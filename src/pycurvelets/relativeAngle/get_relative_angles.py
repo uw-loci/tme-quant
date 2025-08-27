@@ -5,7 +5,7 @@ from skimage.measure import regionprops, label
 import csv
 import os
 
-from find_outline_slope import find_outline_slope
+from .find_outline_slope import find_outline_slope
 
 
 def circ_r(alpha, w=None, d=0, axis=0):

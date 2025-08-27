@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=77.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycurvelets"
+version = "0.1.0"
+description = "Curvelet-based image analysis tools"
+authors = [{ name = "Eliceiri Lab" }]
+requires-python = ">=3.9"
+dependencies = [
+  "git+https://github.com/PyLops/curvelops@0.23",
+  "pandas",
+  "numpy",
+  "matplotlib",
+  "scipy",
+  "opencv-python",
+  "scikit-image",
+]
+
+[dependency-groups]
+dev = [
+  "build",
+  "pytest",
+  "ruff",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = [
+  "tests",
+]
+
+

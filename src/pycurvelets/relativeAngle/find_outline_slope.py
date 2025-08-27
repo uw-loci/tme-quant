@@ -1,5 +1,5 @@
 import numpy as np
-from find_connected_pts import find_connected_pts
+from .find_connected_pts import find_connected_pts
 
 
 def find_outline_slope(coords, idx, num=21):

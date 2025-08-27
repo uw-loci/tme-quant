@@ -1,9 +1,5 @@
-import sys
 import os
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from new_curv import new_curv
+from pycurvelets.new_curv import new_curv
 import matplotlib.pyplot as plt
 import scipy.io
 import numpy as np

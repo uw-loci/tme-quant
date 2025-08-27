@@ -1,11 +1,8 @@
-import sys
 import os
-
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "../relativeAngle"))
+from pycurvelets.relativeAngle.get_relative_angles import (
+    get_relative_angles,
+    load_coords,
 )
-
-from get_relative_angles import get_relative_angles, load_coords
 import numpy as np
 import os
 
