@@ -1,8 +1,12 @@
 name: ci
 
 on:
+  # Allow manual runs from the Actions tab
+  workflow_dispatch:
+  # Run on pushes to any branch (including feature branches)
   push:
-    branches: [ main ]
+    branches: [ "**" ]
+  # And on PRs targeting main
   pull_request:
     branches: [ main ]
 
