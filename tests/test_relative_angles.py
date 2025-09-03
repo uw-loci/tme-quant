@@ -1,4 +1,7 @@
 import os
+import pytest
+
+# These tests rely only on numpy/scikit-image and should run fine without curvelops
 from pycurvelets.relativeAngle.get_relative_angles import (
     get_relative_angles,
     load_coords,

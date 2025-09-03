@@ -1,5 +1,11 @@
 import os
-from pycurvelets.new_curv import new_curv
+import pytest
+
+# Skip this module's tests entirely if curvelops (required by new_curv) is unavailable
+try:
+    from pycurvelets.new_curv import new_curv  # type: ignore
+except Exception:  # ModuleNotFoundError or runtime import error from curvelops
+    pytest.skip("curvelops not available in CI; skipping new_curv tests", allow_module_level=True)
 import matplotlib.pyplot as plt
 import scipy.io
 import numpy as np
