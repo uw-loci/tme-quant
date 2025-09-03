@@ -9,7 +9,7 @@ description = "Curvelet-based image analysis tools"
 authors = [{ name = "Eliceiri Lab" }]
 requires-python = ">=3.9"
 dependencies = [
-  "git+https://github.com/PyLops/curvelops@0.23",
+  "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
   "pandas",
   "numpy",
   "matplotlib",
