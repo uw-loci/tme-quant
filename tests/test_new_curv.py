@@ -1,4 +1,9 @@
 import os
+import pytest
+
+# Optional: skip these tests if curvelet backend isn't available
+from pycurvelets import HAS_CURVELETS
+pytestmark = pytest.mark.skipif(not HAS_CURVELETS, reason="curvelet backend not available")
 from pycurvelets.new_curv import new_curv
 import matplotlib.pyplot as plt
 import scipy.io

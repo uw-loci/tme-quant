@@ -1,4 +1,9 @@
 import numpy as np
+try:
+    from curvelops import FDCT2D, curveshow, fdct2d_wrapper  # type: ignore
+    HAS_CURVELETS = True
+except Exception:
+    HAS_CURVELETS = False
 import pandas as pd
 from skimage.io import imread
 from skimage.color import gray2rgb
