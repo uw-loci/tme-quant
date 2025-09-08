@@ -31,5 +31,8 @@ jobs:
           python -m pip install --break-system-packages pytest ruff
 
       - name: Run tests
+        env:
+          TMEQ_RUN_CURVELETS: "0"
+          QT_QPA_PLATFORM: "offscreen"
         run: |
           pytest -q
