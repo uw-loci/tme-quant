@@ -1,0 +1,12 @@
+package: napari-curvealign
+name: napari-curvealign
+display_name: CurveAlign for Napari
+contributions:
+  commands:
+    - id: napari-curvealign.open_widget
+      title: Open CurveAlign Widget
+      python_name: napari_curvealign.widget:create_curve_align_widget
+  widgets:
+    - command: napari-curvealign.open_widget
+      display_name: CurveAlignPy
+      autogenerate: false

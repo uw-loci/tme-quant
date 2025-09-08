@@ -1,5 +1,5 @@
 import numpy as np
-from get_first_neighbor import get_first_neighbor
+from .get_first_neighbor import get_first_neighbor
 
 
 def find_connected_pts(boundary_coords, idx, num):
