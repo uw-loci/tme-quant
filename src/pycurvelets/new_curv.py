@@ -6,11 +6,6 @@ import pandas as pd
 import os
 from scipy.io import loadmat
 
-# img = plt.imread(
-#     os.path.join(os.path.dirname(__file__), "tests", "testImages", "real1.tif"),
-#     format="TIF",
-# )
-
 
 def new_curv(img, curve_cp):
     """
@@ -56,7 +51,7 @@ def new_curv(img, curve_cp):
     nbscales = math.floor(math.log2(min(M, N)) - 3)
     nbangles_coarse = 16  # default
     c = fdct2d_wrapper.fdct2d_forward_wrap(nbscales, nbangles_coarse, ac, img)
-    
+
     # Debug: print FDCT parameters
     # print(f"Debug: M={M}, N={N}, nbscales={nbscales}, nbangles_coarse={nbangles_coarse}")
     # print(f"Debug: len(c)={len(c)}")
@@ -64,56 +59,45 @@ def new_curv(img, curve_cp):
     #     print(f"Debug: scale {i}: {len(scale)} wedges")
 
     # Create an empty structure of the same dimensions
-    ct = []
-    for cc in range(len(c)):
-        ct.append([])
-        for dd in range(len(c[cc])):
-            ct[cc].append(np.zeros_like(c[cc][dd]))
+    ct = [
+        [np.zeros_like(c[cc][dd]) for dd in range(len(c[cc]))] for cc in range(len(c))
+    ]
 
     # Select the scale at which the coefficients will be used
-    # print(len(c))
-    s = (
-        len(c) - s_scale - 1
-    )  # s_scale: 1: second finest scale, 2: third finest scale, and so on (MATLAB: length(C) - Sscale)
-
-    # print(s)
+    s = len(c) - s_scale - 1  # Same formula as MATLAB: length(C) - Sscale
 
     # Take absolute value of coefficients
     for ee in range(len(c[s])):
         c[s][ee] = np.abs(c[s][ee])
 
-    # Find the maximum coefficient value, then discard the lowest (1-keep)*100%
-    # Match MATLAB exactly: absMax = max(cellfun(@max,cellfun(@max,C{s},'UniformOutput',0)));
+    # Find the maximum coefficient value
     abs_max = max(np.max(arr) for arr in c[s])
-    
-    # MATLAB: bins = 0:.01*absMax:absMax; (101 bins including endpoints)
-    bins = np.linspace(0, abs_max, 101)
-    
-    # MATLAB: histVals = cellfun(@(x) hist(x,bins),C{s},'UniformOutput',0);
-    # Then sum across all wedges: sumVals = sum(totHist,2); cumVals = cumsum(sumVals);
-    # MATLAB does histogram per wedge, then sums across wedges
+
+    # MATLAB: bins = 0:.01*absMax:absMax;
+    bins = np.linspace(0, abs_max, 101)  # 101 centers including endpoints
+
+    # Convert MATLAB centers -> NumPy edges
+    bin_width = bins[1] - bins[0]
+    bin_edges = np.concatenate(([bins[0] - bin_width / 2], bins + bin_width / 2))
+
     hist_per_wedge = []
     for arr in c[s]:
-        # Use numpy.histogram with bins as bin edges (like MATLAB's hist function)
-        hist_w, _ = np.histogram(arr.flatten(), bins=bins)
+        hist_w, _ = np.histogram(arr.flatten(), bins=bin_edges)
         hist_per_wedge.append(hist_w)
-    
-    # Sum across all wedges (MATLAB: sumVals = sum(totHist,2))
+
+    # Sum across wedges — same as MATLAB
     sum_hist = np.sum(hist_per_wedge, axis=0)
     cum_sum = np.cumsum(sum_hist)
-    
-    # MATLAB: loc = find(cumVals > (1-keep)*cumMax,1,'first'); maxVal = bins(loc);
-    threshold_idx = np.where(cum_sum > (1 - keep) * cum_sum[-1])[0][0]
-    max_val = bins[threshold_idx]
-    
-    # Debug: print histogram info
-    # print(f"Debug: sum_hist total = {sum_hist.sum()}, cum_sum[-1] = {cum_sum[-1]}")
-    # print(f"Debug: threshold_idx = {threshold_idx}, max_val = {max_val:.6f}")
 
-    # Threshold coefficients
+    # Find threshold index like MATLAB: first index where cumulative > (1-keep)*total
+    threshold_idx = np.where(cum_sum > (1 - keep) * cum_sum[-1])[0][0]
+    max_val = bins[threshold_idx]  # Use bin center, not edge!
+
+    # Threshold coefficients — keep values >= max_val, zero otherwise
     for dd in range(len(c[s])):
-        ct[s][dd] = c[s][dd] * (np.abs(c[s][dd]) >= max_val)
-    
+        mask = np.abs(c[s][dd]) >= max_val
+        ct[s][dd] = c[s][dd] * mask
+
     # Debug: print threshold info
     # print(f"Debug: scale s={s}, len(c)={len(c)}, s_scale={s_scale}")
     # print(f"Debug: abs_max={abs_max:.6f}, max_val={max_val:.6f}, keep={keep}")
@@ -157,7 +141,9 @@ def new_curv(img, curve_cp):
 
     for w in range(long):
         # Find non-zero coefficients
+        # MATLAB: test = find(Ct{s}{w});
         test = np.flatnonzero(ct[s][w])
+
         if len(test) > 0:
             test_idx_y, test_idx_x = np.unravel_index(test, ct[s][w].shape)
             angle = np.zeros(len(test))
@@ -165,8 +151,8 @@ def new_curv(img, curve_cp):
                 # print(len(test))
                 for aa in range(len(test)):
                     # Convert angular wedge to measured angle in degrees (MATLAB: (w-1) and w)
-                    temp_angle = start_ang - (inc * (w - 1))
-                    shift_temp = start_ang - (inc * w)
+                    temp_angle = start_ang - (inc * w)
+                    shift_temp = start_ang - (inc * (w + 1))
                     angle[aa] = np.mean([temp_angle, shift_temp])
 
             # Adjust angles
@@ -179,15 +165,12 @@ def new_curv(img, curve_cp):
             idx = angle < 45
             angle[idx] += 180
 
-            angs[w] = angle
-
             row[w] = np.zeros(len(test), dtype=int)
             col[w] = np.zeros(len(test), dtype=int)
-            for i in range(len(test)):
-                # MATLAB: row{w} = round(X_rows{s}{w}(test)); col{w} = round(Y_cols{s}{w}(test))
-                # Use the original test indices directly, not the unraveled coordinates
-                row[w][i] = np.round(SX[s][w].flat[test[i]])
-                col[w][i] = np.round(SY[s][w].flat[test[i]])
+
+            angs[w] = np.array(angle)
+            row[w] = np.round(SX[s][w].ravel(order="F")[test])
+            col[w] = np.round(SY[s][w].ravel(order="F")[test])
 
             angle = []
         else:
@@ -240,7 +223,7 @@ def new_curv(img, curve_cp):
 
             # MATLAB: curves2(inNH,:) = 0;
             curves2[in_nh, :] = 0  # Mark grouped curvelets as processed
-    
+
     # print(f"Debug: valid curvelets for grouping: {valid_curvelets}")
 
     # Keep only non-empty groups
@@ -308,9 +291,6 @@ def new_curv(img, curve_cp):
     cen_col = all_center_points[:, 1]  # Second column is col in the center points
     im_rows, im_cols = img.shape
     edge_buf = math.ceil(min(im_rows, im_cols) / 100)
-    # Try to get closer to MATLAB result by using a more aggressive edge buffer
-    edge_buf = max(edge_buf, 12)  # Use at least 12 pixel buffer
-    # print(f"Debug: edge_buf = {edge_buf}, im_rows = {im_rows}, im_cols = {im_cols}")
 
     # Find indices of curvelets that are not too close to the edge
     in_idx = np.where(
@@ -319,19 +299,7 @@ def new_curv(img, curve_cp):
         & (cen_row > edge_buf)
         & (cen_col > edge_buf)
     )[0]
-    
-    # print(f"Debug: curvelets removed by edge filtering: {len(objects) - len(in_idx)}")
 
     in_curves = [objects[i] for i in in_idx]
-    # print(f"Debug: final curvelets after edge filtering: {len(in_curves)}")
 
-    df_in_curves = pd.DataFrame(in_curves)
-    # Export DataFrame to a CSV file
-    df_in_curves.to_csv("./in_curves.csv", index=False)
-
-    # print(in_curves)
-    # print(inc)
     return in_curves, ct, inc
-
-
-# new_curv(img, {"keep": 0.01, "scale": 1, "radius": 3})
