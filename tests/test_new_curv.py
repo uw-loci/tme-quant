@@ -3,7 +3,6 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from pycurvelets.new_curv import new_curv
 
 # By default, skip curvelops-dependent tests (e.g., on CI). Enable locally with:
 #   TMEQ_RUN_CURVELETS=1 pytest -q
@@ -20,6 +19,8 @@ except Exception:
     pytest.skip(
         "curvelops not available; skipping new_curv tests", allow_module_level=True
     )
+
+from pycurvelets.new_curv import new_curv
 
 
 @pytest.fixture(scope="module")
