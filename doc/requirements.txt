@@ -7,3 +7,4 @@ scipy==1.15.2
 opencv-python==4.10.0.84
 scikit-image==0.25.0
 pytest==8.3.4
+openpyxl==3.1.5
