@@ -84,6 +84,12 @@ pytest -q
 Notes:
 - The napari test is an import-only smoke test (no `Viewer` is created); it runs headless.
 
+Testing policy:
+- Tests must not write files to the repository root. Use a system
+  temporary directory instead (e.g., `tempfile.TemporaryDirectory`).
+- If a deterministic artifact is needed across runs, commit it under
+  `tests/test_resources/` and read from there during tests.
+
 ### Continuous integration
 - CI installs the package without `curvelops` to avoid building FFTW/CurveLab on runners.
 - CI environment:
