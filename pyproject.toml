@@ -15,6 +15,7 @@ dependencies = [
   "scipy",
   "opencv-python",
   "scikit-image",
+  "openpyxl",
 ]
 
 [dependency-groups]
