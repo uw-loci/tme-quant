@@ -1,7 +1,7 @@
 import os
 import pytest
 import pandas as pd
-from pycurvelets.relativeAngle.get_relative_angles import (
+from pycurvelets.relative_angle.get_relative_angles import (
     get_relative_angles,
     load_coords,
 )
