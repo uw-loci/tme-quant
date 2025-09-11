@@ -3,9 +3,9 @@ requires = ["setuptools>=77.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pycurvelets"
+name = "tme-quant"
 version = "0.1.0"
-description = "Curvelet-based image analysis tools"
+description = "Python translation of CurveAlign; curvelet-based quantification and napari plugin"
 authors = [{ name = "Eliceiri Lab" }]
 requires-python = ">=3.9"
 dependencies = [
