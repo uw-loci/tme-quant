@@ -1,6 +1,7 @@
 from sklearn.neighbors import NearestNeighbors
 import numpy as np
-from pycurvelets.helper_methods import find_outline_slope, circ_r
+from pycurvelets.helper_methods import find_outline_slope, circ_r, get_segment_pixels
+import pandas as pd
 
 
 def get_tif_boundary(coordinates, img, obj, img_name, dist_thresh, min_dist):
@@ -112,6 +113,58 @@ def get_tif_boundary(coordinates, img, obj, img_name, dist_thresh, min_dist):
                 boundary_point = np.full(2, np.nan)
 
             # Extension point features
+            line_curvelets, ortho_curvelets = get_points_on_line(
+                obj[i], img_width, img_height, dist_thresh
+            )
+
+            line_curvelets_swapped = line_curvelets[:, [1, 0]]
+            intersection_line, intersection_line_a, intersection_line_b = (
+                np.intersect1d(
+                    line_curvelets_swapped, coords, axis=0, return_indices=True
+                )
+            )
+
+            if intersection_line != None:
+                # get closest distance from curvelet center to the intersection
+                # (get rid of farther ones)
+                nbrs = NearestNeighbors(n_neighbors=1, algorithm="auto").fit(
+                    intersection_line
+                )
+                idx_line_distance, line_distance = nbrs.kneighbors([obj[i]["center"]])
+
+                idx_line_distance = idx_line_distance[0][0]
+                line_distance = line_distance[0][0]
+
+                boundary_point_idx = intersection_line_b[idx_line_distance]
+            else:
+                extension_point_dist[i] = np.nan  # no intersection exists
+                extension_point_relative_angle[i] = np.nan  # no angle exists
+                boundary_point[i] = np.full(2, np.nan)
+
+            measurement_boundary[i:] = boundary_point
+
+    result_mat = np.column_stack(
+        [
+            nearest_boundary_dist,
+            nearest_region_dist,
+            nearest_boundary_relative_angle,
+            extension_point_dist,
+            extension_point_relative_angle,
+            measurement_boundary,
+        ]
+    )
+
+    result_mat_names = [
+        "nearest_boundary_distance",
+        "nearest_region_distance",
+        "nearest_boundary_angle",
+        "extension_point_distance",
+        "extension_point_angle",
+        "boundary_point_row",
+        "boundary_point_col",
+    ]
+
+    df = pd.DataFrame(result_mat, columns=result_mat_names)
 
     return None
 
@@ -138,3 +191,22 @@ def get_relative_angle(coordinates, idx, fiber_angle, img_height, img_width):
         temp_angle = np.degrees(np.arcsin(temp_angle))
 
     return temp_angle, boundary_point
+
+
+def get_points_on_line(object, img_width, img_height, box_size):
+    center = object["center"]
+    angle = object["angle"]
+    slope = -np.tan(np.deg2rad(angle))
+    intercept = center[0] - slope * center[1]
+
+    if np.isinf(slope):
+        dist_y = 0
+        dist_x = box_size
+    else:
+        dist_y = box_size / np.sqrt(1 + slope * slope)
+        dist_x = dist_y * slope
+
+    point_1 = [center[1] - dist_y, center[0] - dist_x]
+    point_2 = [center[1] + dist_y, center[0] + dist_x]
+
+    lineCurv, _ = get_segment_pixels(point_1, point_2)
