@@ -1,10 +1,9 @@
 from sklearn.neighbors import NearestNeighbors
 import numpy as np
-from pycurvelets.helper_methods import find_outline_slope, circ_r, get_segment_pixels
-import pandas as pd
+from src.pycurvelets.helper_methods import find_outline_slope, circ_r, get_segment_pixels
 
 
-def get_tif_boundary(coordinates, img, obj, img_name, dist_thresh, min_dist):
+def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     """
     get_tif_boundary - Associates boundary coordinates with curvelets/fibers and
     computes relative angle measures.
@@ -17,8 +16,6 @@ def get_tif_boundary(coordinates, img, obj, img_name, dist_thresh, min_dist):
         The image being measured.
     obj : dict
         Dictionary (from new_curv) containing curvelet/fiber properties such as center and angle.
-    img_name : str
-        Name of the image file.
     dist_thresh : float
         Pixel distance from boundary within which to evaluate curvelets.
     min_dist : float
@@ -92,7 +89,7 @@ def get_tif_boundary(coordinates, img, obj, img_name, dist_thresh, min_dist):
     out_curvs_flag = np.zeros(curvs_len, dtype=bool)
 
     if min_dist is None:
-        for i in range(len(curvs_len)):
+        for i in range(curvs_len):
             # in region?
             nearest_region_dist[i] = (reg_dist[i] == 255) | (reg_dist[i] == 1)
 
@@ -164,9 +161,7 @@ def get_tif_boundary(coordinates, img, obj, img_name, dist_thresh, min_dist):
         "boundary_point_col",
     ]
 
-    df = pd.DataFrame(result_mat, columns=result_mat_names)
-
-    return None
+    return result_mat, result_mat_names, num_img_points
 
 
 def get_relative_angle(coordinates, idx, fiber_angle, img_height, img_width):
