@@ -5,6 +5,10 @@ Python translation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) w
 ### About this repo
 - `src/pycurvelets`: Python implementation using the curvelet transform
 - `src/napari_curvealign`: napari plugin surface for interactive use
+- `curvealign_py/`: Complete CurveAlign Python API with organized architecture
+  - `curvealign/core/`: Core analysis algorithms (visualization-free)
+  - `curvealign/types/`: Organized type definitions (core, options, results)
+  - `curvealign/visualization/`: Pluggable backends (standalone, napari, ImageJ)
 - `tests/`: pytest suite (data-driven tests and headless napari smoke test)
 - `.github/workflows/ci.yml`: GitHub Actions workflow (runs core tests only)
 
@@ -89,6 +93,34 @@ Testing policy:
   temporary directory instead (e.g., `tempfile.TemporaryDirectory`).
 - If a deterministic artifact is needed across runs, commit it under
   `tests/test_resources/` and read from there during tests.
+
+### CurveAlign Python API
+
+The repository now includes a complete, modern Python API for CurveAlign (`curvealign_py/`):
+
+#### Quick Start with CurveAlign API
+```python
+# Add to Python path
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent / "curvealign_py"))
+
+# Use the API
+import curvealign
+result = curvealign.analyze_image(image)
+
+# Optional visualization
+from curvealign.visualization import standalone
+overlay = standalone.create_overlay(image, result.curvelets)
+```
+
+#### Features
+- **Core Analysis**: Visualization-free algorithms with minimal dependencies
+- **Organized Types**: Clean type packages (core, options, results)
+- **Pluggable Visualization**: Support for matplotlib, napari, and ImageJ
+- **Framework Integration**: Ready for scientific Python workflows
+
+See `curvealign_py/ARCHITECTURE.md` for complete documentation.
 
 ### Continuous integration
 - CI installs the package without `curvelops` to avoid building FFTW/CurveLab on runners.

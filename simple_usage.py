@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 import numpy as np
 
-# Add curvealign to path
+# Add curvealign to path (now in tme-quant repository)
 sys.path.insert(0, str(Path(__file__).parent / "curvealign_py"))
 import curvealign
 
