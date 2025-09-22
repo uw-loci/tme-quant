@@ -174,3 +174,40 @@ lastPATH_CTF.mat
 *.tif
 
 pycurvelets/opt/*.*
+
+# --- Python API (curvealign_py) and general Python ignores ---
+# Virtual environments
+.venv/
+venv/
+curvealign_py/curvealign_env/
+
+# Byte-compiled / cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test, coverage, lint
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Local outputs
+curvealign_output/
+synthetic_results/
+proper_results/
+*_results/
