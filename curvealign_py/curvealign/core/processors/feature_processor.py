@@ -69,14 +69,19 @@ def compute_features(
         center = centers[i]
         
         # Find k nearest neighbors (excluding self)
+        k = min(options.minimum_nearest_fibers + 1, n_curvelets)
         distances, neighbor_indices = tree.query(
             center, 
-            k=options.minimum_nearest_fibers + 1
+            k=k
         )
         
         # Remove self from neighbors
-        neighbor_indices = neighbor_indices[1:]
-        distances = distances[1:]
+        if k > 1:
+            neighbor_indices = neighbor_indices[1:]
+            distances = distances[1:]
+        else:
+            neighbor_indices = []
+            distances = []
         
         if len(neighbor_indices) >= options.minimum_nearest_fibers:
             # Density: inverse of mean distance to k-NN

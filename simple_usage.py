@@ -30,7 +30,7 @@ def main():
         from curvealign.visualization import standalone
         print("\nCreating visualization...")
         overlay = standalone.create_overlay(image, result.curvelets)
-        print(f"✅ Overlay created: {overlay.shape}")
+        print(f"PASS: Overlay created: {overlay.shape}")
         
         # Could save with: 
         # from skimage import io
@@ -44,12 +44,12 @@ def main():
         from curvealign.visualization import napari_plugin
         print("Launching napari viewer...")
         viewer = napari_plugin.launch_napari_viewer(result, image)
-        print("✅ napari viewer launched")
+        print("PASS: napari viewer launched")
         
     except ImportError:
         print("napari not available - skipping interactive visualization")
     
-    print("\n🎉 Analysis complete!")
+    print("\nAnalysis complete!")
     print("\nTo use with your own images:")
     print("  from skimage import io")
     print("  image = io.imread('your_image.tif')")

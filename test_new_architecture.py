@@ -23,7 +23,7 @@ def test_core_api():
     print("Running core analysis...")
     result = curvealign.analyze_image(image)
     
-    print(f"✅ Core analysis successful")
+    print(f"PASS: Core analysis successful")
     print(f"   Curvelets: {len(result.curvelets)}")
     print(f"   Features: {len(result.features)} types")
     print(f"   Stats: {list(result.stats.keys())}")
@@ -46,9 +46,9 @@ def test_visualization_backends():
         from curvealign.visualization import standalone
         overlay = standalone.create_overlay(image, result.curvelets)
         maps = standalone.create_angle_maps(image, result.curvelets)
-        print(f"   ✅ Standalone: overlay {overlay.shape}, maps {maps[0].shape}")
+        print(f"   PASS: Standalone: overlay {overlay.shape}, maps {maps[0].shape}")
     except ImportError as e:
-        print(f"   ❌ Standalone failed: {e}")
+        print(f"   FAIL: Standalone failed: {e}")
     
     # Test napari backend
     print("Testing napari backend...")
@@ -56,9 +56,9 @@ def test_visualization_backends():
         from curvealign.visualization import napari_plugin
         vectors, props = napari_plugin.curvelets_to_napari_vectors(result.curvelets)
         points, point_props = napari_plugin.curvelets_to_napari_points(result.curvelets)
-        print(f"   ✅ napari: vectors {vectors.shape}, points {points.shape}")
+        print(f"   PASS: napari: vectors {vectors.shape}, points {points.shape}")
     except ImportError as e:
-        print(f"   ❌ napari not available: {e}")
+        print(f"   SKIP: napari not available: {e}")
     
     # Test PyImageJ backend
     print("Testing PyImageJ backend...")
@@ -66,10 +66,10 @@ def test_visualization_backends():
         from curvealign.visualization import pyimagej_plugin
         imagej_data = pyimagej_plugin.analysis_result_to_imagej(result, image)
         macro = pyimagej_plugin.create_imagej_macro(result, "test.tif")
-        print(f"   ✅ PyImageJ: data keys {list(imagej_data.keys())}")
-        print(f"   ✅ Macro generated: {len(macro)} characters")
+        print(f"   PASS: PyImageJ: data keys {list(imagej_data.keys())}")
+        print(f"   PASS: Macro generated: {len(macro)} characters")
     except ImportError as e:
-        print(f"   ❌ PyImageJ not available: {e}")
+        print(f"   SKIP: PyImageJ not available: {e}")
 
 def test_type_organization():
     """Test the new type organization."""
@@ -77,10 +77,10 @@ def test_type_organization():
     
     # Test core types
     from curvealign.types.core import Curvelet, Boundary, CtCoeffs
-    from curvealign.types.options import CurveAlignOptions, FeatureOptions  
+    from curvealign.types.config import CurveAlignOptions, FeatureOptions  
     from curvealign.types.results import AnalysisResult, BoundaryMetrics
     
-    print("✅ Core types imported successfully")
+    print("PASS: Core types imported successfully")
     
     # Test type usage
     curvelet = Curvelet(100, 150, 45.0, 1.5)
@@ -106,13 +106,13 @@ def main():
     # Test type organization
     test_type_organization()
     
-    print("\n🎉 New architecture working correctly!")
+    print("\nNew architecture working correctly!")
     print("\nKey improvements:")
-    print("✅ Core API is visualization-free")
-    print("✅ Types organized into logical packages")
-    print("✅ Pluggable visualization backends")
-    print("✅ Clean separation of concerns")
-    print("✅ Framework integration ready")
+    print("PASS: Core API is visualization-free")
+    print("PASS: Types organized into logical packages")
+    print("PASS: Pluggable visualization backends")
+    print("PASS: Clean separation of concerns")
+    print("PASS: Framework integration ready")
 
 if __name__ == "__main__":
     main()

@@ -8,7 +8,10 @@ CurveAlign analysis behavior.
 from typing import Optional
 from dataclasses import dataclass
 
-from .feature_options import FeatureOptions
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .feature_options import FeatureOptions
 
 
 @dataclass
@@ -44,8 +47,9 @@ class CurveAlignOptions:
     minimum_nearest_fibers: int = 4
     minimum_box_size: int = 16
     
-    def to_feature_options(self) -> FeatureOptions:
+    def to_feature_options(self) -> 'FeatureOptions':
         """Convert to FeatureOptions."""
+        from .feature_options import FeatureOptions
         return FeatureOptions(
             minimum_nearest_fibers=self.minimum_nearest_fibers,
             minimum_box_size=self.minimum_box_size

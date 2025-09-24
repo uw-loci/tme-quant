@@ -45,6 +45,12 @@ import curvealign
 
 # Use the API
 result = curvealign.analyze_image(image)
+
+# Or use granular imports for specific components
+from curvealign.types.core import Curvelet, Boundary
+from curvealign.types.config import CurveAlignOptions
+from curvealign.core.processors import extract_curvelets, compute_features
+from curvealign.visualization.backends import matplotlib_create_overlay
 ```
 
 ## Integration with Existing tme-quant Code

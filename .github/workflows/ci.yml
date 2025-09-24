@@ -29,6 +29,8 @@ jobs:
           # Install without curvelops to avoid FFTW/CurveLab build on CI
           python -m pip install --break-system-packages -e .
           python -m pip install --break-system-packages pytest ruff
+          # Install CurveAlign API dependencies for testing
+          python -m pip install --break-system-packages -e ./curvealign_py
 
       - name: Run tests
         env:
@@ -36,3 +38,5 @@ jobs:
           QT_QPA_PLATFORM: "offscreen"
         run: |
           pytest -q
+          # Test granular CurveAlign API
+          python test_granular_api.py
