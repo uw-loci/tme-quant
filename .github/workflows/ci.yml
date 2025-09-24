@@ -28,7 +28,7 @@ jobs:
           python -m pip install --upgrade pip
           # Install without curvelops to avoid FFTW/CurveLab build on CI
           python -m pip install --break-system-packages -e .
-          python -m pip install --break-system-packages pytest ruff
+          python -m pip install --break-system-packages pytest pytest-cov ruff
           # Install CurveAlign and CT-FIRE API dependencies for testing
           python -m pip install --break-system-packages -e ./curvealign_py
           python -m pip install --break-system-packages -e ./ctfire_py
