@@ -113,9 +113,13 @@ def enhance_image_with_curvelets(
     # Import curvealign processors for enhancement
     import sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "curvealign_py"))
+    curvealign_path = Path(__file__).parent.parent.parent.parent.parent / "curvealign_py"
+    sys.path.insert(0, str(curvealign_path))
     
-    from curvealign.core.processors import extract_curvelets, reconstruct_image
+    try:
+        from curvealign.core.processors import extract_curvelets, reconstruct_image
+    except ImportError:
+        raise ImportError("CurveAlign package not available for curvelet enhancement. Install curvealign_py.")
     
     # Extract curvelets and reconstruct with limited scales
     _, coeffs = extract_curvelets(image, keep=keep, scale=scale)

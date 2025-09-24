@@ -178,6 +178,7 @@ def analyze_roi(
 def batch_analyze(
     inputs: Iterable[Union[Path, np.ndarray]],
     boundaries: Optional[Iterable[Optional[Boundary]]] = None,
+    mode: Literal["curvelets", "ctfire"] = "curvelets",
     options: Optional[CurveAlignOptions] = None,
 ) -> List[AnalysisResult]:
     """
@@ -218,7 +219,7 @@ def batch_analyze(
         boundary = boundary_list[i] if i < len(boundary_list) else None
         
         # Analyze image
-        result = analyze_image(image, boundary=boundary, options=options)
+        result = analyze_image(image, boundary=boundary, mode=mode, options=options)
         results.append(result)
     
     return results

@@ -8,8 +8,8 @@ from pathlib import Path
 import numpy as np
 
 # Add both APIs to path
-sys.path.insert(0, str(Path(__file__).parent / "curvealign_py"))
-sys.path.insert(0, str(Path(__file__).parent / "ctfire_py"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "curvealign_py"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_ctfire_standalone():
     """Test CT-FIRE as standalone API."""
