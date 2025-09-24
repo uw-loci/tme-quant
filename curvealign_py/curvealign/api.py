@@ -67,19 +67,48 @@ def analyze_image(
         options = CurveAlignOptions()
     
     if mode == "ctfire":
-        raise NotImplementedError("CT-FIRE mode not yet implemented")
-    
-    # Extract curvelets
-    curvelets, coeffs = extract_curvelets(
-        image,
-        keep=options.keep,
-        scale=options.scale,
-        group_radius=options.group_radius
-    )
-    
-    # Compute features
-    feature_options = options.to_feature_options()
-    features = compute_features(curvelets, feature_options)
+        # Use CT-FIRE for fiber extraction
+        try:
+            import sys
+            from pathlib import Path
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "ctfire_py"))
+            import ctfire
+            
+            # Convert CurveAlign options to CT-FIRE options
+            ctfire_options = ctfire.CTFireOptions(
+                run_mode="ctfire",
+                keep=options.keep,
+                scale=options.scale,
+                thresh_flen=options.minimum_box_size * 2,  # Reasonable default
+            )
+            
+            # Run CT-FIRE analysis
+            ctfire_result = ctfire.analyze_image(image, ctfire_options)
+            
+            # Convert CT-FIRE fibers to CurveAlign curvelets
+            curvelets = _convert_fibers_to_curvelets(ctfire_result.fibers)
+            
+            # Use CT-FIRE statistics but compute CurveAlign features for consistency
+            features = compute_features(curvelets, options.to_feature_options())
+            stats = ctfire_result.stats.copy()
+            
+        except ImportError:
+            raise ImportError("CT-FIRE package not available. Ensure ctfire_py is installed.")
+    else:
+        # Extract curvelets
+        curvelets, coeffs = extract_curvelets(
+            image,
+            keep=options.keep,
+            scale=options.scale,
+            group_radius=options.group_radius
+        )
+        
+        # Compute features
+        feature_options = options.to_feature_options()
+        features = compute_features(curvelets, feature_options)
+        
+        # Compute summary statistics
+        stats = _compute_summary_statistics(curvelets, features, None)
     
     # Boundary analysis if boundary provided
     boundary_metrics = None
@@ -91,9 +120,10 @@ def analyze_image(
             min_dist=options.min_dist,
             exclude_inside_mask=options.exclude_inside_mask
         )
-    
-    # Compute summary statistics
-    stats = _compute_summary_statistics(curvelets, features, boundary_metrics)
+        
+        # Update stats with boundary metrics if not from CT-FIRE
+        if mode != "ctfire":
+            stats = _compute_summary_statistics(curvelets, features, boundary_metrics)
     
     return AnalysisResult(
         curvelets=curvelets,
@@ -348,6 +378,27 @@ def _compute_summary_statistics(
         })
     
     return stats
+
+
+def _convert_fibers_to_curvelets(fibers):
+    """Convert CT-FIRE fibers to CurveAlign curvelets for unified interface."""
+    curvelets = []
+    
+    for fiber in fibers:
+        # Use fiber center point and mean angle
+        if fiber.points:
+            center_idx = len(fiber.points) // 2
+            center_row, center_col = fiber.points[center_idx]
+            
+            curvelet = Curvelet(
+                center_row=int(center_row),
+                center_col=int(center_col),
+                angle_deg=fiber.angle_deg,
+                weight=fiber.length  # Use length as weight
+            )
+            curvelets.append(curvelet)
+    
+    return curvelets
 
 
 def _compute_roi_comparison_stats(roi_results: List[AnalysisResult]) -> dict:
