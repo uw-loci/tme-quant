@@ -66,6 +66,10 @@ def analyze_image(
     if options is None:
         options = CurveAlignOptions()
     
+    # Validate mode for backward compatibility with legacy tests
+    if mode not in ("curvelets", "ctfire"):
+        raise ValueError(f"Unknown mode: {mode}")
+    
     if mode == "ctfire":
         # Use CT-FIRE for fiber extraction
         try:
@@ -356,6 +360,8 @@ def _compute_summary_statistics(
         'angle_std': np.std(angles),
         'mean_weight': np.mean(weights),
     }
+    # Backward-compatibility alias for older tests expecting 'std_angle'
+    stats['std_angle'] = stats['angle_std']
     
     # Compute alignment from features if available
     if 'alignment_nn' in features:

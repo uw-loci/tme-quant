@@ -46,6 +46,9 @@ from .core.processors import (
     measure_boundary_alignment as core_measure_boundary_alignment
 )
 
+# Re-export compute_features at the top-level for backwards compatibility
+from .core.processors import compute_features
+
 # Package metadata
 __version__ = "0.1.0"
 __author__ = "CurveAlign Development Team"
@@ -66,6 +69,8 @@ __all__ = [
     # Advanced/core functions
     'core_extract_curvelets', 'core_reconstruct_image',
     'core_compute_features', 'core_measure_boundary_alignment',
+    # Backwards-compat convenience alias expected by some tests
+    'compute_features',
     
     # Package info
     '__version__', '__author__', '__email__'

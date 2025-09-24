@@ -36,6 +36,7 @@ class CurveAlignOptions:
     minimum_nearest_fibers : int, default 4
         Minimum number of nearest neighbors for density/alignment features
     minimum_box_size : int, default 16
+    map_std_window : int, default 24
         Minimum box size for local feature computation
     """
     keep: float = 0.001
@@ -46,6 +47,8 @@ class CurveAlignOptions:
     exclude_inside_mask: bool = False
     minimum_nearest_fibers: int = 4
     minimum_box_size: int = 16
+    # Added for compatibility with historical tests/config
+    map_std_window: int = 24
     
     def to_feature_options(self) -> 'FeatureOptions':
         """Convert to FeatureOptions."""
