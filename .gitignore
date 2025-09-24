@@ -179,35 +179,50 @@ pycurvelets/opt/*.*
 # Virtual environments
 .venv/
 venv/
+.test_env/
 curvealign_py/curvealign_env/
 
 # Byte-compiled / cache
 __pycache__/
 **/__pycache__/
 *.py[cod]
+*$py.class
 
 # Packaging / build
 build/
 dist/
 *.egg-info/
 .eggs/
+*.egg
 
 # Test, coverage, lint
 .pytest_cache/
 .coverage
 .coverage.*
 htmlcov/
+.tox/
+.nox/
 
 # Jupyter
 .ipynb_checkpoints/
 
-# OS/editor
+# OS/editor files
 .DS_Store
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 
-# Local outputs
+# Local outputs and results
 curvealign_output/
 synthetic_results/
 proper_results/
 *_results/
+*_overlay.png
+*_analysis.png
+
+# Development artifacts
+*.log
+*.tmp
+*.temp
