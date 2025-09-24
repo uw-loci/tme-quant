@@ -362,6 +362,8 @@ def _compute_summary_statistics(
     }
     # Backward-compatibility alias for older tests expecting 'std_angle'
     stats['std_angle'] = stats['angle_std']
+    # Backward-compatibility alias for tests expecting 'total_curvelets'
+    stats['total_curvelets'] = stats['n_curvelets']
     
     # Compute alignment from features if available
     if 'alignment_nn' in features:
