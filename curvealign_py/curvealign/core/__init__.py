@@ -1,13 +1,31 @@
 """
-Core implementation modules for CurveAlign functionality.
+CurveAlign core analysis modules.
 
-This package contains the low-level implementation of curvelet transforms,
-feature computation, and boundary analysis. Visualization is handled
-separately in the visualization package to maintain separation of concerns.
+This module provides the core analysis functionality organized into:
+- algorithms: Low-level algorithmic functions
+- processors: High-level processing orchestrators
 """
 
-from . import curvelets
-from . import features  
-from . import boundary
+# Import high-level processors (most commonly used)
+from .processors import (
+    extract_curvelets, reconstruct_image,
+    compute_features, measure_boundary_alignment
+)
 
-__all__ = ["curvelets", "features", "boundary"]
+# Import specific algorithms for advanced users
+from .algorithms import (
+    apply_fdct, apply_ifdct, extract_parameters,
+    threshold_coefficients_at_scale, create_empty_coeffs_like,
+    extract_curvelets_from_coeffs, group_curvelets, 
+    normalize_angles, filter_edge_curvelets
+)
+
+__all__ = [
+    # High-level processors
+    'extract_curvelets', 'reconstruct_image', 'compute_features', 'measure_boundary_alignment',
+    # Low-level algorithms  
+    'apply_fdct', 'apply_ifdct', 'extract_parameters',
+    'threshold_coefficients_at_scale', 'create_empty_coeffs_like',
+    'extract_curvelets_from_coeffs', 'group_curvelets', 
+    'normalize_angles', 'filter_edge_curvelets'
+]

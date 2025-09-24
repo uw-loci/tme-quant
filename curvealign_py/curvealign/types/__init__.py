@@ -1,21 +1,27 @@
 """
-Type definitions for the CurveAlign Python API.
+CurveAlign type system - organized by functional area.
 
-This package contains all type definitions organized by functional area:
-- Core data structures (curvelets, boundaries, coefficients)
-- Configuration options (analysis parameters)
-- Result structures (analysis outputs)
+This module provides all type definitions used in the CurveAlign API,
+organized into logical categories:
+- core: Fundamental data structures (Curvelet, Boundary, CtCoeffs)
+- config: Configuration and option classes
+- results: Result and output structures
 """
 
-from .core import Curvelet, CtCoeffs, Boundary
-from .options import CurveAlignOptions, FeatureOptions
-from .results import AnalysisResult, ROIResult, BoundaryMetrics, FeatureTable
+# Core data structures
+from .core import Curvelet, Boundary, CtCoeffs
+
+# Configuration classes
+from .config import CurveAlignOptions, FeatureOptions
+
+# Result structures
+from .results import FeatureTable, BoundaryMetrics, AnalysisResult, ROIResult
 
 __all__ = [
-    # Core data structures
-    "Curvelet", "CtCoeffs", "Boundary",
-    # Configuration options
-    "CurveAlignOptions", "FeatureOptions", 
-    # Result structures
-    "AnalysisResult", "ROIResult", "BoundaryMetrics", "FeatureTable",
+    # Core types
+    'Curvelet', 'Boundary', 'CtCoeffs',
+    # Configuration
+    'CurveAlignOptions', 'FeatureOptions', 
+    # Results
+    'FeatureTable', 'BoundaryMetrics', 'AnalysisResult', 'ROIResult'
 ]

@@ -1,60 +1,72 @@
 """
-CurveAlign Python API for collagen fiber analysis.
+CurveAlign Python API - Modern interface for collagen fiber analysis.
 
-This package provides a Python interface for analyzing collagen fiber organization
-in microscopy images using curvelet transforms and related techniques.
+This package provides a comprehensive Python API for CurveAlign functionality,
+featuring a clean separation of concerns:
 
-Main Functions
---------------
-analyze_image : Analyze a single image for fiber organization
-analyze_roi : Analyze multiple regions of interest  
-batch_analyze : Analyze multiple images in batch mode
-get_curvelets : Extract curvelets using FDCT
-reconstruct : Reconstruct image from curvelet coefficients
-compute_features : Compute fiber features from curvelets
-measure_boundary : Measure alignment relative to boundaries
-overlay : Create visualization overlays
-angle_map : Create spatial angle maps
+- Core analysis algorithms (visualization-free)
+- Organized type system (core, config, results)
+- Pluggable visualization backends (matplotlib, napari, ImageJ)
+- High-level user-facing API functions
 
-Examples
---------
+Basic Usage
+-----------
 >>> import curvealign
->>> import numpy as np
->>> image = np.random.rand(512, 512)
 >>> result = curvealign.analyze_image(image)
->>> print(f"Found {len(result.curvelets)} curvelets")
+>>> print(f"Found {len(result.curvelets)} fiber segments")
+
+With Visualization
+------------------
+>>> from curvealign.visualization import standalone
+>>> overlay = standalone.create_overlay(image, result.curvelets)
 """
 
+# High-level API functions (most commonly used)
 from .api import (
-    analyze_image,
-    analyze_roi,
-    batch_analyze,
-    get_curvelets,
-    reconstruct,
-    compute_features,
-    measure_boundary,
-    overlay,
-    angle_map,
+    analyze_image, analyze_roi, batch_analyze,
+    get_curvelets, reconstruct,
+    overlay, angle_map
 )
 
+# Core types (commonly needed)
 from .types import (
-    Curvelet,
-    Boundary,
-    CurveAlignOptions,
-    FeatureOptions,
-    AnalysisResult,
-    ROIResult,
-    BoundaryMetrics,
-    FeatureTable,
+    # Core data structures
+    Curvelet, Boundary, CtCoeffs,
+    # Configuration
+    CurveAlignOptions, FeatureOptions,
+    # Results
+    AnalysisResult, ROIResult, FeatureTable, BoundaryMetrics
 )
 
-__version__ = "0.1.0"
+# Core processing functions (for advanced users)
+from .core.processors import (
+    extract_curvelets as core_extract_curvelets,
+    reconstruct_image as core_reconstruct_image,
+    compute_features as core_compute_features,
+    measure_boundary_alignment as core_measure_boundary_alignment
+)
 
+# Package metadata
+__version__ = "0.1.0"
+__author__ = "CurveAlign Development Team"
+__email__ = "curvealign@loci.wisc.edu"
+
+# Main public API
 __all__ = [
-    # Main API functions
-    "analyze_image", "analyze_roi", "batch_analyze", "get_curvelets", "reconstruct",
-    "compute_features", "measure_boundary", "overlay", "angle_map",
-    # Types and data structures
-    "Curvelet", "Boundary", "CurveAlignOptions", "FeatureOptions",
-    "AnalysisResult", "ROIResult", "BoundaryMetrics", "FeatureTable",
+    # High-level API
+    'analyze_image', 'analyze_roi', 'batch_analyze',
+    'get_curvelets', 'reconstruct',
+    'overlay', 'angle_map',
+    
+    # Core types
+    'Curvelet', 'Boundary', 'CtCoeffs',
+    'CurveAlignOptions', 'FeatureOptions',
+    'AnalysisResult', 'ROIResult', 'FeatureTable', 'BoundaryMetrics',
+    
+    # Advanced/core functions
+    'core_extract_curvelets', 'core_reconstruct_image',
+    'core_compute_features', 'core_measure_boundary_alignment',
+    
+    # Package info
+    '__version__', '__author__', '__email__'
 ]
