@@ -1,6 +1,7 @@
 from sklearn.neighbors import NearestNeighbors
 import numpy as np
-from src.pycurvelets.helper_methods import find_outline_slope, circ_r, get_segment_pixels
+from pycurvelets.utils.segmentation import get_segment_pixels
+from pycurvelets.utils.geometry import circ_r, find_outline_slope
 
 
 def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
@@ -30,14 +31,14 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     img_size = (img_height, img_width)
 
     # collect all fiber points
-    all_center_points = np.vstack([o["center"] for o in obj])
+    all_center_points = np.vstack([v["center"] for v in obj.values()])
+    all_center_points = all_center_points.astype(int)
 
     # collect all boundary points
-    coords = np.vstack(coordinates)
+    coords = np.vstack([coordinates[k] for k in coordinates])
 
-    # collect all region points
     lin_idx = np.ravel_multi_index(
-        (all_center_points[:, 0], all_center_points[:, 1]), dims=img_size
+        (all_center_points[:, 0], all_center_points[:, 1]), dims=img_size, order="F"
     )
 
     neighbors = NearestNeighbors(n_neighbors=1, algorithm="auto").fit(coords)
@@ -45,14 +46,17 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     idx_dist = indices.flatten()
     dist = distances.flatten()
 
-    reg_dist = img.flat[lin_idx]
+    reg_dist = img.flatten(order="F")[lin_idx]
 
     step_size = img_width // 20
-    linear_indices = np.arange(0, img_height * img_width, step_size)
+    # Hard coded 1, +1 for MATLAB's 1-indexing
+    linear_indices = np.arange(1, img_height * img_width + 1, step_size)
 
     # Convert linear indices to (row, col)
-    rows, cols = np.unravel_index(linear_indices, (img_height, img_width))
-    all_img_points = np.column_stack((rows, cols))
+    cols, rows = np.unravel_index(linear_indices, (img_width, img_height))
+
+    # Hard coded +1 to match with MATLAB 1-indexing; may change later
+    all_img_points = np.column_stack((rows + 1, cols + 1))
 
     # Subsample boundary points for speed
     subsampled_boundary_points = coords[::3, :]
@@ -61,12 +65,12 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     nbrs = NearestNeighbors(n_neighbors=1, algorithm="auto").fit(
         subsampled_boundary_points
     )
-    distances_to_boundary, _ = nbrs.kneighbors(coords)
+    distances_to_boundary, _ = nbrs.kneighbors(all_img_points)
     distances_to_boundary = distances_to_boundary.flatten()  # shape (N_points,)
 
     # Apply distance thresholds
     if min_dist is None:
-        in_img_points_mask = distances_to_boundary <= dist_thresh
+        in_img_points_mask = distances_to_boundary <= (dist_thresh + 1e-12)
     else:
         in_img_points_mask = (distances_to_boundary <= dist_thresh) & (
             distances_to_boundary > min_dist
@@ -188,11 +192,10 @@ def get_relative_angle(coordinates, idx, fiber_angle, img_height, img_width):
     return temp_angle, boundary_point
 
 
-def get_points_on_line(object, img_width, img_height, box_size):
+def get_points_on_line(object, box_size):
     center = object["center"]
     angle = object["angle"]
     slope = -np.tan(np.deg2rad(angle))
-    intercept = center[0] - slope * center[1]
 
     if np.isinf(slope):
         dist_y = 0
@@ -205,3 +208,59 @@ def get_points_on_line(object, img_width, img_height, box_size):
     point_2 = [center[1] + dist_y, center[0] + dist_x]
 
     lineCurv, _ = get_segment_pixels(point_1, point_2)
+
+
+import csv
+import os
+import matplotlib.pyplot as plt
+
+base_path = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "..",
+    "tests",
+    "test_results",
+    "get_tif_boundary_test_files",
+)
+
+files = [
+    os.path.join(base_path, f)
+    for f in [
+        "real1_boundary1_coords.csv",
+        "real1_boundary2_coords.csv",
+        "real1_boundary3_coords.csv",
+    ]
+]
+coords = {}
+
+for i, f in enumerate(files, start=1):
+    with open(f, newline="") as csvfile:
+        reader = csv.reader(csvfile)
+        # convert each row into a tuple, cast to float or int if needed
+        coords[f"csv{i}"] = [tuple(map(float, row)) for row in reader]
+
+print(len(coords))
+img = plt.imread(
+    os.path.join(
+        os.path.dirname(__file__), "..", "..", "tests", "test_images", "real1.tif"
+    ),
+    format="TIF",
+)
+
+print(img)
+
+
+dist_thresh = 100
+min_dist = 0
+obj = {}
+
+with open(os.path.join(base_path, "real1_curvelets.csv"), newline="") as f:
+    reader = csv.DictReader(f)
+    for i, row in enumerate(reader):
+        obj[i] = {
+            "center": (float(row["center_1"]), float(row["center_2"])),
+            "angle": float(row["angle"]),
+            "weight": float(row["weight"]),
+        }
+
+get_tif_boundary(coords, img, obj, dist_thresh, min_dist)

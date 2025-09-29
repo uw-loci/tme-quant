@@ -5,7 +5,7 @@ from skimage.measure import regionprops, label
 import csv
 import os
 
-from helper_methods import find_outline_slope, circ_r
+from pycurvelets.utils.geometry import circ_r, find_outline_slope
 
 
 def get_relative_angles(ROI, obj, angle_option=0, fig_flag=False):

@@ -5,15 +5,99 @@ from skimage.measure import regionprops, label
 import csv
 import os
 
-from pycurvelets.helper_methods import (
-    find_connected_pts,
-    find_outline_slope,
-    get_first_neighbor,
-    circ_r,
-)
+from pycurvelets.utils.geometry import find_outline_slope, circ_r
 
 
 def get_relative_angles(ROI, obj, angle_option=0, fig_flag=False):
+    """
+    Compute relative angle measurements between an object and a polygonal ROI (Region of Interest).
+
+    This function extracts geometric properties of the ROI and compares them with the
+    orientation and center of a given object. Depending on the selected `angle_option`,
+    it calculates angles between:
+      - the object's orientation and the ROI boundary at a specific point,
+      - the object's orientation and the ROI's overall orientation,
+      - the object's orientation and the line connecting the object and ROI centers.
+
+    Optionally, a visualization can be generated showing the ROI, object, centers, and
+    orientation vectors.
+
+    Parameters
+    ----------
+    ROI : dict
+        Dictionary describing the region of interest with keys:
+          - "coords" : array_like of shape (N, 2)
+              Polygon coordinates of the ROI boundary, given as (row, col) or (y, x).
+          - "imageHeight" : int
+              Height of the image containing the ROI.
+          - "imageWidth" : int
+              Width of the image containing the ROI.
+          - "index2object" : int
+              Index into `coords` specifying the boundary point closest to the object.
+    obj : dict
+        Dictionary describing the object with keys:
+          - "center" : array_like of shape (2,)
+              Object center coordinates (y, x).
+          - "angle" : float
+              Object orientation angle in degrees.
+    angle_option : {0, 1, 2, 3}, default=0
+        Specifies which relative angle(s) to compute:
+          - 0 : Compute all available relative angles.
+          - 1 : Only compute angle between object and ROI boundary edge.
+          - 2 : Only compute angle between object and ROI center orientation.
+          - 3 : Only compute angle between object and ROI center-to-center line.
+    fig_flag : bool, default=False
+        If True and `angle_option == 0`, display a matplotlib figure showing the ROI,
+        object center, ROI center, orientations, and connecting lines.
+
+    Returns
+    -------
+    relative_angles : dict
+        Dictionary containing computed angles in degrees:
+          - "angle2boundaryEdge" : float or None
+              Angle between object orientation and ROI boundary edge orientation at the
+              specified boundary point.
+          - "angle2boundaryCenter" : float or None
+              Angle between object orientation and overall ROI orientation.
+          - "angle2centersLine" : float or None
+              Angle between object orientation and the line connecting object and ROI centers.
+    ROImeasurements : dict
+        Dictionary containing measurements of the ROI:
+          - "center" : ndarray of shape (2,)
+              ROI centroid coordinates (x, y).
+          - "orientation" : float
+              ROI orientation angle in degrees.
+          - "area" : int
+              Pixel area of the ROI.
+          - "boundary" : ndarray of shape (N, 2)
+              ROI boundary coordinates (y, x).
+
+    Raises
+    ------
+    ValueError
+        If the provided ROI coordinates do not define exactly one connected region.
+
+    Notes
+    -----
+    - ROI orientation is derived from `regionprops`, which may differ slightly
+      from MATLAB's `regionprops` implementation.
+    - Angles are normalized such that the maximum deviation is 90°.
+    - If the boundary point lies on the image edge, `angle2boundaryEdge` defaults to 0.
+
+    Examples
+    --------
+    >>> ROI = {
+    ...     "coords": np.array([[10, 10], [20, 10], [20, 20], [10, 20]]),
+    ...     "imageHeight": 50,
+    ...     "imageWidth": 50,
+    ...     "index2object": 1
+    ... }
+    >>> obj = {"center": np.array([15, 25]), "angle": 45}
+    >>> rel_angles, roi_meas = get_relative_angles(ROI, obj, angle_option=0, fig_flag=False)
+    >>> rel_angles["angle2boundaryCenter"]
+    30.0
+    """
+
     coords = np.array(ROI["coords"])  # [[y1, x1], [y2, x2], ...]
     image_height = ROI["imageHeight"]
     image_width = ROI["imageWidth"]
@@ -147,25 +231,3 @@ def load_coords(csv_path):
                 y, x = map(float, row[:2])
                 coords.append([y, x])
     return np.array(coords)
-
-
-# coords = load_coords_swapped(
-#     "/Users/dongwoolee/Documents/GitHub/curvelets/pycurvelets/testImages/relativeAngleTest/boundary_coords.csv"
-# )
-
-# ROI = {
-#     "coords": coords,
-#     "imageWidth": 512,
-#     "imageHeight": 512,
-#     "index2object": 403,
-# }
-
-# object_data = {"center": [145, 430], "angle": 14.0625}
-
-# angles, measurements = get_relative_angles(
-#     ROI, object_data, angle_option=0, fig_flag=False
-# )
-
-# pretty_angles = {k: float(v) for k, v in angles.items()}
-
-# print(pretty_angles)
