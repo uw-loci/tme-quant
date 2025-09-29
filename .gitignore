@@ -173,14 +173,12 @@ lastPATH_CTF.mat
 *.mat
 *.tif
 
-pycurvelets/opt/*.*
-
-# --- Python API (curvealign_py) and general Python ignores ---
+# --- Python API (curvealign_py, ctfire_py) and general Python ignores ---
 # Virtual environments
 .venv/
 venv/
 .test_env/
-curvealign_py/curvealign_env/
+curvealign_env/
 
 # Byte-compiled / cache
 __pycache__/

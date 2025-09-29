@@ -16,9 +16,9 @@ def test_granular_types():
     print("Testing granular types...")
     
     # Test core types
-    from curvealign_py_py.types.core.curvelet import Curvelet
-    from curvealign_py_py.types.core.boundary import Boundary
-    from curvealign_py_py.types.core.coefficients import CtCoeffs
+    from curvealign_py.types.core.curvelet import Curvelet
+    from curvealign_py.types.core.boundary import Boundary
+    from curvealign_py.types.core.coefficients import CtCoeffs
     
     # Test curvelet creation
     curvelet = Curvelet(center_row=10, center_col=20, angle_deg=45.0, weight=1.5)
@@ -32,8 +32,8 @@ def test_granular_types():
     print("  PASS: Boundary class working")
     
     # Test config types
-    from curvealign_py_py.types.config.curvealign_options import CurveAlignOptions
-    from curvealign_py_py.types.config.feature_options import FeatureOptions
+    from curvealign_py.types.config.curvealign_options import CurveAlignOptions
+    from curvealign_py.types.config.feature_options import FeatureOptions
     
     options = CurveAlignOptions(keep=0.002, dist_thresh=150)
     assert options.keep == 0.002
