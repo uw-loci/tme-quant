@@ -1,16 +1,40 @@
-### tme-quant
+# tme-quant
 
-Python translation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) with the goal of unifying cell and collagen analysis, provided as a modern Python `src/` package and a napari plugin.
+Modern Python implementation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) for collagen fiber analysis, featuring a comprehensive API, CT-FIRE integration, and napari plugin support.
 
-### About this repo
-- `src/pycurvelets`: Python implementation using the curvelet transform
-- `src/napari_curvealign`: napari plugin surface for interactive use
-- `curvealign_py/`: Complete CurveAlign Python API with organized architecture
-  - `curvealign/core/`: Core analysis algorithms (visualization-free)
-  - `curvealign/types/`: Organized type definitions (core, options, results)
-  - `curvealign/visualization/`: Pluggable backends (standalone, napari, ImageJ)
-- `tests/`: pytest suite (data-driven tests and headless napari smoke test)
-- `.github/workflows/ci.yml`: GitHub Actions workflow (runs core tests only)
+## Python API - Quick Start
+
+The repository provides a complete, modern Python API for fiber analysis:
+
+```python
+import curvealign_py as curvealign
+
+# Basic analysis
+result = curvealign.analyze_image(image)
+print(f"Found {len(result.curvelets)} fiber segments")
+print(f"Mean angle: {result.stats['mean_angle']:.1f}°")
+
+# Create visualizations
+overlay = curvealign.overlay(image, result.curvelets)
+angle_map = curvealign.angle_map(image, result.curvelets)
+
+# CT-FIRE integration
+result_ctfire = curvealign.analyze_image(image, mode="ctfire")
+```
+
+### API Features
+- **Unified Interface**: Both curvelet-based and CT-FIRE fiber extraction
+- **Granular Architecture**: Modular design with clean separation of concerns  
+- **Pluggable Visualization**: Support for matplotlib, napari, and ImageJ backends
+- **Type Safety**: Comprehensive type definitions and validation
+- **Framework Ready**: Designed for scientific Python workflows
+
+## Repository Structure
+- `src/curvealign_py/`: Modern CurveAlign Python API
+- `src/ctfire_py/`: CT-FIRE Python API for individual fiber extraction
+- `src/napari_curvealign/`: Interactive napari plugin
+- `tests/`: Comprehensive test suite with API and integration tests
+- `src/curvealign_matlab/`: Original MATLAB reference implementation
 
 ### Licensing and prerequisites
 This project depends on code that cannot be redistributed here:
@@ -21,18 +45,30 @@ Base requirements:
 - Conda (recommended) or Python 3.10–3.13
 - For napari: a Qt binding (PyQt or PySide)
 
-### Quick start (without curvelets)
-Install the package and the napari GUI. This path avoids the native curvelet build.
+## Installation
+
+### Quick Start (Recommended)
+Install the unified package with all Python APIs:
 
 ```bash
-conda create -y -n napari-env -c conda-forge python=3.11 pip
-conda activate napari-env
+conda create -y -n tme-quant -c conda-forge python=3.11 pip
+conda activate tme-quant
 
-# project install (editable)
+# Install the package (includes both CurveAlign and CT-FIRE APIs)
 pip install -e .
 
-# napari + Qt
+# Optional: Install napari for interactive analysis
 conda install -y -c conda-forge napari pyqt qtpy
+```
+
+### Verify Installation
+```python
+import curvealign_py as curvealign
+import ctfire_py as ctfire
+
+# Test basic functionality
+result = curvealign.analyze_image(your_image)
+print(f"Analysis complete: {len(result.curvelets)} features detected")
 ```
 
 ### Optional: curvelet backend (curvelops)
@@ -69,66 +105,83 @@ Windows options:
 - Recommended: use WSL2 (Ubuntu). Follow the macOS/Linux steps inside WSL.
 - Native Windows: use MSYS2 (for `gcc`, `make`) or Visual Studio toolchain; build FFTW 2.1.5 and CurveLab from source, set `FFTW` and `FDCT` env vars to their install roots, then install `curvelops` as above. Supervisors can validate these steps on a Windows host.
 
-### Development: running the tests
-- Headless (no GUI): set Qt to offscreen
-  - macOS/Linux: `export QT_QPA_PLATFORM=offscreen`
-  - Windows/PowerShell: `$env:QT_QPA_PLATFORM = 'offscreen'`
+## Testing
 
-- Core tests (no curvelets):
+The repository includes comprehensive tests for all API components:
+
 ```bash
+# Run all tests (CurveAlign, CT-FIRE, and integration)
+pytest -v
+
+# Run specific test suites
+pytest tests/curvealign_py/ -v  # CurveAlign API tests
+pytest tests/ctfire_py/ -v     # CT-FIRE API tests
+pytest tests/test_unified_api.py -v  # Integration tests
+```
+
+### Headless Testing
+For CI or headless environments:
+```bash
+export QT_QPA_PLATFORM=offscreen  # Linux/macOS
 pytest -q
 ```
 
-- Full tests with curvelets (after installing `curvelops`):
+### Curvelet Backend Tests
+After installing `curvelops`:
 ```bash
 export TMEQ_RUN_CURVELETS=1
 pytest -q
 ```
 
-Notes:
-- The napari test is an import-only smoke test (no `Viewer` is created); it runs headless.
+## Advanced Usage
 
-Testing policy:
-- Tests must not write files to the repository root. Use a system
-  temporary directory instead (e.g., `tempfile.TemporaryDirectory`).
-- If a deterministic artifact is needed across runs, commit it under
-  `tests/test_resources/` and read from there during tests.
-
-### CurveAlign Python API
-
-The repository now includes a complete, modern Python API for CurveAlign (`curvealign_py/`):
-
-#### Quick Start with CurveAlign API
+### Batch Processing
 ```python
-# Add to Python path
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent / "curvealign_py"))
+import curvealign_py as curvealign
 
-# Use the API
-import curvealign
-result = curvealign.analyze_image(image)
+# Process multiple images
+images = [load_image(path) for path in image_paths]
+results = curvealign.batch_analyze(images, mode="curvelets")
 
-# Optional visualization
-from curvealign.visualization import standalone
-overlay = standalone.create_overlay(image, result.curvelets)
+# CT-FIRE batch analysis
+results_ctfire = curvealign.batch_analyze(images, mode="ctfire")
 ```
 
-#### Features
-- **Core Analysis**: Visualization-free algorithms with minimal dependencies
-- **Organized Types**: Clean type packages (core, options, results)
-- **Pluggable Visualization**: Support for matplotlib, napari, and ImageJ
-- **Framework Integration**: Ready for scientific Python workflows
+### Custom Analysis Options
+```python
+# Configure analysis parameters
+options = curvealign.CurveAlignOptions(
+    keep=0.002,              # Coefficient threshold
+    dist_thresh=150.0,       # Boundary distance
+    minimum_nearest_fibers=6 # Feature computation
+)
 
-See `curvealign_py/ARCHITECTURE.md` for complete documentation.
+result = curvealign.analyze_image(image, options=options)
+```
 
-### Continuous integration
-- CI installs the package without `curvelops` to avoid building FFTW/CurveLab on runners.
-- CI environment:
-  - `TMEQ_RUN_CURVELETS=0` (curvelet tests skipped)
-  - `QT_QPA_PLATFORM=offscreen` (headless napari import)
+### Visualization Backends
+```python
+# Matplotlib backend (default)
+overlay = curvealign.overlay(image, result.curvelets, backend="matplotlib")
 
-### Troubleshooting
-- Qt error ("No Qt bindings could be found"): install `pyqt` (or `pyside2`) from conda-forge.
-- Segfault on Viewer creation: avoid creating a `napari.Viewer()` in tests; we only import napari and run offscreen.
-- curvelops build errors: ensure `FFTW` and `FDCT` point to your install roots and the 2D/3D libraries were built.
+# napari integration
+curvealign.overlay(image, result.curvelets, backend="napari")
+
+# ImageJ integration  
+curvealign.overlay(image, result.curvelets, backend="imagej")
+```
+
+## Troubleshooting
+
+### Common Issues
+- **Qt error**: Install Qt bindings: `conda install -c conda-forge pyqt`
+- **Import errors**: Ensure package is installed: `pip install -e .`
+- **curvelops build errors**: Verify `FFTW` and `FDCT` environment variables point to install roots
+
+### Documentation
+- API documentation: See individual module docstrings
+- Architecture details: Comprehensive type system and modular design
+- Examples: Check `simple_usage.py` for common usage patterns
+
+## Contributing
+This repository follows modern Python packaging standards with comprehensive testing and CI integration. All APIs are designed for extensibility and scientific workflow integration.
