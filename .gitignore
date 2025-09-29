@@ -177,6 +177,9 @@ lastPATH_CTF.mat
 # Virtual environments
 .venv/
 venv/
+.env/
+env/
+.api_env/
 .test_env/
 curvealign_env/
 
