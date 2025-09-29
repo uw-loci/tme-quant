@@ -8,7 +8,7 @@ correctly and maintain backward compatibility.
 import numpy as np
 import pytest
 
-import curvealign
+import curvealign_py as curvealign
 
 
 class TestHighLevelAPI:

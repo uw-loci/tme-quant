@@ -16,7 +16,7 @@ def test_ctfire_standalone():
     print("Testing CT-FIRE standalone API...")
     
     try:
-        import ctfire
+        import ctfire_py as ctfire
         
         # Test image
         image = np.random.rand(128, 128)
@@ -50,7 +50,7 @@ def test_ctfire_integration():
     print("\nTesting CT-FIRE integration with CurveAlign...")
     
     try:
-        import curvealign
+        import curvealign_py as curvealign
         
         # Test image
         image = np.random.rand(128, 128)
@@ -82,15 +82,15 @@ def test_granular_ctfire():
     
     try:
         # Test granular type imports
-        from ctfire.types.core import Fiber, FiberNetwork
-        from ctfire.types.config import CTFireOptions
-        from ctfire.types.results import CTFireResult
+        from ctfire_py.types.core import Fiber, FiberNetwork
+        from ctfire_py.types.config import CTFireOptions
+        from ctfire_py.types.results import CTFireResult
         
         print("  PASS: CT-FIRE types imported successfully")
         
         # Test granular algorithm imports
-        from ctfire.core.algorithms import extract_fibers_fire, enhance_image_with_curvelets
-        from ctfire.core.processors import analyze_image_ctfire
+        from ctfire_py.core.algorithms import extract_fibers_fire, enhance_image_with_curvelets
+        from ctfire_py.core.processors import analyze_image_ctfire
         
         print("  PASS: CT-FIRE algorithms and processors imported successfully")
         

@@ -16,9 +16,9 @@ def test_granular_types():
     print("Testing granular types...")
     
     # Test core types
-    from curvealign.types.core.curvelet import Curvelet
-    from curvealign.types.core.boundary import Boundary
-    from curvealign.types.core.coefficients import CtCoeffs
+    from curvealign_py_py.types.core.curvelet import Curvelet
+    from curvealign_py_py.types.core.boundary import Boundary
+    from curvealign_py_py.types.core.coefficients import CtCoeffs
     
     # Test curvelet creation
     curvelet = Curvelet(center_row=10, center_col=20, angle_deg=45.0, weight=1.5)
@@ -32,8 +32,8 @@ def test_granular_types():
     print("  PASS: Boundary class working")
     
     # Test config types
-    from curvealign.types.config.curvealign_options import CurveAlignOptions
-    from curvealign.types.config.feature_options import FeatureOptions
+    from curvealign_py_py.types.config.curvealign_options import CurveAlignOptions
+    from curvealign_py_py.types.config.feature_options import FeatureOptions
     
     options = CurveAlignOptions(keep=0.002, dist_thresh=150)
     assert options.keep == 0.002
@@ -45,10 +45,10 @@ def test_granular_types():
     print("  PASS: FeatureOptions class working")
     
     # Test results types
-    from curvealign.types.results.feature_table import FeatureTable
-    from curvealign.types.results.boundary_metrics import BoundaryMetrics
-    from curvealign.types.results.analysis_result import AnalysisResult
-    from curvealign.types.results.roi_result import ROIResult
+    from curvealign_py.types.results.feature_table import FeatureTable
+    from curvealign_py.types.results.boundary_metrics import BoundaryMetrics
+    from curvealign_py.types.results.analysis_result import AnalysisResult
+    from curvealign_py.types.results.roi_result import ROIResult
     
     print("  PASS: All result types imported successfully")
 
@@ -64,7 +64,7 @@ def test_granular_algorithms():
         return
     
     # Test FDCT wrapper
-    from curvealign.core.algorithms.fdct_wrapper import apply_fdct, apply_ifdct, extract_parameters
+    from curvealign_py.core.algorithms.fdct_wrapper import apply_fdct, apply_ifdct, extract_parameters
     
     test_image = np.random.randn(64, 64)
     coeffs = apply_fdct(test_image)
@@ -80,7 +80,7 @@ def test_granular_algorithms():
     print("  PASS: extract_parameters working")
     
     # Test coefficient processing
-    from curvealign.core.algorithms.coefficient_processing import (
+    from curvealign_py.core.algorithms.coefficient_processing import (
         threshold_coefficients_at_scale, create_empty_coeffs_like
     )
     
@@ -93,12 +93,12 @@ def test_granular_algorithms():
     print("  PASS: threshold_coefficients_at_scale working")
     
     # Test curvelet extraction
-    from curvealign.core.algorithms.curvelet_extraction import (
+    from curvealign_py.core.algorithms.curvelet_extraction import (
         extract_curvelets_from_coeffs, normalize_angles, filter_edge_curvelets
     )
     
     # Create mock curvelets for testing
-    from curvealign.types.core.curvelet import Curvelet
+    from curvealign_py.types.core.curvelet import Curvelet
     test_curvelets = [
         Curvelet(10, 20, 30.0, 1.0),
         Curvelet(30, 40, 190.0, 1.5),  # Will be normalized to <180
@@ -125,7 +125,7 @@ def test_granular_processors():
         return
     
     # Test curvelet processor
-    from curvealign.core.processors.curvelet_processor import extract_curvelets, reconstruct_image
+    from curvealign_py.core.processors.curvelet_processor import extract_curvelets, reconstruct_image
     
     test_image = np.random.randn(32, 32)  # Smaller for faster testing
     curvelets, coeffs = extract_curvelets(test_image, keep=0.01)
@@ -137,7 +137,7 @@ def test_granular_processors():
     # Note: Shape may differ due to placeholder implementation
     
     # Test feature processor
-    from curvealign.core.processors.feature_processor import compute_features
+    from curvealign_py.core.processors.feature_processor import compute_features
     
     if curvelets:  # Only test if we have curvelets
         features = compute_features(curvelets)
@@ -145,8 +145,8 @@ def test_granular_processors():
         print(f"  PASS: compute_features working - computed {len(features)} feature types")
     
     # Test boundary processor
-    from curvealign.core.processors.boundary_processor import measure_boundary_alignment
-    from curvealign.types.core.boundary import Boundary
+    from curvealign_py.core.processors.boundary_processor import measure_boundary_alignment
+    from curvealign_py.types.core.boundary import Boundary
     
     if curvelets:  # Only test if we have curvelets
         boundary = Boundary("polygon", [[0, 0], [32, 0], [32, 32], [0, 32]])
@@ -159,7 +159,7 @@ def test_granular_visualization():
     print("\nTesting granular visualization...")
     
     # Test backend detection
-    from curvealign.visualization.backends import get_available_backends
+    from curvealign_py.visualization.backends import get_available_backends
     
     backends = get_available_backends()
     print(f"  PASS: get_available_backends working - found: {backends}")
@@ -167,7 +167,7 @@ def test_granular_visualization():
     # Test renderers (without matplotlib to avoid dependencies)
     try:
         import numpy as np
-        from curvealign.types.core.curvelet import Curvelet
+        from curvealign_py.types.core.curvelet import Curvelet
         
         test_image = np.random.randn(32, 32)
         test_curvelets = [
@@ -176,8 +176,8 @@ def test_granular_visualization():
         ]
         
         # Test that renderer functions can be imported
-        from curvealign.visualization.renderers.overlay_renderer import create_fiber_overlay
-        from curvealign.visualization.renderers.angle_map_renderer import create_angle_maps
+        from curvealign_py.visualization.renderers.overlay_renderer import create_fiber_overlay
+        from curvealign_py.visualization.renderers.angle_map_renderer import create_angle_maps
         
         print("  PASS: Renderer functions imported successfully")
         print("  ⚠️  Skipping actual rendering - matplotlib not available")
@@ -192,7 +192,7 @@ def test_main_api():
     
     try:
         import numpy as np
-        import curvealign
+        import curvealign_py as curvealign
         
         print(f"  PASS: Main package imported - version {curvealign.__version__}")
         print(f"  PASS: API functions available: {len([x for x in curvealign.__all__ if not x.startswith('__')])}")
@@ -220,24 +220,24 @@ def test_organized_imports():
     print("\nTesting organized imports...")
     
     # Test types imports
-    from curvealign.types import Curvelet, CurveAlignOptions, AnalysisResult
+    from curvealign_py.types import Curvelet, CurveAlignOptions, AnalysisResult
     print("  PASS: Main types import working")
     
     # Test core imports
     try:
-        from curvealign.core.processors import extract_curvelets, compute_features
+        from curvealign_py.core.processors import extract_curvelets, compute_features
         print("  PASS: Core processors import working")
     except ImportError:
         print("  ⚠️  Core processors import requires numpy")
     
     # Test visualization imports
-    from curvealign.visualization.backends import get_available_backends
+    from curvealign_py.visualization.backends import get_available_backends
     print("  PASS: Visualization backends import working")
     
     # Test organized type imports
-    from curvealign.types.core import Curvelet as CoreCurvelet
-    from curvealign.types.config import CurveAlignOptions as ConfigOptions
-    from curvealign.types.results import AnalysisResult as ResultType
+    from curvealign_py.types.core import Curvelet as CoreCurvelet
+    from curvealign_py.types.config import CurveAlignOptions as ConfigOptions
+    from curvealign_py.types.results import AnalysisResult as ResultType
     
     print("  PASS: Granular type imports working")
 

@@ -18,7 +18,7 @@ def test_unified_api_modes():
     """Test unified API with both analysis modes."""
     print("Testing unified API modes...")
     
-    import curvealign
+    import curvealign_py as curvealign
     
     # Test image
     image = np.random.rand(128, 128)
@@ -45,7 +45,7 @@ def test_mode_comparison():
     """Test comparison between analysis modes."""
     print("\nTesting mode comparison...")
     
-    import curvealign
+    import curvealign_py as curvealign
     
     # Test image with clear structure
     image = np.zeros((100, 100))
@@ -68,7 +68,7 @@ def test_batch_processing():
     """Test batch processing with both modes."""
     print("\nTesting batch processing...")
     
-    import curvealign
+    import curvealign_py as curvealign
     
     # Create test images
     images = [np.random.rand(64, 64) for _ in range(3)]

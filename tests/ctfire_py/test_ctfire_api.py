@@ -10,9 +10,9 @@ def test_ctfire_types():
     """Test CT-FIRE type definitions."""
     print("Testing CT-FIRE types...")
     
-    from ctfire.types.core import Fiber, FiberNetwork, FiberGraph
-    from ctfire.types.config import CTFireOptions
-    from ctfire.types.results import CTFireResult, FiberMetrics
+    from ctfire_py.types.core import Fiber, FiberNetwork, FiberGraph
+    from ctfire_py.types.config import CTFireOptions
+    from ctfire_py.types.results import CTFireResult, FiberMetrics
     
     # Test Fiber creation
     fiber = Fiber(
@@ -45,8 +45,8 @@ def test_ctfire_algorithms():
     """Test CT-FIRE algorithm functions."""
     print("\nTesting CT-FIRE algorithms...")
     
-    from ctfire.core.algorithms import extract_fibers_fire, enhance_image_with_curvelets
-    from ctfire.types.config import CTFireOptions
+    from ctfire_py.core.algorithms import extract_fibers_fire, enhance_image_with_curvelets
+    from ctfire_py.types.config import CTFireOptions
     
     # Test image
     test_image = np.random.rand(64, 64)
@@ -72,7 +72,7 @@ def test_ctfire_processors():
     """Test CT-FIRE processor functions."""
     print("\nTesting CT-FIRE processors...")
     
-    from ctfire.core.processors import (
+    from ctfire_py.core.processors import (
         analyze_image_ctfire, analyze_fiber_network,
         compute_fiber_metrics, compute_ctfire_statistics
     )

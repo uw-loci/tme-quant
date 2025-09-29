@@ -10,23 +10,54 @@ authors = [{ name = "Eliceiri Lab" }]
 requires-python = ">=3.9"
 dependencies = [
   "pandas",
-  "numpy",
-  "matplotlib",
-  "scipy",
+  "numpy>=1.20.0",
+  "matplotlib>=3.3.0",
+  "scipy>=1.7.0",
   "opencv-python",
-  "scikit-image",
+  "scikit-image>=0.18.0",
+  "tifffile>=2021.1.1",
   "openpyxl",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
   "build",
-  "pytest",
+  "pytest>=6.0",
+  "pytest-cov",
   "ruff",
+  "black>=22.0.0",
+  "isort>=5.0.0",
+  "flake8>=4.0.0",
+  "mypy",
+  "pre-commit",
 ]
-
-[project.optional-dependencies]
+docs = [
+  "sphinx>=4.0",
+  "sphinx-rtd-theme",
+  "numpydoc",
+]
+visualization = [
+  "matplotlib>=3.5.0",
+]
+napari = [
+  "napari[all]>=0.4.0",
+  "qtpy",
+]
+imagej = [
+  "pyimagej>=1.4.0",
+]
+curvelet = [
+  "pycurvelets",
+]
 curvelops = [
+  "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
+]
+all = [
+  "matplotlib>=3.5.0",
+  "napari[all]>=0.4.0", 
+  "qtpy",
+  "pyimagej>=1.4.0",
+  "pycurvelets",
   "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
 ]
 
@@ -41,9 +72,21 @@ namespaces = false
 [tool.pytest.ini_options]
 testpaths = [
   "tests",
-  "test/curvealign_py",
-  "test/ctfire_py",
+  "tests/curvealign_py",
+  "tests/ctfire_py",
 ]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=curvealign_py --cov=ctfire_py --cov-report=term-missing"
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.isort]
+profile = "black"
+line_length = 88
 
 
 

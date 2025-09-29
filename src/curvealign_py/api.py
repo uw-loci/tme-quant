@@ -75,8 +75,7 @@ def analyze_image(
         try:
             import sys
             from pathlib import Path
-            sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "ctfire_py"))
-            import ctfire
+            import ctfire_py as ctfire
             
             # Convert CurveAlign options to CT-FIRE options
             ctfire_options = ctfire.CTFireOptions(
