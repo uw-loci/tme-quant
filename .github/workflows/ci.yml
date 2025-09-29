@@ -26,23 +26,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Install without curvelops to avoid FFTW/CurveLab build on CI
+          # Install project in editable mode (src layout)
           python -m pip install --break-system-packages -e .
           python -m pip install --break-system-packages pytest pytest-cov ruff
-          # Install CurveAlign and CT-FIRE API dependencies for testing
-          python -m pip install --break-system-packages -e ./curvealign_py
-          python -m pip install --break-system-packages -e ./ctfire_py
 
       - name: Run tests
         env:
           TMEQ_RUN_CURVELETS: "0"
           QT_QPA_PLATFORM: "offscreen"
         run: |
-          # Run original tme-quant tests
-          pytest -q
-          # Test granular CurveAlign API
-          cd curvealign_py && pytest tests/ -v
-          # Test CT-FIRE API
-          cd ../ctfire_py && pytest tests/ -v
-          # Test unified API integration
-          cd ../tests && python test_unified_api.py
+          # Run all tests (root tests, and test/curvealign_py + test/ctfire_py)
+          pytest -q -vv

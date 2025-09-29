@@ -9,8 +9,7 @@ import os
 from pathlib import Path
 import traceback
 
-# Add curvealign to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Tests run with src/ on sys.path via setuptools. No manual sys.path tweaks needed.
 
 def test_granular_types():
     """Test all granular type imports and functionality."""

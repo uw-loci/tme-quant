@@ -110,16 +110,11 @@ def enhance_image_with_curvelets(
     np.ndarray
         Curvelet-enhanced image
     """
-    # Import curvealign processors for enhancement
-    import sys
-    from pathlib import Path
-    curvealign_path = Path(__file__).parent.parent.parent.parent.parent / "curvealign_py"
-    sys.path.insert(0, str(curvealign_path))
-    
+    # Import curvealign processors for enhancement (installed from src/curvealign)
     try:
         from curvealign.core.processors import extract_curvelets, reconstruct_image
-    except ImportError:
-        raise ImportError("CurveAlign package not available for curvelet enhancement. Install curvealign_py.")
+    except ImportError as e:
+        raise ImportError("CurveAlign package not available for curvelet enhancement. Ensure 'curvealign' is installed from src.") from e
     
     # Extract curvelets and reconstruct with limited scales
     _, coeffs = extract_curvelets(image, keep=keep, scale=scale)

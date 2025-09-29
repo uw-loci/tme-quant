@@ -3,12 +3,8 @@
 Test suite for CT-FIRE core API functionality.
 """
 
-import sys
-from pathlib import Path
 import numpy as np
-
-# Add ctfire to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from pathlib import Path
 
 def test_ctfire_types():
     """Test CT-FIRE type definitions."""

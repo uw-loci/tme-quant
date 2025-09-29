@@ -41,6 +41,8 @@ namespaces = false
 [tool.pytest.ini_options]
 testpaths = [
   "tests",
+  "test/curvealign_py",
+  "test/ctfire_py",
 ]
 
 
