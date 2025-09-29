@@ -1,9 +1,4 @@
 import numpy as np
-try:
-    from curvelops import FDCT2D, curveshow, fdct2d_wrapper  # type: ignore
-    HAS_CURVELETS = True
-except Exception:
-    HAS_CURVELETS = False
 import pandas as pd
 from skimage.io import imread
 from skimage.color import gray2rgb
@@ -11,6 +6,43 @@ from skimage.filters import gaussian
 import random
 from enum import Enum
 from typing import Tuple
+
+# Import the new CurveAlign API
+try:
+    import curvealign_py as curvealign
+    HAS_CURVEALIGN = True
+except ImportError:
+    HAS_CURVEALIGN = False
+    print("Warning: curvealign_py not available. Using mock analysis.")
+
+# Legacy curvelops import for backward compatibility
+try:
+    from curvelops import FDCT2D, curveshow, fdct2d_wrapper  # type: ignore
+    HAS_CURVELETS = True
+except Exception:
+    HAS_CURVELETS = False
+
+def _convert_features_to_dataframe(features: dict, stats: dict) -> pd.DataFrame:
+    """Convert CurveAlign features and stats to a DataFrame for display."""
+    measurements = []
+    
+    # Add summary statistics
+    for key, value in stats.items():
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            measurements.append({
+                'Feature': key.replace('_', ' ').title(),
+                'Value': float(value)
+            })
+    
+    # Add feature array summaries (mean values)
+    for key, array in features.items():
+        if isinstance(array, np.ndarray) and array.size > 0:
+            measurements.append({
+                'Feature': f'{key.replace("_", " ").title()} (Mean)',
+                'Value': float(np.mean(array))
+            })
+    
+    return pd.DataFrame(measurements)
 
 def run_analysis(
     image_path: str,
@@ -37,11 +69,6 @@ def run_analysis(
         print(f"  - {param}: {value}")
     
 
-    # Add curvelets analysis logic here
-    # to be added in the future
-
-
-    # For now, we will mock the analysis results
     # Load the image
     image_data = imread(image_path)
     
@@ -49,6 +76,34 @@ def run_analysis(
     if image_data.ndim > 2 and image_data.shape[0] > 1:
         image_data = image_data[0]
     
+    # Use real CurveAlign analysis if available
+    if HAS_CURVEALIGN:
+        try:
+            # Create CurveAlign options from parameters
+            options = curvealign.CurveAlignOptions(
+                keep=curve_threshold,
+                dist_thresh=distance_boundary,
+            )
+            
+            # Run CurveAlign analysis
+            result = curvealign.analyze_image(image_data, options=options)
+            
+            # Create overlay visualization
+            overlay_img = curvealign.overlay(image_data, result.curvelets)
+            
+            # Create angle map visualization
+            angle_map_raw, angle_map_processed = curvealign.angle_map(image_data, result.curvelets)
+            
+            # Convert features to measurements DataFrame
+            measurements = _convert_features_to_dataframe(result.features, result.stats)
+            
+            return overlay_img, angle_map_processed, measurements
+            
+        except Exception as e:
+            print(f"CurveAlign analysis failed: {e}")
+            print("Falling back to mock analysis...")
+    
+    # Fallback to mock analysis if CurveAlign not available or failed
     # Generate mock overlay image (convert to RGB and add green overlay)
     if image_data.ndim == 2:
         rgb_image = gray2rgb(image_data)
