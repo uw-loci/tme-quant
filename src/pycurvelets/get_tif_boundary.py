@@ -50,13 +50,13 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
 
     step_size = img_width // 20
     # Hard coded 1, +1 for MATLAB's 1-indexing
-    linear_indices = np.arange(1, img_height * img_width + 1, step_size)
+    linear_indices = np.arange(0, img_height * img_width, step_size)
 
     # Convert linear indices to (row, col)
     cols, rows = np.unravel_index(linear_indices, (img_width, img_height))
 
     # Hard coded +1 to match with MATLAB 1-indexing; may change later
-    all_img_points = np.column_stack((rows + 1, cols + 1))
+    all_img_points = np.column_stack((rows, cols))
 
     # Subsample boundary points for speed
     subsampled_boundary_points = coords[::3, :]
@@ -69,7 +69,7 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     distances_to_boundary = distances_to_boundary.flatten()  # shape (N_points,)
 
     # Apply distance thresholds
-    if min_dist is None:
+    if not min_dist:
         in_img_points_mask = distances_to_boundary <= (dist_thresh + 1e-12)
     else:
         in_img_points_mask = (distances_to_boundary <= dist_thresh) & (
@@ -92,7 +92,7 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     in_curvs_flag = np.zeros(curvs_len, dtype=bool)
     out_curvs_flag = np.zeros(curvs_len, dtype=bool)
 
-    if min_dist is None:
+    if not min_dist:
         for i in range(curvs_len):
             # in region?
             nearest_region_dist[i] = (reg_dist[i] == 255) | (reg_dist[i] == 1)
@@ -103,7 +103,7 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
             # relative angle at nearest boundary point
             if dist[i] <= dist_thresh:
                 nearest_boundary_relative_angle[i], boundary_point = get_relative_angle(
-                    coordinates=[coords[:, 1], coords[:, 0]],
+                    coordinates=coords,
                     idx=idx_dist[i],
                     fiber_angle=obj[i]["angle"],
                     img_height=img_height,
@@ -114,9 +114,7 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
                 boundary_point = np.full(2, np.nan)
 
             # Extension point features
-            line_curvelets, ortho_curvelets = get_points_on_line(
-                obj[i], img_width, img_height, dist_thresh
-            )
+            line_curvelets, ortho_curvelets = get_points_on_line(obj[i], dist_thresh)
 
             line_curvelets_swapped = line_curvelets[:, [1, 0]]
             intersection_line, intersection_line_a, intersection_line_b = (
@@ -169,7 +167,9 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
 
 
 def get_relative_angle(coordinates, idx, fiber_angle, img_height, img_width):
-    boundary_angle = find_outline_slope([coordinates[:, 1], coordinates[:, 0]], idx)
+    coordinates = np.asarray(coordinates)
+
+    boundary_angle = find_outline_slope(coordinates, idx)
     boundary_point = coordinates[idx, :]
     if (
         boundary_point[0] == 1
@@ -204,8 +204,8 @@ def get_points_on_line(object, box_size):
         dist_y = box_size / np.sqrt(1 + slope * slope)
         dist_x = dist_y * slope
 
-    point_1 = [center[1] - dist_y, center[0] - dist_x]
-    point_2 = [center[1] + dist_y, center[0] + dist_x]
+    point_1 = [center[0] - dist_y, center[1] - dist_x]
+    point_2 = [center[0] + dist_y, center[1] + dist_x]
 
     lineCurv, _ = get_segment_pixels(point_1, point_2)
 
@@ -251,7 +251,7 @@ print(img)
 
 
 dist_thresh = 100
-min_dist = 0
+min_dist = []
 obj = {}
 
 with open(os.path.join(base_path, "real1_curvelets.csv"), newline="") as f:

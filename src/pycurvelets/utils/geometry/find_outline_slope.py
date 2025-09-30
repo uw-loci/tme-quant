@@ -43,12 +43,15 @@ def find_outline_slope(coords, idx, num=21):
         x_coeffs = np.polyfit(con_pts_sorted[:, 1], con_pts_sorted[:, 0], 2)
         x_fit = np.polyval(x_coeffs, y_fit)
 
-    run2 = -(x_fit[26] - x_fit[24])
-    rise2 = -(y_fit[26] - y_fit[24])
+    run2 = x_fit[25] - x_fit[23]
+    rise2 = y_fit[25] - y_fit[23]
 
-    if run2 == 0:
-        slope2 = None
-    else:
-        slope2 = np.degrees(np.arctan(rise2 / run2)) % 180
+    theta2 = np.degrees(np.arctan2(rise2, run2))  # safer than rise/run
+    slope2 = theta2 % 180
+
+    # if run2 == 0:
+    #     slope2 = None
+    # else:
+    #     slope2 = np.degrees(np.arctan(rise2 / run2)) % 180
 
     return slope2
