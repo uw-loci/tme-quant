@@ -23,6 +23,7 @@ result_ctfire = curvealign.analyze_image(image, mode="ctfire")
 ```
 
 ### API Features
+- **Authentic FDCT**: Real CurveLab transforms via Curvelops integration
 - **Unified Interface**: Both curvelet-based and CT-FIRE fiber extraction
 - **Granular Architecture**: Modular design with clean separation of concerns  
 - **Pluggable Visualization**: Support for matplotlib, napari, and ImageJ backends
@@ -127,10 +128,17 @@ pytest -q
 ```
 
 ### Curvelet Backend Tests
-After installing `curvelops`:
+After installing `curvelops` (see `CURVELOPS_INTEGRATION.md`):
 ```bash
+# Setup Curvelops environment
+source setup_curvelops_env.sh
+
+# Run tests with real FDCT
 export TMEQ_RUN_CURVELETS=1
 pytest -q
+
+# Test Curvelops integration specifically
+python test_curvelops_final.py
 ```
 
 ## Advanced Usage

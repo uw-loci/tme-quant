@@ -6,7 +6,11 @@ The CurveAlign Python API now supports **Curvelops** integration for authentic F
 
 ## Integration Status
 
+### ✅ **SUCCESSFULLY INTEGRATED** 
+Curvelops is now working with CurveLab FDCT transforms
+
 ### Current Implementation
+- ✅ **Real FDCT transforms**: CurveLab operations via Curvelops
 - ✅ **Graceful fallback**: Works with or without Curvelops installed
 - ✅ **Automatic detection**: Detects Curvelops availability at runtime
 - ✅ **Improved placeholders**: Enhanced placeholder implementations when Curvelops unavailable
@@ -14,42 +18,64 @@ The CurveAlign Python API now supports **Curvelops** integration for authentic F
 - ✅ **Better reconstruction**: Image shape-aware inverse transforms
 
 ### Curvelops Features Supported
-- ✅ Forward FDCT (`apply_fdct`)
-- ✅ Inverse FDCT (`apply_ifdct`) 
-- ✅ Parameter extraction (`extract_parameters`)
-- ✅ Status checking (`get_curvelops_status`)
+- ✅ Forward FDCT (`apply_fdct`) - **WORKING WITH REAL CURVELAB**
+- ✅ Inverse FDCT (`apply_ifdct`) - **WORKING WITH REAL CURVELAB**
+- ✅ Parameter extraction (`extract_parameters`) - **WORKING WITH REAL CURVELAB**
+- ✅ Status checking (`get_curvelops_status`) - **REPORTS FUNCTIONAL**
+
+### Test Results
+```
+Curvelops Available: True
+Backend: curvelops  
+Version: 0.23
+Functional: True
+✅ Curvelops is properly installed and functional!
+```
 
 ## Installation
 
 ### Prerequisites
 Curvelops requires **FFTW 2.1.5** and **CurveLab** to be built and installed first.
 
-#### 1. Install FFTW 2.1.5
+#### 1. Organize Dependencies
 ```bash
-# Download and build FFTW 2.1.5
+# Create a utils directory for dependencies (adjust path as needed)
+mkdir -p ../utils
+
+# Move or install FFTW 2.1.5 to utils/
+# If not already built, download and build:
+cd ../utils
 curl -L -O http://www.fftw.org/fftw-2.1.5.tar.gz
 tar xzf fftw-2.1.5.tar.gz
 cd fftw-2.1.5
-./configure --prefix="$HOME/opt/fftw-2.1.5" --disable-fortran
+./configure --prefix="$(pwd)" --disable-fortran
 make -j$(nproc)
 make install
-export FFTW="$HOME/opt/fftw-2.1.5"
+# Create symlink for Curvelops compatibility
+ln -sf include fftw
 ```
 
 #### 2. Install CurveLab
 ```bash
-# Download CurveLab 2.1.x from http://curvelet.org/
-export FDCT="/path/to/CurveLab-2.1.x"
-cd "$FDCT/fdct_wrapping_cpp/src" && make
-cd "$FDCT/fdct/src" && make  
-cd "$FDCT/fdct3d/src" && make
+# Download CurveLab 2.1.x from http://curvelet.org/ to utils/
+cd ../utils
+# Extract CurveLab-2.1.x.tar.gz here
+cd CurveLab-2.1.x
+# Build required components
+cd fdct_wrapping_cpp/src && make
+cd ../../fdct3d/src && make
 ```
 
-#### 3. Install Curvelops
+#### 3. Setup Environment and Install Curvelops
 ```bash
-# Set environment variables
-export FFTW="$HOME/opt/fftw-2.1.5"
-export FDCT="/path/to/CurveLab-2.1.x"
+# Use the provided setup script (adjust paths as needed)
+source setup_curvelops_env.sh
+
+# Or manually set environment variables:
+export FFTW="../utils/fftw-2.1.5"
+export FDCT="../utils/CurveLab-2.1.x"
+export CPPFLAGS="-I${FFTW}/include"
+export LDFLAGS="-L${FFTW}/lib"
 
 # Install Curvelops
 pip install -e ".[curvelops]"
