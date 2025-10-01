@@ -68,8 +68,8 @@ def extract_curvelets(
     # Threshold coefficients - keep only the strongest 'keep' fraction
     Ct[s] = threshold_coefficients_at_scale(C[s], keep)
     
-    # Extract center positions and angles
-    X_rows, Y_cols = extract_parameters(Ct)
+    # Extract center positions and angles (pass image shape for better scaling)
+    X_rows, Y_cols = extract_parameters(Ct, img_shape=image.shape)
     
     # Convert coefficient positions to curvelet objects
     curvelets = extract_curvelets_from_coeffs(Ct[s], X_rows[s], Y_cols[s], s)
@@ -87,7 +87,7 @@ def extract_curvelets(
     return curvelets, Ct
 
 
-def reconstruct_image(coeffs: CtCoeffs, scales: Optional[Sequence[int]] = None) -> np.ndarray:
+def reconstruct_image(coeffs: CtCoeffs, scales: Optional[Sequence[int]] = None, img_shape: Optional[Tuple[int, int]] = None) -> np.ndarray:
     """
     Reconstruct an image from curvelet coefficients.
     
@@ -100,6 +100,8 @@ def reconstruct_image(coeffs: CtCoeffs, scales: Optional[Sequence[int]] = None) 
         Curvelet coefficient structure from forward transform
     scales : Sequence[int], optional
         Specific scales to include in reconstruction (default: all scales)
+    img_shape : Tuple[int, int], optional
+        Target image shape for reconstruction
         
     Returns
     -------
@@ -114,5 +116,5 @@ def reconstruct_image(coeffs: CtCoeffs, scales: Optional[Sequence[int]] = None) 
                 filtered_coeffs[scale_idx] = coeffs[scale_idx]
         coeffs = filtered_coeffs
     
-    # Apply inverse FDCT
-    return apply_ifdct(coeffs, finest=0)
+    # Apply inverse FDCT (pass image shape for better reconstruction)
+    return apply_ifdct(coeffs, finest=0, img_shape=img_shape)
