@@ -231,3 +231,25 @@ def load_coords(csv_path):
                 y, x = map(float, row[:2])
                 coords.append([y, x])
     return np.array(coords)
+
+
+coords = load_coords(
+    "/Users/dongwoolee/Documents/GitHub/tme-quant/tests/test_results/relative_angle_test_files/boundary_coords.csv"
+)
+
+ROI = {
+    "coords": coords,
+    "imageWidth": 512,
+    "imageHeight": 512,
+    "index2object": 403,
+}
+
+object_data = {"center": [145, 430], "angle": 14.0625}
+
+angles, measurements = get_relative_angles(
+    ROI, object_data, angle_option=0, fig_flag=False
+)
+
+pretty_angles = {k: float(v) for k, v in angles.items()}
+
+print(pretty_angles)

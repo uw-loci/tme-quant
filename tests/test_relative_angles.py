@@ -1,7 +1,7 @@
 import os
 import pytest
 import pandas as pd
-from pycurvelets.relative_angle.get_relative_angles import (
+from pycurvelets.get_relative_angles import (
     get_relative_angles,
     load_coords,
 )
@@ -14,7 +14,7 @@ csv_path = os.path.join(
     "relative_angle_test_files",
     "boundary_coords.csv",
 )
-coords = load_coords(csv_path)
+coords = load_coords(csv_path) - 1
 
 # Load Excel file with fiber info and expected angles
 xl_path = os.path.join(
@@ -29,7 +29,7 @@ df = pd.read_excel(xl_path, sheet_name=1)
 test_cases = []
 for _, row in df.iterrows():
     # Find the index of the boundary point in coords
-    boundary_coord = [row["boundaryPointRow"], row["boundaryPointCol"]]
+    boundary_coord = [row["boundaryPointRow"] - 1, row["boundaryPointCol"] - 1]
     matches = np.where((coords == boundary_coord).all(axis=1))[0]
     if len(matches) == 0:
         # If not found, skip this fiber
@@ -71,7 +71,7 @@ def test_get_relative_angles(
         "index2object": index2object,
     }
 
-    object_data = {"center": [fiber_row, fiber_col], "angle": fiber_angle}
+    object_data = {"center": [fiber_row - 1, fiber_col - 1], "angle": fiber_angle}
 
     angles, _ = get_relative_angles(ROI, object_data, angle_option=0, fig_flag=False)
 

@@ -168,6 +168,7 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
 
 def get_relative_angle(coordinates, idx, fiber_angle, img_height, img_width):
     coordinates = np.asarray(coordinates)
+    idx = int(idx)
 
     boundary_angle = find_outline_slope(coordinates, idx)
     boundary_point = coordinates[idx, :]
