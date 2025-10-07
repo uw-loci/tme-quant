@@ -34,11 +34,10 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
 
     # collect all fiber points
     all_center_points = np.vstack([v["center"] for v in obj.values()])
-    all_center_points = all_center_points.astype(int)
+    all_center_points = np.round(all_center_points).astype(int)
 
     # collect all boundary points
     coords = np.vstack([coordinates[k] for k in coordinates])
-
     lin_idx = np.ravel_multi_index(
         (all_center_points[:, 0], all_center_points[:, 1]), dims=img_size, order="F"
     )
@@ -51,7 +50,7 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     reg_dist = img.flatten(order="F")[lin_idx]
 
     step_size = img_width // 20
-    # Hard coded 1, +1 for MATLAB's 1-indexing
+
     linear_indices = np.arange(0, img_height * img_width, step_size)
 
     # Convert linear indices to (row, col)
@@ -97,7 +96,7 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     if not min_dist:
         for i in range(curvs_len):
             # in region?
-            nearest_region_dist[i] = (reg_dist[i] == 255) | (reg_dist[i] == 1)
+            nearest_region_dist[i] = int((reg_dist[i] == 255) | (reg_dist[i] == 1))
 
             # distance in nearest epithelial boundary
             nearest_boundary_dist[i] = dist[i]
@@ -178,10 +177,10 @@ def get_relative_angle(coordinates, idx, fiber_angle, img_height, img_width):
     boundary_angle = find_outline_slope(coordinates, idx)
     boundary_point = coordinates[idx, :]
     if (
-        boundary_point[0] == 1
-        or boundary_point[1] == 1
-        or boundary_point[0] == img_height
-        or boundary_point[1] == img_width
+        boundary_point[0] == 0
+        or boundary_point[1] == 0
+        or boundary_point[0] == img_height - 1
+        or boundary_point[1] == img_width - 1
     ):
         # don't count fiber if boundary point is along edge of image
         temp_angle = 0
