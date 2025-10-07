@@ -1,3 +1,3 @@
-from . import geometry, connectivity, segmentation
+from . import math, connectivity, segmentation
 
-__all__ = ["geometry", "connectivity", "segmentation"]
+__all__ = ["math", "connectivity", "segmentation"]
