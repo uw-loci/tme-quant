@@ -42,7 +42,9 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
         (all_center_points[:, 0], all_center_points[:, 1]), dims=img_size, order="F"
     )
 
-    neighbors = NearestNeighbors(n_neighbors=1, algorithm="auto").fit(coords)
+    neighbors = NearestNeighbors(
+        n_neighbors=1, algorithm="brute", metric="euclidean"
+    ).fit(coords)
     distances, indices = neighbors.kneighbors(all_center_points)
     idx_dist = indices.flatten()
     dist = distances.flatten()
@@ -218,57 +220,57 @@ def get_points_on_line(object, box_size):
     return line_curv, ortho_curv
 
 
-import csv
-import os
-import matplotlib.pyplot as plt
+# import csv
+# import os
+# import matplotlib.pyplot as plt
 
-base_path = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "tests",
-    "test_results",
-    "get_tif_boundary_test_files",
-)
+# base_path = os.path.join(
+#     os.path.dirname(__file__),
+#     "..",
+#     "..",
+#     "tests",
+#     "test_results",
+#     "get_tif_boundary_test_files",
+# )
 
-files = [
-    os.path.join(base_path, f)
-    for f in [
-        "real1_boundary1_coords.csv",
-        "real1_boundary2_coords.csv",
-        "real1_boundary3_coords.csv",
-    ]
-]
-coords = {}
+# files = [
+#     os.path.join(base_path, f)
+#     for f in [
+#         "real1_boundary1_coords.csv",
+#         "real1_boundary2_coords.csv",
+#         "real1_boundary3_coords.csv",
+#     ]
+# ]
+# coords = {}
 
-for i, f in enumerate(files, start=1):
-    with open(f, newline="") as csvfile:
-        reader = csv.reader(csvfile)
-        # convert each row into a tuple, cast to float or int if needed
-        coords[f"csv{i}"] = [tuple(map(float, row)) for row in reader]
+# for i, f in enumerate(files, start=1):
+#     with open(f, newline="") as csvfile:
+#         reader = csv.reader(csvfile)
+#         # convert each row into a tuple, cast to float or int if needed
+#         coords[f"csv{i}"] = [tuple(map(float, row)) for row in reader]
 
-print(len(coords))
-img = plt.imread(
-    os.path.join(
-        os.path.dirname(__file__), "..", "..", "tests", "test_images", "real1.tif"
-    ),
-    format="TIF",
-)
+# print(len(coords))
+# img = plt.imread(
+#     os.path.join(
+#         os.path.dirname(__file__), "..", "..", "tests", "test_images", "real1.tif"
+#     ),
+#     format="TIF",
+# )
 
-print(img)
+# print(img)
 
 
-dist_thresh = 100
-min_dist = []
-obj = {}
+# dist_thresh = 100
+# min_dist = []
+# obj = {}
 
-with open(os.path.join(base_path, "real1_curvelets.csv"), newline="") as f:
-    reader = csv.DictReader(f)
-    for i, row in enumerate(reader):
-        obj[i] = {
-            "center": (float(row["center_1"]), float(row["center_2"])),
-            "angle": float(row["angle"]),
-            "weight": float(row["weight"]),
-        }
+# with open(os.path.join(base_path, "real1_curvelets.csv"), newline="") as f:
+#     reader = csv.DictReader(f)
+#     for i, row in enumerate(reader):
+#         obj[i] = {
+#             "center": (float(row["center_1"]) - 1, float(row["center_2"]) - 1),
+#             "angle": float(row["angle"]),
+#             "weight": float(row["weight"]),
+#         }
 
-get_tif_boundary(coords, img, obj, dist_thresh, min_dist)
+# get_tif_boundary(coords, img, obj, dist_thresh, min_dist)

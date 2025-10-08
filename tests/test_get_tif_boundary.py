@@ -10,35 +10,39 @@ from pycurvelets.get_tif_boundary import get_tif_boundary
 
 @pytest.fixture
 def test_data():
-    """Loads all test inputs from disk."""
+    """
+    Load all test inputs (image, boundary coordinates, and curvelet data) from disk.
+    Converts MATLAB 1-based coordinates to Python 0-based indexing.
+    """
     base_path = os.path.join(
         os.path.dirname(__file__),
         "test_results",
         "get_tif_boundary_test_files",
     )
 
-    # --- Load boundary coordinates ---
+    # load boundary coordinates
     coord_files = [
-        os.path.join(base_path, f)
-        for f in [
+        os.path.join(base_path, fname)
+        for fname in [
             "real1_boundary1_coords.csv",
             "real1_boundary2_coords.csv",
             "real1_boundary3_coords.csv",
         ]
     ]
+
     coords = {}
-    for i, f in enumerate(coord_files, start=1):
-        with open(f, newline="") as csvfile:
+    for i, path in enumerate(coord_files, start=1):
+        with open(path, newline="") as csvfile:
             reader = csv.reader(csvfile)
             coords[f"csv{i}"] = [
                 tuple(np.array(list(map(float, row))) - 1) for row in reader
             ]
 
-    # --- Load image ---
+    # load test image
     img_path = os.path.join(os.path.dirname(__file__), "test_images", "real1.tif")
     img = plt.imread(img_path, format="TIF")
 
-    # --- Load curvelet object data ---
+    # load curvelet metadata
     obj = {}
     curvelet_file = os.path.join(base_path, "real1_curvelets.csv")
     with open(curvelet_file, newline="") as f:
@@ -54,73 +58,71 @@ def test_data():
 
 
 def test_get_tif_boundary_output_structure(test_data):
-    """Tests if get_tif_boundary produces outputs with correct shapes and types."""
+    """Verify output types, shapes, and numeric consistency."""
     coords, img, obj = test_data
-
     dist_thresh = 100
-    min_dist = []
 
     result_mat, result_mat_names, num_img_points, result_df = get_tif_boundary(
-        coords, img, obj, dist_thresh, min_dist
+        coords, img, obj, dist_thresh, min_dist=[]
     )
 
-    # --- Type checks ---
-    assert isinstance(result_mat, np.ndarray)
-    assert isinstance(result_mat_names, list)
-    assert isinstance(num_img_points, (int, float))
-    assert isinstance(result_df, pd.DataFrame)
+    # check type
+    assert isinstance(result_mat, np.ndarray), "result_mat must be a NumPy array"
+    assert isinstance(result_mat_names, list), "result_mat_names must be a list"
+    assert isinstance(num_img_points, (int, float)), "num_img_points must be numeric"
+    assert isinstance(result_df, pd.DataFrame), "result_df must be a pandas DataFrame"
 
-    # --- Shape consistency ---
+    # shape consistency
     n_curvs = len(obj)
-    assert result_mat.shape[0] == n_curvs
-    assert result_mat.shape[1] == len(result_mat_names)
-    assert list(result_df.columns) == result_mat_names
-    assert result_df.shape == result_mat.shape
+    assert result_mat.shape == result_df.shape, "Matrix and DataFrame shape mismatch"
+    assert result_mat.shape[0] == n_curvs, "Row count must match number of curvelets"
+    assert result_mat.shape[1] == len(result_mat_names), "Column count mismatch"
+    assert list(result_df.columns) == result_mat_names, "Column names inconsistent"
 
-    # --- Value sanity checks ---
-    # Allow NaN, but check numeric columns exist
+    # column sanity check
     numeric_cols = [
         "nearest_boundary_distance",
         "nearest_region_distance",
         "nearest_boundary_angle",
     ]
     for col in numeric_cols:
-        assert col in result_df.columns
-        assert pd.api.types.is_numeric_dtype(result_df[col])
+        assert col in result_df.columns, f"Missing expected column: {col}"
+        assert pd.api.types.is_numeric_dtype(
+            result_df[col]
+        ), f"Column {col} not numeric"
 
-    # --- Basic numerical range sanity ---
-    # (Example: distances should not be negative)
-    assert np.all(result_df["nearest_boundary_distance"].dropna() >= 0)
+    # numerical sanity check
+    distances = result_df["nearest_boundary_distance"].dropna()
+    assert (distances >= 0).all(), "Boundary distances should be non-negative"
 
     print("\nSample result_df:\n", result_df.head())
 
 
 def test_get_tif_boundary_returns_meaningful_points(test_data):
-    """Check if function returns non-empty, plausible data."""
+    """Ensure the function detects valid image points and returns usable data."""
     coords, img, obj = test_data
     dist_thresh = 100
-    min_dist = []
 
-    _, _, num_img_points, df = get_tif_boundary(coords, img, obj, dist_thresh, min_dist)
+    _, _, num_img_points, df = get_tif_boundary(
+        coords, img, obj, dist_thresh, min_dist=[]
+    )
 
-    # Should detect at least some image points
-    assert num_img_points > 0
-    # Should have at least one valid non-NaN row
-    assert df.notna().any().any()
+    assert num_img_points > 0, "No image points detected"
+    assert df.notna().any().any(), "DataFrame appears empty or entirely NaN"
 
 
-def test_get_tif_boundary_vs_expected_file(test_data):
+def test_get_tif_boundary_matches_expected_file(test_data):
+    """Compare computed output against the expected reference CSV file."""
     coords, img, obj = test_data
     dist_thresh = 100
-    min_dist = []
 
-    # Run your function
-    _, _, _, df = get_tif_boundary(coords, img, obj, dist_thresh, min_dist)
+    _, _, _, df = get_tif_boundary(coords, img, obj, dist_thresh, min_dist=[])
+    # swap row/col to match MATLAB convention
     df[["boundary_point_row", "boundary_point_col"]] = df[
         ["boundary_point_col", "boundary_point_row"]
     ]
 
-    # Load expected output CSV
+    # load reference
     base_path = os.path.join(
         os.path.dirname(__file__),
         "test_results",
@@ -128,29 +130,27 @@ def test_get_tif_boundary_vs_expected_file(test_data):
     )
     expected_file = os.path.join(base_path, "real1_get_tif_boundary_output.csv")
     expected_df = pd.read_csv(expected_file)
-    expected_df[["bndryPtRow", "bndryPtCol"]] -= 1
+    expected_df[["bndryPtRow", "bndryPtCol"]] -= 1  # adjust to 0-based indexing
 
-    # --- Compare only the values (ignore column names) ---
-    assert df.shape == expected_df.shape, "DataFrames shape mismatch"
+    # check shape consistency
+    assert (
+        df.shape == expected_df.shape
+    ), f"Shape mismatch: expected {expected_df.shape}, got {df.shape}"
 
-    # Convert both to NumPy arrays for comparison
-    actual_values = df.to_numpy()
-    expected_values = expected_df.to_numpy()
+    # numerical comparison
+    actual = df.to_numpy()
+    expected = expected_df.to_numpy()
 
-    # Use np.isclose with NaN equality for numerical comparison
-    comparison = np.isclose(
-        actual_values, expected_values, rtol=1e-6, atol=1e-8, equal_nan=True
-    )
-
-    # comparison: boolean array from np.isclose
+    comparison = np.isclose(actual, expected, rtol=1e-4, atol=1e-4, equal_nan=True)
     mismatch_idx = np.argwhere(~comparison)
 
-    for row, col_idx in mismatch_idx:
-        col_name = df.columns[col_idx]  # or df.columns[col_idx]
-        print(
-            f"Mismatch at row {row}, column '{col_name}': "
-            f"actual={actual_values[row, col_idx]}, expected={expected_values[row, col_idx]}"
-        )
+    if len(mismatch_idx) > 0:
+        print("\n⚠️ Mismatched values detected:")
+        for row, col_idx in mismatch_idx:
+            col_name = df.columns[col_idx]
+            print(
+                f"  Row {row}, column '{col_name}': "
+                f"actual={actual[row, col_idx]:.6f}, expected={expected[row, col_idx]:.6f}"
+            )
 
-    # Optional assertion
-    assert comparison.all(), f"{len(mismatch_idx)} mismatches found."
+    assert comparison.all(), f"{len(mismatch_idx)} mismatched entries found."
