@@ -16,7 +16,7 @@ dependencies = [
   "opencv-python",
   "scikit-image",
   "openpyxl",
-  "sklearn",
+  "scikit-learn",
 ]
 
 [dependency-groups]
