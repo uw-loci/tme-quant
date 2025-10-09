@@ -27,8 +27,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # Install without curvelops to avoid FFTW/CurveLab build on CI
-          python -m pip install --break-system-packages -e .
-          python -m pip install --break-system-packages pytest ruff
+          python -m pip install -e .
+          # Install dev dependencies
+          python -m pip install pytest ruff
 
       - name: Run tests
         env:
