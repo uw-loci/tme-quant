@@ -9,14 +9,14 @@ description = "Python translation of CurveAlign; curvelet-based quantification a
 authors = [{ name = "Eliceiri Lab" }]
 requires-python = ">=3.9"
 dependencies = [
-  "pandas",
-  "numpy",
-  "matplotlib",
-  "scipy",
-  "opencv-python",
-  "scikit-image",
-  "openpyxl",
-  "scikit-learn",
+  "matplotlib==3.10.1",
+  "numpy==2.2.6",
+  "opencv-python==4.10",
+  "openpyxl==3.1.5",
+  "pandas==2.2.3",
+  "scikit-image==0.25.0",
+  "scikit-learn==1.7.1",
+  "scipy==1.15.2",
 ]
 
 [dependency-groups]
