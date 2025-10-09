@@ -30,59 +30,59 @@ jobs:
           python -m pip install --break-system-packages -e .
           python -m pip install --break-system-packages pytest ruff
 
-    - name: CI diagnostics
-    run: |
-      echo "==== repo/commit ===="
-      echo "commit: $(git rev-parse --short HEAD)"
-      echo
-      echo "==== test file shasums (tests/*.py) ===="
-      for f in tests/*.py; do
-      echo "--- $f ---"
-      shasum -a 256 "$f" || true
-      done
-      echo
-      echo "==== pip freeze ===="
-      python -m pip freeze
-      echo
-      echo "==== python & package diagnostics ===="
-      python - <<'PY'
+      - name: CI diagnostics
+        run: |
+          echo "==== repo/commit ===="
+          echo "commit: $(git rev-parse --short HEAD)"
+          echo
+          echo "==== test file shasums (tests/*.py) ===="
+          for f in tests/*.py; do
+            echo "--- $f ---"
+            shasum -a 256 "$f" || true
+          done
+          echo
+          echo "==== pip freeze ===="
+          python -m pip freeze
+          echo
+          echo "==== python & package diagnostics ===="
+          python - <<'PY'
 import sys, platform, os
 print('python', sys.version)
 print('platform', platform.platform())
 try:
-  import numpy as np, scipy, matplotlib, pandas
-  print('numpy', np.__version__)
-  print('scipy', scipy.__version__)
-  print('matplotlib', matplotlib.__version__)
-  print('pandas', pandas.__version__)
+    import numpy as np, scipy, matplotlib, pandas
+    print('numpy', np.__version__)
+    print('scipy', scipy.__version__)
+    print('matplotlib', matplotlib.__version__)
+    print('pandas', pandas.__version__)
 except Exception as e:
-  print('package import error:', e)
+    print('package import error:', e)
 try:
-  import PIL
-  print('Pillow', PIL.__version__)
+    import PIL
+    print('Pillow', PIL.__version__)
 except Exception:
-  print('Pillow import failed')
+    print('Pillow import failed')
 try:
-  import cv2
-  print('opencv', cv2.__version__)
+    import cv2
+    print('opencv', cv2.__version__)
 except Exception:
-  print('opencv import failed')
+    print('opencv import failed')
 
 # Try reading one test image used by tests and report dtype/shape/min/max
 paths = [
-  'tests/test_images/real1.tif',
+    'tests/test_images/real1.tif',
 ]
 for p in paths:
-  if os.path.exists(p):
-    try:
-      import matplotlib.pyplot as plt
-      import numpy as _np
-      arr = plt.imread(p, format='TIF')
-      print('image', p, 'dtype', arr.dtype, 'shape', getattr(arr, 'shape', None), 'min', _np.nanmin(arr), 'max', _np.nanmax(arr))
-    except Exception as e:
-      print('image read failed for', p, '->', e)
-  else:
-    print('image not found:', p)
+    if os.path.exists(p):
+        try:
+            import matplotlib.pyplot as plt
+            import numpy as _np
+            arr = plt.imread(p, format='TIF')
+            print('image', p, 'dtype', arr.dtype, 'shape', getattr(arr, 'shape', None), 'min', _np.nanmin(arr), 'max', _np.nanmax(arr))
+        except Exception as e:
+            print('image read failed for', p, '->', e)
+    else:
+        print('image not found:', p)
 PY
 
       - name: Run tests
