@@ -1,12 +1,9 @@
 name: ci
 
 on:
-  # Allow manual runs from the Actions tab
   workflow_dispatch:
-  # Run on pushes to any branch (including feature branches)
   push:
     branches: ["**"]
-  # And on PRs targeting main
   pull_request:
     branches: [main]
 
@@ -16,24 +13,38 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.12", "3.13"]
+
     steps:
       - uses: actions/checkout@v4
 
+      # Install system dependencies (like in your Docker container)
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0 python3-venv
+
+      # Set up Python
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      # Create virtual environment
+      - name: Create virtual environment
         run: |
+          python -m venv venv
+          source venv/bin/activate
           python -m pip install --upgrade pip
-          # Install without curvelops to avoid FFTW/CurveLab build on CI
-          python -m pip install -e .
-          # Install dev dependencies
-          python -m pip install pytest ruff
 
+      # Install Python dependencies in venv
+      - name: Install Python dependencies
+        run: |
+          source venv/bin/activate
+          pip install -e .
+          pip install pytest ruff
+
+      # Run tests in the venv
       - name: Run tests
         env:
           TMEQ_RUN_CURVELETS: "0"
           QT_QPA_PLATFORM: "offscreen"
         run: |
+          source venv/bin/activate
           pytest -rs
