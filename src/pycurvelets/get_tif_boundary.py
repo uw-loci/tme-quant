@@ -58,14 +58,13 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     # Convert linear indices to (row, col)
     cols, rows = np.unravel_index(linear_indices, (img_width, img_height))
 
-    # Hard coded +1 to match with MATLAB 1-indexing; may change later
     all_img_points = np.column_stack((rows, cols))
 
-    # Subsample boundary points for speed
     subsampled_boundary_points = coords[::3, :]
 
     # KNN search
-    nbrs = NearestNeighbors(n_neighbors=1, algorithm="auto").fit(
+    # Use brute-force search with explicit metric for deterministic behavior
+    nbrs = NearestNeighbors(n_neighbors=1, algorithm="brute", metric="euclidean").fit(
         subsampled_boundary_points
     )
     distances_to_boundary, _ = nbrs.kneighbors(all_img_points)
@@ -132,9 +131,10 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
             if intersection_line.size != 0:
                 # get closest distance from curvelet center to the intersection
                 # (get rid of farther ones)
-                nbrs = NearestNeighbors(n_neighbors=1, algorithm="auto").fit(
-                    intersection_line
-                )
+                # Use brute-force search for determinism when selecting intersection points
+                nbrs = NearestNeighbors(
+                    n_neighbors=1, algorithm="brute", metric="euclidean"
+                ).fit(intersection_line)
                 line_distance, idx_line_distance = nbrs.kneighbors([obj[i]["center"]])
 
                 idx_line_distance = idx_line_distance[0][0]
