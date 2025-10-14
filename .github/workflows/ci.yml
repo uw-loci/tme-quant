@@ -31,15 +31,9 @@ jobs:
         run: |
           python -m venv venv
           source venv/bin/activate
-          python -m pip install --upgrade pip
-
-      # Install Python dependencies in venv
-      - name: Install Python dependencies
-        run: |
-          source venv/bin/activate
-          pip install -e .
-          pip install pytest ruff
-          python -c "import numpy as np; np.show_config()"
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e .
+          python -m pip install pytest ruff
 
       # Run tests in the venv
       - name: Run tests
