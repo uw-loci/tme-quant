@@ -33,7 +33,7 @@ def test_data():
     coords = {}
     for i, path in enumerate(coord_files, start=1):
         with open(path, newline="") as csvfile:
-            reader = csv.reader(csvfile)
+            reader = csv.reader(csvfile, delimiter=",")
             coords[f"csv{i}"] = [
                 tuple(np.array(list(map(float, row))) - 1) for row in reader
             ]
@@ -148,7 +148,7 @@ def test_get_tif_boundary_matches_expected_file(test_data):
     expected = expected_df.to_numpy(dtype=float)
 
     # numerical comparison with tolerance
-    comparison = np.isclose(actual, expected, rtol=1e-2, atol=1, equal_nan=True)
+    comparison = np.isclose(actual, expected, rtol=1e-2, atol=1e-2, equal_nan=True)
     mismatch_idx = np.argwhere(~comparison)
 
     if len(mismatch_idx) > 0:
