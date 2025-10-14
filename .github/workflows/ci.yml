@@ -39,10 +39,6 @@ jobs:
           source venv/bin/activate
           pip install -e .
           pip install pytest ruff
-
-      # See platform dependency of NumPy
-      - name: Dump NumPy build info
-        run: |
           python -c "import numpy as np; np.show_config()"
 
       # Run tests in the venv
