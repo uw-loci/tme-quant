@@ -32,11 +32,9 @@ def test_data():
 
     coords = {}
     for i, path in enumerate(coord_files, start=1):
-        with open(path, newline="") as csvfile:
-            reader = csv.reader(csvfile, delimiter=",")
-            coords[f"csv{i}"] = [
-                tuple(np.array(list(map(float, row))) - 1) for row in reader
-            ]
+        # read CSV as floats directly
+        df = pd.read_csv(path)
+        coords[f"csv{i}"] = [tuple(row.values - 1) for _, row in df.iterrows()]
 
     # load test image
     img_path = os.path.join(os.path.dirname(__file__), "test_images", "real1.tif")
@@ -45,14 +43,13 @@ def test_data():
     # load curvelet metadata
     obj = {}
     curvelet_file = os.path.join(base_path, "real1_curvelets.csv")
-    with open(curvelet_file, newline="") as f:
-        reader = csv.DictReader(f)
-        for i, row in enumerate(reader):
-            obj[i] = {
-                "center": (float(row["center_1"]) - 1, float(row["center_2"]) - 1),
-                "angle": float(row["angle"]),
-                "weight": float(row["weight"]),
-            }
+    df_curvelets = pd.read_csv(curvelet_file)
+    for i, row in df_curvelets.iterrows():
+        obj[i] = {
+            "center": (float(row["center_1"]) - 1, float(row["center_2"]) - 1),
+            "angle": float(row["angle"]),
+            "weight": float(row["weight"]),
+        }
 
     return coords, img, obj
 
@@ -135,8 +132,8 @@ def test_get_tif_boundary_matches_expected_file(test_data):
 
     # convert MATLAB 1-based to Python 0-based, round
     expected_df[["bndryPtRow", "bndryPtCol"]] = (
-        expected_df[["bndryPtRow", "bndryPtCol"]] - 1
-    ).round()
+        expected_df[["bndryPtRow", "bndryPtCol"]]
+    ).round() - 1
 
     # check shape consistency
     assert (
