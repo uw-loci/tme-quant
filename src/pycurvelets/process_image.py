@@ -7,7 +7,7 @@ import os
 import tkinter as tk
 
 
-def process_image(img, img_name, output_directory, keep, coordinates, distance_threshold, make_associations, slice_num, tif_boundary, boundary_img, fire_directory):
+def process_image(img, img_name, output_directory, keep, coordinates, distance_threshold, make_associations, slice_num, tif_boundary, boundary_img, fire_directory, num_sections, advanced_options):
     """
     process_image - Process images for fiber/curvelet analysis.
 
@@ -40,6 +40,8 @@ def process_image(img, img_name, output_directory, keep, coordinates, distance_t
         Boundary image used for overlay outputs.
     fire_directory : str
         Directory containing FIRE fiber results (optional; used instead of curvelets).
+    num_sections : int
+        Number of sections within a stack (optional; used instead of curvelets).
     advanced_options : dict, optional
         Dictionary containing advanced interface controls, e.g.:
             - exclude_fibers_in_mask_flag : int
@@ -47,8 +49,10 @@ def process_image(img, img_name, output_directory, keep, coordinates, distance_t
             - curvelets_group_radius : float
                 Radius to group nearby curvelets.
             - selected_scale : int
-                Curvelet scale used for analysis (default = 2nd finest scale).
-            - heatmap_STDfilter_size : int
+                Curvelet scale used for analysis. Must be in the range
+                `[2, ceil(log2(min(M, N)) - 4)]`, where M and N are the image dimensions.
+                Default is the 2nd finest scale: `ceil(log2(min(M, N)) - 3) - 1`.
+            - heatmap_STD_filter_size : int
                 Size of standard deviation filter for heatmap (default 24).
             - heatmap_SQUARE_max_filter_size : int
                 Size of max filter for heatmap (default 12).
@@ -70,6 +74,14 @@ def process_image(img, img_name, output_directory, keep, coordinates, distance_t
         - Statistical summaries of angles and correlations.
         - Filtered spatial correlation maps of curvelet angles.
     """
+
+    # Get screen size for figure position
+    root = tk.Tk()
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    root.destroy()
+
+    exclude_fibers_in_mask_flag = advanced_options
 
 
     return True
