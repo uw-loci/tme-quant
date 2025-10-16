@@ -5,9 +5,13 @@ import numpy as np
 import pandas as pd
 import os
 import tkinter as tk
+import time
+import new_curv
 
 
-def process_image(img, img_name, output_directory, keep, coordinates, distance_threshold, make_associations, slice_num, tif_boundary, boundary_img, fire_directory, num_sections, advanced_options):
+def process_image(img, img_name, output_directory, keep, coordinates, distance_threshold,
+                  make_associations, make_map, make_overlay, make_feature_file, slice_num, tif_boundary, boundary_img,
+                  fire_directory, fiber_mode, num_sections, advanced_options):
     """
     process_image - Process images for fiber/curvelet analysis.
 
@@ -32,6 +36,12 @@ def process_image(img, img_name, output_directory, keep, coordinates, distance_t
         Distance from the boundary to evaluate fibers/curvelets.
     make_associations : bool
         Whether to generate association plots between boundary and fibers.
+    make_map : bool
+        Whether to generate heatmap.
+    make_overlay : bool
+        Whether to generate curvelet overlay figure.
+    make_feature_file : bool
+        Whether to generate feature file.
     slice_num : int
         Slice number within a stack (if analyzing multiple slices).
     tif_boundary : bool
@@ -40,6 +50,9 @@ def process_image(img, img_name, output_directory, keep, coordinates, distance_t
         Boundary image used for overlay outputs.
     fire_directory : str
         Directory containing FIRE fiber results (optional; used instead of curvelets).
+    fiber_mode : str
+        Determines fiber processing method:
+        0 = curvelet, 1/2/3 = FIRE variants
     num_sections : int
         Number of sections within a stack (optional; used instead of curvelets).
     advanced_options : dict, optional
@@ -81,7 +94,42 @@ def process_image(img, img_name, output_directory, keep, coordinates, distance_t
     screen_height = root.winfo_screenheight()
     root.destroy()
 
-    exclude_fibers_in_mask_flag = advanced_options
+    exclude_fibers_in_mask_flag = advanced_options["exclude_fibers_in_mask_flag"]
+    img_name_length = len(img_name)
+    img_name_plain = img_name # plain image name, without slice number
+    if num_sections > 1:
+        img_name = f"{img_name[:img_name_length]}_s{slice_num}"
 
+    print(f'Image name: {img_name_plain}')
+
+    if num_sections > 1:
+        print(f'Slide number: {slice_num}')
+
+    # Check if we are measuring with respect to boundary
+    boundary_measurement = coordinates.size > 0
+
+    start_time = time.perf_counter()
+    # Feature control structure initialized: feature_cp
+    feature_cp = {
+        "minimum_nearest_fibers": advanced_options["minimum_nearest_fibers"],
+        "minimum_box_size": advanced_options["minimum_box_size"],
+        "fiber_midpoint_est": advanced_options["fiber_midpoint_est"]
+    }
+
+    # Add lower limit for distance threshold
+    min_dist = advanced_options["min_dist"]
+
+    # Get features that are only based on fibers
+    if fiber_mode == 0:
+        print("Computing curvelet transform.")
+        curve_cp = {
+            "keep": keep,
+            "scale": advanced_options["selected_scale"],
+            "radius": advanced_options["curvelets_group_radius"]
+        }
+        # Call getCT
+    else:
+        print("Reading CT-FIRE database.")
+        # Call getFIRE
 
     return True
