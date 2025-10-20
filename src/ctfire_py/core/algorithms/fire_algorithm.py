@@ -43,6 +43,17 @@ def extract_fibers_fire(
     smoothed_image = gaussian_filter(image.astype(float), sigma=options.sigma_im)
     
     # Step 2: Threshold image
+    # Handle NaN values before thresholding
+    if np.any(np.isnan(smoothed_image)):
+        # Replace NaN values with the minimum finite value
+        finite_mask = np.isfinite(smoothed_image)
+        if np.any(finite_mask):
+            min_finite = np.min(smoothed_image[finite_mask])
+            smoothed_image = np.where(np.isfinite(smoothed_image), smoothed_image, min_finite)
+        else:
+            # If all values are NaN, create a uniform image
+            smoothed_image = np.ones_like(smoothed_image) * 0.5
+    
     if options.thresh_im is not None:
         threshold = options.thresh_im * np.max(smoothed_image)
         binary_image = smoothed_image > threshold
@@ -120,11 +131,12 @@ def enhance_image_with_curvelets(
     _, coeffs = extract_curvelets(image, keep=keep, scale=scale)
     
     # Reconstruct using selected scales for enhancement
+    # Pass original image shape to ensure correct output dimensions
     if scale is not None:
-        enhanced_image = reconstruct_image(coeffs, scales=[scale])
+        enhanced_image = reconstruct_image(coeffs, scales=[scale], img_shape=image.shape)
     else:
         # Use multiple scales for enhancement
-        enhanced_image = reconstruct_image(coeffs, scales=[1, 2, 3])
+        enhanced_image = reconstruct_image(coeffs, scales=[1, 2, 3], img_shape=image.shape)
     
     return enhanced_image
 
