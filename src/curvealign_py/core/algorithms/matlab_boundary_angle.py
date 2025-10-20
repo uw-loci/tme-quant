@@ -164,7 +164,7 @@ def find_outline_slope(boundary_mask: np.ndarray, idx: int) -> float:
     run = con_pts[num - 1, 1] - con_pts[0, 1]   # col difference
     
     # theta = atan(rise/run); %range -pi/2 to pi/2
-    theta = np.arctan2(rise, run)  # Use atan2 for better numerical stability
+    theta = np.arctan(rise / run)  # Use atan like MATLAB, not atan2
     
     # Scale to 0 to 180 degrees
     slope = theta * 180 / np.pi
@@ -172,32 +172,39 @@ def find_outline_slope(boundary_mask: np.ndarray, idx: int) -> float:
         slope = slope + 180
     
     # Fit a curve to these points, then compute floating point angle of tangent line
+    # MATLAB logic: use indices 24 and 26 for refined slope calculation
     if slope < 45 or slope > 135:
         # More unique points in vertical direction
+        # MATLAB: y_f = linspace(con_pts(1,2),con_pts(end,2),50);
         y_f = np.linspace(con_pts[0, 1], con_pts[-1, 1], 50)  # col values
+        # MATLAB: x_p = polyfit(con_pts(:,2),con_pts(:,1),2);
         x_p = np.polyfit(con_pts[:, 1], con_pts[:, 0], 2)    # fit x as function of y
         x_f = np.polyval(x_p, y_f)
         
-        # Calculate derivative (tangent) at midpoint
-        mid_idx = len(y_f) // 2
-        if mid_idx > 0 and mid_idx < len(y_f) - 1:
-            dx_dy = (x_f[mid_idx + 1] - x_f[mid_idx - 1]) / (y_f[mid_idx + 1] - y_f[mid_idx - 1])
-            slope = np.arctan(dx_dy) * 180 / np.pi
-            if slope < 0:
-                slope = slope + 180
+        # MATLAB: rise2 = x_f(26)-x_f(24); run2 = y_f(26)-y_f(24);
+        rise2 = x_f[25] - x_f[23]  # indices 26 and 24 (0-based: 25 and 23)
+        run2 = y_f[25] - y_f[23]
+        theta2 = np.arctan(rise2 / run2)
+        slope2 = theta2 * 180 / np.pi
+        if slope2 < 0:
+            slope2 = slope2 + 180
+        slope = slope2
     else:
         # More unique points in horizontal direction
+        # MATLAB: x_f = linspace(con_pts(1,1),con_pts(end,1),50);
         x_f = np.linspace(con_pts[0, 0], con_pts[-1, 0], 50)  # row values
+        # MATLAB: y_p = polyfit(con_pts(:,1),con_pts(:,2),2);
         y_p = np.polyfit(con_pts[:, 0], con_pts[:, 1], 2)    # fit y as function of x
         y_f = np.polyval(y_p, x_f)
         
-        # Calculate derivative (tangent) at midpoint
-        mid_idx = len(x_f) // 2
-        if mid_idx > 0 and mid_idx < len(x_f) - 1:
-            dy_dx = (y_f[mid_idx + 1] - y_f[mid_idx - 1]) / (x_f[mid_idx + 1] - x_f[mid_idx - 1])
-            slope = np.arctan(dy_dx) * 180 / np.pi
-            if slope < 0:
-                slope = slope + 180
+        # MATLAB: rise2 = x_f(26)-x_f(24); run2 = y_f(26)-y_f(24);
+        rise2 = x_f[25] - x_f[23]  # indices 26 and 24 (0-based: 25 and 23)
+        run2 = y_f[25] - y_f[23]
+        theta2 = np.arctan(rise2 / run2)
+        slope2 = theta2 * 180 / np.pi
+        if slope2 < 0:
+            slope2 = slope2 + 180
+        slope = slope2
     
     return slope
 
