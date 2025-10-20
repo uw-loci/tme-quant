@@ -66,6 +66,41 @@ def create_test_curvelet(center_row: int, center_col: int, angle_deg: float) -> 
     )
 
 
+def get_boundary_point_index(center_row: int, center_col: int, coords: np.ndarray) -> int:
+    """Find the boundary point index for a given fiber center from Excel data."""
+    # Load Excel data to get the correct boundary point
+    xl_path = os.path.join(
+        os.path.dirname(__file__),
+        "test_results",
+        "relative_angle_test_files",
+        "real1_BoundaryMeasurements.xlsx",
+    )
+    df = pd.read_excel(xl_path, sheet_name=1)
+    
+    # Find matching row in Excel data
+    matches = df[(df['fibercenterRow'] == center_row) & (df['fibercenterCol'] == center_col)]
+    if len(matches) == 0:
+        # If not found in Excel data, fall back to nearest boundary point
+        center_coords = np.array([[center_row, center_col]])
+        distances = np.sqrt(np.sum((coords - center_coords) ** 2, axis=1))
+        return np.argmin(distances)
+    
+    row = matches.iloc[0]
+    boundary_row = int(row['boundaryPointRow'])
+    boundary_col = int(row['boundaryPointCol'])
+    
+    # Find the index in coords
+    boundary_coord = [boundary_row, boundary_col]
+    coord_matches = np.where((coords == boundary_coord).all(axis=1))[0]
+    if len(coord_matches) > 0:
+        return coord_matches[0]
+    else:
+        # If boundary point not found in coords, fall back to nearest
+        center_coords = np.array([[center_row, center_col]])
+        distances = np.sqrt(np.sum((coords - center_coords) ** 2, axis=1))
+        return np.argmin(distances)
+
+
 def test_load_coords_1():
     """
     Test loading coordinates from sample_coords.csv.
@@ -148,11 +183,15 @@ def test_relative_angles_parametrized(center_row, center_col, angle_deg, expecte
         angle_deg=angle_deg
     )
     
+    # Get the correct boundary point index for this fiber
+    boundary_point_index = get_boundary_point_index(center_row, center_col, coords)
+    
     # Perform boundary analysis with parameters matching MATLAB
     metrics = ca.core.processors.measure_boundary_alignment(
         curvelets=[test_curvelet],
         boundary=boundary,
         dist_thresh=1000,  # Large threshold to ensure inclusion
+        boundary_point_indices=[boundary_point_index],
     )
     
     # Verify we got results

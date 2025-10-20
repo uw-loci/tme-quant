@@ -148,8 +148,11 @@ def find_outline_slope(boundary_mask: np.ndarray, idx: int) -> float:
     slope = np.nan
     
     # Find the list of connected points on the outline surrounding the point
+    # MATLAB: [con_pts] = FindConnectedPts([boundaryMask(:,2) boundaryMask(:,1)], idx, num);
+    # This swaps columns from [row, col] to [col, row] format
     num = 21  # number of points to return
-    con_pts = find_connected_pts(boundary_mask, idx, num)
+    boundary_swapped = boundary_mask[:, [1, 0]]  # Swap columns: [row, col] -> [col, row]
+    con_pts = find_connected_pts(boundary_swapped, idx, num)
     
     if np.isnan(con_pts[0, 0]):
         return slope

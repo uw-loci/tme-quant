@@ -5,7 +5,7 @@ This module provides high-level boundary analysis orchestration,
 implementing algorithms from getBoundary.m and getTifBoundary.m.
 """
 
-from typing import Sequence, Optional
+from typing import Sequence, Optional, List
 import numpy as np
 from scipy.spatial.distance import cdist
 
@@ -22,6 +22,7 @@ def measure_boundary_alignment(
     dist_thresh: float,
     min_dist: Optional[float] = None,
     exclude_inside_mask: bool = False,
+    boundary_point_indices: Optional[List[int]] = None,
 ) -> BoundaryMetrics:
     """
     Measure curvelet alignment relative to a boundary.
@@ -65,7 +66,7 @@ def measure_boundary_alignment(
         )
     elif boundary.kind in ["polygon", "polygons"]:
         distances, boundary_angles, inside_mask = _analyze_polygon_boundary(
-            centers, boundary.data
+            centers, boundary.data, boundary_point_indices
         )
     else:
         raise ValueError(f"Unsupported boundary kind: {boundary.kind}")
@@ -139,7 +140,7 @@ def _analyze_mask_boundary(centers: np.ndarray, mask: np.ndarray) -> tuple:
     return distances, boundary_angles, inside_mask
 
 
-def _analyze_polygon_boundary(centers: np.ndarray, polygon_data) -> tuple:
+def _analyze_polygon_boundary(centers: np.ndarray, polygon_data, boundary_point_indices: Optional[List[int]] = None) -> tuple:
     """
     Analyze boundary defined by polygon(s).
     
@@ -154,15 +155,38 @@ def _analyze_polygon_boundary(centers: np.ndarray, polygon_data) -> tuple:
     boundary_angles = np.zeros(n_points)
     inside_mask = np.zeros(n_points, dtype=bool)
     
-    # Compute distances to all boundary points
-    distances_to_boundary = cdist(centers, polygon_data)
-    
-    # Find nearest boundary point for each curvelet
-    nearest_indices = np.argmin(distances_to_boundary, axis=1)
-    distances = np.min(distances_to_boundary, axis=1)
-    
-    # Use MATLAB-compatible boundary angle calculation
-    boundary_angles = calculate_matlab_boundary_angles(polygon_data, centers)
+    if boundary_point_indices is not None:
+        # Use specific boundary point indices (MATLAB-style)
+        if len(boundary_point_indices) != len(centers):
+            raise ValueError("boundary_point_indices must have same length as centers")
+        
+        # Calculate distances to specific boundary points
+        distances = []
+        for i, (center, boundary_idx) in enumerate(zip(centers, boundary_point_indices)):
+            if boundary_idx >= len(polygon_data):
+                raise ValueError(f"Boundary index {boundary_idx} out of range (max: {len(polygon_data)-1})")
+            boundary_point = polygon_data[boundary_idx]
+            distance = np.sqrt(np.sum((center - boundary_point) ** 2))
+            distances.append(distance)
+        distances = np.array(distances)
+        
+        # Calculate boundary angles using specific indices
+        boundary_angles = np.zeros(len(centers))
+        for i, boundary_idx in enumerate(boundary_point_indices):
+            if boundary_idx < len(polygon_data):
+                # Call FindOutlineSlope for the specific boundary point
+                from ..algorithms.matlab_boundary_angle import find_outline_slope
+                boundary_angles[i] = find_outline_slope(polygon_data, boundary_idx)
+    else:
+        # Use nearest boundary point (fallback behavior)
+        distances_to_boundary = cdist(centers, polygon_data)
+        
+        # Find nearest boundary point for each curvelet
+        nearest_indices = np.argmin(distances_to_boundary, axis=1)
+        distances = np.min(distances_to_boundary, axis=1)
+        
+        # Use MATLAB-compatible boundary angle calculation
+        boundary_angles = calculate_matlab_boundary_angles(polygon_data, centers)
     
     # For inside_mask, we'd need polygon containment test
     # For now, leave as all False (assumes curvelets are outside)
