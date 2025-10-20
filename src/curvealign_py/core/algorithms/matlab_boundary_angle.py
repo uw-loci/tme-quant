@@ -173,38 +173,45 @@ def find_outline_slope(boundary_mask: np.ndarray, idx: int) -> float:
     
     # Fit a curve to these points, then compute floating point angle of tangent line
     # MATLAB logic: use indices 24 and 26 for refined slope calculation
-    if slope < 45 or slope > 135:
-        # More unique points in vertical direction
-        # MATLAB: y_f = linspace(con_pts(1,2),con_pts(end,2),50);
-        y_f = np.linspace(con_pts[0, 1], con_pts[-1, 1], 50)  # col values
-        # MATLAB: x_p = polyfit(con_pts(:,2),con_pts(:,1),2);
-        x_p = np.polyfit(con_pts[:, 1], con_pts[:, 0], 2)    # fit x as function of y
-        x_f = np.polyval(x_p, y_f)
-        
-        # MATLAB: rise2 = x_f(26)-x_f(24); run2 = y_f(26)-y_f(24);
-        rise2 = x_f[25] - x_f[23]  # indices 26 and 24 (0-based: 25 and 23)
-        run2 = y_f[25] - y_f[23]
-        theta2 = np.arctan(rise2 / run2)
-        slope2 = theta2 * 180 / np.pi
-        if slope2 < 0:
-            slope2 = slope2 + 180
-        slope = slope2
-    else:
-        # More unique points in horizontal direction
-        # MATLAB: x_f = linspace(con_pts(1,1),con_pts(end,1),50);
-        x_f = np.linspace(con_pts[0, 0], con_pts[-1, 0], 50)  # row values
-        # MATLAB: y_p = polyfit(con_pts(:,1),con_pts(:,2),2);
-        y_p = np.polyfit(con_pts[:, 0], con_pts[:, 1], 2)    # fit y as function of x
-        y_f = np.polyval(y_p, x_f)
-        
-        # MATLAB: rise2 = x_f(26)-x_f(24); run2 = y_f(26)-y_f(24);
-        rise2 = x_f[25] - x_f[23]  # indices 26 and 24 (0-based: 25 and 23)
-        run2 = y_f[25] - y_f[23]
-        theta2 = np.arctan(rise2 / run2)
-        slope2 = theta2 * 180 / np.pi
-        if slope2 < 0:
-            slope2 = slope2 + 180
-        slope = slope2
+    try:
+        if slope < 45 or slope > 135:
+            # More unique points in vertical direction
+            # MATLAB: y_f = linspace(con_pts(1,2),con_pts(end,2),50);
+            y_f = np.linspace(con_pts[0, 1], con_pts[-1, 1], 50)  # col values
+            # MATLAB: x_p = polyfit(con_pts(:,2),con_pts(:,1),2);
+            x_p = np.polyfit(con_pts[:, 1], con_pts[:, 0], 2)    # fit x as function of y
+            x_f = np.polyval(x_p, y_f)
+            
+            # MATLAB: rise2 = x_f(26)-x_f(24); run2 = y_f(26)-y_f(24);
+            rise2 = x_f[25] - x_f[23]  # indices 26 and 24 (0-based: 25 and 23)
+            run2 = y_f[25] - y_f[23]
+            if run2 != 0:  # Avoid division by zero
+                theta2 = np.arctan(rise2 / run2)
+                slope2 = theta2 * 180 / np.pi
+                if slope2 < 0:
+                    slope2 = slope2 + 180
+                slope = slope2
+        else:
+            # More unique points in horizontal direction
+            # MATLAB: x_f = linspace(con_pts(1,1),con_pts(end,1),50);
+            x_f = np.linspace(con_pts[0, 0], con_pts[-1, 0], 50)  # row values
+            # MATLAB: y_p = polyfit(con_pts(:,1),con_pts(:,2),2);
+            y_p = np.polyfit(con_pts[:, 0], con_pts[:, 1], 2)    # fit y as function of x
+            y_f = np.polyval(y_p, x_f)
+            
+            # MATLAB: rise2 = x_f(26)-x_f(24); run2 = y_f(26)-y_f(24);
+            rise2 = x_f[25] - x_f[23]  # indices 26 and 24 (0-based: 25 and 23)
+            run2 = y_f[25] - y_f[23]
+            if run2 != 0:  # Avoid division by zero
+                theta2 = np.arctan(rise2 / run2)
+                slope2 = theta2 * 180 / np.pi
+                if slope2 < 0:
+                    slope2 = slope2 + 180
+                slope = slope2
+    except (np.linalg.LinAlgError, ValueError, RuntimeWarning):
+        # If polynomial fitting fails, use the original slope calculation
+        # This can happen when connected points are collinear or have numerical issues
+        pass
     
     return slope
 

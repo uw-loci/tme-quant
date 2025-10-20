@@ -48,8 +48,11 @@ def test_ctfire_algorithms():
     from ctfire_py.core.algorithms import extract_fibers_fire, enhance_image_with_curvelets
     from ctfire_py.types.config import CTFireOptions
     
-    # Test image
-    test_image = np.random.rand(64, 64)
+    # Test image with directional patterns
+    test_image = np.zeros((64, 64))
+    test_image[20:30, :] = 1.0  # Horizontal line
+    test_image[:, 20:30] = 1.0  # Vertical line
+    test_image += np.random.rand(64, 64) * 0.1
     
     # Test curvelet enhancement
     try:

@@ -16,8 +16,14 @@ class TestHighLevelAPI:
     
     def test_analyze_image_basic(self):
         """Test basic image analysis functionality."""
-        # Create test image
-        image = np.random.rand(256, 256)
+        # Create test image with directional patterns
+        image = np.zeros((256, 256))
+        # Add some horizontal and vertical lines to create directional structures
+        image[100:120, :] = 1.0  # Horizontal line
+        image[:, 100:120] = 1.0  # Vertical line
+        image[150:170, 150:200] = 1.0  # Horizontal line segment
+        # Add some noise
+        image += np.random.rand(256, 256) * 0.1
         
         # Analyze image
         result = curvealign.analyze_image(image)
@@ -40,7 +46,14 @@ class TestHighLevelAPI:
     
     def test_analyze_image_with_options(self):
         """Test image analysis with custom options."""
-        image = np.random.rand(256, 256)
+        # Create test image with directional patterns
+        image = np.zeros((256, 256))
+        # Add some diagonal lines
+        for i in range(50, 200):
+            if i < 200:
+                image[i, i] = 1.0
+                image[i, i+1] = 1.0
+        image += np.random.rand(256, 256) * 0.1
         
         options = curvealign.CurveAlignOptions(
             keep=0.002,
@@ -55,8 +68,22 @@ class TestHighLevelAPI:
     
     def test_batch_analyze(self):
         """Test batch analysis functionality."""
-        # Create test images
-        images = [np.random.rand(128, 128) for _ in range(3)]
+        # Create test images with directional patterns
+        images = []
+        for i in range(3):
+            img = np.zeros((128, 128))
+            # Add different directional patterns for each image
+            if i == 0:
+                img[50:70, :] = 1.0  # Horizontal
+            elif i == 1:
+                img[:, 50:70] = 1.0  # Vertical
+            else:
+                # Diagonal
+                for j in range(20, 100):
+                    if j < 100:
+                        img[j, j] = 1.0
+            img += np.random.rand(128, 128) * 0.1
+            images.append(img)
         
         # Batch analyze
         results = curvealign.batch_analyze(images)
@@ -73,7 +100,12 @@ class TestMidLevelAPI:
     
     def test_get_curvelets(self):
         """Test curvelet extraction."""
-        image = np.random.rand(256, 256)
+        # Create test image with directional patterns
+        image = np.zeros((256, 256))
+        # Add some lines at different angles
+        image[100:120, :] = 1.0  # Horizontal
+        image[:, 100:120] = 1.0  # Vertical
+        image += np.random.rand(256, 256) * 0.1
         
         curvelets, coeffs = curvealign.get_curvelets(image)
         

@@ -329,13 +329,19 @@ def apply_ifdct(coeffs: CtCoeffs, finest: int = 0, img_shape: Optional[Tuple[int
         Reconstructed image
     """
     if not coeffs or not coeffs[0]:
-        return np.zeros((256, 256))
+        # Return a reasonable default shape if no coefficients
+        return np.zeros((64, 64))
     
     # Estimate image size if not provided
     if img_shape is None:
-        max_scale_coeffs = coeffs[-1][0] if coeffs[-1] else coeffs[0][0]
-        img_shape = tuple(s * 2**len(coeffs) for s in max_scale_coeffs.shape)
-        img_shape = tuple(min(1024, max(64, s)) for s in img_shape)
+        # Use the shape of the finest scale coefficients as a base
+        if coeffs[0] and len(coeffs[0]) > 0:
+            base_shape = coeffs[0][0].shape
+            # Estimate original image size from coefficient shape
+            img_shape = tuple(s * 4 for s in base_shape)  # Rough estimate
+            img_shape = tuple(min(1024, max(64, s)) for s in img_shape)
+        else:
+            img_shape = (64, 64)
     
     if HAS_CURVELOPS:
         try:

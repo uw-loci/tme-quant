@@ -66,12 +66,16 @@ def test_granular_algorithms():
     # Test FDCT wrapper
     from curvealign_py.core.algorithms.fdct_wrapper import apply_fdct, apply_ifdct, extract_parameters
     
-    test_image = np.random.randn(64, 64)
+    # Create test image with directional patterns
+    test_image = np.zeros((64, 64))
+    test_image[20:30, :] = 1.0  # Horizontal line
+    test_image[:, 20:30] = 1.0  # Vertical line
+    test_image += np.random.randn(64, 64) * 0.1
     coeffs = apply_fdct(test_image)
     assert len(coeffs) > 0
     print("  PASS: apply_fdct working")
     
-    reconstructed = apply_ifdct(coeffs)
+    reconstructed = apply_ifdct(coeffs, img_shape=(64, 64))
     assert reconstructed.shape == (64, 64)
     print("  PASS: apply_ifdct working")
     
