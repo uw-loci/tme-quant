@@ -1,75 +1,108 @@
-from dataclasses import dataclass
+import pandas as pd
 import numpy as np
-from typing import List, Optional, Tuple
+from pycurvelets.utils.math import circ_r
 
 
-@dataclass
-class FiberSegment:
-    center: Tuple[float, float]
-    angle: float
-    weight: Optional[float] = None
-
-
-def process_fibers(fibers: List, feature_CP: dict) -> Tuple[
-    List[FiberSegment], np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+class FiberProcessor:
     """
-    Shared processing logic for fiber/curvelet features:
-    - Calculates segment/fiber centers, angles
-    - Computes length, curvature, width
-    - Computes density and alignment features
-
-    Args:
-        fibers: list of fiber data (can come from FIRE or CT)
-        feature_CP: feature control parameters
-
-    Returns:
-        object: list of FiberSegment
-        totLengthList, endLengthList, curvatureList, widthList, denList, alignList: numpy arrays of features
+    Unified processor for CT or FIRE fiber data
     """
-    num_fib = len(fibers)
-    object_ = []
-    totLengthList = np.zeros(num_fib)
-    endLengthList = np.zeros(num_fib)
-    curvatureList = np.zeros(num_fib)
-    widthList = np.zeros(num_fib)
-    # Placeholders for density/alignment
-    denList = np.zeros((num_fib, 5))  # adjust size as needed
-    alignList = np.zeros((num_fib, 5))
 
-    for i, f in enumerate(fibers):
-        # Example: compute center, angle, etc.
-        cen = f.get('center', (0, 0))
-        angle = f.get('angle', 0)
-        object_.append(FiberSegment(center=cen, angle=angle, weight=None))
+    def __init__(self, feature_cp):
+        """
+        Parameters
+        ----------
+        feature_cp: dict
+            Dictionary for control parameters for extracted features, e.g.:
+                - minimum_nearest_fibers : int
+                    Minimum nearest fibers for localized fiber density and alignment calculation
+                - minimum_box_size : int
+                    Minimum box size for localized fiber
+                - fiber_midpoint_estimation: int
+                    0 = based on end points coordinate, 1 = based on fiber length density and alignment calculation
+        """
+        self.feature_cp = feature_cp
 
-        # placeholder computations
-        totLengthList[i] = f.get('totLength', 0)
-        endLengthList[i] = f.get('endLength', 0)
-        curvatureList[i] = f.get('curvature', 0)
-        widthList[i] = f.get('width', 0)
+    def process(self, object_list):
+        """
+        Given list of fiber dicts: [{'center':(x,y), 'angle':deg, ...}, ...]
+        Compute density, alignment, etc.
+        Returns pd.DataFrame
+        """
 
-    # TODO: implement density/alignment calculation
-    return object_, totLengthList, endLengthList, curvatureList, widthList, denList, alignList
+        minimum_nearest_fibers = self.feature_cp["minimum_nearest_fibers"]
+        minimum_box_size = self.feature_cp["minimum_box_size"]
 
+        # Keep 4 original nearest fiber features
+        nearest_fibers = [2**i * minimum_nearest_fibers for i in range(4)]
+        box_sizes = [2**i * mbs for i in range(3)]
+        fiber_sizes = np.ceil(np.array(box_sizes) / 2)
 
-def get_FIRE(img_name: str, fire_dir: str, fiber_mode: int, feature_cp: dict) -> Tuple[
-    List[FiberSegment], np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Load CT-FIRE fibers and process them.
-    """
-    # TODO: Load FIRE .mat file and extract fiber list
-    fibers = []  # replace with actual loading logic
+        len_fiber_sizes = len(fiber_sizes)
+        len_nearest_fibers = len(nearest_fibers)
 
-    return process_fibers(fibers, featCP)
+        density_list = []
+        alignment_list = []
 
+        centers = np.vstack(obj.center for obj in object_list)
+        angles = np.vstack(obj.angle for obj in object_list)
+        x = centers[:, 0]
+        y = centers[:, 1]
 
-def get_CT(img_name: str, img_array: np.ndarray, curve_cp: dict, feature_cp: dict) -> Tuple[
-    List[FiberSegment], np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Apply curvelet processing and process fibers.
-    """
-    # TODO: Run newCurv or equivalent Python implementation
-    fibers, Ct = [], None  # replace with actual curvelet extraction
+        K = nearest_fibers[-1] + 1
+        nbrs = NearestNeighbors(n_neighbors=K, metric="euclidean").fit(centers)
+        nearest_neighbor_dist, nearest_neighbor_idx = nbrs.kneighbors(centers)
 
-    processed = process_fibers(fibers, featCP)
-    return (*processed, Ct)
+        for i in range(len(object_list)):
+            angles_i = angles[nearest_neighbor_idx[i, :]]
+            for j in range(len_nearest_fibers):
+                if nearest_fibers[j] <= nearest_neighbor_dist.shape[1] - 1:
+                    # skip the first column (the self-distance)
+                    try:
+                        density_list[i][j] = nearest_neighbor_dist[
+                            i, 1 : nearest_neighbor[j] + 1
+                        ].mean()
+                        alignment_list[i][j] = circ_r(
+                            angles_i[1 : nearest_neighbor[j] + 1] * 2 * np.pi / 180
+                        )
+                    except:
+                        print(f"size of density list: {len(density_list)}")
+                else:
+                    # if fiber number is less than number of nearest neighbors, then don't calculate
+                    density_list[i][j] = np.nan
+                    alignment_list[i][j] = np.nan
+
+            # density box filter
+            for j in range(len_fiber_sizes):
+                # find any positions in square region around current fiber
+                square_mask = (
+                    (x > x[i] - fiber_sizes[j])
+                    & (x < x[i] + fiber_sizes[j])
+                    & (y > y[i] - fiber_sizes[j])
+                    & (y < y[i] + fiber_sizes[j])
+                )
+
+                # get all fibers in that area
+                vals = np.vstack(object)
+
+        # --- assemble final DataFrame ---
+        df = pd.DataFrame(
+            {
+                "x": centers[:, 0],
+                "y": centers[:, 1],
+                "angle": angles,
+                "density_mean": density_mean,
+                "density_std": density_std,
+                "alignment_mean": alignment_mean,
+                "alignment_std": alignment_std,
+            }
+        )
+
+        for k in range(len(n_list)):
+            df[f"density_n{k+1}"] = density_array[:, k]
+            df[f"alignment_n{k+1}"] = alignment_array[:, k]
+        for k in range(len(box_sizes)):
+            df[f"density_box{k+1}"] = box_density[:, k]
+            df[f"alignment_box{k+1}"] = box_alignment[:, k]
+
+        return df
