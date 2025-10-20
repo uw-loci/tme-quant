@@ -10,6 +10,10 @@ import numpy as np
 from scipy.spatial.distance import cdist
 
 from ...types import Curvelet, Boundary, BoundaryMetrics
+from ..algorithms.matlab_boundary_angle import (
+    calculate_matlab_boundary_angles, 
+    calculate_matlab_relative_angles
+)
 
 
 def measure_boundary_alignment(
@@ -90,7 +94,8 @@ def measure_boundary_alignment(
     valid_curvelet_angles = angles[valid_indices]
     valid_boundary_angles = boundary_angles[valid_indices]
     
-    relative_angles = _compute_relative_angles(valid_curvelet_angles, valid_boundary_angles)
+    # Use MATLAB-compatible relative angle calculation
+    relative_angles = calculate_matlab_relative_angles(valid_curvelet_angles, valid_boundary_angles)
     
     # Compute alignment statistics
     alignment_stats = _compute_alignment_statistics(relative_angles)
@@ -135,21 +140,49 @@ def _analyze_mask_boundary(centers: np.ndarray, mask: np.ndarray) -> tuple:
 
 
 def _analyze_polygon_boundary(centers: np.ndarray, polygon_data) -> tuple:
-    """Analyze boundary defined by polygon(s)."""
-    # This is a simplified implementation
-    # In practice, would use shapely or similar for robust polygon operations
+    """
+    Analyze boundary defined by polygon(s).
+    
+    Computes distances and boundary tangent angles at nearest points.
+    """
+    # polygon_data should be Nx2 array of [row, col] coordinates
+    if isinstance(polygon_data, list):
+        polygon_data = np.array(polygon_data)
+    
     n_points = len(centers)
     distances = np.zeros(n_points)
     boundary_angles = np.zeros(n_points)
     inside_mask = np.zeros(n_points, dtype=bool)
     
-    # Placeholder implementation
+    # Compute distances to all boundary points
+    distances_to_boundary = cdist(centers, polygon_data)
+    
+    # Find nearest boundary point for each curvelet
+    nearest_indices = np.argmin(distances_to_boundary, axis=1)
+    distances = np.min(distances_to_boundary, axis=1)
+    
+    # Use MATLAB-compatible boundary angle calculation
+    boundary_angles = calculate_matlab_boundary_angles(polygon_data, centers)
+    
+    # For inside_mask, we'd need polygon containment test
+    # For now, leave as all False (assumes curvelets are outside)
+    # A proper implementation would use shapely's contains() or similar
+    
     return distances, boundary_angles, inside_mask
 
 
 def _compute_relative_angles(curvelet_angles: np.ndarray, boundary_angles: np.ndarray) -> np.ndarray:
     """
     Compute relative angles between curvelets and boundary.
+    
+    This implements the MATLAB formula from getRelativeangles.m:
+        tempAng = circ_r([fibAng*2*pi/180; boundaryAngle*2*pi/180]);
+        tempAng = 180*asin(tempAng)/pi;
+    
+    The circ_r function computes mean resultant vector length:
+        r = abs(mean(exp(1i*alpha)))
+    
+    For two angles [a1, a2], this gives a measure of how aligned they are.
     
     Parameters
     ----------
@@ -163,12 +196,22 @@ def _compute_relative_angles(curvelet_angles: np.ndarray, boundary_angles: np.nd
     np.ndarray
         Relative angles in degrees (0 = parallel, 90 = perpendicular)
     """
-    # Compute angle differences
-    angle_diffs = np.abs(curvelet_angles - boundary_angles)
+    # MATLAB implementation: circ_r([fibAng*2*pi/180; boundaryAngle*2*pi/180])
+    # Convert to radians (multiply by 2 as in MATLAB to account for 180° periodicity)
+    fib_rad = curvelet_angles * 2 * np.pi / 180
+    bound_rad = boundary_angles * 2 * np.pi / 180
     
-    # Map to [0, 90] range (fiber symmetry and relative angle symmetry)
-    relative_angles = np.minimum(angle_diffs, 180 - angle_diffs)
-    relative_angles = np.minimum(relative_angles, 90)
+    # Compute circ_r: mean resultant vector length for two angles
+    # For two angles [a1, a2]: r = abs(mean(exp(1i*[a1, a2])))
+    complex_angles = np.exp(1j * np.vstack([fib_rad, bound_rad]))
+    mean_complex = np.mean(complex_angles, axis=0)
+    circ_r = np.abs(mean_complex)
+    
+    # Apply MATLAB formula: 180*asin(tempAng)/pi
+    relative_angles = 180 * np.arcsin(np.clip(circ_r, -1, 1)) / np.pi
+    
+    # Take absolute value to get [0, 90] range
+    relative_angles = np.abs(relative_angles)
     
     return relative_angles
 

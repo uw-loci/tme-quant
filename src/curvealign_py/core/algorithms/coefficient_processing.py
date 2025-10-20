@@ -13,44 +13,65 @@ from ...types import CtCoeffs
 
 def threshold_coefficients_at_scale(scale_coeffs: List[np.ndarray], keep: float) -> List[np.ndarray]:
     """
-    Threshold coefficients at a specific scale to keep only the strongest.
+    Threshold coefficients at a specific scale using MATLAB histogram-based approach.
     
-    This implements the coefficient selection logic from newCurv.m.
+    This implements the exact coefficient selection logic from newCurv.m lines 61-76.
     
     Parameters
     ----------
     scale_coeffs : List[np.ndarray]
         Coefficients for all wedges at one scale
     keep : float
-        Fraction of coefficients to keep (e.g., 0.001 = top 0.1%)
+        Fraction of coefficients to keep (e.g., 0.01 = top 1%)
         
     Returns
     -------
     List[np.ndarray]
         Thresholded coefficients (zeros where below threshold)
     """
-    thresholded = []
+    if not scale_coeffs or all(coeff.size == 0 for coeff in scale_coeffs):
+        return [coeff.copy() for coeff in scale_coeffs]
     
+    # MATLAB logic: find the maximum coefficient value
+    # absMax = max(cellfun(@max,cellfun(@max,C{s},'UniformOutput',0)));
+    abs_max = max(max(np.max(np.abs(coeff)) for coeff in scale_coeffs), 1e-10)
+    
+    # MATLAB logic: bins = 0:.01*absMax:absMax;
+    bins = np.arange(0, abs_max + 0.01 * abs_max, 0.01 * abs_max)
+    
+    # MATLAB logic: histVals = cellfun(@(x) hist(x,bins),C{s},'UniformOutput',0);
+    hist_vals = []
     for coeff in scale_coeffs:
-        if coeff.size == 0:
-            thresholded.append(coeff.copy())
-            continue
-        
-        # Take absolute values for thresholding
         abs_coeff = np.abs(coeff)
-        
-        # Find threshold value (keep top 'keep' fraction)
-        n_total = abs_coeff.size
-        n_keep = max(1, int(n_total * keep))
-        
-        # Get threshold value
-        thresh_val = np.partition(abs_coeff.ravel(), -n_keep)[-n_keep]
-        
-        # Apply threshold
-        mask = abs_coeff >= thresh_val
-        thresholded_coeff = np.zeros_like(coeff)
-        thresholded_coeff[mask] = coeff[mask]
-        
+        hist_val, _ = np.histogram(abs_coeff.ravel(), bins=bins)
+        hist_vals.append(hist_val)
+    
+    # MATLAB logic: sumHist = cellfun(@(x) sum(x,2),histVals,'UniformOutput',0);
+    sum_hist = [np.sum(hist_val) for hist_val in hist_vals]
+    
+    # MATLAB logic: totHist = horzcat(sumHist{aa});
+    # sumVals = sum(totHist,2);
+    sum_vals = np.sum(hist_vals, axis=0)
+    
+    # MATLAB logic: cumVals = cumsum(sumVals);
+    cum_vals = np.cumsum(sum_vals)
+    
+    # MATLAB logic: cumMax = max(cumVals);
+    # loc = find(cumVals > (1-keep)*cumMax,1,'first');
+    cum_max = np.max(cum_vals)
+    threshold_idx = np.where(cum_vals > (1 - keep) * cum_max)[0]
+    
+    if len(threshold_idx) > 0:
+        loc = threshold_idx[0]
+        max_val = bins[loc]
+    else:
+        max_val = abs_max
+    
+    # MATLAB logic: Ct{s} = cellfun(@(x)(x .* abs(x >= maxVal)),C{s},'UniformOutput',0);
+    thresholded = []
+    for coeff in scale_coeffs:
+        abs_coeff = np.abs(coeff)
+        thresholded_coeff = np.where(abs_coeff >= max_val, coeff, 0.0)
         thresholded.append(thresholded_coeff)
     
     return thresholded

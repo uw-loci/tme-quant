@@ -56,10 +56,37 @@ def extract_curvelets_from_coeffs(
         if x_centers.size == 0 or y_centers.size == 0:
             continue
         
-        # Calculate angle for this wedge (based on MATLAB fdct structure)
+        # Calculate angle for this wedge using MATLAB logic from newCurv.m lines 82-112
         n_wedges = len(scale_coeffs)
         if n_wedges > 1:
-            angle_deg = (wedge_idx * 180.0) / n_wedges
+            # MATLAB logic: long = length(C{s})/2; (only process first half)
+            long = n_wedges // 2
+            if wedge_idx < long:
+                # MATLAB logic: inc = 360/length(C{s});
+                inc = 360.0 / n_wedges
+                start_ang = 225.0  # MATLAB startAng
+                
+                # MATLAB logic: tempAngle = startAng - (inc * (w-1));
+                # shiftTemp = startAng - (inc * w);
+                # angle(aa) = mean([tempAngle,shiftTemp]);
+                temp_angle = start_ang - (inc * wedge_idx)
+                shift_temp = start_ang - (inc * (wedge_idx + 1))
+                angle_deg = (temp_angle + shift_temp) / 2.0
+                
+                # MATLAB logic: ind = angle < 0; angle(ind) = angle(ind) + 360;
+                if angle_deg < 0:
+                    angle_deg += 360
+                
+                # MATLAB logic: IND = angle > 225; angle(IND) = angle(IND) - 180;
+                if angle_deg > 225:
+                    angle_deg -= 180
+                
+                # MATLAB logic: idx = angle < 45; angle(idx) = angle(idx) + 180;
+                if angle_deg < 45:
+                    angle_deg += 180
+            else:
+                # Skip wedges beyond the first half (MATLAB logic)
+                continue
         else:
             angle_deg = 0.0
         

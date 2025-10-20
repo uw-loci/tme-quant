@@ -50,6 +50,7 @@ def extract_curvelets(
         Extracted curvelets and thresholded coefficient structure
     """
     # Apply forward FDCT - equivalent to: C = fdct_wrapping(IMG,0,2)
+    # Note: MATLAB's third parameter (2) is nbangles_coarsest=2
     C = apply_fdct(image, finest=0, nbangles_coarsest=2)
     
     # Create empty coefficient structure for thresholding
@@ -59,7 +60,10 @@ def extract_curvelets(
     if scale is None:
         # Default: second finest scale (scale=1 in MATLAB indexing)
         scale = 1
-    s = len(C) - scale - 1  # Convert to Python 0-based indexing
+    # MATLAB scale indexing: 1=second finest, 2=third finest, etc.
+    # MATLAB formula: s = length(C) - Sscale
+    # So MATLAB scale=1 corresponds to Python index (len(C) - 1)
+    s = len(C) - scale
     
     # Take absolute values of coefficients at selected scale
     for wedge_idx in range(len(C[s])):
