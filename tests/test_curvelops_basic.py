@@ -44,6 +44,9 @@ def test_curvelops_api_functions():
 
 def test_curvelops_integration():
     """Test that Curvelops integrates with main API."""
+    import os
+    using_real_curvelab = os.getenv('TMEQ_RUN_CURVELETS', '0') == '1'
+    
     # Create simple test image
     image = np.random.rand(64, 64)
     
@@ -60,6 +63,13 @@ def test_curvelops_integration():
     expected_stats = ['mean_angle', 'std_angle', 'alignment', 'density', 'total_curvelets']
     for stat in expected_stats:
         assert stat in result.stats
+    
+    if using_real_curvelab:
+        # With real CurveLab, we might get some curvelets
+        print(f"  Real CurveLab mode: {len(result.curvelets)} curvelets detected")
+    else:
+        # With placeholder, empty results are expected
+        print(f"  Placeholder mode: {len(result.curvelets)} curvelets (expected)")
 
 
 if __name__ == "__main__":

@@ -59,11 +59,20 @@ def test_mode_comparison():
     print(f"  Curvelets mode: {len(result_curvelets.curvelets)} features")
     print(f"  CT-FIRE mode: {len(result_ctfire.curvelets)} features")
     
-    # Both should return valid result structures (may be empty with placeholder implementations)
-    assert isinstance(result_curvelets.curvelets, list)
-    assert isinstance(result_ctfire.curvelets, list)
-    # Note: With placeholder FDCT, both modes may return empty results, which is acceptable
-    print("  PASS: Both modes detecting fiber structure")
+    # Check if we're using real CurveLab or placeholder
+    import os
+    using_real_curvelab = os.getenv('TMEQ_RUN_CURVELETS', '0') == '1'
+    
+    if using_real_curvelab:
+        # With real CurveLab, we should detect features
+        assert len(result_curvelets.curvelets) > 0 or len(result_ctfire.curvelets) > 0, \
+            "Real CurveLab should detect features in structured image"
+        print("  PASS: Real CurveLab detected features")
+    else:
+        # With placeholder, empty results are acceptable
+        assert isinstance(result_curvelets.curvelets, list)
+        assert isinstance(result_ctfire.curvelets, list)
+        print("  PASS: Placeholder mode - empty results acceptable")
 
 
 def test_batch_processing():
