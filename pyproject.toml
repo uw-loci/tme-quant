@@ -72,13 +72,15 @@ namespaces = false
 [tool.pytest.ini_options]
 testpaths = [
   "tests",
-  "tests/curvealign_py",
+  "tests/curvealign_py", 
   "tests/ctfire_py",
 ]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=curvealign_py --cov=ctfire_py --cov-report=term-missing"
+# Exclude validation tests by default (run with: pytest tests/validation/ to include them)
+norecursedirs = ["tests/validation"]
 
 [tool.black]
 line-length = 88
