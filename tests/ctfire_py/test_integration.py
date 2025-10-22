@@ -38,11 +38,11 @@ def test_ctfire_standalone():
         
         print(f"  PASS: FIRE-only mode - found {len(result_fire.fibers)} fibers")
         
-        return True
+        assert True  # Test passed
         
     except Exception as e:
         print(f"  FAIL: CT-FIRE standalone test failed: {e}")
-        return False
+        assert False, f"CT-FIRE standalone test failed: {e}"
 
 
 def test_ctfire_integration():
@@ -67,13 +67,13 @@ def test_ctfire_integration():
         print(f"  PASS: Curvelets mode - found {len(result_curvelets.curvelets)} curvelets")
         print(f"  PASS: Both modes working through unified API")
         
-        return True
+        assert True  # Test passed
         
     except Exception as e:
         print(f"  FAIL: CT-FIRE integration test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, f"CT-FIRE integration test failed: {e}"
 
 
 def test_granular_ctfire():
@@ -108,13 +108,13 @@ def test_granular_ctfire():
         options = CTFireOptions(run_mode="ctfire", thresh_flen=25.0)
         print(f"  PASS: CTFireOptions created - mode: {options.run_mode}, threshold: {options.thresh_flen}")
         
-        return True
+        assert True  # Test passed
         
     except Exception as e:
         print(f"  FAIL: Granular CT-FIRE test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, f"Granular CT-FIRE test failed: {e}"
 
 
 def main():

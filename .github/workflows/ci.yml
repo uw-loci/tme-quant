@@ -71,9 +71,11 @@ jobs:
       - name: Download CurveLab
         run: |
           cd utils
+          echo "Downloading CurveLab from secure server..."
+          echo "URL: ${{ secrets.RESTRICTED_URL }}"
           curl -fL -u "${{ secrets.RESTRICTED_USER }}:${{ secrets.RESTRICTED_PASSWORD }}" -O "${{ secrets.RESTRICTED_URL }}"
+          ls -la
           tar xzf CurveLab-2.1.3.tar.gz
-          mv CurveLab-2.1.3 CurveLab-2.1.3
 
       - name: Build CurveLab from source
         run: |
