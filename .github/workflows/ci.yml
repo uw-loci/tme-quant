@@ -33,7 +33,11 @@ jobs:
         run: |
           pytest -q -vv tests/curvealign_py/ tests/ctfire_py/ tests/test_unified_api.py tests/test_curvelops_basic.py
 
+  # Secure build with CurveLab; skip on forked PRs (no secrets there).
   test-curvelab:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+    # If your secrets live in a GitHub Environment, uncomment the next line and set the name:
+    # environment: ci
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -68,11 +72,35 @@ jobs:
           RESTRICTED_PASSWORD: ${{ secrets.RESTRICTED_PASSWORD }}
           RESTRICTED_URL: ${{ secrets.RESTRICTED_URL }}
         run: |
+          set -euo pipefail
           cd utils
-          echo "Downloading CurveLab from secure server..."
-          echo "Using URL stored in secret"
-          curl -fL -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" -O "${RESTRICTED_URL}"
-          ls -la
+
+          echo "== Secret presence check =="
+          for v in RESTRICTED_USER RESTRICTED_PASSWORD RESTRICTED_URL; do
+            if [ -z "${!v:-}" ]; then
+              echo "ERROR: $v is empty (check repo/org secrets or environment scoping)"; exit 1
+            else
+              echo "$v=SET"
+            fi
+          done
+
+          echo "== Probe HTTP status with auth (follows redirects) =="
+          code=$(curl -sS -o /dev/null -w "%{http_code}" -L \
+                  --anyauth -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" \
+                  "${RESTRICTED_URL}")
+          echo "HTTP status after redirects: $code"
+          if [ "$code" -ge 400 ]; then
+            echo "Server rejected credentials or URL not a direct artifact (HTTP $code)."; exit 22
+          fi
+
+          echo "== Downloading CurveLab archive =="
+          # --location-trusted allows sending auth to redirect target hosts you trust
+          curl --fail --location --location-trusted --show-error --retry 3 --retry-delay 2 \
+               --anyauth -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" \
+               -o CurveLab-2.1.3.tar.gz \
+               "${RESTRICTED_URL}"
+
+          ls -lh CurveLab-2.1.3.tar.gz
           tar xzf CurveLab-2.1.3.tar.gz
 
       - name: Build CurveLab from source
@@ -97,19 +125,8 @@ jobs:
       - name: Test CurveLab compilation
         run: |
           echo "Testing CurveLab compilation..."
-          if [ -f "utils/CurveLab-2.1.3/fdct_wrapping_cpp/src/fdct_wrapping_cpp" ]; then
-            echo "✅ fdct_wrapping_cpp built successfully"
-          else
-            echo "❌ fdct_wrapping_cpp build failed"
-            exit 1
-          fi
-
-          if [ -f "utils/CurveLab-2.1.3/fdct3d/src/fdct3d" ]; then
-            echo "✅ fdct3d built successfully"
-          else
-            echo "❌ fdct3d build failed"
-            exit 1
-          fi
+          test -f "utils/CurveLab-2.1.3/fdct_wrapping_cpp/src/fdct_wrapping_cpp" && echo "✅ fdct_wrapping_cpp built" || (echo "❌ fdct_wrapping_cpp missing"; exit 1)
+          test -f "utils/CurveLab-2.1.3/fdct3d/src/fdct3d" && echo "✅ fdct3d built" || (echo "❌ fdct3d missing"; exit 1)
 
       - name: Run tests with CurveLab
         env:
