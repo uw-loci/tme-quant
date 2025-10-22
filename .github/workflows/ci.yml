@@ -33,10 +33,10 @@ jobs:
         run: |
           pytest -q -vv tests/curvealign_py/ tests/ctfire_py/ tests/test_unified_api.py tests/test_curvelops_basic.py
 
-  # Secure build with CurveLab; skip on forked PRs (no secrets there).
+  # Secure build with CurveLab; skip on forked PRs (no secrets on forks).
   test-curvelab:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
-    # If your secrets live in a GitHub Environment, uncomment the next line and set the name:
+    # If your secrets live in a GitHub Environment, uncomment and set the name:
     # environment: ci
     runs-on: ubuntu-latest
     strategy:
@@ -71,6 +71,8 @@ jobs:
           RESTRICTED_USER: ${{ secrets.RESTRICTED_USER }}
           RESTRICTED_PASSWORD: ${{ secrets.RESTRICTED_PASSWORD }}
           RESTRICTED_URL: ${{ secrets.RESTRICTED_URL }}
+          # Optional: pre-signed direct link (no auth). If set, this will be used instead of Basic Auth.
+          RESTRICTED_URL_DIRECT: ${{ secrets.RESTRICTED_URL_DIRECT }}
         run: |
           set -euo pipefail
           cd utils
@@ -78,27 +80,49 @@ jobs:
           echo "== Secret presence check =="
           for v in RESTRICTED_USER RESTRICTED_PASSWORD RESTRICTED_URL; do
             if [ -z "${!v:-}" ]; then
-              echo "ERROR: $v is empty (check repo/org secrets or environment scoping)"; exit 1
+              echo "::error title=Missing secret::$v is empty. Define under Settings → Secrets or attach the correct Environment."
+              exit 1
             else
               echo "$v=SET"
             fi
           done
-
-          echo "== Probe HTTP status with auth (follows redirects) =="
-          code=$(curl -sS -o /dev/null -w "%{http_code}" -L \
-                  --anyauth -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" \
-                  "${RESTRICTED_URL}")
-          echo "HTTP status after redirects: $code"
-          if [ "$code" -ge 400 ]; then
-            echo "Server rejected credentials or URL not a direct artifact (HTTP $code)."; exit 22
+          if [ -n "${RESTRICTED_URL_DIRECT:-}" ]; then
+            echo "RESTRICTED_URL_DIRECT=SET (will prefer direct no-auth download)"
           fi
 
-          echo "== Downloading CurveLab archive =="
-          # --location-trusted allows sending auth to redirect target hosts you trust
-          curl --fail --location --location-trusted --show-error --retry 3 --retry-delay 2 \
-               --anyauth -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" \
-               -o CurveLab-2.1.3.tar.gz \
-               "${RESTRICTED_URL}"
+          if [ -n "${RESTRICTED_URL_DIRECT:-}" ]; then
+            echo "== Downloading via pre-signed direct URL =="
+            curl --fail --location --show-error --retry 3 --retry-delay 2 \
+                 -o CurveLab-2.1.3.tar.gz \
+                 "${RESTRICTED_URL_DIRECT}"
+          else
+            echo "== Redirect chain + final URL (with auth) =="
+            curl -sS -L -o /dev/null -w 'final:%{url_effective} code:%{http_code}\n' \
+                 --anyauth -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" \
+                 "${RESTRICTED_URL}"
+
+            echo "== Probe HTTP status with auth (no body) =="
+            code=$(curl -sS -o /dev/null -w "%{http_code}" -L \
+                    --anyauth -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" \
+                    "${RESTRICTED_URL}")
+            echo "HTTP status after redirects: $code"
+            if [ "$code" -eq 403 ]; then
+              echo "::error ::403 Forbidden. Likely not a direct artifact URL or auth method mismatch."
+              echo "Hints:"
+              echo "  • For Drive/Box/portal links: use a direct download link (often needs ?download=1) or API token."
+              echo "  • For S3/GCS/private object stores: use a pre-signed URL (set RESTRICTED_URL_DIRECT)."
+              echo "  • Verify ACLs permit this user to read the exact path."
+              exit 22
+            elif [ "$code" -ge 400 ]; then
+              echo "::error ::Server returned HTTP $code"; exit 22
+            fi
+
+            echo "== Downloading with Basic/Auth negotiation =="
+            curl --fail --location --location-trusted --show-error --retry 3 --retry-delay 2 \
+                 --anyauth -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" \
+                 -o CurveLab-2.1.3.tar.gz \
+                 "${RESTRICTED_URL}"
+          fi
 
           ls -lh CurveLab-2.1.3.tar.gz
           tar xzf CurveLab-2.1.3.tar.gz
