@@ -1,5 +1,7 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
+from pycurvelets.models import FeatureControlParameters
 from pycurvelets.utils.math import circ_r
 
 
@@ -8,12 +10,12 @@ class FiberProcessor:
     Unified processor for CT or FIRE fiber data
     """
 
-    def __init__(self, feature_cp):
+    def __init__(self, feature_cp: FeatureControlParameters):
         """
         Parameters
         ----------
-        feature_cp: dict
-            Dictionary for control parameters for extracted features, e.g.:
+        feature_cp: FeatureControlParameters
+            Dataclass for control parameters for extracted features, e.g.:
                 - minimum_nearest_fibers : int
                     Minimum nearest fibers for localized fiber density and alignment calculation
                 - minimum_box_size : int
@@ -30,8 +32,8 @@ class FiberProcessor:
         Returns pd.DataFrame
         """
 
-        minimum_nearest_fibers = self.feature_cp["minimum_nearest_fibers"]
-        minimum_box_size = self.feature_cp["minimum_box_size"]
+        minimum_nearest_fibers = self.feature_cp.minimum_nearest_fibers
+        minimum_box_size = self.feature_cp.minimum_box_size
 
         # Keep 4 original nearest fiber features
         nearest_fibers = [2**i * minimum_nearest_fibers for i in range(4)]

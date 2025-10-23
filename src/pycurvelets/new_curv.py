@@ -1,13 +1,12 @@
-from curvelops import FDCT2D, curveshow, fdct2d_wrapper
 import math
-import matplotlib.pyplot as plt
+
 import numpy as np
-import pandas as pd
-import os
-from scipy.io import loadmat
+from curvelops import fdct2d_wrapper
+
+from pycurvelets.models import CurveletControlParameters
 
 
-def new_curv(img, curve_cp):
+def new_curv(img, curve_cp: CurveletControlParameters):
     """
     Python implementation of newCurv.m
     SAME IMPLEMENTATION WHEN USING CPP WRAPPER -- NOT MATLAB.
@@ -23,11 +22,14 @@ def new_curv(img, curve_cp):
     -----------
     img : ndarray
         Input image
-    curve_cp : dict
-        Control parameters for curvelets application with fields:
-        - keep: fraction of the curvelets to be kept
-        - scale: scale to be analyzed
-        - radius: radius to group the adjacent curvelets
+    curve_cp : CurveletControlParameters
+        Dataclass containing curvelet control parameters:
+            - keep : float
+                Fraction of the curvelets to be kept.
+            - scale : float
+                Scale to be analyzed.
+            - radius : float
+                Radius to group adjacent curvelets.
 
     Returns:
     --------
@@ -38,9 +40,9 @@ def new_curv(img, curve_cp):
     inc : float
         Angle increment used
     """
-    keep = curve_cp["keep"]
-    s_scale = curve_cp["scale"]
-    radius = curve_cp["radius"]
+    keep = curve_cp.keep
+    s_scale = curve_cp.scale
+    radius = curve_cp.radius
 
     # Apply the FDCT to the image
     # Note: Python implementation uses different parameter ordering from MATLAB
@@ -230,6 +232,7 @@ def new_curv(img, curve_cp):
     not_empty = [len(g) > 0 for g in groups]
     comb_nh = [g for g in groups if len(g) > 0]
     n_hoods = [curves[g] for g in comb_nh]
+
     # print(f"Debug: curvelets after grouping: {len(n_hoods)}")
 
     # Helper function for fixing angles
