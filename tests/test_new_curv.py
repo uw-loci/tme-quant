@@ -1,8 +1,11 @@
-import pytest
 import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import pytest
+
+from pycurvelets.models import CurveletControlParameters
 
 # By default, skip curvelops-dependent tests (e.g., on CI). Enable locally with:
 #   TMEQ_RUN_CURVELETS=1 pytest -q
@@ -15,7 +18,7 @@ if os.environ.get("TMEQ_RUN_CURVELETS") != "1":
 # Optional: attempt import; skip module if curvelet backend is missing
 try:
     from pycurvelets.new_curv import new_curv  # type: ignore
-except Exception:
+except ModuleNotFoundError:
     pytest.skip(
         "curvelops not available; skipping new_curv tests", allow_module_level=True
     )
@@ -37,7 +40,8 @@ def test_new_curv_generates_nonempty_curvelets(standard_test_image):
     and center coordinates for typical parameters.
     """
     img = standard_test_image
-    in_curves, ct, inc = new_curv(img, {"keep": 0.01, "scale": 1, "radius": 3})
+    curve_cp = CurveletControlParameters(keep=0.01, scale=1, radius=3)
+    in_curves, ct, inc = new_curv(img, curve_cp)
 
     assert isinstance(in_curves, list)
     assert len(in_curves) > 0
@@ -58,11 +62,10 @@ def test_new_curv_matches_matlab_reference(standard_test_image):
     """
     Compare the curvelet centers and angles against a MATLAB reference CSV.
     Checks absolute tolerance and ensures mismatched elements are <1%.
-    Absolute tolerance for centers: 50 px
-    Absolute tolerance for angles: 30 deg
     """
     img = standard_test_image
-    in_curves, ct, inc = new_curv(img, {"keep": 0.01, "scale": 1, "radius": 3})
+    curve_cp = CurveletControlParameters(keep=0.01, scale=1, radius=3)
+    in_curves, ct, inc = new_curv(img, curve_cp)
 
     ref_csv = os.path.join(
         os.path.dirname(__file__),
@@ -95,7 +98,7 @@ def test_new_curv_matches_matlab_reference(standard_test_image):
         pred_centers_sorted,
         ref_centers_sorted,
         rtol=0,
-        atol=50,
+        atol=1,
         err_msg="Curvelet centers differ from MATLAB reference",
     )
 
@@ -104,7 +107,7 @@ def test_new_curv_matches_matlab_reference(standard_test_image):
         pred_angles_sorted,
         ref_angles_sorted,
         rtol=0,
-        atol=30,
+        atol=1,
         err_msg="Curvelet angles differ from MATLAB reference",
     )
 
@@ -124,18 +127,18 @@ def test_new_curv_matches_matlab_reference(standard_test_image):
 
 
 @pytest.mark.parametrize(
-    "params",
+    "curve_cp",
     [
-        {"keep": 0.01, "scale": 1, "radius": 3},
-        {"keep": 0.1, "scale": 2, "radius": 5},
+        CurveletControlParameters(keep=0.01, scale=1, radius=3),
+        CurveletControlParameters(keep=0.1, scale=2, radius=5),
     ],
 )
-def test_new_curv_output_consistency(standard_test_image, params):
+def test_new_curv_output_consistency(standard_test_image, curve_cp):
     """
     Ensure different curvelet parameters produce non-empty, valid outputs.
     """
     img = standard_test_image
-    in_curves, ct, inc = new_curv(img, params)
+    in_curves, ct, inc = new_curv(img, curve_cp)
 
     assert len(in_curves) > 0
     angles = np.asarray([c["angle"] for c in in_curves], dtype=float)

@@ -4,6 +4,7 @@ import numpy as np
 from curvelops import fdct2d_wrapper
 
 from pycurvelets.models import CurveletControlParameters
+from pycurvelets.utils.math import round_mlab
 
 
 def new_curv(img, curve_cp: CurveletControlParameters):
@@ -171,8 +172,8 @@ def new_curv(img, curve_cp: CurveletControlParameters):
             col[w] = np.zeros(len(test), dtype=int)
 
             angs[w] = np.array(angle)
-            row[w] = np.round(SX[s][w].ravel(order="F")[test])
-            col[w] = np.round(SY[s][w].ravel(order="F")[test])
+            row[w] = round_mlab(SX[s][w].ravel(order="F")[test])
+            col[w] = round_mlab(SY[s][w].ravel(order="F")[test])
 
             angle = []
         else:
@@ -272,7 +273,7 @@ def new_curv(img, curve_cp: CurveletControlParameters):
 
     angles = [fix_angle(nh[:, 2], inc) for nh in n_hoods]
     centers = [
-        np.array([round(np.median(nh[:, 0])), round(np.median(nh[:, 1]))])
+        np.array([round_mlab(np.median(nh[:, 0])), round_mlab(np.median(nh[:, 1]))])
         for nh in n_hoods
     ]
 
