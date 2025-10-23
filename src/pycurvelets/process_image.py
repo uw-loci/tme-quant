@@ -6,9 +6,9 @@ import pandas as pd
 import os
 import tkinter as tk
 import time
-import new_curv
-import get_ct
+
 from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
+from pycurvelets import get_ct, get_tif_boundary, new_curv
 
 
 def process_image(
@@ -52,23 +52,23 @@ def process_image(
         Coordinates of a boundary for evaluation.
     distance_threshold : float
         Distance from the boundary to evaluate fibers/curvelets.
-    make_associations : bool
+    make_associations : int
         Whether to generate association plots between boundary and fibers.
-    make_map : bool
+    make_map : int
         Whether to generate heatmap.
-    make_overlay : bool
+    make_overlay : int
         Whether to generate curvelet overlay figure.
-    make_feature_file : bool
+    make_feature_file : int
         Whether to generate feature file.
     slice_num : int
         Slice number within a stack (if analyzing multiple slices).
-    tif_boundary : bool
+    tif_boundary : int
         Flag indicating whether the boundary input is a TIFF file (True) or a list of coordinates (False).
     boundary_img : ndarray
         Boundary image used for overlay outputs.
     fire_directory : str
         Directory containing FIRE fiber results (optional; used instead of curvelets).
-    fiber_mode : str
+    fiber_mode : int
         Determines fiber processing method:
         0 = curvelet, 1/2/3 = FIRE variants
     num_sections : int
@@ -134,7 +134,7 @@ def process_image(
         print(f"Slide number: {slice_num}")
 
     # Check if we are measuring with respect to boundary
-    boundary_measurement = coordinates.size > 0
+    boundary_measurement = bool(coordinates)
 
     start_time = time.perf_counter()
     # Feature control structure initialized: feature_cp
@@ -156,8 +156,115 @@ def process_image(
             radius=advanced_options["curvelets_group_radius"],
         )
         # Call getCT
+        (
+            object,
+            fiber_key,
+            total_length_list,
+            end_length_list,
+            curvature_list,
+            width_list,
+            density_list,
+            alignment_list,
+            Ct,
+        ) = get_ct(img_name_plain, img, curve_cp, feature_cp)
     else:
         print("Reading CT-FIRE database.")
         # Call getFIRE
 
     return True
+
+
+if __name__ == "__main__":
+    import csv
+    import os
+    import matplotlib.pyplot as plt
+
+    base_path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "tests",
+        "test_results",
+        "get_tif_boundary_test_files",
+    )
+
+    files = [
+        os.path.join(base_path, f)
+        for f in [
+            "real1_boundary1_coords.csv",
+            "real1_boundary2_coords.csv",
+            "real1_boundary3_coords.csv",
+        ]
+    ]
+    coords = {}
+
+    for i, f in enumerate(files, start=1):
+        with open(f, newline="") as csvfile:
+            reader = csv.reader(csvfile)
+            # convert each row into a tuple, cast to float or int if needed
+            coords[f"csv{i}"] = [tuple(map(float, row)) for row in reader]
+
+    img = plt.imread(
+        os.path.join(
+            os.path.dirname(__file__), "..", "..", "tests", "test_images", "real1.tif"
+        ),
+        format="TIF",
+    )
+
+    dist_thresh = 100
+    min_dist = []
+    obj = {}
+
+    advanced_options = {
+        "exclude_fibers_in_mask_flag": 1,
+        "curvelets_group_radius": 10,
+        "selected_scale": 1,
+        "heatmap_STD_filter_size": 16,
+        "heatmap_SQUARE_max_filter_size": 12,
+        "heatmap_GAUSSIAN_disc_filter_sigma": 4,
+        "plot_rgb_flag": 0,
+        "minimum_nearest_fibers": 2,
+        "minimum_box_size": 32,
+        "fiber_midpoint_estimate": 1,
+        "min_dist": [],
+    }
+
+    with open(os.path.join(base_path, "real1_curvelets.csv"), newline="") as f:
+        reader = csv.DictReader(f)
+        for i, row in enumerate(reader):
+            obj[i] = {
+                "center": (float(row["center_1"]) - 1, float(row["center_2"]) - 1),
+                "angle": float(row["angle"]),
+                "weight": float(row["weight"]),
+            }
+
+    boundary_img = get_tif_boundary(coords, img, obj, dist_thresh, min_dist)
+    boundary_mode = 3
+    fiber_mode = 0
+    i = 1
+    keep = 0.05
+    make_association_flag = 1
+    make_map_flag = 1
+    make_overlay_flag = 1
+    num_sections = 1
+    output_dir = "."
+    path_name = os.getcwd()
+    process_image(
+        img,
+        "bob",
+        output_dir,
+        keep,
+        coords,
+        distance_threshold=dist_thresh,
+        make_associations=make_association_flag,
+        make_map=make_map_flag,
+        make_overlay=make_overlay_flag,
+        make_feature_file=1,
+        slice_num=1,
+        tif_boundary=boundary_mode,
+        boundary_img=boundary_img,
+        fire_directory=path_name,
+        fiber_mode=fiber_mode,
+        advanced_options=advanced_options,
+        num_sections=1,
+    )

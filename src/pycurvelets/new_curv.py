@@ -36,7 +36,7 @@ def new_curv(img, curve_cp: CurveletControlParameters):
     --------
     in_curves : list of dict
         List of dictionaries containing the orientation angle and center point of each curvelet
-    ct : list of lists
+    curvelet_coefficients : list of lists
         A nested list containing the thresholded curvelet coefficients
     inc : float
         Angle increment used
@@ -62,7 +62,7 @@ def new_curv(img, curve_cp: CurveletControlParameters):
     #     print(f"Debug: scale {i}: {len(scale)} wedges")
 
     # Create an empty structure of the same dimensions
-    ct = [
+    curvelet_coefficients = [
         [np.zeros_like(c[cc][dd]) for dd in range(len(c[cc]))] for cc in range(len(c))
     ]
 
@@ -99,7 +99,7 @@ def new_curv(img, curve_cp: CurveletControlParameters):
     # Threshold coefficients — keep values >= max_val, zero otherwise
     for dd in range(len(c[s])):
         mask = np.abs(c[s][dd]) >= max_val
-        ct[s][dd] = c[s][dd] * mask
+        curvelet_coefficients[s][dd] = c[s][dd] * mask
 
     # Debug: print threshold info
     # print(f"Debug: scale s={s}, len(c)={len(c)}, s_scale={s_scale}")
@@ -145,10 +145,12 @@ def new_curv(img, curve_cp: CurveletControlParameters):
     for w in range(long):
         # Find non-zero coefficients
         # MATLAB: test = find(Ct{s}{w});
-        test = np.flatnonzero(ct[s][w])
+        test = np.flatnonzero(curvelet_coefficients[s][w])
 
         if len(test) > 0:
-            test_idx_y, test_idx_x = np.unravel_index(test, ct[s][w].shape)
+            test_idx_y, test_idx_x = np.unravel_index(
+                test, curvelet_coefficients[s][w].shape
+            )
             angle = np.zeros(len(test))
             for bb in range(2):
                 # print(len(test))
@@ -188,7 +190,7 @@ def new_curv(img, curve_cp: CurveletControlParameters):
 
     if len(bb) == 0:  # No curvelets found
         print("Error; no curvelets found")
-        return [], ct, inc
+        return [], curvelet_coefficients, inc
 
     # Concatenate non-empty arrays
     col_flat = np.concatenate([col[i] for i in bb])
@@ -306,4 +308,4 @@ def new_curv(img, curve_cp: CurveletControlParameters):
 
     in_curves = [objects[i] for i in in_idx]
 
-    return in_curves, ct, inc
+    return in_curves, curvelet_coefficients, inc
