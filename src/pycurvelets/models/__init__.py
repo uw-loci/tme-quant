@@ -1,3 +1,7 @@
-from .models import CurveletControlParameters, FeatureControlParameters
+from .models import CurveletControlParameters, FeatureControlParameters, FiberFeatures
 
-__all__ = ["CurveletControlParameters", "FeatureControlParameters"]
+__all__ = [
+    "CurveletControlParameters",
+    "FeatureControlParameters",
+    "FiberFeatures",
+]

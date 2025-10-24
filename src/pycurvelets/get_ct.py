@@ -1,7 +1,14 @@
 import numpy as np
+import pandas as pd
+from sklearn.neighbors import NearestNeighbors
 
-from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
+from pycurvelets.models import (
+    CurveletControlParameters,
+    FeatureControlParameters,
+    FiberFeatures,
+)
 from pycurvelets.new_curv import new_curv
+from pycurvelets.process_fibers import process_fibers
 
 
 def get_ct(
@@ -26,17 +33,17 @@ def get_ct(
 
     Returns
     -------
-    CTResult
+    FiberFeatures
         Dataclass containing:
             - objects: info about each fiber segment (position, angle)
             - fiber_key: index of beginning of each fiber
-            - total_length_list
-            - end_length_list
-            - curvature_list
-            - width_list
-            - density_list
-            - alignment_list
-            - Ct: processed curvelet/fiber data
+            - total_length
+            - end_length
+            - curvature
+            - width
+            - density
+            - alignment
+            - curvelet_coefficients: processed curvelet/fiber data
     """
 
     fiber_structure, curvelet_coefficients, _ = new_curv(img, curve_cp)
@@ -63,7 +70,7 @@ def get_ct(
             curvelet_coefficients,
         )
 
-    fiber_number = len(fiber_structure)
+    process_fibers(fiber_structure=fiber_structure, feature_cp=feature_cp)
 
     return (
         object_list,
