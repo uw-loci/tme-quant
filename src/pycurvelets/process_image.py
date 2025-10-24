@@ -8,7 +8,8 @@ import tkinter as tk
 import time
 
 from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
-from pycurvelets import get_ct, get_tif_boundary, new_curv
+from pycurvelets.get_ct import get_ct
+from pycurvelets.get_tif_boundary import get_tif_boundary
 
 
 def process_image(
