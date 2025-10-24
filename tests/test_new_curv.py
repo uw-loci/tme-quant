@@ -43,11 +43,11 @@ def test_new_curv_generates_nonempty_curvelets(standard_test_image):
     curve_cp = CurveletControlParameters(keep=0.01, scale=1, radius=3)
     in_curves, ct, inc = new_curv(img, curve_cp)
 
-    assert isinstance(in_curves, list)
+    assert isinstance(in_curves, pd.DataFrame)
     assert len(in_curves) > 0
 
-    angles = np.asarray([c["angle"] for c in in_curves], dtype=float)
-    centers = np.asarray([c["center"] for c in in_curves], dtype=float)
+    angles = in_curves["angle"].to_numpy(dtype=float)
+    centers = in_curves[["center_row", "center_col"]].to_numpy()
 
     assert angles.ndim == 1
     assert centers.ndim == 2 and centers.shape[1] == 2
@@ -82,8 +82,8 @@ def test_new_curv_matches_matlab_reference(standard_test_image):
     ref_centers = df[["center_0", "center_1"]].to_numpy(dtype=float)
     ref_angles = df["angle"].to_numpy(dtype=float)
 
-    pred_centers = np.asarray([d["center"] for d in in_curves], dtype=float)
-    pred_angles = np.asarray([d["angle"] for d in in_curves], dtype=float)
+    pred_centers = in_curves[["center_row", "center_col"]].to_numpy()
+    pred_angles = in_curves["angle"].to_numpy()
 
     ref_sort_idx = np.lexsort((ref_centers[:, 1], ref_centers[:, 0]))
     pred_sort_idx = np.lexsort((pred_centers[:, 1], pred_centers[:, 0]))
@@ -141,8 +141,8 @@ def test_new_curv_output_consistency(standard_test_image, curve_cp):
     in_curves, ct, inc = new_curv(img, curve_cp)
 
     assert len(in_curves) > 0
-    angles = np.asarray([c["angle"] for c in in_curves], dtype=float)
-    centers = np.asarray([c["center"] for c in in_curves], dtype=float)
+    angles = in_curves["angle"].to_numpy()
+    centers = in_curves[["center_row", "center_col"]].to_numpy()
 
     assert np.isfinite(angles).all()
     assert centers.ndim == 2 and centers.shape[1] == 2

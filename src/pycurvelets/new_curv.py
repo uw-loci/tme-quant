@@ -1,6 +1,8 @@
 import math
 
 import numpy as np
+import pandas as pd
+
 from curvelops import fdct2d_wrapper
 
 from pycurvelets.models import CurveletControlParameters
@@ -11,9 +13,6 @@ def new_curv(img, curve_cp: CurveletControlParameters):
     """
     Python implementation of newCurv.m
     SAME IMPLEMENTATION WHEN USING CPP WRAPPER -- NOT MATLAB.
-    The equivalent input to newCurv.m curveCP's:
-    keep = 0.01, scale = 1, radius = 3 is the same as:
-    keep = 0.01, scale = 1, radius = 3 in this function, so it takes in the same parameters.
 
     This function applies the Fast Discrete Curvelet Transform to an image, then extracts
     the curvelet coefficients at a given scale with magnitude above a given threshold.
@@ -34,8 +33,11 @@ def new_curv(img, curve_cp: CurveletControlParameters):
 
     Returns:
     --------
-    in_curves : list of dict
-        List of dictionaries containing the orientation angle and center point of each curvelet
+    in_curves : pandas.DataFrame
+        DataFrame containing one row per curvelet, with columns:
+        - ``angle``: orientation angle in degrees
+        - ``center_row``: row coordinate of the curvelet center
+        - ``center_col``: column coordinate of the curvelet center
     curvelet_coefficients : list of lists
         A nested list containing the thresholded curvelet coefficients
     inc : float
@@ -306,6 +308,16 @@ def new_curv(img, curve_cp: CurveletControlParameters):
         & (cen_col > edge_buf)
     )[0]
 
-    in_curves = [objects[i] for i in in_idx]
+    in_curves = pd.DataFrame(
+        [
+            {
+                "center_row": obj["center"][0],
+                "center_col": obj["center"][1],
+                "angle": obj["angle"],
+            }
+            for i, obj in enumerate(objects)
+            if i in in_idx
+        ]
+    ).reset_index(drop=True)
 
     return in_curves, curvelet_coefficients, inc
