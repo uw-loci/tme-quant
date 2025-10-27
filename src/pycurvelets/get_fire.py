@@ -29,7 +29,20 @@ def get_fire(
 
     Returns
     -------
-    None
+    fiber_structure: pandas.DataFrame
+        DataFrame containing one row per curvelet, with columns:
+        - ``angle``: orientation angle in degrees
+        - ``center_row``: row coordinate of the curvelet center
+        - ``center_col``: column coordinate of the curvelet center
+        - ``width``: width of the curvelet
+    density_df: pandas.DataFrame
+        DataFrame containing one row per curvelet, with columns:
+        - ``density_mean``: mean density of fibers
+        - ``density_std``: standard deviation of density of fibers
+    alignment_df: pandas.DataFrame
+        DataFrame containing one row per curvelet, with columns:
+        - ``alignment_mean``: mean alignment of fibers
+        - ``alignment_std``: standard deviation of alignment of fibers
     """
 
     ct_fire_name = f"ct_fire_out{img_name}.mat"
@@ -70,13 +83,16 @@ def get_fire(
 
     fiber_structure = fiber_structure_mat["data"]
     length_limit = fiber_structure_mat["cP"]["LL1"][0, 0]
+    density_df, alignment_df = process_fibers(
+        fiber_structure=fiber_structure, feature_cp=feature_cp
+    )
 
     if len(fiber_structure) == 0:
-        return fiber_structure
+        return fiber_structure, density_df, alignment_df
 
     fiber_number = len(fiber_structure_mat["Fai"][0, 0])
     X = fiber_structure["Xai"]
 
     # Now process segments:
 
-    return fiber_structure
+    return fiber_structure, density_df, alignment_df

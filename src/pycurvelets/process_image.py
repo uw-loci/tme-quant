@@ -177,12 +177,34 @@ def process_image(
         print("Reading CT-FIRE database.")
         # Call getFIRE
         # Add slice name used in CT-FIRE output
-        if num_sections > 1:
-            (
-                fiber_structure,
-                density_df,
-                alignment_df,
-            ) = get_fire(img_name_plain, fire_directory, fiber_mode, feature_cp)
+        fiber_structure, density_df, alignment_df = get_fire(
+            img_name_plain, fire_directory, fiber_mode, feature_cp
+        )
+
+    if fiber_structure.empty:
+        return None
+
+    # Get features correlating fibers to boundaries
+    if boundary_measurement:
+        print("Analyzing boundary.")
+        if tif_boundary == 3:
+            print(
+                "Calculate relative angles of fibers within the specified distance to each boundary, including"
+            )
+            print(" 1) angle to the nearest point on the boundary")
+            print(" 2) angle to the boundary mask orientation")
+            print(
+                " 3) angle to the line connecting the fiber center and boundary mask center"
+            )
+
+            ROI_number = len(coordinates)
+            fiber_list = fiber_structure
+
+            save_boundary_width_measurements = os.path.join(
+                output_directory, f"{img_name}_BoundaryMeasurements.xlsx"
+            )
+            if os.path.isfile(save_boundary_width_measurements):
+                os.remove(save_boundary_width_measurements)
     return True
 
 
