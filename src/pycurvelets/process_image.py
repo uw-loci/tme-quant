@@ -9,6 +9,7 @@ import time
 
 from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
 from pycurvelets.get_ct import get_ct
+from pycurvelets.get_fire import get_fire
 from pycurvelets.get_tif_boundary import get_tif_boundary
 
 
@@ -145,6 +146,16 @@ def process_image(
         fiber_midpoint_estimate=advanced_options["fiber_midpoint_estimate"],
     )
 
+    # Initialize attributes for fiber features
+    fiber_structure = pd.DataFrame()
+    fiber_key = []
+    total_length_list = []
+    end_length_list = []
+    curvature_list = []
+    width_list = []
+    density_df = pd.DataFrame()
+    alignment_df = pd.DataFrame()
+
     # Add lower limit for distance threshold
     min_dist = advanced_options["min_dist"]
 
@@ -158,20 +169,20 @@ def process_image(
         )
         # Call getCT
         (
-            object,
-            fiber_key,
-            total_length_list,
-            end_length_list,
-            curvature_list,
-            width_list,
-            density_list,
-            alignment_list,
-            Ct,
+            fiber_structure,
+            density_df,
+            alignment_df,
         ) = get_ct(img_name_plain, img, curve_cp, feature_cp)
     else:
         print("Reading CT-FIRE database.")
         # Call getFIRE
-
+        # Add slice name used in CT-FIRE output
+        if num_sections > 1:
+            (
+                fiber_structure,
+                density_df,
+                alignment_df,
+            ) = get_fire(img_name_plain, fire_directory, fiber_mode, feature_cp)
     return True
 
 

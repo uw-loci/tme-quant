@@ -31,6 +31,8 @@ def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
     alignment_list : np.ndarray
         Alignment features array
     """
+    # add weight column to fiber_structure
+    fiber_structure["weight"] = np.nan
 
     fiber_number = len(fiber_structure)
     x = fiber_structure["center_row"].to_numpy()
@@ -55,7 +57,7 @@ def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
     )
 
     K = nearest_fibers[-1] + 1
-    nbrs = NearestNeighbors(n_neighbors=K, metric="euclidean", algorithm="auto").fit(
+    nbrs = NearestNeighbors(n_neighbors=K, metric="euclidean", algorithm="brute").fit(
         centers
     )
     nearest_neighbor_dist, nearest_neighbor_idx = nbrs.kneighbors(centers)
@@ -86,29 +88,28 @@ def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
             )
 
             # get all fibers in that area
-            vals = np.vstack(object)
-            col_idx = len_nearest_fibers + 2 + box_idx
-            density_list[fiber_idx, j] = vals[square_mask].mean()
+            vals = np.vstack(fiber_structure[square_mask].angle)
+            col_idx = len(nearest_fibers) + 2 + j
+            density_list[i, col_idx] = len(vals)
             alignment_list[i, col_idx] = circ_r(vals * 2 * np.pi / 180)
 
-    # --- assemble final DataFrame ---
-    df = pd.DataFrame(
+        fiber_structure.iloc[i].weight = np.nan
+
+    density_df = pd.DataFrame(
         {
-            "x": centers[:, 0],
-            "y": centers[:, 1],
-            "angle": angles,
-            "density_mean": density_mean,
-            "density_std": density_std,
-            "alignment_mean": alignment_mean,
-            "alignment_std": alignment_std,
+            "density_mean": np.mean(density_list[:, : len(nearest_fibers)], axis=1),
+            "density_std": np.std(
+                density_list[:, : len(nearest_fibers)], axis=1, ddof=0
+            ),
+        }
+    )
+    alignment_df = pd.DataFrame(
+        {
+            "alignment_mean": np.mean(alignment_list[:, : len(nearest_fibers)], axis=1),
+            "alignment_std": np.std(
+                alignment_list[:, : len(nearest_fibers)], axis=1, ddof=0
+            ),
         }
     )
 
-    for k in range(len(n_list)):
-        df[f"density_n{k+1}"] = density_array[:, k]
-        df[f"alignment_n{k+1}"] = alignment_array[:, k]
-    for k in range(len(box_sizes)):
-        df[f"density_box{k+1}"] = box_density[:, k]
-        df[f"alignment_box{k+1}"] = box_alignment[:, k]
-
-    return df
+    return density_df, alignment_df

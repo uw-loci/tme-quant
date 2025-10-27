@@ -1,6 +1,4 @@
 import numpy as np
-import pandas as pd
-from sklearn.neighbors import NearestNeighbors
 
 from pycurvelets.models import (
     CurveletControlParameters,
@@ -48,38 +46,11 @@ def get_ct(
 
     fiber_structure, curvelet_coefficients, _ = new_curv(img, curve_cp)
 
-    object_list = []
-    fiber_key = []
-    total_length_list = []
-    end_length_list = []
-    curvature_list = []
-    width_list = []
-    density_list = []
-    alignment_list = []
-
     if len(fiber_structure) == 0:
-        return (
-            object_list,
-            fiber_key,
-            total_length_list,
-            end_length_list,
-            curvature_list,
-            width_list,
-            density_list,
-            alignment_list,
-            curvelet_coefficients,
-        )
+        return fiber_structure
 
-    process_fibers(fiber_structure=fiber_structure, feature_cp=feature_cp)
-
-    return (
-        object_list,
-        fiber_key,
-        total_length_list,
-        end_length_list,
-        curvature_list,
-        width_list,
-        density_list,
-        alignment_list,
-        curvelet_coefficients,
+    density_df, alignment_df = process_fibers(
+        fiber_structure=fiber_structure, feature_cp=feature_cp
     )
+
+    return fiber_structure, density_df, alignment_df
