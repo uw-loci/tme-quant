@@ -172,7 +172,7 @@ def process_image(
             fiber_structure,
             density_df,
             alignment_df,
-        ) = get_ct(img_name_plain, img, curve_cp, feature_cp)
+        ) = get_ct(img, curve_cp, feature_cp)
     else:
         print("Reading CT-FIRE database.")
         # Call getFIRE

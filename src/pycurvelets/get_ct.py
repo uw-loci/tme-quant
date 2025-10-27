@@ -10,7 +10,6 @@ from pycurvelets.process_fibers import process_fibers
 
 
 def get_ct(
-    img_name: str,
     img: np.ndarray,
     curve_cp: CurveletControlParameters,
     feature_cp: FeatureControlParameters,
@@ -20,8 +19,6 @@ def get_ct(
 
     Parameters
     ----------
-    img_name : str
-        Name of the image we are processing.
     img : np.ndarray
         2D image array of size [M, N] to be analyzed.
     curve_cp : CurveletControlParameters
@@ -31,17 +28,20 @@ def get_ct(
 
     Returns
     -------
-    FiberFeatures
-        Dataclass containing:
-            - objects: info about each fiber segment (position, angle)
-            - fiber_key: index of beginning of each fiber
-            - total_length
-            - end_length
-            - curvature
-            - width
-            - density
-            - alignment
-            - curvelet_coefficients: processed curvelet/fiber data
+    fiber_structure: pandas.DataFrame
+        DataFrame containing one row per curvelet, with columns:
+        - ``angle``: orientation angle in degrees
+        - ``center_row``: row coordinate of the curvelet center
+        - ``center_col``: column coordinate of the curvelet center
+        - ``width``: width of the curvelet
+    density_df: pandas.DataFrame
+        DataFrame containing one row per curvelet, with columns:
+        - ``density_mean``: mean density of fibers
+        - ``density_std``: standard deviation of density of fibers
+    alignment_df: pandas.DataFrame
+        DataFrame containing one row per curvelet, with columns:
+        - ``alignment_mean``: mean alignment of fibers
+        - ``alignment_std``: standard deviation of alignment of fibers
     """
 
     fiber_structure, curvelet_coefficients, _ = new_curv(img, curve_cp)
