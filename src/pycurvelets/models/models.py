@@ -26,3 +26,21 @@ class FiberFeatures:
     density: float
     alignment: float
     curvelet_coefficients: list
+
+
+@dataclass
+class ROIList:
+    coordinates: tuple
+    image_width: int
+    image_height: int
+
+
+@dataclass
+class ROIMeasurements:
+    angle_to_boundary_edge: float
+    angle_to_boundary_center: float
+    angle_to_center_line: float
+    fiber_center_list: list[int]
+    fiber_angle_list: list[float]
+    distance: float  # between fiber and boundary
+    number_of_fibers: int  # within distance to each boundary

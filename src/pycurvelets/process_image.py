@@ -9,7 +9,12 @@ from skimage.measure import regionprops, label
 import tkinter as tk
 import time
 
-from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
+from pycurvelets.get_alignment_to_roi import get_alignment_to_roi
+from pycurvelets.models import (
+    CurveletControlParameters,
+    FeatureControlParameters,
+    ROIList,
+)
 from pycurvelets.get_ct import get_ct
 from pycurvelets.get_fire import get_fire
 from pycurvelets.get_tif_boundary import get_tif_boundary
@@ -242,8 +247,15 @@ def process_image(
             )
 
             for roi_index, roi_coords in enumerate(coordinates.values()):
+                roi_list = ROIList(
+                    coordinates=roi_coords,
+                    image_width=img.shape[1],
+                    image_height=img.shape[0],
+                )
                 roi_coords = np.array(roi_coords)
-                roi_mask = polygon2mask(img.shape[:2], roi_coords[:, [1, 0]])
+                roi_mask = polygon2mask(
+                    (roi_list.image_width, roi_list.image_height), roi_coords[:, [1, 0]]
+                )
                 roi_regions = regionprops(label(roi_mask.astype(int)))
 
                 if len(roi_regions) != 1:
@@ -264,7 +276,70 @@ def process_image(
                     "area": roi_properties.area,
                 }
 
+                roi_measurements = None
+                try:
+                    roi_measurements = get_alignment_to_roi(
+                        roi_list, fiber_structure, distance_threshold
+                    )
+                except Exception as e:
+                    print(f"Boundary {roi_index} was skipped. Error: {str(e)}")
+
+                # concat_roi_df(
+                #     roi_measurements, roi_measurement_details, roi_summary_details
+                # )
+
     return True
+
+
+# def concat_roi_df(roi_measurements, roi_measurement_details, roi_summary_details):
+#     if roi_measurements is not None:
+#         roi_measurement_details = pd.concat(
+#             [
+#                 roi_measurement_details,
+#                 pd.DataFrame(
+#                     {
+#                         "angle_to_boundary_edge": [roi_measurements.angle2boundaryEdge],
+#                         "angle_to_boundary_center": [
+#                             roi_measurements.angle2boundaryCenter
+#                         ],
+#                         "angle_to_center_line": [roi_measurements.angle2centersLine],
+#                         "fiber_center_row": [roi_measurements.fibercenterList[:, 0]],
+#                         "fiber_center_col": [roi_measurements.fibercenterList[:, 1]],
+#                         "fiber_angle_list": [roi_measurements.fiberangleList],
+#                         "distance_list": [roi_measurements.distanceList],
+#                         "boundary_point_row": [roi_measurements.boundaryPoints[:, 0]],
+#                         "boundary_point_col": [roi_measurements.boundaryPoints[:, 1]],
+#                     }
+#                 ),
+#             ],
+#             ignore_index=True,
+#         )
+#
+#         roi_summary_details = pd.concat(
+#             [
+#                 roi_summary_details,
+#                 pd.DataFrame(
+#                     {
+#                         "name": [i],
+#                         "center_row": [center_row],
+#                         "center_col": [center_col],
+#                         "orientation": [orientation_deg],
+#                         "area": [area],
+#                         "mean_of_angle_to_boundary_edge": [
+#                             np.nanmean(roi_measurements.angle2boundaryEdge)
+#                         ],
+#                         "mean_of_angle_to_boundary_center": [
+#                             np.nanmean(roi_measurements.angle2boundaryCenter)
+#                         ],
+#                         "mean_of_angle_to_center_line": [
+#                             np.nanmean(roi_measurements.angle2centersLine)
+#                         ],
+#                         "number_of_fibers": [n_fibers],
+#                     }
+#                 ),
+#             ],
+#             ignore_index=True,
+#         )
 
 
 if __name__ == "__main__":
