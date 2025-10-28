@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import os
+from skimage.draw import polygon, polygon2mask
+from skimage.measure import regionprops, label
 import tkinter as tk
 import time
 
@@ -11,6 +13,7 @@ from pycurvelets.models import CurveletControlParameters, FeatureControlParamete
 from pycurvelets.get_ct import get_ct
 from pycurvelets.get_fire import get_fire
 from pycurvelets.get_tif_boundary import get_tif_boundary
+from pycurvelets.utils.misc import format_df_to_excel
 
 
 def process_image(
@@ -197,7 +200,7 @@ def process_image(
                 " 3) angle to the line connecting the fiber center and boundary mask center"
             )
 
-            ROI_number = len(coordinates)
+            roi_number = len(coordinates)
             fiber_list = fiber_structure
 
             save_boundary_width_measurements = os.path.join(
@@ -205,6 +208,62 @@ def process_image(
             )
             if os.path.isfile(save_boundary_width_measurements):
                 os.remove(save_boundary_width_measurements)
+
+            roi_measurement_details_cols = [
+                "angle_to_boundary_edge",
+                "angle_to_boundary_center",
+                "angle_to_center_line",
+                "fiber_center_row",
+                "fiber_center_col",
+                "fiber_angle_list",
+                "distance_list",
+                "boundary_point_row",
+                "boundary_point_col",
+            ]
+            roi_measurement_details = pd.DataFrame(columns=roi_measurement_details_cols)
+
+            roi_summary_cols = [
+                "name",
+                "center_row",
+                "center_col",
+                "orientation",
+                "area",
+                "mean_of_angle_to_boundary_edge",
+                "mean_of_angle_to_boundary_center",
+                "mean_of_angle_to_center_line",
+                "number_of_fibers",
+            ]
+            roi_summary_details = pd.DataFrame(columns=roi_summary_cols)
+
+            format_df_to_excel(
+                roi_summary_details,
+                save_boundary_width_measurements,
+                sheet_name="Boundary Summary",
+            )
+
+            for roi_index, roi_coords in enumerate(coordinates.values()):
+                roi_coords = np.array(roi_coords)
+                roi_mask = polygon2mask(img.shape[:2], roi_coords[:, [1, 0]])
+                roi_regions = regionprops(label(roi_mask.astype(int)))
+
+                if len(roi_regions) != 1:
+                    raise ValueError(
+                        f"ROI {roi_index} does not correspond to a single region"
+                    )
+
+                roi_properties = roi_regions[0]
+                orientation_degrees = -np.degrees(roi_properties.orientation)
+                if orientation_degrees < 0:
+                    orientation_degrees += 180
+
+                summary_row = {
+                    "name": roi_properties.label,
+                    "center_row": roi_properties.centroid[0],
+                    "center_col": roi_properties.centroid[1],
+                    "orientation": orientation_degrees,
+                    "area": roi_properties.area,
+                }
+
     return True
 
 
