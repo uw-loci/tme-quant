@@ -46,9 +46,6 @@ napari = [
 imagej = [
   "pyimagej>=1.4.0",
 ]
-curvelet = [
-  "pycurvelets",
-]
 curvelops = [
   "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
 ]
@@ -57,7 +54,6 @@ all = [
   "napari[all]>=0.4.0", 
   "qtpy",
   "pyimagej>=1.4.0",
-  "pycurvelets",
   "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
 ]
 

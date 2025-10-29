@@ -191,7 +191,7 @@ ij = pyimagej_plugin.launch_imagej_with_results(result, image)
 ```
 
 Backend notes
-- Prefer a pluggable FDCT layer (e.g., `curvelab_py` or pybind11 wrapper to CurveLab). Prototype with `pycurvelets` if available.
+- Prefer a pluggable FDCT layer (e.g., `curvelab_py` or pybind11 wrapper to CurveLab). Use curvelops for authentic CurveLab transforms.
 - Visualization is now separated from core API for framework neutrality
 - I/O: default to `tifffile` and `imageio`; optional `pyimagej` integration for complex formats.
 - Deterministic tests: seed any randomized steps; provide fixtures mirroring MATLAB tests in `tests/test_results`.
