@@ -153,6 +153,20 @@ setup_curvelab() {
         return 0
     fi
     
+    # Auto-detect CurveLab under ../utils
+    local utils_fdct
+    for d in "$PROJECT_ROOT/../utils"/CurveLab-*; do
+        if [ -d "$d" ]; then
+            utils_fdct="$d"
+            break
+        fi
+    done
+    if [ -z "${FDCT:-}" ] && [ -n "$utils_fdct" ]; then
+        export FDCT="$utils_fdct"
+        print_success "Auto-detected CurveLab at: $FDCT"
+        return 0
+    fi
+    
     # Prompt user for CurveLab location
     print_warning "CurveLab not found in environment."
     echo ""
@@ -203,6 +217,7 @@ setup_fftw() {
     
     # Check common locations
     local fftw_locations=(
+        "$PROJECT_ROOT/../utils/fftw-2.1.5"
         "$HOME/opt/fftw-2.1.5"
         "/usr/local/fftw-2.1.5"
         "/opt/fftw-2.1.5"
