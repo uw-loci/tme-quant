@@ -1,7 +1,9 @@
 from .models import (
     CurveletControlParameters,
     FeatureControlParameters,
+    Fiber,
     FiberFeatures,
+    ROI,
     ROIList,
     ROIMeasurements,
 )
@@ -9,7 +11,9 @@ from .models import (
 __all__ = [
     "CurveletControlParameters",
     "FeatureControlParameters",
+    "Fiber",
     "FiberFeatures",
+    "ROI",
     "ROIList",
     "ROIMeasurements",
 ]

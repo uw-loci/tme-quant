@@ -1,4 +1,38 @@
 from dataclasses import dataclass
+from typing import Optional, Dict, List, Union
+import numpy as np
+import pandas as pd
+
+
+# Custom Exception Classes for Fiber Analysis
+class FiberAnalysisError(Exception):
+    """Base exception for fiber analysis operations."""
+
+    pass
+
+
+class ROIProcessingError(FiberAnalysisError):
+    """Exception raised during ROI processing."""
+
+    pass
+
+
+class BoundaryAnalysisError(FiberAnalysisError):
+    """Exception raised during boundary analysis."""
+
+    pass
+
+
+class FeatureExtractionError(FiberAnalysisError):
+    """Exception raised during feature extraction."""
+
+    pass
+
+
+class ImageProcessingError(FiberAnalysisError):
+    """Exception raised during image processing operations."""
+
+    pass
 
 
 @dataclass
@@ -16,6 +50,13 @@ class FeatureControlParameters:
 
 
 @dataclass
+class Fiber:
+    center_row: float
+    center_col: float
+    angle: float
+
+
+@dataclass
 class FiberFeatures:
     object: tuple
     fiber_key: int
@@ -29,8 +70,17 @@ class FiberFeatures:
 
 
 @dataclass
-class ROIList:
+class ROI:
     coordinates: tuple
+    image_width: int
+    image_height: int
+    distance: Optional[float]
+    index_to_object: Optional[int]
+
+
+@dataclass
+class ROIList:
+    coordinates: list[tuple]
     image_width: int
     image_height: int
 
