@@ -42,18 +42,33 @@ visualization = [
 napari = [
   "napari[all]>=0.4.0",
   "qtpy",
+  "roifile>=2024.1.0",
 ]
 imagej = [
   "pyimagej>=1.4.0",
 ]
+fiji_bridge = [
+  "napari-imagej",
+  "aicsimageio",
+]
 curvelops = [
   "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
+]
+segmentation = [
+  "cellpose>=2.0",
+  "stardist",
+  "csbdeep",
+  "tensorflow>=2.6.0",
 ]
 all = [
   "matplotlib>=3.5.0",
   "napari[all]>=0.4.0", 
   "qtpy",
+  "roifile>=2024.1.0",
   "pyimagej>=1.4.0",
+  "cellpose>=2.0",
+  "stardist",
+  "csbdeep",
   "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
 ]
 
@@ -85,6 +100,9 @@ target-version = ['py39']
 [tool.isort]
 profile = "black"
 line_length = 88
+
+[project.entry-points."napari.manifest"]
+tme-quant = "napari_curvealign:napari.yaml"
 
 
 
