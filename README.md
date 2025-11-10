@@ -1,6 +1,8 @@
 # tme-quant
 
-Modern Python implementation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) for collagen fiber analysis, featuring a comprehensive API, CT-FIRE integration, and napari plugin support.
+Modern Python implementation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) for collagen fiber analysis, featuring a comprehensive API and CT-FIRE integration.
+
+> **Note**: This branch (`api-curation`) focuses on the Python API. For the napari plugin, see the [`napari-curvealign`](https://github.com/uw-loci/tme-quant/tree/napari-curvealign) branch.
 
 ## Python API - Quick Start
 
@@ -26,15 +28,15 @@ result_ctfire = curvealign.analyze_image(image, mode="ctfire")
 - **Authentic FDCT**: Real CurveLab transforms via Curvelops integration
 - **Unified Interface**: Both curvelet-based and CT-FIRE fiber extraction
 - **Granular Architecture**: Modular design with clean separation of concerns  
-- **Pluggable Visualization**: Support for matplotlib, napari, and ImageJ backends
+- **Visualization Support**: Built-in support for matplotlib and extensible for other backends
 - **Type Safety**: Comprehensive type definitions and validation
 - **Framework Ready**: Designed for scientific Python workflows
 
 ## Repository Structure (high-level)
 - `src/curvealign_py/`: CurveAlign Python API
 - `src/ctfire_py/`: CT-FIRE Python API
-- `src/napari_curvealign/`: Napari plugin
-- `tests/`: Test suite
+- `bin/`: Automated setup scripts
+- `tests/`: Comprehensive test suite with CI integration
 
 ### Licensing and prerequisites
 This project depends on code that cannot be redistributed here:
@@ -42,8 +44,7 @@ This project depends on code that cannot be redistributed here:
 
 Base requirements:
 - macOS, Linux, or Windows (see notes below)
-- Conda (recommended) or Python 3.10–3.13
-- For napari: a Qt binding (PyQt or PySide)
+- Conda (recommended) or Python 3.9–3.13
 
 ## Installation
 
@@ -93,7 +94,6 @@ See `simple_usage.py`.
 ## Troubleshooting
 
 ### Common Issues
-- **Qt error**: Install Qt bindings: `conda install -c conda-forge pyqt`
 - **Import errors**: Ensure package is installed: `pip install -e .`
 - **curvelops build errors**: Verify `FFTW` and `FDCT` environment variables point to install roots
 
