@@ -32,27 +32,16 @@ def load_test_data():
     fiber_structure_path = os.path.join(base_path, "real1_fiber_structure.csv")
     fiber_df = pd.read_csv(fiber_structure_path)
 
-    # Convert to list of Fiber objects
-    fiber_list = []
-    for _, row in fiber_df.iterrows():
-        fiber_list.append(
-            Fiber(
-                center_row=row["center_1"],
-                center_col=row["center_2"],
-                angle=row["angle"],
-            )
-        )
-
     # Load expected output
     expected_output_path = os.path.join(base_path, "real1_ROImeasurements.csv")
     expected_df = pd.read_csv(expected_output_path)
 
-    return roi_coords, fiber_list, expected_df
+    return roi_coords, fiber_df, expected_df
 
 
 def test_get_alignment_to_roi_with_distance_threshold():
     """Test get_alignment_to_roi with distance threshold mode."""
-    roi_coords, fiber_list, expected_df = load_test_data()
+    roi_coords, fiber_df, expected_df = load_test_data()
 
     # Create ROIList with single ROI
     roi_list = ROIList(
@@ -65,7 +54,7 @@ def test_get_alignment_to_roi_with_distance_threshold():
 
     # Call the function
     result, result_fiber_count = get_alignment_to_roi(
-        roi_list, [fiber_list], distance_threshold
+        roi_list, fiber_df, distance_threshold
     )
 
     # Verify result is a DataFrame
@@ -117,16 +106,17 @@ def test_get_alignment_to_roi_empty_fiber_structure():
         image_height=100,
     )
 
+    empty_df = pd.DataFrame()
     with pytest.raises(ValueError, match="fiber_structure cannot be None or empty"):
-        get_alignment_to_roi(roi_list, [], 10)
+        get_alignment_to_roi(roi_list, empty_df, 10)
 
 
 def test_get_alignment_to_roi_none_roi():
     """Test that function raises error with None ROI."""
-    fiber_list = [Fiber(center_row=15, center_col=15, angle=45)]
+    fiber_df = pd.DataFrame({"center_1": [15], "center_2": [15], "angle": [45]})
 
     with pytest.raises(ValueError, match="roi_list cannot be None"):
-        get_alignment_to_roi(None, [fiber_list], 10)
+        get_alignment_to_roi(None, fiber_df, 10)
 
 
 if __name__ == "__main__":

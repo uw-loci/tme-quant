@@ -236,6 +236,10 @@ def process_image(
             ]
             roi_summary_details = pd.DataFrame(columns=roi_summary_cols)
 
+            # Delete existing file if it exists to start fresh
+            if os.path.exists(save_boundary_width_measurements):
+                os.remove(save_boundary_width_measurements)
+
             format_df_to_excel(
                 roi_summary_details,
                 save_boundary_width_measurements,
@@ -244,7 +248,9 @@ def process_image(
 
             for roi_index, roi_coords in enumerate(coordinates.values()):
                 roi_list = ROIList(
-                    coordinates=roi_coords,
+                    coordinates=[
+                        roi_coords
+                    ],  # Wrap in list - ROIList expects list of ROIs
                     image_width=img.shape[1],
                     image_height=img.shape[0],
                 )
@@ -265,7 +271,7 @@ def process_image(
                     orientation_degrees += 180
 
                 summary_row = {
-                    "name": roi_properties.label,
+                    "ROI_id": roi_index + 1,
                     "center_row": roi_properties.centroid[0],
                     "center_col": roi_properties.centroid[1],
                     "orientation": orientation_degrees,
@@ -273,69 +279,193 @@ def process_image(
                 }
 
                 roi_measurements = None
+                fiber_count = 0
                 try:
-                    roi_measurement, fiber_count = get_alignment_to_roi(
+                    roi_measurements, fiber_count = get_alignment_to_roi(
                         roi_list, fiber_structure, distance_threshold
                     )
                 except Exception as e:
-                    print(f"Boundary {roi_index} was skipped. Error: {str(e)}")
+                    print(f"ROI {roi_index} was skipped. Error message: {e}")
 
-                # concat_roi_df(
-                #     roi_measurements, roi_measurement_details, roi_summary_details
-                # )
+                roi_measurement_details, roi_summary_details = concat_roi_df(
+                    roi_measurements,
+                    roi_measurement_details,
+                    roi_summary_details,
+                    summary_row,
+                )
+
+                # Detailed measurements for each individual ROI
+                if roi_measurements is not None and not roi_measurements.empty:
+                    format_df_to_excel(
+                        roi_measurements,
+                        save_boundary_width_measurements,
+                        sheet_name=f"ROI {roi_index + 1} Details",
+                        mode="a",
+                    )
+
+                format_df_to_excel(
+                    roi_summary_details,
+                    save_boundary_width_measurements,
+                    sheet_name="Boundary Summary",
+                    mode="a",
+                )
+
+            # Save visualization after all ROIs processed
+            save_roi_tif_file(
+                img=img,
+                coordinates=coordinates,
+                fiber_structure=fiber_structure,
+                output_directory=output_directory,
+                img_name=img_name,
+            )
+
+            # _, _, _, boundary_df = get_tif_boundary(
+            #     coordinates, img, fiber_structure, distance_threshold, min_dist
+            # )
 
     return True
 
 
-# def concat_roi_df(roi_measurements, roi_measurement_details, roi_summary_details):
-#     if roi_measurements is not None:
-#         roi_measurement_details = pd.concat(
-#             [
-#                 roi_measurement_details,
-#                 pd.DataFrame(
-#                     {
-#                         "angle_to_boundary_edge": [roi_measurements.angle2boundaryEdge],
-#                         "angle_to_boundary_center": [
-#                             roi_measurements.angle2boundaryCenter
-#                         ],
-#                         "angle_to_center_line": [roi_measurements.angle2centersLine],
-#                         "fiber_center_row": [roi_measurements.fibercenterList[:, 0]],
-#                         "fiber_center_col": [roi_measurements.fibercenterList[:, 1]],
-#                         "fiber_angle_list": [roi_measurements.fiberangleList],
-#                         "distance_list": [roi_measurements.distanceList],
-#                         "boundary_point_row": [roi_measurements.boundaryPoints[:, 0]],
-#                         "boundary_point_col": [roi_measurements.boundaryPoints[:, 1]],
-#                     }
-#                 ),
-#             ],
-#             ignore_index=True,
-#         )
-#
-#         roi_summary_details = pd.concat(
-#             [
-#                 roi_summary_details,
-#                 pd.DataFrame(
-#                     {
-#                         "name": [i],
-#                         "center_row": [center_row],
-#                         "center_col": [center_col],
-#                         "orientation": [orientation_deg],
-#                         "area": [area],
-#                         "mean_of_angle_to_boundary_edge": [
-#                             np.nanmean(roi_measurements.angle2boundaryEdge)
-#                         ],
-#                         "mean_of_angle_to_boundary_center": [
-#                             np.nanmean(roi_measurements.angle2boundaryCenter)
-#                         ],
-#                         "mean_of_angle_to_center_line": [
-#                             np.nanmean(roi_measurements.angle2centersLine)
-#                         ],
-#                         "number_of_fibers": [n_fibers],
-#                     }
-#                 ),
-#             ],
-#             ignore_index=True,
-#         )
+def save_roi_tif_file(
+    img, coordinates, fiber_structure, output_directory, img_name, fiber_len=5
+):
+    """
+    Save ROI and fiber positions to a TIFF file.
+
+    Parameters
+    ----------
+    img : ndarray
+        2D image array to display as background.
+    coordinates : dict
+        Dictionary of ROI coordinates.
+    fiber_structure : pd.DataFrame
+        DataFrame containing fiber information with columns:
+        center_row/center_1, center_col/center_2, angle.
+    output_directory : str
+        Directory where the TIFF file will be saved.
+    img_name : str
+        Name of the image (used for output filename).
+    fiber_len : int, optional
+        Length of fiber lines to draw (default 5).
+    """
+    # Create figure
+    fig, ax = plt.subplots(figsize=(img.shape[1] / 100, img.shape[0] / 100), dpi=100)
+    ax.imshow(img, cmap="gray")
+    ax.axis("off")
+
+    # Show all ROIs and fiber locations
+    for roi_idx, roi_coords in enumerate(coordinates.values()):
+        roi_coords_array = np.array(roi_coords)
+        # Plot boundary (X=col, Y=row)
+        ax.plot(
+            roi_coords_array[:, 1],
+            roi_coords_array[:, 0],
+            "y-",
+            linewidth=1,
+        )
+
+        # Add ROI label at center
+        center_row = roi_coords_array[:, 0].mean()
+        center_col = roi_coords_array[:, 1].mean()
+        ax.text(
+            center_col,
+            center_row,
+            str(roi_idx + 1),
+            fontweight="bold",
+            color="yellow",
+            fontsize=7,
+        )
+
+    # Plot fiber positions and orientations
+    for _, fiber_row in fiber_structure.iterrows():
+        if "center_row" in fiber_structure.columns:
+            center_row = fiber_row["center_row"]
+            center_col = fiber_row["center_col"]
+            angle = fiber_row["angle"]
+        else:
+            center_row = fiber_row["center_1"]
+            center_col = fiber_row["center_2"]
+            angle = fiber_row["angle"]
+
+        # Calculate fiber line endpoints
+        angle_rad = np.deg2rad(angle)
+        start_x = center_col + fiber_len * np.cos(angle_rad)
+        start_y = center_row - fiber_len * np.sin(angle_rad)
+        end_x = center_col - fiber_len * np.cos(angle_rad)
+        end_y = center_row + fiber_len * np.sin(angle_rad)
+
+        ax.plot([start_x, end_x], [start_y, end_y], "g-", linewidth=0.5)
+
+    # Save figure
+    save_bf_figures = os.path.join(
+        output_directory, f"{img_name}_BoundaryFiberPositions.tif"
+    )
+    plt.tight_layout(pad=0)
+    plt.savefig(save_bf_figures, dpi=200, bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
+
+
+def concat_roi_df(
+    roi_measurements, roi_measurement_details, roi_summary_details, summary_row
+):
+    """
+    Concatenate ROI measurements into accumulating dataframes.
+
+    Parameters
+    ----------
+    roi_measurements : pd.DataFrame or None
+        Detailed measurements for fibers in this ROI. Contains columns like:
+        angle_to_boundary_edge, angle_to_boundary_center, etc.
+        If None, only summary_row is appended with NaN statistics.
+    roi_measurement_details : pd.DataFrame
+        Accumulator for all detailed measurements across ROIs (modified in-place).
+    roi_summary_details : pd.DataFrame
+        Accumulator for summary statistics per ROI (modified in-place).
+    summary_row : dict
+        Pre-populated summary info for this ROI (name, center_row, center_col,
+        orientation, area). Will be augmented with statistics.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        Updated (roi_measurement_details, roi_summary_details)
+    """
+    if roi_measurements is not None and not roi_measurements.empty:
+        # Append detailed measurements
+        if roi_measurement_details.empty:
+            roi_measurement_details = roi_measurements.copy()
+        else:
+            roi_measurement_details = pd.concat(
+                [roi_measurement_details, roi_measurements], ignore_index=True
+            )
+
+        # Calculate summary statistics from measurements
+        summary_row["mean_of_angle_to_boundary_edge"] = roi_measurements[
+            "angle_to_boundary_edge"
+        ].mean()
+        summary_row["mean_of_angle_to_boundary_center"] = roi_measurements[
+            "angle_to_boundary_center"
+        ].mean()
+        summary_row["mean_of_angle_to_center_line"] = roi_measurements[
+            "angle_to_center_line"
+        ].mean()
+        summary_row["number_of_fibers"] = len(roi_measurements)
+    else:
+        # No measurements for this ROI
+        summary_row["mean_of_angle_to_boundary_edge"] = np.nan
+        summary_row["mean_of_angle_to_boundary_center"] = np.nan
+        summary_row["mean_of_angle_to_center_line"] = np.nan
+        summary_row["number_of_fibers"] = 0
+
+    # Append summary row
+    if roi_summary_details.empty:
+        roi_summary_details = pd.DataFrame([summary_row])
+    else:
+        roi_summary_details = pd.concat(
+            [roi_summary_details, pd.DataFrame([summary_row])], ignore_index=True
+        )
+
+    return roi_measurement_details, roi_summary_details
 
 
 if __name__ == "__main__":

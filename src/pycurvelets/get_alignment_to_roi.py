@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from sklearn.neighbors import NearestNeighbors, KDTree
 
-from .models.models import ROIMeasurements, ROIProcessingError, ROIList, ROI, Fiber
+from .models.models import ROIList
 from .get_relative_angles import get_relative_angles
 
 # Configure logging
@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 def get_alignment_to_roi(
-    roi_list: Union[ROIList, List[ROIList]],
-    fiber_structure: Union[List[List[Fiber]], List[Fiber]],
+    roi_list: ROIList,
+    fiber_structure: pd.DataFrame,
     distance_threshold: Optional[float] = None,
 ) -> pd.DataFrame:
     """
@@ -67,20 +67,22 @@ def get_alignment_to_roi(
     -------
     pd.DataFrame
         DataFrame containing fiber alignment measurements with columns:
-        - angle2boundaryEdge : float
+        - angle_to_boundary_edge : float
             Angles between fiber orientation and boundary edge at closest point
-        - angle2boundaryCenter : float
+        - angle_to_boundary_center : float
             Angles between fiber orientation and ROI center orientation
-        - angle2centersLine : float
+        - angle_to_center_line : float
             Angles between fiber orientation and fiber-to-ROI-center line
-        - fibercenterX : float
+        - fiber_center_x : float
             Fiber center X coordinate (column)
-        - fibercenterY : float
+        - fiber_center_y : float
             Fiber center Y coordinate (row)
-        - fiberangle : float
+        - fiber_angle : float
             Fiber orientation angles in degrees
         - distance : float
             Distances from fibers to closest ROI boundary points
+    fiber_count: int
+      Number of fibers
     """
 
     # Input validation
@@ -89,6 +91,26 @@ def get_alignment_to_roi(
 
     if fiber_structure is None or len(fiber_structure) == 0:
         raise ValueError("fiber_structure cannot be None or empty")
+
+    # Convert DataFrame to list of fiber dicts
+    # Handle both column naming conventions: center_row/center_col or center_1/center_2
+    fiber_list = []
+    for _, row in fiber_structure.iterrows():
+        if "center_row" in fiber_structure.columns:
+            fiber_dict = {
+                "center_row": row["center_row"],
+                "center_col": row["center_col"],
+                "angle": row["angle"],
+            }
+        else:
+            # Fallback to center_1/center_2 naming
+            fiber_dict = {
+                "center_row": row["center_1"],
+                "center_col": row["center_2"],
+                "angle": row["angle"],
+            }
+        fiber_list.append(fiber_dict)
+    fiber_structure = fiber_list
 
     # Determine processing mode
     select_fiber_flag = distance_threshold is not None
@@ -121,7 +143,7 @@ def get_alignment_to_roi(
             # Distance-based fiber selection
             roi_tree = KDTree(roi_coords)
             fiber_centers = np.array(
-                [[f.center_row, f.center_col] for f in current_fiber_list]
+                [[f["center_row"], f["center_col"]] for f in current_fiber_list]
             )
             dist, idx_dist = roi_tree.query(fiber_centers)
             fiber_indices = np.where(dist <= distance_threshold)[0]
@@ -183,8 +205,8 @@ def get_alignment_to_roi(
             # Prepare fiber dict for get_relative_angles
             fiber = current_fiber_list[i]
             fiber_dict = {
-                "center": [fiber.center_row, fiber.center_col],
-                "angle": fiber.angle,
+                "center": [fiber["center_row"], fiber["center_col"]],
+                "angle": fiber["angle"],
             }
 
             # Calculate relative angles
@@ -199,10 +221,10 @@ def get_alignment_to_roi(
                 "angle_to_boundary_edge": relative_angles["angle2boundaryEdge"],
                 "angle_to_boundary_center": relative_angles["angle2boundaryCenter"],
                 "angle_to_center_line": relative_angles["angle2centersLine"],
-                "fiber_center_x": fiber.center_col,  # X is column
-                "fiber_center_y": fiber.center_row,  # Y is row
-                "fiber_angle": fiber.angle,
-                "distance": dist[i] if select_fiber_flag else None,
+                "fiber_center_x": fiber["center_col"],  # X is column
+                "fiber_center_y": fiber["center_row"],  # Y is row
+                "fiber_angle": fiber["angle"],
+                "distance": dist[i][0] if select_fiber_flag else None,
             }
 
             all_measurements.append(measurement)
