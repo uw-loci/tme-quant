@@ -31,7 +31,8 @@ def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
     alignment_list : np.ndarray
         Alignment features array
     """
-    # add weight column to fiber_structure
+    # Addd weight column to fiber_structure
+    fiber_structure = fiber_structure.copy()
     fiber_structure["weight"] = np.nan
 
     fiber_number = len(fiber_structure)
@@ -91,9 +92,9 @@ def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
             vals = np.vstack(fiber_structure[square_mask].angle)
             col_idx = len(nearest_fibers) + 2 + j
             density_list[i, col_idx] = len(vals)
-            alignment_list[i, col_idx] = circ_r(vals * 2 * np.pi / 180)
+            alignment_list[i, col_idx] = circ_r(vals * 2 * np.pi / 180, axis=None)
 
-        fiber_structure.iloc[i].weight = np.nan
+        fiber_structure.loc[i, "weight"] = np.nan
 
     density_df = pd.DataFrame(
         {

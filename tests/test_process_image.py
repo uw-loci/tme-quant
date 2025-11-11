@@ -1,4 +1,5 @@
 import pytest
+import os
 
 from pycurvelets.models import CurveletControlParameters
 
