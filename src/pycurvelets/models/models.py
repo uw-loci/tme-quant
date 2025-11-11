@@ -87,10 +87,12 @@ class ROIList:
 
 @dataclass
 class ROIMeasurements:
-    angle_to_boundary_edge: float
-    angle_to_boundary_center: float
-    angle_to_center_line: float
-    fiber_center_list: list[int]
-    fiber_angle_list: list[float]
-    distance: float  # between fiber and boundary
-    number_of_fibers: int  # within distance to each boundary
+    """Measurements of fiber alignment relative to ROI."""
+
+    angle2boundaryEdge: np.ndarray
+    angle2boundaryCenter: np.ndarray
+    angle2centersLine: np.ndarray
+    fibercenterX: np.ndarray
+    fibercenterY: np.ndarray
+    fiberangle: np.ndarray
+    distance: np.ndarray

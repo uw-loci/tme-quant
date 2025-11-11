@@ -58,7 +58,7 @@ def standard_control_parameters():
     )
 
     curve_cp = CurveletControlParameters(
-        keep=0.05,  # This matches the value used in process_image.py main
+        keep=0.05,
         scale=advanced_options["selected_scale"],
         radius=advanced_options["curvelets_group_radius"],
     )
@@ -87,10 +87,10 @@ def test_get_ct_matches_expected_results(
     )
 
     expected_density_raw = pd.read_csv(
-        os.path.join(test_results_dir, "density_df.csv"), header=None
+        os.path.join(test_results_dir, "real1_density_df.csv"), header=None
     )
     expected_alignment_raw = pd.read_csv(
-        os.path.join(test_results_dir, "alignment_df.csv"), header=None
+        os.path.join(test_results_dir, "real1_alignment_df.csv"), header=None
     )
 
     # Check that we have results
@@ -127,8 +127,6 @@ def test_get_ct_matches_expected_results(
         expected_alignment
     ), f"alignment_df length mismatch: {len(alignment_df)} vs {len(expected_alignment)}"
 
-    # The data is already in the correct order (row-by-row correspondence)
-    # No need to sort - the unsorted comparison shows excellent agreement
     density_values = density_df.values
     expected_density_values = expected_density.values
     alignment_values = alignment_df.values

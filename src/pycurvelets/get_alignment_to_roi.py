@@ -24,9 +24,9 @@ logger = logging.getLogger(__name__)
 
 def get_alignment_to_roi(
     roi_list: Union[ROIList, List[ROIList]],
-    fiber_structure: Union[pd.DataFrame, List[Dict]],
+    fiber_structure: Union[List[List[Fiber]], List[Fiber]],
     distance_threshold: Optional[float] = None,
-) -> Union[ROIMeasurements, List[ROIMeasurements]]:
+) -> pd.DataFrame:
     """
     Calculate fiber alignment measurements relative to regions of interest (ROIs).
 
@@ -50,15 +50,14 @@ def get_alignment_to_roi(
         - 'index2object' : array_like, optional
             Pre-selected fiber indices (used when distance_threshold is None)
 
-    fiber_structure : pd.DataFrame or list of dict
-        Fiber data containing center coordinates and angles. If DataFrame, should have:
-        - 'center_row' : float
+    fiber_structure : list of list of Fiber or list of Fiber
+        Fiber data containing center coordinates and angles. Each Fiber object has:
+        - center_row : float
             Fiber center row coordinate (y)
-        - 'center_col' : float
+        - center_col : float
             Fiber center column coordinate (x)
-        - 'angle' : float
+        - angle : float
             Fiber orientation angle in degrees
-        If list of dicts, each dict should have 'center' and 'angle' keys.
 
     distance_threshold : float, optional
         Maximum distance from fiber to ROI boundary for inclusion in analysis.
@@ -66,25 +65,22 @@ def get_alignment_to_roi(
 
     Returns
     -------
-    ROIMeasurements or list of ROIMeasurements
-        Single ROIMeasurements object if single ROI input, otherwise list.
-        Each ROIMeasurements contains:
-        - angle_to_boundary_edge : ndarray
+    pd.DataFrame
+        DataFrame containing fiber alignment measurements with columns:
+        - angle2boundaryEdge : float
             Angles between fiber orientation and boundary edge at closest point
-        - angle_to_boundary_center : ndarray
+        - angle2boundaryCenter : float
             Angles between fiber orientation and ROI center orientation
-        - angle_to_center_line : ndarray
+        - angle2centersLine : float
             Angles between fiber orientation and fiber-to-ROI-center line
-        - fiber_center_list : ndarray of shape (n_fibers, 2)
-            Fiber center coordinates (y, x)
-        - fiber_angle_list : ndarray
+        - fibercenterX : float
+            Fiber center X coordinate (column)
+        - fibercenterY : float
+            Fiber center Y coordinate (row)
+        - fiberangle : float
             Fiber orientation angles in degrees
-        - distance_list : ndarray
+        - distance : float
             Distances from fibers to closest ROI boundary points
-        - boundary_points : ndarray of shape (n_fibers, 2)
-            Closest boundary point coordinates for each fiber
-        - n_fibers : int
-            Number of fibers analyzed for this ROI
     """
 
     # Input validation
@@ -97,7 +93,6 @@ def get_alignment_to_roi(
     # Determine processing mode
     select_fiber_flag = distance_threshold is not None
 
-    # logger.info(f"Processing {len(roi_list)} ROI(s) with {len(fiber_data)} fibers")
     if select_fiber_flag:
         logger.info(
             f"Using distance-based selection with threshold: {distance_threshold}"
@@ -105,59 +100,114 @@ def get_alignment_to_roi(
     else:
         logger.info("Using pre-selected fiber mode")
 
-    # Process each ROI
-    number_of_roi = len(roi_list)
-    number_of_fibers = len(fiber_structure)
-    ROI_measurements_all = []
+    # Collect all measurements across all ROIs
+    all_measurements = []
 
-    for roi_i in range(len(roi_list.coordinates)):
-        curr_ROI = ROI(
-            coordinates=roi_list.coordinates[roi_i],
-            image_width=roi_list.image_width,
-            image_height=roi_list.image_height,
-        )
-        distance_precalc = None
+    # Process each ROI
+    n_rois = len(roi_list.coordinates)
+
+    for roi_idx in range(n_rois):
+        roi_coords = np.array(roi_list.coordinates[roi_idx])
+
+        # Get fiber list for this ROI
+        if isinstance(fiber_structure[0], list):
+            # List of lists - one list per ROI
+            current_fiber_list = fiber_structure[roi_idx]
+        else:
+            # Single list of fibers - use for all ROIs
+            current_fiber_list = fiber_structure
 
         if select_fiber_flag:
-            roi_tree = KDTree(roi_list.coordinates[roi_i])
-            fiber_centers = np.array([f.center for f in fiber_structure[roi_i]])
+            # Distance-based fiber selection
+            roi_tree = KDTree(roi_coords)
+            fiber_centers = np.array(
+                [[f.center_row, f.center_col] for f in current_fiber_list]
+            )
             dist, idx_dist = roi_tree.query(fiber_centers)
             fiber_indices = np.where(dist <= distance_threshold)[0]
         else:
-            # if distance_threshold is None, then "distance" should be set as a property of the ROI
-            fiber_indices = range(len(fiber_structure))
+            # Pre-selected fiber mode
+            fiber_indices = np.arange(len(current_fiber_list))
+            # Note: distance would need to be pre-calculated and stored in ROI
+            dist = None
+            idx_dist = None
 
-            # -- THIS SHOULDN'T WORK -- NEED TO FIGURE OUT DISTANCE ATTRIBUTE -- #
-            distance_precalc = roi_list[roi_i].distance
+        n_fibers = len(fiber_indices)
 
-        curr_ROI_measurements = []
-
-        if fiber_indices is not None:
-            number_of_fibers = len(fiber_indices)
+        if n_fibers == 0:
             if select_fiber_flag:
-                if number_of_fibers == 1:
-                    print(
-                        f"ROI {roi_i} found one fiber within the {distance_threshold} distance to the boundary"
-                    )
-                else:
-                    print(
-                        f"ROI {roi_i} found {number_of_fibers} fiber within the {distance_threshold} distance to the boundary"
-                    )
+                logger.info(
+                    f"ROI {roi_idx}: NO fiber is within the specified distance "
+                    f"({distance_threshold}) to the boundary"
+                )
             else:
-                print(
-                    f"Calculate all the relative alignment of pre-selected fibers. Total fiber number is {number_of_fibers}"
-                )
-            for fiber_i in number_of_fibers:
-                i = fiber_indices[fiber_i]
-                if select_fiber_flag:
-                    curr_ROI.coordinates = roi_list.coordinates[i]
-                    curr_ROI.index_to_object = idx_dist[i]
-                else:
-                    curr_ROI.index_to_object = roi_list[roi_i].index_to_object[fiber_i]
-                curr_fiber = Fiber(
-                    center_row=fiber_structure[i].center[0],
-                    center_col=fiber_structure[i].center[1],
-                    angle=fiber_structure[i].angle,
-                )
+                logger.info(f"ROI {roi_idx}: NO fiber is selected")
+            continue
 
-    return ROI_measurements_all
+        if select_fiber_flag:
+            if n_fibers == 1:
+                logger.info(
+                    f"ROI {roi_idx}: Found one fiber within the {distance_threshold} "
+                    f"distance to the boundary"
+                )
+            else:
+                logger.info(
+                    f"ROI {roi_idx}: Found {n_fibers} fibers within the "
+                    f"{distance_threshold} distance to the boundary"
+                )
+        else:
+            logger.info(
+                f"Calculate all the relative alignment of pre-selected fibers. "
+                f"Total fiber number is {n_fibers}"
+            )
+
+        # Process each fiber
+        for fiber_i in range(n_fibers):
+            i = fiber_indices[fiber_i]
+
+            # Prepare ROI dict for get_relative_angles
+            if select_fiber_flag:
+                # idx_dist[i] gives the index of the closest boundary point
+                boundary_idx = int(idx_dist[i].item())
+            else:
+                # Would need to be provided in ROI structure
+                boundary_idx = 0  # Default fallback
+
+            roi_dict = {
+                "coords": roi_coords,
+                "imageWidth": roi_list.image_width,
+                "imageHeight": roi_list.image_height,
+                "index2object": boundary_idx,
+            }
+
+            # Prepare fiber dict for get_relative_angles
+            fiber = current_fiber_list[i]
+            fiber_dict = {
+                "center": [fiber.center_row, fiber.center_col],
+                "angle": fiber.angle,
+            }
+
+            # Calculate relative angles
+            angle_option = 0  # Calculate all angles
+            fig_flag = False
+            relative_angles, _ = get_relative_angles(
+                roi_dict, fiber_dict, angle_option, fig_flag
+            )
+
+            # Store measurements
+            measurement = {
+                "angle_to_boundary_edge": relative_angles["angle2boundaryEdge"],
+                "angle_to_boundary_center": relative_angles["angle2boundaryCenter"],
+                "angle_to_center_line": relative_angles["angle2centersLine"],
+                "fiber_center_x": fiber.center_col,  # X is column
+                "fiber_center_y": fiber.center_row,  # Y is row
+                "fiber_angle": fiber.angle,
+                "distance": dist[i] if select_fiber_flag else None,
+            }
+
+            all_measurements.append(measurement)
+
+    # Convert to DataFrame
+    result_df = pd.DataFrame(all_measurements)
+
+    return result_df, result_df.shape[0]

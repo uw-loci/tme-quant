@@ -176,11 +176,7 @@ def process_image(
             radius=advanced_options["curvelets_group_radius"],
         )
         # Call getCT
-        (
-            fiber_structure,
-            density_df,
-            alignment_df,
-        ) = get_ct(img, curve_cp, feature_cp)
+        (fiber_structure, density_df, alignment_df) = get_ct(img, curve_cp, feature_cp)
     else:
         print("Reading CT-FIRE database.")
         # Call getFIRE
@@ -278,7 +274,7 @@ def process_image(
 
                 roi_measurements = None
                 try:
-                    roi_measurements = get_alignment_to_roi(
+                    roi_measurement, fiber_count = get_alignment_to_roi(
                         roi_list, fiber_structure, distance_threshold
                     )
                 except Exception as e:
