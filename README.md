@@ -47,6 +47,38 @@ Base requirements:
 
 ## Installation
 
+### One-Click Installation (Napari Plugin - Recommended)
+
+For the napari plugin with all dependencies including Curvelops:
+
+**Prerequisites:**
+- Python 3.9+ installed
+- FFTW 2.1.5 installed in `../utils/fftw-2.1.5`
+- CurveLab 2.1.2 installed in `../utils/CurveLab-2.1.2`
+
+**Installation:**
+```bash
+cd tme-quant-napari-curvealign
+bash bin/install.sh
+```
+
+This script will:
+1. ✅ Check prerequisites (Python, FFTW, CurveLab)
+2. ✅ Create a virtual environment
+3. ✅ Install all dependencies including Curvelops
+4. ✅ Verify the installation
+
+**After installation:**
+```bash
+# Activate the environment
+source bin/activate.sh
+
+# Launch Napari
+napari
+```
+
+The CurveAlign widget will appear in: **Plugins → napari-curvealign → CurveAlign Widget**
+
 ### Quick Start (Native - recommended)
 
 Use our automated setup script:
@@ -59,7 +91,11 @@ make setup
 ```
 
 This script installs dependencies and guides CurveLab setup (optional).  
-For details see [doc/installation/SETUP_GUIDE.md](doc/installation/SETUP_GUIDE.md).  
+For details see:
+- **Napari Plugin**: [doc/installation/NAPARI_PLUGIN_INSTALLATION.md](doc/installation/NAPARI_PLUGIN_INSTALLATION.md) - Complete guide with one-click installation
+- **Base Package**: [doc/installation/SETUP_GUIDE.md](doc/installation/SETUP_GUIDE.md) - Python API installation
+- **Quick Start**: [doc/installation/QUICK_START.md](doc/installation/QUICK_START.md) - Quick reference
+
 Docker users: see [docker/README.md](docker/README.md).
 
 ### Docker (alternative)
@@ -103,4 +139,17 @@ See `simple_usage.py`.
 - Examples: Check `simple_usage.py` for common usage patterns
 
 ## Support
-Troubleshooting and details: see docs under `doc/installation/` and `doc/curvealign/`.
+
+### Installation Help
+- **Napari Plugin**: [doc/installation/NAPARI_PLUGIN_INSTALLATION.md](doc/installation/NAPARI_PLUGIN_INSTALLATION.md) - Complete installation guide
+- **Quick Start**: [doc/installation/QUICK_START.md](doc/installation/QUICK_START.md) - Quick reference
+- **Base Package**: [doc/installation/SETUP_GUIDE.md](doc/installation/SETUP_GUIDE.md) - Detailed setup guide
+
+### API Documentation
+- **API Summary**: [doc/curvealign/CURVEALIGN_PYTHON_API_SUMMARY.md](doc/curvealign/CURVEALIGN_PYTHON_API_SUMMARY.md)
+- **Architecture**: [doc/curvealign/ARCHITECTURE.md](doc/curvealign/ARCHITECTURE.md)
+
+### Feature Guides
+- **Testing**: [TESTING_GUIDE.md](TESTING_GUIDE.md)
+- **Segmentation**: [SEGMENTATION_FEATURE.md](SEGMENTATION_FEATURE.md)
+- **Multi-Environment**: [MULTI_ENVIRONMENT_GUIDE.md](MULTI_ENVIRONMENT_GUIDE.md)
