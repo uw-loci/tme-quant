@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tme-quant"
 version = "0.1.0"
-description = "Python translation of CurveAlign; curvelet-based quantification and napari plugin"
+description = "Python translation of CurveAlign; curvelet-based quantification API"
 authors = [{ name = "Eliceiri Lab" }]
 requires-python = ">=3.9"
 dependencies = [

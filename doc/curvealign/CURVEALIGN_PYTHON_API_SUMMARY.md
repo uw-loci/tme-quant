@@ -40,7 +40,7 @@ curvealign_py/                          # Python package root
 │   └── visualization/                   # Pluggable visualization backends
 │       ├── __init__.py                  # Backend detection and exports
 │       ├── standalone.py                # Matplotlib-based visualization (default)
-│       ├── napari_plugin.py             # napari integration
+│       ├── napari_backend.py            # napari visualization backend (optional)
 │       └── pyimagej_plugin.py           # ImageJ/FIJI integration
 ├── tests/                               # Test suite
 │   ├── __init__.py                      # Test organization
@@ -232,16 +232,18 @@ overlay = standalone.create_overlay(image, result.curvelets)
 raw_map, processed_map = standalone.create_angle_maps(image, result.curvelets)
 ```
 
-#### napari Integration
+#### napari Backend (Optional)
 ```python
-from curvealign.visualization import napari_plugin
+from curvealign_py.visualization.backends import napari_backend
 
-# Interactive 3D visualization
-viewer = napari_plugin.launch_napari_viewer(result, image)
+# Interactive visualization (requires napari installed separately)
+viewer = napari_backend.launch_napari_viewer(result, image)
 
 # Or manual layer setup
-vector_data, props = napari_plugin.curvelets_to_napari_vectors(result.curvelets)
+vector_data, props = napari_backend.curvelets_to_napari_vectors(result.curvelets)
 ```
+
+Note: napari is an optional visualization backend. Install separately with `pip install "napari[all]"` to use this backend.
 
 #### ImageJ Integration
 ```python
@@ -279,7 +281,7 @@ macro = pyimagej_plugin.create_imagej_macro(result, "image.tif")
 2. **Memory Efficient**: Proper memory management
 3. **Minimal Dependencies**: Core API requires only numpy, scipy, scikit-image, tifffile
 4. **Pluggable Visualization**: Choose visualization framework based on needs
-5. **Framework Integration**: Native support for napari and ImageJ workflows
+5. **Optional Backends**: Support for napari and ImageJ visualization backends
 6. **Error Handling**: Robust error checking and recovery
 7. **Documentation**: Comprehensive docstrings, architecture guides, and examples
 8. **Testing**: Full test suite ensuring reliability
@@ -296,19 +298,17 @@ cd curvelets/Curvelets_API/curvealign_py
 # Install core dependencies
 pip install numpy scipy scikit-image tifffile
 
-# Install optional visualization dependencies
-pip install matplotlib  # for standalone backend
-pip install "napari[all]"  # for napari backend  
-pip install pyimagej  # for ImageJ backend
-
 # Install package
 pip install -e .
 
-# Or install with specific visualization backends
-pip install -e ".[visualization]"  # matplotlib only
-pip install -e ".[napari]"         # napari integration
+# Or install with optional dependencies
+pip install -e ".[visualization]"  # matplotlib support
 pip install -e ".[imagej]"         # ImageJ integration  
-pip install -e ".[all]"            # all backends
+pip install -e ".[curvelops]"      # CurveLab backend
+pip install -e ".[all]"            # all optional dependencies
+
+# Optional: Install napari separately for napari visualization backend
+pip install "napari[all]"
 
 # Use in any Python script
 import curvealign
@@ -430,8 +430,8 @@ interact(interactive_analysis,
 - **High-level API**: Complete single-function analysis
 - **Type System**: Organized type packages with full type safety
 - **Core Algorithms**: All major MATLAB algorithms implemented (visualization-free)
-- **Pluggable Visualization**: Separate backends for matplotlib, napari, ImageJ
-- **Framework Integration**: Ready for napari and ImageJ workflows
+- **Pluggable Visualization**: Separate backends for matplotlib with optional napari and ImageJ support
+- **Framework Integration**: Extensible for different visualization workflows
 - **Testing**: Comprehensive test suite (12/12 tests passing)
 - **Documentation**: Complete API documentation, architecture guides, and examples
 - **Packaging**: Modern Python package with optional dependencies
@@ -453,9 +453,9 @@ interact(interactive_analysis,
 ### Ready for Integration With
 
 1. **PyCurvelab**: Drop-in replacement for FDCT placeholders
-2. **napari**: Full integration with vectors/points layers and interactive visualization
-3. **ImageJ/FIJI**: Complete integration with overlay generation and macro creation
-4. **CellProfiler**: Can be used as custom module
+2. **Enhanced Visualization**: Extended napari and ImageJ backend capabilities
+3. **CellProfiler**: Can be used as custom module
+4. **Batch Processing**: Distributed computing support
 5. **Jupyter**: Full interactive notebook support with multiple visualization backends
 6. **HPC Clusters**: Batch processing ready for cluster deployment
 7. **Scientific Python Ecosystem**: Works with matplotlib, pandas, scikit-image, etc.
@@ -546,7 +546,7 @@ pytest tests/ -v
 
 1. **FDCT Integration**: Replace placeholders with PyCurvelab or open-source alternatives
 2. **CT-FIRE Support**: Add CT-FIRE mode implementation
-3. **GUI Development**: Optional napari plugin or standalone GUI
+3. **GUI Development**: Standalone GUI or integration with existing tools
 4. **Advanced Features**: ROI tools, batch GUI, parameter optimization
 5. **Performance**: GPU acceleration for large images
 6. **Licensing**: Develop open-source transform alternatives to reduce licensing dependencies

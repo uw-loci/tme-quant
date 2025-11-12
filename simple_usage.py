@@ -129,7 +129,7 @@ def main():
     print("All examples completed successfully!")
     print("\nNext steps:")
     print("1. Load your own images with: from skimage import io; image = io.imread('path.tif')")
-    print("2. Explore visualization backends: matplotlib, napari, imagej")
+    print("2. Use visualization: matplotlib (default) or optional backends (napari, imagej)")
     print("3. Customize analysis with CurveAlignOptions and CTFireOptions")
     print("4. Process datasets with batch_analyze() for efficiency")
 

@@ -165,12 +165,6 @@ pip install -e ".[visualization]"
 ```
 Adds matplotlib visualization support.
 
-### With napari Plugin
-```bash
-pip install -e ".[napari]"
-```
-Installs napari for interactive analysis.
-
 ### With Curvelet Backend
 ```bash
 pip install -e ".[curvelops]"
@@ -181,7 +175,7 @@ Enables authentic CurveLab FDCT transforms (requires FFTW and CurveLab).
 ```bash
 pip install -e ".[all]"
 ```
-Installs all optional dependencies including curvelops, napari, and visualization.
+Installs all optional dependencies including curvelops, imagej, and visualization tools.
 
 ## Troubleshooting
 

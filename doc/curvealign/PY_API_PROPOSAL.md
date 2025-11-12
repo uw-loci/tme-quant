@@ -145,7 +145,7 @@ curvealign_py/
 │   └── visualization/       # Pluggable visualization backends
 │       ├── __init__.py      # Backend detection and exports
 │       ├── standalone.py    # Matplotlib-based visualization (default)
-│       ├── napari_plugin.py # napari integration
+│       ├── napari_backend.py # napari visualization backend (optional)
 │       └── pyimagej_plugin.py # ImageJ/FIJI integration
 ├── tests/
 │   ├── __init__.py
@@ -159,7 +159,7 @@ curvealign_py/
 - **Modular Design**: Clean separation between high-level API and core algorithms  
 - **Pluggable Visualization**: Separate visualization backends for different frameworks
 - **Organized Types**: Types organized into logical packages (core, options, results)
-- **Framework Integration**: Ready for napari, ImageJ, and other scientific tools
+- **Framework Integration**: Extensible for napari, ImageJ, and other scientific tools
 - **Comprehensive Testing**: Test suite covering all major functionality
 - **Modern Packaging**: Uses pyproject.toml with proper dependencies
 - **Rich Documentation**: Detailed docstrings, architecture guides, and examples
@@ -180,14 +180,15 @@ The API now uses a pluggable visualization system:
 result = curvealign.analyze_image(image)
 
 # Choose visualization backend
-from curvealign.visualization import standalone    # matplotlib
-from curvealign.visualization import napari_plugin # napari
+from curvealign.visualization import standalone    # matplotlib (default)
+from curvealign.visualization.backends import napari_backend  # optional
 from curvealign.visualization import pyimagej_plugin # ImageJ
 
 # Create visualizations
 overlay = standalone.create_overlay(image, result.curvelets)
-viewer = napari_plugin.launch_napari_viewer(result, image)
-ij = pyimagej_plugin.launch_imagej_with_results(result, image)
+# Optional backends (require separate installation):
+# viewer = napari_backend.launch_napari_viewer(result, image)
+# ij = pyimagej_plugin.launch_imagej_with_results(result, image)
 ```
 
 Backend notes
