@@ -8,6 +8,8 @@ from skimage.draw import polygon, polygon2mask
 from skimage.measure import regionprops, label
 import tkinter as tk
 import time
+from multiprocessing import Pool
+from functools import partial
 
 from pycurvelets.get_alignment_to_roi import get_alignment_to_roi
 from pycurvelets.models import (
@@ -19,6 +21,70 @@ from pycurvelets.get_ct import get_ct
 from pycurvelets.get_fire import get_fire
 from pycurvelets.get_tif_boundary import get_tif_boundary
 from pycurvelets.utils.misc import format_df_to_excel
+
+
+def process_single_roi(
+    roi_index, roi_coords, fiber_structure, distance_threshold, img_shape
+):
+    """
+    Process a single ROI - designed for parallel execution.
+
+    Parameters
+    ----------
+    roi_index : int
+        Index of the ROI being processed.
+    roi_coords : list
+        Coordinates of the ROI boundary.
+    fiber_structure : pd.DataFrame
+        DataFrame containing fiber information.
+    distance_threshold : float
+        Distance threshold for fiber selection.
+    img_shape : tuple
+        Shape of the image (height, width).
+
+    Returns
+    -------
+    tuple
+        (roi_index, roi_measurements, summary_row)
+    """
+    roi_list = ROIList(
+        coordinates=[roi_coords],
+        image_width=img_shape[1],
+        image_height=img_shape[0],
+    )
+    roi_coords_array = np.array(roi_coords)
+    roi_mask = polygon2mask(
+        (roi_list.image_width, roi_list.image_height), roi_coords_array[:, [1, 0]]
+    )
+    roi_regions = regionprops(label(roi_mask.astype(int)))
+
+    if len(roi_regions) != 1:
+        raise ValueError(f"ROI {roi_index} does not correspond to a single region")
+
+    roi_properties = roi_regions[0]
+    orientation_degrees = -np.degrees(roi_properties.orientation)
+    if orientation_degrees < 0:
+        orientation_degrees += 180
+
+    summary_row = {
+        "ROI_id": roi_index + 1,
+        "center_row": roi_properties.centroid[0],
+        "center_col": roi_properties.centroid[1],
+        "orientation": orientation_degrees,
+        "area": roi_properties.area,
+    }
+
+    roi_measurements = None
+    fiber_count = 0
+    try:
+        roi_measurements, fiber_count = get_alignment_to_roi(
+            roi_list, fiber_structure, distance_threshold
+        )
+        print(f"ROI {roi_index}: Found {fiber_count} fibers")
+    except Exception as e:
+        print(f"ROI {roi_index} was skipped. Error message: {e}")
+
+    return roi_index, roi_measurements, summary_row
 
 
 def process_image(
@@ -168,6 +234,7 @@ def process_image(
     min_dist = advanced_options["min_dist"]
 
     # Get features that are only based on fibers
+    t_fiber_start = time.perf_counter()
     if fiber_mode == 0:
         print("Computing curvelet transform.")
         curve_cp = CurveletControlParameters(
@@ -184,6 +251,8 @@ def process_image(
         fiber_structure, density_df, alignment_df = get_fire(
             img_name_plain, fire_directory, fiber_mode, feature_cp
         )
+    t_fiber_end = time.perf_counter()
+    print(f"⏱️  Fiber extraction took: {t_fiber_end - t_fiber_start:.2f}s")
 
     if fiber_structure.empty:
         return None
@@ -191,6 +260,8 @@ def process_image(
     # Get features correlating fibers to boundaries
     if boundary_measurement:
         print("Analyzing boundary.")
+        t_boundary_start = time.perf_counter()
+
         if tif_boundary == 3:
             print(
                 "Calculate relative angles of fibers within the specified distance to each boundary, including"
@@ -246,47 +317,27 @@ def process_image(
                 sheet_name="Boundary Summary",
             )
 
-            for roi_index, roi_coords in enumerate(coordinates.values()):
-                roi_list = ROIList(
-                    coordinates=[
-                        roi_coords
-                    ],  # Wrap in list - ROIList expects list of ROIs
-                    image_width=img.shape[1],
-                    image_height=img.shape[0],
+            # Process ROIs in parallel
+            print(f"Processing {len(coordinates)} ROIs in parallel...")
+            t_roi_start = time.perf_counter()
+            with Pool() as pool:
+                process_func = partial(
+                    process_single_roi,
+                    fiber_structure=fiber_structure,
+                    distance_threshold=distance_threshold,
+                    img_shape=img.shape,
                 )
-                roi_coords = np.array(roi_coords)
-                roi_mask = polygon2mask(
-                    (roi_list.image_width, roi_list.image_height), roi_coords[:, [1, 0]]
+
+                results = pool.starmap(
+                    process_func,
+                    [(idx, coords) for idx, coords in enumerate(coordinates.values())],
                 )
-                roi_regions = regionprops(label(roi_mask.astype(int)))
+            t_roi_end = time.perf_counter()
+            print(f"⏱️  ROI processing took: {t_roi_end - t_roi_start:.2f}s")
 
-                if len(roi_regions) != 1:
-                    raise ValueError(
-                        f"ROI {roi_index} does not correspond to a single region"
-                    )
-
-                roi_properties = roi_regions[0]
-                orientation_degrees = -np.degrees(roi_properties.orientation)
-                if orientation_degrees < 0:
-                    orientation_degrees += 180
-
-                summary_row = {
-                    "ROI_id": roi_index + 1,
-                    "center_row": roi_properties.centroid[0],
-                    "center_col": roi_properties.centroid[1],
-                    "orientation": orientation_degrees,
-                    "area": roi_properties.area,
-                }
-
-                roi_measurements = None
-                fiber_count = 0
-                try:
-                    roi_measurements, fiber_count = get_alignment_to_roi(
-                        roi_list, fiber_structure, distance_threshold
-                    )
-                except Exception as e:
-                    print(f"ROI {roi_index} was skipped. Error message: {e}")
-
+            # Collect results sequentially (file I/O must be sequential)
+            t_excel_start = time.perf_counter()
+            for roi_index, roi_measurements, summary_row in results:
                 roi_measurement_details, roi_summary_details = concat_roi_df(
                     roi_measurements,
                     roi_measurement_details,
@@ -309,8 +360,11 @@ def process_image(
                     sheet_name="Boundary Summary",
                     mode="a",
                 )
+            t_excel_end = time.perf_counter()
+            print(f"⏱️  Excel writing took: {t_excel_end - t_excel_start:.2f}s")
 
             # Save visualization after all ROIs processed
+            t_viz_start = time.perf_counter()
             save_roi_tif_file(
                 img=img,
                 coordinates=coordinates,
@@ -318,10 +372,87 @@ def process_image(
                 output_directory=output_directory,
                 img_name=img_name,
             )
+            t_viz_end = time.perf_counter()
+            print(f"⏱️  Visualization took: {t_viz_end - t_viz_start:.2f}s")
 
-            # _, _, _, boundary_df = get_tif_boundary(
-            #     coordinates, img, fiber_structure, distance_threshold, min_dist
-            # )
+            t_boundary_end = time.perf_counter()
+            print(
+                f"⏱️  Total boundary analysis took: {t_boundary_end - t_boundary_start:.2f}s"
+            )
+
+        elif tif_boundary == 1 or tif_boundary == 2:
+            # Coordinate boundary modes
+            print("Processing boundary with getBoundary method")
+
+            # Call get_tif_boundary (which handles both tif_boundary 1 and 2)
+            res_mat, res_mat_names, num_im_pts, result_df = get_tif_boundary(
+                coordinates=coordinates,
+                boundary_img=boundary_img,
+                fiber_structure=fiber_structure,
+                img_name=img_name,
+                distance_threshold=distance_threshold,
+                fiber_key=fiber_key,
+                end_length_list=end_length_list,
+                fiber_mode=fiber_mode - 1,
+                min_dist=min_dist,
+            )
+
+            # Extract angles (column 3, 0-indexed = column 2)
+            angles = res_mat[:, 2]
+
+            # Determine which fibers are within threshold
+            if min_dist is None or min_dist == 0:
+                in_curvs_flag = res_mat[:, 0] <= distance_threshold
+            else:
+                in_curvs_flag = (res_mat[:, 0] <= distance_threshold) & (
+                    res_mat[:, 0] > min_dist
+                )
+
+            out_curvs_flag = ~in_curvs_flag
+
+            # Apply mask exclusion if enabled
+            if exclude_fibers_in_mask_flag == 1:
+                if min_dist is None or min_dist == 0:
+                    in_curvs_flag = (res_mat[:, 0] <= distance_threshold) & (
+                        res_mat[:, 1] == 0
+                    )
+                else:
+                    in_curvs_flag = (
+                        (res_mat[:, 0] <= distance_threshold)
+                        & (res_mat[:, 0] > min_dist)
+                        & (res_mat[:, 1] == 0)
+                    )
+                out_curvs_flag = ~in_curvs_flag
+
+            # Extract distances and boundary measurements
+            distances = res_mat[:, 0]  # nearest boundary distance
+            meas_bndry = res_mat[:, 5:7]  # columns 6:7 in MATLAB (0-indexed: 5:7)
+            bins = np.arange(2.5, 90, 5)  # 2.5:5:87.5
+
+    else:
+        # No boundary measurement - analyze absolute fiber angles
+        print("No boundary analysis - using absolute fiber angles")
+
+        if fiber_mode == 0:
+            # Curvelet mode
+            angles = fiber_structure["angle"].values
+            distances = np.full(len(fiber_structure), np.nan)
+            in_curvs_flag = np.ones(len(fiber_structure), dtype=bool)
+            out_curvs_flag = np.zeros(len(fiber_structure), dtype=bool)
+        else:
+            # FIRE mode
+            in_curvs_flag = np.ones(len(fiber_structure), dtype=bool)
+            angles = fiber_structure["angle"].values
+            distances = np.full(len(fiber_structure), np.nan)
+
+        meas_bndry = 0
+        num_im_pts = img.shape[0] * img.shape[1]  # count all pixels if no boundary
+        bins = np.arange(2.5, 180, 5)  # 2.5:5:177.5
+
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+
+    print(f"Elapsed time: {elapsed_time:.4f} seconds")
 
     return True
 
