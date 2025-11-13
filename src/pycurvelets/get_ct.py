@@ -53,4 +53,4 @@ def get_ct(
         fiber_structure=fiber_structure, feature_cp=feature_cp
     )
 
-    return fiber_structure, density_df, alignment_df
+    return fiber_structure, density_df, alignment_df, curvelet_coefficients

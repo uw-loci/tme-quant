@@ -13,27 +13,36 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
 
     Parameters
     ----------
-    coordinates : ndarray
-        Array of coordinates for boundary endpoints of line segments.
+    coordinates : ndarray or dict
+        Array of coordinates for boundary endpoints of line segments, or dict of coordinate arrays.
     img : ndarray
         The image being measured.
-    obj : dict
-        Dictionary (from new_curv) containing curvelet/fiber properties such as center and angle.
+    obj : pd.DataFrame
+        DataFrame containing curvelet/fiber properties.
+        Should have columns: center_row/center_1, center_col/center_2, angle.
     dist_thresh : float
         Pixel distance from boundary within which to evaluate curvelets.
     min_dist : float
         Minimum distance to boundary (to exclude fibers on/near boundary).
 
-    Notes
-    -----
-    This function does not return anything.
+    Returns
+    -------
+    res_mat : ndarray
+        Result matrix with fiber-boundary relationships.
+    res_mat_names : list
+        Column names for res_mat.
+    num_im_pts : int
+        Number of image points.
     """
 
     img_height, img_width = img.shape[:2]
     img_size = (img_height, img_width)
 
-    # collect all fiber points
-    all_center_points = np.vstack([v["center"] for v in obj.values()])
+    # Extract center points from DataFrame
+    if "center_row" in obj.columns:
+        all_center_points = obj[["center_row", "center_col"]].values
+    else:
+        all_center_points = obj[["center_1", "center_2"]].values
     all_center_points = np.round(all_center_points).astype(int)
 
     # collect all boundary points
@@ -112,7 +121,7 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
                 nearest_boundary_relative_angle[i], boundary_point = get_relative_angle(
                     coordinates=coords,
                     idx=idx_dist[i],
-                    fiber_angle=obj[i]["angle"],
+                    fiber_angle=obj.iloc[i]["angle"],
                     img_height=img_height,
                     img_width=img_width,
                 )
@@ -121,7 +130,25 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
                 boundary_point = np.full(2, np.nan)
 
             # Extension point features
-            line_curvelets, ortho_curvelets = get_points_on_line(obj[i], dist_thresh)
+            # Convert DataFrame row to dict for get_points_on_line
+            fiber_dict = {
+                "center": (
+                    (
+                        obj.iloc[i]["center_1"]
+                        if "center_1" in obj.columns
+                        else obj.iloc[i]["center_row"]
+                    ),
+                    (
+                        obj.iloc[i]["center_2"]
+                        if "center_2" in obj.columns
+                        else obj.iloc[i]["center_col"]
+                    ),
+                ),
+                "angle": obj.iloc[i]["angle"],
+            }
+            line_curvelets, ortho_curvelets = get_points_on_line(
+                fiber_dict, dist_thresh
+            )
             line_curvelets = np.array(line_curvelets)
 
             a = line_curvelets
@@ -140,7 +167,19 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
                 nbrs = NearestNeighbors(
                     n_neighbors=1, algorithm="brute", metric="euclidean"
                 ).fit(intersection_line)
-                line_distance, idx_line_distance = nbrs.kneighbors([obj[i]["center"]])
+                fiber_center = (
+                    (
+                        obj.iloc[i]["center_1"]
+                        if "center_1" in obj.columns
+                        else obj.iloc[i]["center_row"]
+                    ),
+                    (
+                        obj.iloc[i]["center_2"]
+                        if "center_2" in obj.columns
+                        else obj.iloc[i]["center_col"]
+                    ),
+                )
+                line_distance, idx_line_distance = nbrs.kneighbors([fiber_center])
 
                 idx_line_distance = idx_line_distance[0][0]
                 line_distance = line_distance[0][0]

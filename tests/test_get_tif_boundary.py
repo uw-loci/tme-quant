@@ -40,16 +40,12 @@ def test_data():
     img_path = os.path.join(os.path.dirname(__file__), "test_images", "real1.tif")
     img = plt.imread(img_path, format="TIF")
 
-    # load curvelet metadata
-    obj = {}
+    # load curvelet metadata as DataFrame
     curvelet_file = os.path.join(base_path, "real1_curvelets.csv")
-    df_curvelets = pd.read_csv(curvelet_file)
-    for i, row in df_curvelets.iterrows():
-        obj[i] = {
-            "center": (float(row["center_1"]) - 1, float(row["center_2"]) - 1),
-            "angle": float(row["angle"]),
-            "weight": float(row["weight"]),
-        }
+    obj = pd.read_csv(curvelet_file)
+    # Convert from MATLAB 1-based to Python 0-based indexing
+    obj["center_1"] = obj["center_1"] - 1
+    obj["center_2"] = obj["center_2"] - 1
 
     return coords, img, obj
 

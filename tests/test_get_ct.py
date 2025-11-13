@@ -79,7 +79,9 @@ def test_get_ct_matches_expected_results(
     curve_cp, feature_cp = standard_control_parameters
 
     # Run get_ct
-    fiber_structure, density_df, alignment_df = get_ct(img, curve_cp, feature_cp)
+    fiber_structure, density_df, alignment_df, curvelet_coefficients = get_ct(
+        img, curve_cp, feature_cp
+    )
 
     # Load expected raw results (9 columns: 4 nearest_fibers + 2 + 3 box_sizes)
     test_results_dir = os.path.join(
@@ -160,7 +162,9 @@ def test_get_ct_returns_valid_structure(
     img = standard_test_image
     curve_cp, feature_cp = standard_control_parameters
 
-    fiber_structure, density_df, alignment_df = get_ct(img, curve_cp, feature_cp)
+    fiber_structure, density_df, alignment_df, curvelet_coefficients = get_ct(
+        img, curve_cp, feature_cp
+    )
 
     # Check fiber_structure
     assert isinstance(fiber_structure, pd.DataFrame)

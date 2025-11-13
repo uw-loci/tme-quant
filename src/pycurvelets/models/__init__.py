@@ -5,7 +5,6 @@ from .models import (
     FiberFeatures,
     ROI,
     ROIList,
-    ROIMeasurements,
 )
 
 __all__ = [
@@ -15,5 +14,4 @@ __all__ = [
     "FiberFeatures",
     "ROI",
     "ROIList",
-    "ROIMeasurements",
 ]

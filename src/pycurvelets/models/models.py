@@ -83,16 +83,3 @@ class ROIList:
     coordinates: list[tuple]
     image_width: int
     image_height: int
-
-
-@dataclass
-class ROIMeasurements:
-    """Measurements of fiber alignment relative to ROI."""
-
-    angle2boundaryEdge: np.ndarray
-    angle2boundaryCenter: np.ndarray
-    angle2centersLine: np.ndarray
-    fibercenterX: np.ndarray
-    fibercenterY: np.ndarray
-    fiberangle: np.ndarray
-    distance: np.ndarray
