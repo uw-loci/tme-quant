@@ -9,6 +9,7 @@ description = "Python translation of CurveAlign; curvelet-based quantification A
 authors = [{ name = "Eliceiri Lab" }]
 requires-python = ">=3.9"
 dependencies = [
+  # Core dependencies from tme-quant (api-curation branch)
   "pandas",
   "numpy>=1.20.0",
   "matplotlib>=3.3.0",
@@ -17,6 +18,19 @@ dependencies = [
   "scikit-image>=0.18.0",
   "tifffile>=2021.1.1",
   "openpyxl",
+  # Napari dependencies (mandatory)
+  "napari[all]>=0.4.0",
+  "napari-console>=0.1.0",
+  "napari-plugin-engine>=0.2.0",
+  "napari-plugin-manager>=0.1.0",
+  "napari-svg>=0.2.0",
+  "qtpy>=2.0.0",
+  "roifile>=2024.1.0",
+  "magicgui>=0.10.0",
+  "superqt>=0.7.0",
+  "vispy>=0.15.0",
+  # Curvelops for curvelet analysis
+  "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
 ]
 
 [project.optional-dependencies]
@@ -42,13 +56,25 @@ visualization = [
 imagej = [
   "pyimagej>=1.4.0",
 ]
-curvelops = [
-  "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
+fiji_bridge = [
+  "napari-imagej",
+  "aicsimageio",
+]
+segmentation = [
+  "cellpose>=2.0",
+  "stardist",
+  "csbdeep",
+  "tensorflow>=2.6.0",
 ]
 all = [
   "matplotlib>=3.5.0",
   "pyimagej>=1.4.0",
-  "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
+  "cellpose>=2.0",
+  "stardist",
+  "csbdeep",
+  "tensorflow>=2.6.0",
+  "napari-imagej",
+  "aicsimageio",
 ]
 
 [tool.setuptools]
@@ -80,3 +106,5 @@ target-version = ['py39']
 profile = "black"
 line_length = 88
 
+[project.entry-points."napari.manifest"]
+tme-quant = "napari_curvealign:napari.yaml"
