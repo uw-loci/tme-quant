@@ -380,9 +380,9 @@ The CurveAlign widget provides:
 If you encounter issues not covered here:
 
 1. Check the main [README.md](../../README.md)
-2. Review [TESTING_GUIDE.md](../../TESTING_GUIDE.md)
-3. Check [SEGMENTATION_FEATURE.md](../../SEGMENTATION_FEATURE.md) for segmentation-specific issues
-4. See [MULTI_ENVIRONMENT_GUIDE.md](../../MULTI_ENVIRONMENT_GUIDE.md) for multi-environment setups
+2. Review [TESTING_GUIDE.md](../napari/TESTING_GUIDE.md)
+3. Check [SEGMENTATION_FEATURE.md](../napari/SEGMENTATION_FEATURE.md) for segmentation-specific issues
+4. See [MULTI_ENVIRONMENT_GUIDE.md](../napari/MULTI_ENVIRONMENT_GUIDE.md) for multi-environment setups
 
 ---
 
@@ -418,11 +418,11 @@ After successful installation:
 3. **Read the Documentation:**
    - [API Documentation](../curvealign/CURVEALIGN_PYTHON_API_SUMMARY.md)
    - [Architecture Overview](../curvealign/ARCHITECTURE.md)
-   - [Testing Guide](../../TESTING_GUIDE.md)
+   - [Testing Guide](../napari/TESTING_GUIDE.md)
 
 4. **Explore Features:**
    - ROI Management: See `src/napari_curvealign/roi_manager.py`
-   - Segmentation: See `SEGMENTATION_FEATURE.md`
+   - Segmentation: See [SEGMENTATION_FEATURE.md](../napari/SEGMENTATION_FEATURE.md)
    - Preprocessing: See `src/napari_curvealign/preprocessing.py`
 
 ---

@@ -99,9 +99,9 @@ napari.run()
 
 | File | Purpose |
 |------|---------|
-| `TESTING_GUIDE.md` | General testing |
-| `SEGMENTATION_FEATURE.md` | Segmentation overview |
-| `MULTI_ENVIRONMENT_GUIDE.md` | **Multi-Python setup** ⭐ |
+| [TESTING_GUIDE.md](TESTING_GUIDE.md) | General testing |
+| [SEGMENTATION_FEATURE.md](SEGMENTATION_FEATURE.md) | Segmentation overview |
+| [MULTI_ENVIRONMENT_GUIDE.md](MULTI_ENVIRONMENT_GUIDE.md) | **Multi-Python setup** ⭐ |
 | `ROIFILE_API_NOTES.md` | Fiji ROI format reference |
 | `examples/` | Test scripts |
 

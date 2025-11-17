@@ -150,6 +150,6 @@ See `simple_usage.py`.
 - **Architecture**: [doc/curvealign/ARCHITECTURE.md](doc/curvealign/ARCHITECTURE.md)
 
 ### Feature Guides
-- **Testing**: [TESTING_GUIDE.md](TESTING_GUIDE.md)
-- **Segmentation**: [SEGMENTATION_FEATURE.md](SEGMENTATION_FEATURE.md)
-- **Multi-Environment**: [MULTI_ENVIRONMENT_GUIDE.md](MULTI_ENVIRONMENT_GUIDE.md)
+- **Testing**: [TESTING_GUIDE.md](doc/napari/TESTING_GUIDE.md)
+- **Segmentation**: [SEGMENTATION_FEATURE.md](doc/napari/SEGMENTATION_FEATURE.md)
+- **Multi-Environment**: [MULTI_ENVIRONMENT_GUIDE.md](doc/napari/MULTI_ENVIRONMENT_GUIDE.md)
