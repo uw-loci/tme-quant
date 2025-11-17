@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  tme-quant:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: tme-quant:latest
+    container_name: tme-quant
+    volumes:
+      # Mount CurveLab directory (user must provide this)
+      # Adjust the path on the left to point to your CurveLab installation
+      - ../curvelab:/app/curvelab:ro
+      # Mount your data directory for input/output
+      - ../data:/app/data:rw
+      # Optionally mount results directory
+      - ../results:/app/results:rw
+    environment:
+      - FDCT=/app/curvelab
+      - FFTW=/usr/local/fftw-2.1.5
+      - CPPFLAGS=-I/usr/local/fftw-2.1.5/include
+      - LDFLAGS=-L/usr/local/fftw-2.1.5/lib
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+
