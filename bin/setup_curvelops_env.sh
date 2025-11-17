@@ -7,11 +7,15 @@
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# Get project root (parent of bin/)
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Set paths to FFTW and CurveLab installations (relative to project root)
-# Adjust these paths based on your directory structure
-export FFTW="${SCRIPT_DIR}/../utils/fftw-2.1.5"
-export FDCT="${SCRIPT_DIR}/../utils/CurveLab-2.1.2"
+# Set paths to FFTW and CurveLab installations
+# utils/ is parallel to tme-quant-napari-curvealign/, so we go up one level from project root
+# Resolve to absolute paths to avoid issues with relative paths
+UTILS_DIR="$(cd "$PROJECT_ROOT/../utils" && pwd 2>/dev/null || echo "$PROJECT_ROOT/../utils")"
+export FFTW="${UTILS_DIR}/fftw-2.1.5"
+export FDCT="${UTILS_DIR}/CurveLab-2.1.2"
 
 # Check if directories exist and provide helpful messages
 if [ ! -d "$FFTW" ]; then

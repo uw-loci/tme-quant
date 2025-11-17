@@ -1,5 +1,7 @@
 # tme-quant Setup Guide
 
+This guide covers installation of the **base Python API**. For the **Napari plugin** with GUI, see [NAPARI_PLUGIN_INSTALLATION.md](NAPARI_PLUGIN_INSTALLATION.md).
+
 This guide shows two simple ways to install: native (recommended) and Docker.
 
 ## Quick Start (Recommended)
@@ -165,6 +167,14 @@ pip install -e ".[visualization]"
 ```
 Adds matplotlib visualization support.
 
+### With napari Plugin
+```bash
+pip install -e ".[napari]"
+```
+Installs napari for interactive analysis.
+
+**Note:** For the complete Napari plugin with automated installation, see [NAPARI_PLUGIN_INSTALLATION.md](NAPARI_PLUGIN_INSTALLATION.md) which provides a one-click installation script.
+
 ### With Curvelet Backend
 ```bash
 pip install -e ".[curvelops]"
@@ -175,7 +185,7 @@ Enables authentic CurveLab FDCT transforms (requires FFTW and CurveLab).
 ```bash
 pip install -e ".[all]"
 ```
-Installs all optional dependencies including curvelops, imagej, and visualization tools.
+Installs all optional dependencies including curvelops, napari, and visualization.
 
 ## Troubleshooting
 
