@@ -262,8 +262,8 @@ def process_image(
         return None
 
     # Initialize variables that may be set in boundary analysis
-    meas_bndry = None
-    angles = None
+    measured_boundary = None
+    nearest_angles = None
     in_curvs_flag = None
     bins = np.arange(2.5, 180, 5)  # Default bins for histogram
 
@@ -381,162 +381,58 @@ def process_image(
 
             # Call get_tif_boundary to get global angles, distances, and boundary points
             # This is needed for the overlay visualization
-            # print("Calling get_tif_boundary for global fiber-boundary relationships...")
-            # res_mat, res_mat_names, num_im_pts = get_tif_boundary(
-            #     coordinates=coordinates,
-            #     img=img,
-            #     obj=fiber_structure,
-            #     dist_thresh=distance_threshold,
-            #     min_dist=min_dist,
-            # )
+            print("Calling get_tif_boundary for global fiber-boundary relationships...")
+            res_mat, res_mat_names, num_im_pts, res_df = get_tif_boundary(
+                coordinates=coordinates,
+                img=img,
+                obj=fiber_structure,
+                dist_thresh=distance_threshold,
+                min_dist=min_dist,
+            )
 
-            #     # Extract data for overlay
-            #     angles = res_mat[:, 2]  # nearest relative boundary angle
-            #     distances = res_mat[:, 0]  # nearest boundary distance
+            nearest_angles = res_df["nearest_boundary_angle"]
 
-            #     # Determine which fibers are within threshold
-            #     if min_dist is None or min_dist == 0:
-            #         in_curvs_flag = res_mat[:, 0] <= distance_threshold
-            #     else:
-            #         in_curvs_flag = (res_mat[:, 0] <= distance_threshold) & (
-            #             res_mat[:, 0] > min_dist
-            #         )
+            if len(min_dist) == 0:
+                in_curvs_flag = (
+                    res_df["nearest_boundary_distance"] <= distance_threshold
+                )
+            else:
+                in_curvs_flag = (
+                    res_df["nearest_boundary_distance"] <= distance_threshold
+                ) & (res_df["nearest_boundary_distance"] > min_dist)
+            out_curvs_flag = ~in_curvs_flag
 
-            #     out_curvs_flag = ~in_curvs_flag
+            if exclude_fibers_in_mask_flag == 1:
+                print(
+                    f"Excluding fibers in mask. Region distance values: {res_df['nearest_region_distance'].unique()}"
+                )
+                print(f"Before exclusion: {np.sum(in_curvs_flag)} fibers included")
 
-            #     # Apply mask exclusion if enabled
-            #     if exclude_fibers_in_mask_flag == 1:
-            #         if min_dist is None or min_dist == 0:
-            #             in_curvs_flag = (res_mat[:, 0] <= distance_threshold) & (
-            #                 res_mat[:, 1] == 0
-            #             )
-            #         else:
-            #             in_curvs_flag = (
-            #                 (res_mat[:, 0] <= distance_threshold)
-            #                 & (res_mat[:, 0] > min_dist)
-            #                 & (res_mat[:, 1] == 0)
-            #             )
-            #         out_curvs_flag = ~in_curvs_flag
+                if len(min_dist) == 0:
+                    in_curvs_flag = (
+                        res_df["nearest_boundary_distance"] <= distance_threshold
+                    ) & (res_df["nearest_region_distance"] == 0)
+                else:
+                    in_curvs_flag = (
+                        (res_df["nearest_boundary_distance"] <= distance_threshold)
+                        & (res_df["nearest_boundary_distance"] > min_dist)
+                        & (res_df["nearest_region_distance"] == 0)
+                    )
+                out_curvs_flag = ~in_curvs_flag
 
-            #     # Extract boundary points (columns 6:7 in MATLAB, 0-indexed: 5:7)
-            #     meas_bndry = res_mat[:, 5:7]
-            #     bins = np.arange(2.5, 90, 5)
+                print(f"After exclusion: {np.sum(in_curvs_flag)} fibers included")
+                print(
+                    f"Fibers with region_dist==0: {np.sum(res_df['nearest_region_distance'] == 0)}"
+                )
+                print(
+                    f"Fibers with region_dist==1: {np.sum(res_df['nearest_region_distance'] == 1)}"
+                )
 
-            #     # Combine all ROI measurements for overlay
-            #     if all_roi_measurements:
-            #         combined_measurements = pd.concat(
-            #             all_roi_measurements, ignore_index=True
-            #         )
-
-            #         # Create in_curvs_flag based on which fibers were measured
-            #         in_curvs_flag = np.zeros(len(fiber_structure), dtype=bool)
-            #         # Mark fibers that appear in measurements as "in"
-            #         if (
-            #             "fiber_center_y" in combined_measurements.columns
-            #             and "fiber_center_x" in combined_measurements.columns
-            #         ):
-            #             for _, row in combined_measurements.iterrows():
-            #                 # Find matching fiber in fiber_structure
-            #                 if "center_row" in fiber_structure.columns:
-            #                     mask = (
-            #                         fiber_structure["center_row"] == row["fiber_center_y"]
-            #                     ) & (fiber_structure["center_col"] == row["fiber_center_x"])
-            #                 else:
-            #                     mask = (
-            #                         fiber_structure["center_1"] == row["fiber_center_y"]
-            #                     ) & (fiber_structure["center_2"] == row["fiber_center_x"])
-            #                 in_curvs_flag[mask] = True
-
-            #         # Set angles and meas_bndry for overlay
-            #         angles = fiber_structure["angle"].values
-
-            #         # Create meas_bndry array (boundary points for each fiber)
-            #         meas_bndry = np.full((len(fiber_structure), 2), np.nan)
-            #         if "boundary_point_row" in combined_measurements.columns:
-            #             for _, row in combined_measurements.iterrows():
-            #                 if "center_row" in fiber_structure.columns:
-            #                     mask = (
-            #                         fiber_structure["center_row"] == row["fiber_center_y"]
-            #                     ) & (fiber_structure["center_col"] == row["fiber_center_x"])
-            #                 else:
-            #                     mask = (
-            #                         fiber_structure["center_1"] == row["fiber_center_y"]
-            #                     ) & (fiber_structure["center_2"] == row["fiber_center_x"])
-            #                 idx = np.where(mask)[0]
-            #                 if len(idx) > 0:
-            #                     meas_bndry[idx[0]] = [
-            #                         row.get("boundary_point_col", np.nan),
-            #                         row.get("boundary_point_row", np.nan),
-            #                     ]
-
-            #     t_excel_end = time.perf_counter()
-            #     print(f"⏱️  Excel writing took: {t_excel_end - t_excel_start:.2f}s")
-
-            #     # Save visualization after all ROIs processed
-            #     t_viz_start = time.perf_counter()
-            #     save_roi_tif_file(
-            #         img=img,
-            #         coordinates=coordinates,
-            #         fiber_structure=fiber_structure,
-            #         output_directory=output_directory,
-            #         img_name=img_name,
-            #     )
-            #     t_viz_end = time.perf_counter()
-            #     print(f"⏱️  Visualization took: {t_viz_end - t_viz_start:.2f}s")
-
-            #     t_boundary_end = time.perf_counter()
-            #     print(
-            #         f"⏱️  Total boundary analysis took: {t_boundary_end - t_boundary_start:.2f}s"
-            #     )
-
-            #     # Extract distances and boundary measurements
-            #     distances = res_mat[:, 0]  # nearest boundary distance
-            #     meas_bndry = res_mat[:, 5:7]  # columns 6:7 in MATLAB (0-indexed: 5:7)
-
-            # elif tif_boundary == 1 or tif_boundary == 2:
-            # NEED TO IMPLEMENT getBoundary
-            # # Coordinate boundary modes
-            # print("Processing boundary with getBoundary method")
-
-            # # Call get_tif_boundary (which handles both tif_boundary 1 and 2)
-            # res_mat, res_mat_names, num_im_pts, result_df = get_tif_boundary(
-            #     coordinates=coordinates,
-            #     boundary_img=boundary_img,
-            #     fiber_structure=fiber_structure,
-            #     img_name=img_name,
-            #     distance_threshold=distance_threshold,
-            #     fiber_key=fiber_key,
-            #     end_length_list=end_length_list,
-            #     fiber_mode=fiber_mode - 1,
-            #     min_dist=min_dist,
-            # )
-
-            # # Extract angles (column 3, 0-indexed = column 2)
-            # angles = res_mat[:, 2]
-
-            # # Determine which fibers are within threshold
-            # if min_dist is None or min_dist == 0:
-            #     in_curvs_flag = res_mat[:, 0] <= distance_threshold
-            # else:
-            #     in_curvs_flag = (res_mat[:, 0] <= distance_threshold) & (
-            #         res_mat[:, 0] > min_dist
-            #     )
-
-            # out_curvs_flag = ~in_curvs_flag
-
-            # # Apply mask exclusion if enabled
-            # if exclude_fibers_in_mask_flag == 1:
-            #     if min_dist is None or min_dist == 0:
-            #         in_curvs_flag = (res_mat[:, 0] <= distance_threshold) & (
-            #             res_mat[:, 1] == 0
-            #         )
-            #     else:
-            #         in_curvs_flag = (
-            #             (res_mat[:, 0] <= distance_threshold)
-            #             & (res_mat[:, 0] > min_dist)
-            #             & (res_mat[:, 1] == 0)
-            #         )
-            # out_curvs_flag = ~in_curvs_flag
+            distances = res_df["nearest_boundary_distance"]
+            measured_boundary = res_df[["boundary_point_row", "boundary_point_col"]]
+        elif tif_boundary == 1 or tif_boundary == 2:
+            # TODO: implement getBoundary
+            return
 
         bins = np.arange(2.5, 90, 5)  # 2.5:5:87.5
 
@@ -556,7 +452,7 @@ def process_image(
             angles = fiber_structure["angle"].values
             distances = np.full(len(fiber_structure), np.nan)
 
-        meas_bndry = 0
+        measured_bndry = 0
         num_im_pts = img.shape[0] * img.shape[1]  # count all pixels if no boundary
         bins = np.arange(2.5, 180, 5)  # 2.5:5:177.5
 
@@ -610,8 +506,8 @@ def process_image(
         # Add boundary-related features if boundary measurement was performed
         if (
             boundary_measurement
-            and isinstance(meas_bndry, np.ndarray)
-            and meas_bndry.ndim == 2
+            and isinstance(measured_boundary, np.ndarray)
+            and measured_boundary.ndim == 2
         ):
             boundary_cols = [
                 "nearest_distance_to_boundary",
@@ -623,8 +519,8 @@ def process_image(
                 "boundary_point_col",
             ]
             for i, col_name in enumerate(boundary_cols):
-                if i < meas_bndry.shape[1]:
-                    fib_feat_df[col_name] = meas_bndry[:, i]
+                if i < measured_boundary.shape[1]:
+                    fib_feat_df[col_name] = measured_boundary[:, i]
                 else:
                     fib_feat_df[col_name] = np.nan
         else:
@@ -658,22 +554,33 @@ def process_image(
     if boundary_measurement:
         if tif_boundary == 3:
             # Only for tiff boundary - use angles within threshold
-            if angles is not None and in_curvs_flag is not None:
-                values = angles[in_curvs_flag]
-            elif angles is not None:
-                values = angles
+            if nearest_angles is not None and in_curvs_flag is not None:
+                values = nearest_angles[in_curvs_flag]
+            elif nearest_angles is not None:
+                values = nearest_angles
             else:
                 values = fiber_structure["angle"].values
         else:
-            values = angles if angles is not None else fiber_structure["angle"].values
+            values = (
+                nearest_angles
+                if nearest_angles is not None
+                else fiber_structure["angle"].values
+            )
     else:
-        values = angles if angles is not None else fiber_structure["angle"].values
+        values = (
+            nearest_angles
+            if nearest_angles is not None
+            else fiber_structure["angle"].values
+        )
 
     # Create histogram
-    n, xout = np.histogram(values, bins=bins)
+    n, bin_edges = np.histogram(values, bins=bins)
+
+    # Calculate bin centers (like MATLAB's hist)
+    xout = (bin_edges[:-1] + bin_edges[1:]) / 2
 
     # Prepare histogram data (frequency and bin centers)
-    hist_data = np.vstack([n, xout[:-1]])  # xout has one more element than n
+    hist_data = np.vstack([n, xout])
 
     # Save histogram
     save_hist = os.path.join(output_directory, f"{img_name}_hist.csv")
@@ -682,7 +589,7 @@ def process_image(
     temp_hist = np.roll(hist_data, 1, axis=0)
 
     # Save transposed (rows become columns)
-    np.savetxt(save_hist, temp_hist.T, delimiter=",")
+    np.savetxt(save_hist, temp_hist.T, delimiter=",", fmt="%.6f")
     print(f"Saved histogram to {save_hist}")
 
     # Inverse curvelet transform (only for curvelet mode)
@@ -729,125 +636,100 @@ def process_image(
         recon = None
 
         # Create overlay figure if requested
-        # if make_overlay:
-        #     print("Plotting overlay")
+    if make_overlay:
+        print("Plotting overlay")
 
-        #     # Determine fiber line length based on mode
-        #     if fiber_mode == 0:
-        #         fiber_len = 4  # Curvelet mode
-        #     elif fiber_mode == 1:
-        #         fiber_len = 2.5  # CT-FIRE minimum segment length
-        #     else:  # fiber_mode 2 or 3
-        #         fiber_len = 10  # CT-FIRE minimum fiber length
+        # Determine fiber line length based on mode
+        if fiber_mode == 0:
+            fiber_len = 4  # Curvelet mode
+        elif fiber_mode == 1:
+            fiber_len = 2.5  # CT-FIRE minimum segment length
+        else:  # fiber_mode 2 or 3
+            fiber_len = 10  # CT-FIRE minimum fiber length
 
-        #     # Create figure
-        #     fig, ax = plt.subplots(
-        #         figsize=(img.shape[1] / 100, img.shape[0] / 100), dpi=100
-        #     )
-        #     ax.imshow(img, cmap="gray")
-        #     ax.axis("off")
+        # Create figure
+        fig, ax = plt.subplots(
+            figsize=(img.shape[1] / 100, img.shape[0] / 100), dpi=100
+        )
+        ax.imshow(img, cmap="gray")
+        ax.axis("off")
 
-        #     # Plot boundaries if present
-        #     if boundary_measurement:
-        #         if tif_boundary < 3:  # CSV boundary
-        #             if coordinates:
-        #                 coords_array = np.array(list(coordinates.values())[0])
-        #                 ax.plot(coords_array[:, 1], coords_array[:, 0], "y-")
-        #                 ax.plot(coords_array[:, 1], coords_array[:, 0], "*y", markersize=3)
-        #         elif tif_boundary == 3:  # TIFF boundary
-        #             for roi_coords in coordinates.values():
-        #                 roi_coords_array = np.array(roi_coords)
-        #                 ax.plot(
-        #                     roi_coords_array[:, 1],
-        #                     roi_coords_array[:, 0],
-        #                     "y-",
-        #                     linewidth=1,
-        #                 )
+        # Plot boundaries if present
+        if boundary_measurement:
+            if tif_boundary < 3:  # CSV boundary
+                if coordinates:
+                    coords_array = np.array(list(coordinates.values())[0])
+                    ax.plot(coords_array[:, 1], coords_array[:, 0], "y-")
+                    ax.plot(coords_array[:, 1], coords_array[:, 0], "*y", markersize=3)
+            elif tif_boundary == 3:  # TIFF boundary
+                for roi_coords in coordinates.values():
+                    roi_coords_array = np.array(roi_coords)
+                    ax.plot(
+                        roi_coords_array[:, 1],
+                        roi_coords_array[:, 0],
+                        "y-",
+                        linewidth=1,
+                    )
 
-        #     # Draw fibers using draw_curvs utility
-        #     from pycurvelets.utils.visualization import draw_curvs
+        # Draw fibers using draw_curvs utility
+        from pycurvelets.utils.visualization import draw_curvs
 
-        #     marksize = 7
-        #     linewidth = 1
+        marksize = 7
+        linewidth = 1
 
-        #     # Determine which fibers to draw
-        #     if in_curvs_flag is not None and isinstance(in_curvs_flag, np.ndarray):
-        #         in_fibers_mask = in_curvs_flag
-        #         out_fibers_mask = ~in_curvs_flag
-        #         print(
-        #             f"Overlay: {np.sum(in_fibers_mask)} fibers IN, {np.sum(out_fibers_mask)} fibers OUT"
-        #         )
-        #     else:
-        #         print("Overlay: in_curvs_flag not set, showing all fibers as IN")
-        #         in_fibers_mask = np.ones(len(fiber_structure), dtype=bool)
-        #         out_fibers_mask = np.zeros(len(fiber_structure), dtype=bool)
+        if tif_boundary == 3:  # tiff boundary
+            # Draw fibers that are used (color_flag=0 for green)
+            if np.any(in_curvs_flag):
+                draw_curvs(
+                    fiber_structure[in_curvs_flag],
+                    ax,
+                    fiber_len,
+                    color_flag=0,
+                    angles=nearest_angles[in_curvs_flag],
+                    mark_size=marksize,
+                    line_width=linewidth,
+                    boundary_measurement=boundary_measurement,
+                )
 
-        #     # Get angles
-        #     fiber_angles_data = (
-        #         angles if angles is not None else fiber_structure["angle"].values
-        #     )
+            # Draw fibers that are not used (color_flag=1 for red)
+            if np.any(out_curvs_flag):
+                draw_curvs(
+                    fiber_structure[out_curvs_flag],
+                    ax,
+                    fiber_len,
+                    color_flag=1,
+                    angles=nearest_angles[out_curvs_flag],
+                    mark_size=marksize,
+                    line_width=linewidth,
+                    boundary_measurement=boundary_measurement,
+                )
 
-        #     # Draw fibers that are used (color_flag=0 for green)
-        #     if np.any(in_fibers_mask):
-        #         draw_curvs(
-        #             fiber_structure[in_fibers_mask],
-        #             ax,
-        #             fiber_len,
-        #             color_flag=0,
-        #             angles=fiber_angles_data[in_fibers_mask],
-        #             mark_size=marksize,
-        #             line_width=linewidth,
-        #             boundary_measurement=boundary_measurement,
-        #         )
-
-        #     # Draw fibers that are not used (color_flag=1 for red)
-        #     if np.any(out_fibers_mask):
-        #         draw_curvs(
-        #             fiber_structure[out_fibers_mask],
-        #             ax,
-        #             fiber_len,
-        #             color_flag=1,
-        #             angles=fiber_angles_data[out_fibers_mask],
-        #             mark_size=marksize,
-        #             line_width=linewidth,
-        #             boundary_measurement=boundary_measurement,
-        #         )
-
-        # Draw associations if requested
-        if boundary_measurement and make_associations and meas_bndry is not None:
-            if isinstance(meas_bndry, np.ndarray) and meas_bndry.ndim == 2:
+            # Draw associations between fibers and boundary points
+            if boundary_measurement and make_associations:
+                # Get fiber centers
                 fiber_centers = (
                     fiber_structure[["center_row", "center_col"]].values
                     if "center_row" in fiber_structure.columns
                     else fiber_structure[["center_1", "center_2"]].values
                 )
 
-                # Debug: check meas_bndry
-                valid_count = 0
-                for i, (center, bndry_pt) in enumerate(
-                    zip(fiber_centers[in_fibers_mask], meas_bndry[in_fibers_mask])
-                ):
-                    if (
-                        len(bndry_pt) >= 2
-                        and not np.isnan(bndry_pt[0])
-                        and not np.isnan(bndry_pt[1])
-                    ):
+                # Get included fibers and their boundary points
+                in_curvs = fiber_centers[in_curvs_flag]
+                in_bndry = measured_boundary.values[in_curvs_flag]
+
+                # Plot lines connecting each fiber center to its nearest boundary point
+                for center, bndry_pt in zip(in_curvs, in_bndry):
+                    if not np.isnan(bndry_pt[0]) and not np.isnan(bndry_pt[1]):
+                        # Plot line from fiber center to boundary point
+                        # MATLAB: plot([center(1,2) bndry(1)], [center(1,1) bndry(2)], 'b')
+                        # bndry_pt is [row, col], center is [row, col]
                         ax.plot(
-                            [center[1], bndry_pt[0]],
-                            [center[0], bndry_pt[1]],
+                            [center[1], bndry_pt[1]],  # x: col coordinates
+                            [center[0], bndry_pt[0]],  # y: row coordinates
                             "b-",
                             linewidth=0.5,
-                            alpha=0.5,
                         )
-                        valid_count += 1
-                        if i < 3:  # Debug first 3
-                            print(
-                                f"Association {i}: fiber ({center[1]:.1f}, {center[0]:.1f}) -> boundary ({bndry_pt[0]:.1f}, {bndry_pt[1]:.1f})"
-                            )
-
-                print(
-                    f"Drew {valid_count} association lines out of {np.sum(in_fibers_mask)} IN fibers"
-                )
+        # TODO: tif_boundary 0, 1, 2 implementation
 
         print("Saving overlay")
 
@@ -1069,7 +951,7 @@ if __name__ == "__main__":
     obj["center_1"] = obj["center_1"] - 1
     obj["center_2"] = obj["center_2"] - 1
 
-    boundary_img = get_tif_boundary(coords, img, obj, dist_thresh, min_dist)
+    # boundary_img = get_tif_boundary(coords, img, obj, dist_thresh, min_dist)
     boundary_mode = 3
     fiber_mode = 0
     i = 1
@@ -1093,7 +975,7 @@ if __name__ == "__main__":
         make_feature_file=1,
         slice_num=1,
         tif_boundary=boundary_mode,
-        boundary_img=boundary_img,
+        boundary_img=pd.DataFrame(),
         fire_directory=path_name,
         fiber_mode=fiber_mode,
         advanced_options=advanced_options,

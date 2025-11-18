@@ -65,7 +65,11 @@ def get_segment_pixels(point_1, point_2):
     if maxrr == 0:
         return
 
-    absolute_angle = np.arctan(rise / run)  # range -pi to pi
+    # Calculate angle, handling vertical lines (run == 0)
+    if run == 0:
+        absolute_angle = np.pi / 2 if rise > 0 else -np.pi / 2
+    else:
+        absolute_angle = np.arctan(rise / run)  # range -pi to pi
 
     # walk this distance each iteration (sub pixel)
     fraction_rise = 0.5 * rise / maxrr

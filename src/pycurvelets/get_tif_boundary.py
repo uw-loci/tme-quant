@@ -47,9 +47,6 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
 
     # collect all boundary points
     coords = np.vstack([coordinates[k] for k in coordinates])
-    lin_idx = np.ravel_multi_index(
-        (all_center_points[:, 0], all_center_points[:, 1]), dims=img_size, order="F"
-    )
 
     neighbors = NearestNeighbors(
         n_neighbors=1, algorithm="brute", metric="euclidean"
@@ -58,7 +55,15 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     idx_dist = indices.flatten()
     dist = distances.flatten()
 
-    reg_dist = img.flatten(order="F")[lin_idx]
+    # Get pixel values at fiber center locations from the boundary image
+    # Round coordinates to nearest integer (MATLAB sub2ind behavior)
+    center_rows = np.clip(
+        np.round(all_center_points[:, 0]).astype(int), 0, img_height - 1
+    )
+    center_cols = np.clip(
+        np.round(all_center_points[:, 1]).astype(int), 0, img_width - 1
+    )
+    reg_dist = img[center_rows, center_cols]
 
     step_size = img_width // 20
 
