@@ -207,6 +207,15 @@ class CurveAlignWidget(QWidget):
         # Connect selection change
         self.image_list.itemSelectionChanged.connect(self.on_image_selected)
         
+        # Analysis mode (Curvelets vs CT-FIRE)
+        mode_layout = QHBoxLayout()
+        mode_layout.addWidget(QLabel("Analysis mode:"))
+        self.analysis_mode_combo = QComboBox()
+        self.analysis_mode_combo.addItems(["Curvelets", "CT-FIRE", "Both"])
+        self.analysis_mode_combo.setCurrentText("Curvelets")
+        mode_layout.addWidget(self.analysis_mode_combo)
+        main_tab_layout.addLayout(mode_layout)
+        
         # Boundary type
         boundary_layout = QHBoxLayout()
         boundary_layout.addWidget(QLabel("Boundary type:"))
@@ -225,7 +234,7 @@ class CurveAlignWidget(QWidget):
         self.curve_threshold = QDoubleSpinBox()
         self.curve_threshold.setRange(0.0, 1.0)
         self.curve_threshold.setSingleStep(0.01)
-        self.curve_threshold.setValue(0.5)
+        self.curve_threshold.setValue(0.001)  # Default from MATLAB
         curve_layout.addWidget(self.curve_threshold)
         params_layout.addLayout(curve_layout)
         
@@ -500,8 +509,9 @@ class CurveAlignWidget(QWidget):
 
     def reset_parameters(self):
         """Reset parameters to default values"""
+        self.analysis_mode_combo.setCurrentText("Curvelets")
         self.boundary_combo.setCurrentText(BoundaryType.NO_BOUNDARY.value)
-        self.curve_threshold.setValue(0.5)
+        self.curve_threshold.setValue(0.001)
         self.distance_boundary.setValue(10)
         self.histograms_cb.setChecked(True)
         self.boundary_association_cb.setChecked(True)
@@ -580,6 +590,15 @@ class CurveAlignWidget(QWidget):
         except Exception as e:
             print(f"Preprocessing failed: {e}")
         
+        # Get analysis mode
+        mode_text = self.analysis_mode_combo.currentText()
+        if mode_text == "CT-FIRE":
+            analysis_mode = "ctfire"
+        elif mode_text == "Both":
+            analysis_mode = "both"  # Will need to handle this specially
+        else:
+            analysis_mode = "curvelets"
+        
         # Run analysis - this should return two images and a DataFrame
         overlay_img, heatmap_img, measurements = run_analysis(
             image_path=selected_path,
@@ -587,6 +606,7 @@ class CurveAlignWidget(QWidget):
             boundary_type=boundary_type,
             curve_threshold=self.curve_threshold.value(),
             distance_boundary=self.distance_boundary.value(),
+            analysis_mode=analysis_mode,
             output_options={
                 "histograms": self.histograms_cb.isChecked(),
                 "boundary_association": self.boundary_association_cb.isChecked(),
