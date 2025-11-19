@@ -1,14 +1,14 @@
 #!/bin/bash
 ################################################################################
-# tme-quant-napari-curvealign Installation Script
+# tme-quant Installation Script
 # 
 # This script automates the complete installation of the CurveAlign Napari plugin
 # including all dependencies and Curvelops with FFTW/CurveLab support.
 #
 # Prerequisites:
 #   - Python 3.9+ installed
-#   - FFTW 2.1.5 installed in ../utils/fftw-2.1.5
-#   - CurveLab 2.1.2 installed in ../utils/CurveLab-2.1.2
+#   - FFTW 2.1.5 installed in ../utils/fftw-2.1.5 (optional, for curvelet backend)
+#   - CurveLab 2.1.2 installed in ../utils/CurveLab-2.1.2 (optional, for curvelet backend)
 #
 # Usage:
 #   bash bin/install.sh
@@ -109,7 +109,7 @@ check_prerequisites() {
     else
         print_error "FFTW not found at: $FFTW_PATH"
         echo "   Expected location: $UTILS_DIR_ABS/fftw-2.1.5"
-        echo "   Please ensure FFTW 2.1.5 is installed in the utils/ directory (parallel to tme-quant-napari-curvealign/)."
+        echo "   Please ensure FFTW 2.1.5 is installed in the utils/ directory (parallel to tme-quant/)."
         exit 1
     fi
     
@@ -121,7 +121,7 @@ check_prerequisites() {
     else
         print_error "CurveLab not found at: $CURVELAB_PATH"
         echo "   Expected location: $UTILS_DIR_ABS/CurveLab-2.1.2"
-        echo "   Please ensure CurveLab 2.1.2 is installed in the utils/ directory (parallel to tme-quant-napari-curvealign/)."
+        echo "   Please ensure CurveLab 2.1.2 is installed in the utils/ directory (parallel to tme-quant/)."
         exit 1
     fi
     
@@ -225,7 +225,7 @@ install_dependencies() {
     echo ""
     
     # Install the main package with all dependencies
-    print_info "Installing tme-quant-napari-curvealign and all dependencies..."
+    print_info "Installing tme-quant and all dependencies..."
     print_info "This will install:"
     echo "  - Core dependencies (numpy, scipy, pandas, etc.)"
     echo "  - Napari and all GUI dependencies"
@@ -332,7 +332,7 @@ create_activation_helper() {
     # Create activation script in bin/ directory
     cat > "$SCRIPT_DIR/activate.sh" << 'ACTIVATE_EOF'
 #!/bin/bash
-# Quick activation script for tme-quant-napari-curvealign
+# Quick activation script for tme-quant
 # Usage: source bin/activate.sh
 #
 # This script activates the virtual environment and sets up Curvelops
@@ -380,7 +380,7 @@ main() {
     clear
     echo ""
     print_header "═══════════════════════════════════════════════════════════════"
-    print_header "  tme-quant-napari-curvealign Installation"
+    print_header "  tme-quant Installation"
     print_header "═══════════════════════════════════════════════════════════════"
     echo ""
     echo "This script will:"

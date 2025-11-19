@@ -9,11 +9,13 @@ services:
     container_name: tme-quant
     volumes:
       # Mount CurveLab directory (user must provide this)
-      # Adjust the path on the left to point to your CurveLab installation
+      # IMPORTANT: Adjust the path on the left to point to your CurveLab installation
+      # Example: /path/to/CurveLab-2.1.x:/app/curvelab:ro
+      # Or if CurveLab is parallel to tme-quant: ../curvelab:/app/curvelab:ro
       - ../curvelab:/app/curvelab:ro
-      # Mount your data directory for input/output
+      # Mount your data directory for input/output (adjust path as needed)
       - ../data:/app/data:rw
-      # Optionally mount results directory
+      # Optionally mount results directory (adjust path as needed)
       - ../results:/app/results:rw
     environment:
       - FDCT=/app/curvelab

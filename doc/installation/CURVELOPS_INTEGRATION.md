@@ -39,7 +39,8 @@ Curvelops requires **FFTW 2.1.5** and **CurveLab** to be built and installed fir
 
 #### 1. Organize Dependencies
 ```bash
-# Create a utils directory for dependencies (adjust path as needed)
+# Create a utils directory parallel to tme-quant/ (adjust path as needed)
+# Structure: ../utils/ (relative to tme-quant directory)
 mkdir -p ../utils
 
 # Move or install FFTW 2.1.5 to utils/
@@ -58,6 +59,7 @@ ln -sf include fftw
 #### 2. Install CurveLab
 ```bash
 # Download CurveLab 2.1.x from http://curvelet.org/ to utils/
+# Note: ../utils/ is relative to the tme-quant directory
 cd ../utils
 # Extract CurveLab-2.1.x.tar.gz here
 cd CurveLab-2.1.x
@@ -68,10 +70,10 @@ cd ../../fdct3d/src && make
 
 #### 3. Setup Environment and Install Curvelops
 ```bash
-# Use the provided setup script (adjust paths as needed)
-source setup_curvelops_env.sh
+# Use the provided setup script (from tme-quant/bin/)
+source bin/setup_curvelops_env.sh
 
-# Or manually set environment variables:
+# Or manually set environment variables (paths relative to tme-quant directory):
 export FFTW="../utils/fftw-2.1.5"
 export FDCT="../utils/CurveLab-2.1.x"
 export CPPFLAGS="-I${FFTW}/include"

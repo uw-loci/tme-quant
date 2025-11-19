@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Set paths to FFTW and CurveLab installations
-# utils/ is parallel to tme-quant-napari-curvealign/, so we go up one level from project root
+# utils/ is parallel to tme-quant/, so we go up one level from project root
 # Resolve to absolute paths to avoid issues with relative paths
 UTILS_DIR="$(cd "$PROJECT_ROOT/../utils" && pwd 2>/dev/null || echo "$PROJECT_ROOT/../utils")"
 export FFTW="${UTILS_DIR}/fftw-2.1.5"

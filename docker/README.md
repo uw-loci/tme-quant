@@ -38,8 +38,8 @@ docker-compose up -d
 
 Before building, you need:
 1. **CurveLab** downloaded from https://curvelet.org/download.php
-2. Place CurveLab in `../curvelab/` relative to this directory
-3. Or update the volume mount in `docker-compose.yml`
+2. Place CurveLab in a location accessible to Docker (e.g., `~/curvelab/` or `/path/to/CurveLab-2.1.x`)
+3. Update the volume mount in `docker-compose.yml` to point to your CurveLab location
 
 ## Notes
 

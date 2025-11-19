@@ -1,6 +1,6 @@
 # tme-quant Setup Guide
 
-This guide covers installation of the **base Python API**. For the **Napari plugin** with GUI, see [NAPARI_PLUGIN_INSTALLATION.md](NAPARI_PLUGIN_INSTALLATION.md).
+This guide covers installation of the **base Python API** for tme-quant. The package includes both the Python API and an optional Napari plugin.
 
 This guide shows two simple ways to install: native (recommended) and Docker.
 
@@ -173,7 +173,7 @@ pip install -e ".[napari]"
 ```
 Installs napari for interactive analysis.
 
-**Note:** For the complete Napari plugin with automated installation, see [NAPARI_PLUGIN_INSTALLATION.md](NAPARI_PLUGIN_INSTALLATION.md) which provides a one-click installation script.
+**Note:** For automated Napari plugin installation, use `bash bin/install.sh` from the project root, which provides a one-click installation script.
 
 ### With Curvelet Backend
 ```bash

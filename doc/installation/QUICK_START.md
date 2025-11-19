@@ -6,13 +6,19 @@ For the **CurveAlign Napari Plugin** with all GUI features:
 
 ### Prerequisites
 - Python 3.9+ installed
-- FFTW 2.1.5 in `../utils/fftw-2.1.5`
-- CurveLab 2.1.2 in `../utils/CurveLab-2.1.2`
+- FFTW 2.1.5 (optional, for curvelet backend)
+- CurveLab 2.1.2 (optional, for curvelet backend)
+
+**Note:** FFTW and CurveLab should be placed in a `utils/` directory parallel to `tme-quant/`:
+- `../utils/fftw-2.1.5` (relative to tme-quant directory)
+- `../utils/CurveLab-2.1.2` (relative to tme-quant directory)
+
+Alternatively, you can install them in any location and set the `FFTW` and `FDCT` environment variables.
 
 ### One-Click Installation
 
 ```bash
-cd tme-quant-napari-curvealign
+cd tme-quant
 bash bin/install.sh
 ```
 
@@ -31,7 +37,7 @@ napari
 
 The CurveAlign widget will appear in: **Plugins → napari-curvealign → CurveAlign Widget**
 
-For detailed instructions, see [NAPARI_PLUGIN_INSTALLATION.md](NAPARI_PLUGIN_INSTALLATION.md)
+For detailed instructions, see [SETUP_GUIDE.md](SETUP_GUIDE.md)
 
 ---
 
@@ -105,6 +111,5 @@ make docker-run   # Run Docker container
 ```
 
 For more details, see:
-- [NAPARI_PLUGIN_INSTALLATION.md](NAPARI_PLUGIN_INSTALLATION.md) - **Complete Napari plugin installation guide**
 - [SETUP_GUIDE.md](SETUP_GUIDE.md) - Detailed base package installation guide
 - [CURVELOPS_INTEGRATION.md](CURVELOPS_INTEGRATION.md) - CurveLab integration details
