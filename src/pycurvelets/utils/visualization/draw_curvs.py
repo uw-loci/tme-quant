@@ -58,11 +58,7 @@ def draw_curvs(
         print(f"draw_curvs: No fibers to draw (color_flag={color_flag})")
         return
 
-    print(
-        f"draw_curvs: Drawing {len(centers)} fibers (color_flag={color_flag}, boundary={boundary_measurement})"
-    )
-
-    # Draw each fiber - logic matches MATLAB exactly
+    # Draw each fiber
     if boundary_measurement:
         # With boundary measurement
         for i in range(len(fiber_data)):

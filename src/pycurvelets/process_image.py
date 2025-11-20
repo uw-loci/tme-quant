@@ -609,8 +609,6 @@ def process_image(
     plt.ylabel("Count")
     plt.title("Histogram")
 
-    plt.show()
-
     # Inverse curvelet transform (only for curvelet mode)
     if fiber_mode == 0:
         print("Computing inverse curvelet transform.")
@@ -654,116 +652,36 @@ def process_image(
         # Cannot do inverse-CT for FIRE mode
         recon = None
 
-        # Create overlay figure if requested
+    # Create overlay figure if requested
     if make_overlay:
-        print("Plotting overlay")
-
-        # Determine fiber line length based on mode
-        if fiber_mode == 0:
-            fiber_len = 4  # Curvelet mode
-        elif fiber_mode == 1:
-            fiber_len = 2.5  # CT-FIRE minimum segment length
-        else:  # fiber_mode 2 or 3
-            fiber_len = 10  # CT-FIRE minimum fiber length
-
-        # Create figure
-        fig, ax = plt.subplots(
-            figsize=(img.shape[1] / 100, img.shape[0] / 100), dpi=100
+        generate_overlay(
+            img=img,
+            fiber_structure=fiber_structure,
+            coordinates=coordinates,
+            in_curvs_flag=(
+                in_curvs_flag
+                if boundary_measurement
+                else np.ones(len(fiber_structure), dtype=bool)
+            ),
+            out_curvs_flag=(
+                out_curvs_flag
+                if boundary_measurement
+                else np.zeros(len(fiber_structure), dtype=bool)
+            ),
+            nearest_angles=(
+                nearest_angles
+                if boundary_measurement and nearest_angles is not None
+                else fiber_structure["angle"].values
+            ),
+            measured_boundary=measured_boundary if boundary_measurement else None,
+            output_directory=output_directory,
+            img_name=img_name,
+            fiber_mode=fiber_mode,
+            tif_boundary=tif_boundary,
+            boundary_measurement=boundary_measurement,
+            make_associations=make_associations,
+            num_sections=num_sections,
         )
-        ax.imshow(img, cmap="gray")
-        ax.axis("off")
-
-        # Plot boundaries if present
-        if boundary_measurement:
-            if tif_boundary < 3:  # CSV boundary
-                if coordinates:
-                    coords_array = np.array(list(coordinates.values())[0])
-                    ax.plot(coords_array[:, 1], coords_array[:, 0], "y-")
-                    ax.plot(coords_array[:, 1], coords_array[:, 0], "*y", markersize=3)
-            elif tif_boundary == 3:  # TIFF boundary
-                for roi_coords in coordinates.values():
-                    roi_coords_array = np.array(roi_coords)
-                    ax.plot(
-                        roi_coords_array[:, 1],
-                        roi_coords_array[:, 0],
-                        "y-",
-                        linewidth=1,
-                    )
-
-        # Draw fibers using draw_curvs utility
-
-        marksize = 3
-        linewidth = 1
-
-        if tif_boundary == 3:  # tiff boundary
-            # Draw fibers that are used (color_flag=0 for green)
-            if np.any(in_curvs_flag):
-                draw_curvs(
-                    fiber_structure[in_curvs_flag],
-                    ax,
-                    fiber_len,
-                    color_flag=0,
-                    angles=nearest_angles[in_curvs_flag],
-                    mark_size=marksize,
-                    line_width=linewidth,
-                    boundary_measurement=boundary_measurement,
-                )
-
-            # Draw fibers that are not used (color_flag=1 for red)
-            if np.any(out_curvs_flag):
-                draw_curvs(
-                    fiber_structure[out_curvs_flag],
-                    ax,
-                    fiber_len,
-                    color_flag=1,
-                    angles=nearest_angles[out_curvs_flag],
-                    mark_size=marksize,
-                    line_width=linewidth,
-                    boundary_measurement=boundary_measurement,
-                )
-
-            # Draw associations between fibers and boundary points
-            if boundary_measurement and make_associations:
-                # Get fiber centers
-                fiber_centers = (
-                    fiber_structure[["center_row", "center_col"]].values
-                    if "center_row" in fiber_structure.columns
-                    else fiber_structure[["center_1", "center_2"]].values
-                )
-
-                # Get included fibers and their boundary points
-                in_curvs = fiber_centers[in_curvs_flag]
-                in_bndry = measured_boundary[
-                    ["boundary_point_row", "boundary_point_col"]
-                ].values[in_curvs_flag]
-
-                # Plot lines connecting each fiber center to its nearest boundary point
-                for center, bndry_pt in zip(in_curvs, in_bndry):
-                    if not np.isnan(bndry_pt[0]) and not np.isnan(bndry_pt[1]):
-                        # Plot line from fiber center to boundary point
-                        # MATLAB: plot([center(1,2) bndry(1)], [center(1,1) bndry(2)], 'b')
-                        # bndry_pt is [row, col], center is [row, col]
-                        ax.plot(
-                            [center[1], bndry_pt[1]],  # x: col coordinates
-                            [center[0], bndry_pt[0]],  # y: row coordinates
-                            "b-",
-                            linewidth=0.5,
-                        )
-        # TODO: tif_boundary 0, 1, 2 implementation
-
-        print("Saving overlay")
-
-        # Save overlay
-        if num_sections > 1:
-            save_overlay = os.path.join(output_directory, f"{img_name}_overlay.tiff")
-        else:
-            save_overlay = os.path.join(output_directory, f"{img_name}_overlay.tiff")
-
-        plt.tight_layout(pad=0)
-        plt.savefig(save_overlay, dpi=200, bbox_inches="tight", pad_inches=0)
-        plt.close(fig)
-
-        print(f"Saved overlay to {save_overlay}")
 
     # Generate heatmap if requested
     if make_map:
@@ -789,7 +707,161 @@ def process_image(
             advanced_options=advanced_options,
         )
 
-    return True
+    plt.show()
+
+
+def generate_overlay(
+    img,
+    fiber_structure,
+    coordinates,
+    in_curvs_flag,
+    out_curvs_flag,
+    nearest_angles,
+    measured_boundary,
+    output_directory,
+    img_name,
+    fiber_mode,
+    tif_boundary,
+    boundary_measurement,
+    make_associations,
+    num_sections,
+):
+    """
+    Generate and save fiber overlay visualization.
+
+    Parameters
+    ----------
+    img : ndarray
+        Original grayscale image
+    fiber_structure : pd.DataFrame
+        Fiber data
+    coordinates : dict
+        Boundary coordinates
+    in_curvs_flag : ndarray
+        Boolean mask for included fibers
+    out_curvs_flag : ndarray
+        Boolean mask for excluded fibers
+    nearest_angles : ndarray
+        Fiber angles relative to boundary
+    measured_boundary : pd.DataFrame
+        Boundary point measurements
+    output_directory : str
+        Output directory
+    img_name : str
+        Image name
+    fiber_mode : int
+        Fiber processing method (0=curvelet, 1/2/3=FIRE)
+    tif_boundary : int
+        Boundary type (0=none, 1/2=CSV, 3=TIFF)
+    boundary_measurement : bool
+        Whether boundary measurement is enabled
+    make_associations : bool
+        Whether to draw association lines
+    num_sections : int
+        Number of sections in stack
+    """
+    print("Plotting overlay")
+
+    # Determine fiber line length based on mode
+    if fiber_mode == 0:
+        fiber_len = 4  # Curvelet mode
+    elif fiber_mode == 1:
+        fiber_len = 2.5  # CT-FIRE minimum segment length
+    else:  # fiber_mode 2 or 3
+        fiber_len = 10  # CT-FIRE minimum fiber length
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=(img.shape[1] / 100, img.shape[0] / 100), dpi=100)
+    ax.imshow(img, cmap="gray")
+    ax.axis("off")
+
+    # Plot boundaries if present
+    if boundary_measurement:
+        if tif_boundary < 3:  # CSV boundary
+            if coordinates:
+                coords_array = np.array(list(coordinates.values())[0])
+                ax.plot(coords_array[:, 1], coords_array[:, 0], "y-")
+                ax.plot(coords_array[:, 1], coords_array[:, 0], "*y", markersize=3)
+        elif tif_boundary == 3:  # TIFF boundary
+            for roi_coords in coordinates.values():
+                roi_coords_array = np.array(roi_coords)
+                ax.plot(
+                    roi_coords_array[:, 1],
+                    roi_coords_array[:, 0],
+                    "y-",
+                    linewidth=1,
+                )
+
+    # Draw fibers using draw_curvs utility
+    marksize = 3
+    linewidth = 1
+
+    if tif_boundary == 3:  # tiff boundary
+        # Draw fibers that are used (color_flag=0 for green)
+        if np.any(in_curvs_flag):
+            draw_curvs(
+                fiber_structure[in_curvs_flag],
+                ax,
+                fiber_len,
+                color_flag=0,
+                angles=nearest_angles[in_curvs_flag],
+                mark_size=marksize,
+                line_width=linewidth,
+                boundary_measurement=boundary_measurement,
+            )
+
+        # Draw fibers that are not used (color_flag=1 for red)
+        if np.any(out_curvs_flag):
+            draw_curvs(
+                fiber_structure[out_curvs_flag],
+                ax,
+                fiber_len,
+                color_flag=1,
+                angles=nearest_angles[out_curvs_flag],
+                mark_size=marksize,
+                line_width=linewidth,
+                boundary_measurement=boundary_measurement,
+            )
+
+        # Draw associations between fibers and boundary points
+        if boundary_measurement and make_associations:
+            # Get fiber centers
+            fiber_centers = (
+                fiber_structure[["center_row", "center_col"]].values
+                if "center_row" in fiber_structure.columns
+                else fiber_structure[["center_1", "center_2"]].values
+            )
+
+            # Get included fibers and their boundary points
+            in_curvs = fiber_centers[in_curvs_flag]
+            in_bndry = measured_boundary[
+                ["boundary_point_row", "boundary_point_col"]
+            ].values[in_curvs_flag]
+
+            # Plot lines connecting each fiber center to its nearest boundary point
+            for center, bndry_pt in zip(in_curvs, in_bndry):
+                if not np.isnan(bndry_pt[0]) and not np.isnan(bndry_pt[1]):
+                    # Plot line from fiber center to boundary point
+                    # MATLAB: plot([center(1,2) bndry(1)], [center(1,1) bndry(2)], 'b')
+                    # bndry_pt is [row, col], center is [row, col]
+                    ax.plot(
+                        [center[1], bndry_pt[1]],  # x: col coordinates
+                        [center[0], bndry_pt[0]],  # y: row coordinates
+                        "b-",
+                        linewidth=0.5,
+                    )
+    # TODO: tif_boundary 0, 1, 2 implementation
+
+    print("Saving overlay")
+
+    # Save overlay
+    save_overlay = os.path.join(output_directory, f"{img_name}_overlay.tiff")
+
+    plt.tight_layout(pad=0)
+    plt.savefig(save_overlay, dpi=200, bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
+
+    print(f"Saved overlay to {save_overlay}")
 
 
 def generate_heatmap(
