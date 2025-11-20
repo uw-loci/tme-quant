@@ -21,17 +21,35 @@ def format_df_to_excel(
         'w' to create new file or overwrite, 'a' to append/update sheets.
     """
     # Determine if we need to append or create new
+    file_created = False
     if mode == "a" and os.path.exists(filename):
-        with pd.ExcelWriter(
-            filename, engine="openpyxl", mode="a", if_sheet_exists="replace"
-        ) as writer:
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-    else:
+        try:
+            with pd.ExcelWriter(
+                filename, engine="openpyxl", mode="a", if_sheet_exists="replace"
+            ) as writer:
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+            file_created = True
+        except Exception as e:
+            # If file is corrupted, delete and recreate
+            print(f"Warning: Excel file corrupted during append, recreating: {e}")
+            if os.path.exists(filename):
+                os.remove(filename)
+
+    if not file_created:
         # Create new file
         df.to_excel(filename, sheet_name=sheet_name, index=False)
 
     # Load workbook and adjust column widths
-    wb = load_workbook(filename)
+    try:
+        wb = load_workbook(filename)
+    except Exception as e:
+        # If file is corrupted, delete and recreate
+        print(f"Warning: Excel file corrupted after creation, recreating: {e}")
+        if os.path.exists(filename):
+            os.remove(filename)
+        df.to_excel(filename, sheet_name=sheet_name, index=False)
+        wb = load_workbook(filename)
+
     ws = wb[sheet_name]
 
     # Freeze the header row (row 1) so it stays visible when scrolling
