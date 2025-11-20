@@ -65,9 +65,10 @@ def draw_curvs(
     # Draw each fiber - logic matches MATLAB exactly
     if boundary_measurement:
         # With boundary measurement
-        for i, (center, angle) in enumerate(zip(centers, angles)):
-            xc = center[1]  # column
-            yc = center[0]  # row
+        for i in range(len(fiber_data)):
+
+            xc = fiber_data["center_col"].iloc[i]
+            yc = fiber_data["center_row"].iloc[i]
 
             # Plot center point
             if color_flag == 0:
@@ -76,7 +77,7 @@ def draw_curvs(
                 ax.plot(xc, yc, "r.", markersize=mark_size)
 
             # Calculate line endpoints
-            ca = np.deg2rad(angle)
+            ca = np.deg2rad(fiber_data["angle"].iloc[i])
             xc1 = xc - length * np.cos(ca)
             xc2 = xc + length * np.cos(ca)
             yc1 = yc + length * np.sin(ca)

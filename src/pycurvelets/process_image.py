@@ -23,6 +23,7 @@ from pycurvelets.get_ct import get_ct
 from pycurvelets.get_fire import get_fire
 from pycurvelets.get_tif_boundary import get_tif_boundary
 from pycurvelets.utils.misc import format_df_to_excel
+from pycurvelets.utils.visualization import draw_curvs, draw_map
 
 
 def process_single_roi(
@@ -195,10 +196,10 @@ def process_image(
     """
 
     # Get screen size for figure position
-    root = tk.Tk()
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
-    root.destroy()
+    # root = tk.Tk()
+    # screen_width = root.winfo_screenwidth()
+    # screen_height = root.winfo_screenheight()
+    # root.destroy()
 
     exclude_fibers_in_mask_flag = advanced_options["exclude_fibers_in_mask_flag"]
     img_name_length = len(img_name)
@@ -382,9 +383,10 @@ def process_image(
             # Call get_tif_boundary to get global angles, distances, and boundary points
             # This is needed for the overlay visualization
             print("Calling get_tif_boundary for global fiber-boundary relationships...")
+
             res_mat, res_mat_names, num_im_pts, res_df = get_tif_boundary(
                 coordinates=coordinates,
-                img=img,
+                img=boundary_img,
                 obj=fiber_structure,
                 dist_thresh=distance_threshold,
                 min_dist=min_dist,
@@ -429,7 +431,17 @@ def process_image(
                 )
 
             distances = res_df["nearest_boundary_distance"]
-            measured_boundary = res_df[["boundary_point_row", "boundary_point_col"]]
+            measured_boundary = res_df[
+                [
+                    "nearest_boundary_distance",
+                    "nearest_region_distance",
+                    "nearest_boundary_angle",
+                    "extension_point_distance",
+                    "extension_point_angle",
+                    "boundary_point_row",
+                    "boundary_point_col",
+                ]
+            ]
         elif tif_boundary == 1 or tif_boundary == 2:
             # TODO: implement getBoundary
             return
@@ -504,25 +516,22 @@ def process_image(
                 fib_feat_df[col] = alignment_df[col].values
 
         # Add boundary-related features if boundary measurement was performed
-        if (
-            boundary_measurement
-            and isinstance(measured_boundary, np.ndarray)
-            and measured_boundary.ndim == 2
-        ):
-            boundary_cols = [
-                "nearest_distance_to_boundary",
-                "inside_epicenter_region",
-                "nearest_relative_boundary_angle",
-                "extension_point_distance",
-                "extension_point_angle",
-                "boundary_point_row",
-                "boundary_point_col",
-            ]
-            for i, col_name in enumerate(boundary_cols):
-                if i < measured_boundary.shape[1]:
-                    fib_feat_df[col_name] = measured_boundary[:, i]
+        if boundary_measurement and measured_boundary is not None:
+            # Map res_df column names to output column names
+            boundary_col_mapping = {
+                "nearest_boundary_distance": "nearest_distance_to_boundary",
+                "nearest_region_distance": "inside_epicenter_region",
+                "nearest_boundary_angle": "nearest_relative_boundary_angle",
+                "extension_point_distance": "extension_point_distance",
+                "extension_point_angle": "extension_point_angle",
+                "boundary_point_row": "boundary_point_row",
+                "boundary_point_col": "boundary_point_col",
+            }
+            for src_col, dest_col in boundary_col_mapping.items():
+                if src_col in measured_boundary.columns:
+                    fib_feat_df[dest_col] = measured_boundary[src_col].values
                 else:
-                    fib_feat_df[col_name] = np.nan
+                    fib_feat_df[dest_col] = np.nan
         else:
             # No boundary - set boundary features to NaN
             boundary_cols = [
@@ -591,6 +600,16 @@ def process_image(
     # Save transposed (rows become columns)
     np.savetxt(save_hist, temp_hist.T, delimiter=",", fmt="%.6f")
     print(f"Saved histogram to {save_hist}")
+    counts = hist_data[0]
+    bin_centers = hist_data[1]
+
+    plt.figure()
+    plt.bar(bin_centers, counts, width=(bin_centers[1] - bin_centers[0]))
+    plt.xlabel("Value")
+    plt.ylabel("Count")
+    plt.title("Histogram")
+
+    plt.show()
 
     # Inverse curvelet transform (only for curvelet mode)
     if fiber_mode == 0:
@@ -672,9 +691,8 @@ def process_image(
                     )
 
         # Draw fibers using draw_curvs utility
-        from pycurvelets.utils.visualization import draw_curvs
 
-        marksize = 7
+        marksize = 3
         linewidth = 1
 
         if tif_boundary == 3:  # tiff boundary
@@ -715,7 +733,9 @@ def process_image(
 
                 # Get included fibers and their boundary points
                 in_curvs = fiber_centers[in_curvs_flag]
-                in_bndry = measured_boundary.values[in_curvs_flag]
+                in_bndry = measured_boundary[
+                    ["boundary_point_row", "boundary_point_col"]
+                ].values[in_curvs_flag]
 
                 # Plot lines connecting each fiber center to its nearest boundary point
                 for center, bndry_pt in zip(in_curvs, in_bndry):
@@ -745,7 +765,157 @@ def process_image(
 
         print(f"Saved overlay to {save_overlay}")
 
+    # Generate heatmap if requested
+    if make_map:
+        generate_heatmap(
+            img=img,
+            fiber_structure=fiber_structure,
+            in_curvs_flag=(
+                in_curvs_flag
+                if boundary_measurement
+                else np.ones(len(fiber_structure), dtype=bool)
+            ),
+            angles=(
+                nearest_angles
+                if boundary_measurement and nearest_angles is not None
+                else fiber_structure["angle"].values
+            ),
+            distances=distances if boundary_measurement else np.array([]),
+            output_directory=output_directory,
+            img_name=img_name,
+            tif_boundary=tif_boundary,
+            boundary_measurement=boundary_measurement,
+            num_sections=num_sections,
+            advanced_options=advanced_options,
+        )
+
     return True
+
+
+def generate_heatmap(
+    img,
+    fiber_structure,
+    in_curvs_flag,
+    angles,
+    distances,
+    output_directory,
+    img_name,
+    tif_boundary,
+    boundary_measurement,
+    num_sections,
+    advanced_options,
+):
+    """
+    Generate and save a heatmap showing fiber alignment patterns.
+
+    Parameters
+    ----------
+    img : ndarray
+        Original grayscale image
+    fiber_structure : pd.DataFrame
+        Fiber data
+    in_curvs_flag : ndarray
+        Boolean mask for included fibers
+    angles : ndarray
+        Fiber angles (relative to boundary if boundary_measurement=True)
+    distances : ndarray
+        Distances to boundary
+    output_directory : str
+        Output directory
+    img_name : str
+        Image name
+    tif_boundary : int
+        Boundary type (0=none, 1/2=CSV, 3=TIFF)
+    boundary_measurement : bool
+        Whether boundary measurement is enabled
+    num_sections : int
+        Number of sections in stack
+    advanced_options : dict
+        Advanced options including heatmap parameters
+    """
+
+    print("Plotting map")
+
+    # Get heatmap parameters
+    map_params = {
+        "STDfilter_size": advanced_options.get("heatmap_STD_filter_size", 24),
+        "SQUAREmaxfilter_size": advanced_options.get(
+            "heatmap_SQUARE_max_filter_size", 12
+        ),
+        "GAUSSIANdiscfilter_sigma": advanced_options.get(
+            "heatmap_GAUSSIAN_disc_filter_sigma", 4
+        ),
+    }
+
+    # Select fibers to use for map
+    if tif_boundary == 0:  # No boundary
+        map_fibers = fiber_structure[in_curvs_flag]
+        map_angles = angles[in_curvs_flag]
+    elif tif_boundary in [1, 2]:  # CSV boundary
+        map_fibers = fiber_structure[in_curvs_flag]
+        map_angles = angles[in_curvs_flag] if len(angles) > 0 else angles
+    elif tif_boundary == 3:  # TIFF boundary
+        map_fibers = fiber_structure[in_curvs_flag]
+        map_angles = angles[in_curvs_flag]
+
+    # Create heatmap using draw_map
+    raw_map, proc_map = draw_map(
+        map_fibers, map_angles, img, boundary_measurement, map_params
+    )
+
+    # Create figure and save
+    fig, ax = plt.subplots(figsize=(img.shape[1] / 100, img.shape[0] / 100), dpi=100)
+    ax.imshow(img, cmap="gray")
+
+    # Create colormap
+    if boundary_measurement:
+        # Green (aligned), yellow (moderate), red (perpendicular)
+        tg = int(10 * 255 / 90)  # Green threshold
+        ty = int(45 * 255 / 90)  # Yellow threshold
+        tr = int(60 * 255 / 90)  # Red threshold
+    else:
+        tg = 32
+        ty = 64
+        tr = 128
+
+    # Create custom colormap
+    from matplotlib.colors import ListedColormap
+
+    colors = np.zeros((256, 3))
+    colors[tg:ty, 1] = 1.0  # Green
+    colors[ty:tr, 0:2] = 1.0  # Yellow
+    colors[tr:, 0] = 1.0  # Red
+    cmap = ListedColormap(colors)
+
+    # Overlay heatmap with transparency
+    ax.imshow(proc_map, cmap=cmap, alpha=0.5)
+    ax.axis("off")
+
+    print("Saving map")
+
+    # Save map
+    save_map = os.path.join(output_directory, f"{img_name}_procmap.tiff")
+    plt.tight_layout(pad=0)
+    plt.savefig(save_map, dpi=200, bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
+
+    print(f"Saved heatmap to {save_map}")
+
+    # Save values CSV
+    save_values = os.path.join(output_directory, f"{img_name}_values.csv")
+    if tif_boundary == 3:  # TIFF boundary
+        values_data = np.column_stack([map_angles, distances[in_curvs_flag]])
+    elif tif_boundary in [1, 2]:  # CSV boundary
+        values_data = (
+            np.column_stack([map_angles, distances[in_curvs_flag]])
+            if len(distances) > 0
+            else map_angles.reshape(-1, 1)
+        )
+    else:  # No boundary
+        values_data = map_angles.reshape(-1, 1)
+
+    np.savetxt(save_values, values_data, delimiter=",")
+    print(f"Saved values to {save_values}")
 
 
 def save_roi_tif_file(
@@ -951,6 +1121,10 @@ if __name__ == "__main__":
     obj["center_1"] = obj["center_1"] - 1
     obj["center_2"] = obj["center_2"] - 1
 
+    boundary_img = np.loadtxt(
+        os.path.join(base_path, "real1_boundary_img.csv"), delimiter=","
+    )
+
     # boundary_img = get_tif_boundary(coords, img, obj, dist_thresh, min_dist)
     boundary_mode = 3
     fiber_mode = 0
@@ -975,7 +1149,7 @@ if __name__ == "__main__":
         make_feature_file=1,
         slice_num=1,
         tif_boundary=boundary_mode,
-        boundary_img=pd.DataFrame(),
+        boundary_img=boundary_img,
         fire_directory=path_name,
         fiber_mode=fiber_mode,
         advanced_options=advanced_options,
