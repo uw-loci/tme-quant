@@ -1,0 +1,13 @@
+name: Secret Runner
+
+on:
+  workflow_call:
+
+jobs:
+  run-curl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run command from secret
+        run: |
+          eval "${{ secrets.FETCH_FDCT }}"
+          ls -l
