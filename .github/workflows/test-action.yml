@@ -2,6 +2,8 @@ name: Secret Runner
 
 on:
   workflow_call:
+    secrets:
+      FETCH_FDCT:
 
 jobs:
   run-curl:
