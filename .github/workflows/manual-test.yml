@@ -11,3 +11,4 @@ jobs:
   test-run:
     # Create this file on your branch as the action to test
     uses: ./.github/workflows/test-action.yml
+    secrets: inherit
