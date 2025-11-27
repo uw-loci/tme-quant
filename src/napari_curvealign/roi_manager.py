@@ -15,7 +15,7 @@ import struct
 import zipfile
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Optional, Tuple, Union
+from typing import List, Dict, Optional, Tuple, Union, Iterable, Sequence
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from enum import Enum
@@ -31,9 +31,12 @@ except ImportError:
 try:
     from skimage import io
     from skimage.measure import label, regionprops
+    from skimage.morphology import binary_dilation, disk
     HAS_SKIMAGE = True
 except ImportError:
     HAS_SKIMAGE = False
+    binary_dilation = None
+    disk = None
 
 try:
     import curvealign_py as curvealign
@@ -78,60 +81,79 @@ class ROI:
     boundary_mode: Optional[str] = None
     crop_mode: bool = True  # True: cropped ROI, False: mask-based
     metadata: Dict = field(default_factory=dict)
-    
+    annotation_type: str = "custom_annotation"
+    source_object_ids: List[int] = field(default_factory=list)
+
     def to_boundary(self, image_shape: Tuple[int, int]) -> Boundary:
         """Convert ROI to CurveAlign Boundary object."""
         if not HAS_CURVEALIGN:
             raise ImportError("curvealign_py is required")
-        
+
         # Create mask from ROI
         mask = self.to_mask(image_shape)
-        
+
         # Get boundary coordinates from mask
         from skimage import measure
         contours = measure.find_contours(mask, 0.5)
         if len(contours) > 0:
-            # Use largest contour
             contour = max(contours, key=len)
             # Convert to (row, col) format
             boundary_coords = np.array([[int(r), int(c)] for r, c in contour])
         else:
             boundary_coords = np.array([])
-        
+
         return Boundary(coords=boundary_coords)
-    
+
     def to_mask(self, image_shape: Tuple[int, int]) -> np.ndarray:
         """Convert ROI to binary mask."""
         mask = np.zeros(image_shape, dtype=bool)
-        
+
         if self.shape == ROIShape.RECTANGLE:
-            # Rectangle coordinates: [[x1, y1], [x2, y2]]
             x1, y1 = int(self.coordinates[0, 0]), int(self.coordinates[0, 1])
             x2, y2 = int(self.coordinates[1, 0]), int(self.coordinates[1, 1])
             x1, x2 = min(x1, x2), max(x1, x2)
             y1, y2 = min(y1, y2), max(y1, y2)
             mask[y1:y2, x1:x2] = True
         elif self.shape == ROIShape.ELLIPSE:
-            # Ellipse coordinates: two corners of bounding box
             from skimage.draw import ellipse
             x1, y1 = self.coordinates[0]
             x2, y2 = self.coordinates[1]
             cx, cy = self.center
-            
-            # skimage.draw.ellipse can choke on 0 radii. Clamp to ≥1
             r_row = max(1, int(abs(y2 - cy)))
             r_col = max(1, int(abs(x2 - cx)))
-            
             rr, cc = ellipse(int(cy), int(cx), r_row, r_col, shape=image_shape)
             mask[rr, cc] = True
         elif self.shape in (ROIShape.FREEHAND, ROIShape.POLYGON):
-            # Polygon coordinates: array of [x, y] points
             from skimage.draw import polygon
             coords = self.coordinates.astype(int)
             rr, cc = polygon(coords[:, 1], coords[:, 0], shape=image_shape)
             mask[rr, cc] = True
-        
+
         return mask
+
+
+@dataclass
+class AnnotationObject:
+    """Represents a detected object (cell/fiber) that can become an annotation."""
+    id: int
+    name: str
+    kind: str  # 'cell' or 'fiber'
+    boundary_rc: np.ndarray  # stored as (row, col) for napari compatibility
+    centroid_rc: Tuple[float, float]
+    orientation: Optional[float] = None
+    area: float = 0.0
+    metadata: Dict = field(default_factory=dict)
+
+    @property
+    def centroid_xy(self) -> Tuple[float, float]:
+        """Return centroid as (x, y)."""
+        return (self.centroid_rc[1], self.centroid_rc[0])
+
+    def to_roi_coordinates(self) -> np.ndarray:
+        """Convert stored (row, col) boundary to ROI (x, y) coordinates."""
+        if self.boundary_rc.size == 0:
+            return np.empty((0, 2))
+        return np.column_stack((self.boundary_rc[:, 1], self.boundary_rc[:, 0]))
 
 
 class ROIManager:
@@ -156,10 +178,18 @@ class ROIManager:
         self.roi_counter = 0
         self.shapes_layer: Optional[Shapes] = None
         self.current_image_shape: Optional[Tuple[int, int]] = None
+        self.objects: Dict[str, List[AnnotationObject]] = {"cell": [], "fiber": []}
+        self.object_lookup: Dict[int, AnnotationObject] = {}
+        self._object_id_counter = 0
+        self.object_layer: Optional[Shapes] = None
+        self._active_object_filter: Sequence[str] = ("cell", "fiber")
+        self.detection_distance: int = 25
         
     def set_viewer(self, viewer: 'napari.viewer.Viewer'):
         """Set the napari viewer."""
         self.viewer = viewer
+        self.shapes_layer = None
+        self.object_layer = None
         
     def set_image_shape(self, shape: Tuple[int, int]):
         """Set current image shape for ROI operations."""
@@ -185,12 +215,96 @@ class ROIManager:
             edge_width=2
         )
         return self.shapes_layer
+
+    @staticmethod
+    def _rc_to_xy(coords: np.ndarray) -> np.ndarray:
+        """Convert (row, col) coordinates to (x, y) order."""
+        coords = np.asarray(coords, dtype=float)
+        if coords.ndim != 2 or coords.shape[1] != 2:
+            raise ValueError("Coordinates must be N x 2 array")
+        return np.column_stack((coords[:, 1], coords[:, 0]))
+
+    @staticmethod
+    def _xy_to_rc(coords: np.ndarray) -> np.ndarray:
+        """Convert (x, y) coordinates to (row, col) order."""
+        coords = np.asarray(coords, dtype=float)
+        if coords.ndim != 2 or coords.shape[1] != 2:
+            raise ValueError("Coordinates must be N x 2 array")
+        return np.column_stack((coords[:, 1], coords[:, 0]))
+
+    def _shape_data_to_roi(self, data: np.ndarray, shape_type: str) -> Tuple[np.ndarray, ROIShape]:
+        """Convert napari shape data into ROI coordinates/shape."""
+        coords_rc = np.asarray(data, dtype=float)
+        if coords_rc.ndim != 2 or coords_rc.shape[1] != 2:
+            raise ValueError("Shape data must be N x 2 array")
+
+        if shape_type == "rectangle":
+            rows = coords_rc[:, 0]
+            cols = coords_rc[:, 1]
+            y1, y2 = rows.min(), rows.max()
+            x1, x2 = cols.min(), cols.max()
+            coords_xy = np.array([[x1, y1], [x2, y2]], dtype=float)
+            return coords_xy, ROIShape.RECTANGLE
+        if shape_type == "ellipse":
+            rows = coords_rc[:, 0]
+            cols = coords_rc[:, 1]
+            y1, y2 = rows.min(), rows.max()
+            x1, x2 = cols.min(), cols.max()
+            coords_xy = np.array([[x1, y1], [x2, y2]], dtype=float)
+            return coords_xy, ROIShape.ELLIPSE
+        if shape_type == "polygon":
+            return self._rc_to_xy(coords_rc), ROIShape.POLYGON
+        if shape_type == "path":
+            return self._rc_to_xy(coords_rc), ROIShape.FREEHAND
+
+        raise ValueError(f"Unsupported shape_type '{shape_type}'")
+
+    def add_rois_from_shapes(
+        self,
+        indices: Optional[Iterable[int]] = None,
+        *,
+        annotation_type: str = "custom_annotation"
+    ) -> List[ROI]:
+        """Convert selected napari shapes into managed ROIs."""
+        if self.shapes_layer is None:
+            self.create_shapes_layer()
+
+        if self.shapes_layer is None or len(self.shapes_layer.data) == 0:
+            return []
+
+        if indices is None:
+            if self.shapes_layer.selected_data:
+                indices = list(self.shapes_layer.selected_data)
+            else:
+                indices = [len(self.shapes_layer.data) - 1]
+        else:
+            indices = list(indices)
+
+        new_rois: List[ROI] = []
+        for idx in indices:
+            if idx < 0 or idx >= len(self.shapes_layer.data):
+                continue
+            try:
+                coords, roi_shape = self._shape_data_to_roi(
+                    self.shapes_layer.data[idx],
+                    self.shapes_layer.shape_type[idx]
+                )
+            except ValueError as exc:
+                print(f"Skipping shape {idx}: {exc}")
+                continue
+            roi = self.add_roi(coords, roi_shape, annotation_type=annotation_type)
+            new_rois.append(roi)
+
+        return new_rois
     
     def add_roi(
         self,
         coordinates: np.ndarray,
         shape: ROIShape,
-        name: Optional[str] = None
+        name: Optional[str] = None,
+        *,
+        annotation_type: str = "custom_annotation",
+        metadata: Optional[Dict] = None
     ) -> ROI:
         """
         Add a new ROI.
@@ -232,13 +346,18 @@ class ROIManager:
             else:
                 area = 0.0
         
+        roi_metadata = metadata.copy() if metadata else {}
+        roi_metadata.setdefault("annotation_type", annotation_type)
+
         roi = ROI(
             id=self.roi_counter,
             name=name,
             shape=shape,
             coordinates=coordinates,
             center=center,
-            area=area
+            area=area,
+            metadata=roi_metadata,
+            annotation_type=annotation_type
         )
         
         self.rois.append(roi)
@@ -311,7 +430,20 @@ class ROIManager:
         if name is None:
             name = f"Combined_{roi_ids[0]}"
         
-        combined_roi = self.add_roi(coordinates, ROIShape.POLYGON, name)
+        combined_roi = self.add_roi(
+            coordinates,
+            ROIShape.POLYGON,
+            name,
+            annotation_type="combined",
+            metadata={"component_roi_ids": roi_ids}
+        )
+        combined_sources: List[int] = []
+        for rid in roi_ids:
+            existing = self.get_roi(rid)
+            if existing and existing.source_object_ids:
+                combined_sources.extend(existing.source_object_ids)
+        if combined_sources:
+            combined_roi.source_object_ids = combined_sources
         
         # Delete original ROIs
         for roi_id in sorted(roi_ids, reverse=True):
@@ -324,6 +456,237 @@ class ROIManager:
         for roi in self.rois:
             if roi.id == roi_id:
                 return roi
+        return None
+
+    def highlight_roi(self, roi_id: int):
+        """Highlight ROI inside napari."""
+        if self.shapes_layer is None:
+            return
+        selection = set()
+        for idx, roi in enumerate(self.rois):
+            if roi.id == roi_id:
+                selection.add(idx)
+                break
+        self.shapes_layer.selected_data = selection
+
+    def _next_object_id(self) -> int:
+        """Return the next unique object identifier."""
+        self._object_id_counter += 1
+        return self._object_id_counter
+
+    def _register_object(self, obj: AnnotationObject):
+        """Register an object and update lookup tables."""
+        if obj.kind not in self.objects:
+            self.objects[obj.kind] = []
+        self.objects[obj.kind].append(obj)
+        self.object_lookup[obj.id] = obj
+
+    def clear_objects(self, kinds: Optional[Iterable[str]] = None):
+        """Clear tracked objects (cells/fibers)."""
+        if kinds is None:
+            kinds = list(self.objects.keys())
+        kinds = list(kinds)
+        for kind in kinds:
+            for obj in self.objects.get(kind, []):
+                self.object_lookup.pop(obj.id, None)
+            self.objects[kind] = []
+        self._update_object_layer()
+
+    def _iter_objects(self, kinds: Optional[Sequence[str]] = None) -> Iterable[AnnotationObject]:
+        """Iterate over objects filtered by kind."""
+        if kinds is None:
+            kinds = self._active_object_filter or ("cell", "fiber")
+        for kind in kinds:
+            for obj in self.objects.get(kind, []):
+                yield obj
+
+    def set_object_display_filter(self, kinds: Optional[Sequence[str]]):
+        """Set which object types should be visible."""
+        if kinds is None or len(kinds) == 0:
+            self._active_object_filter = tuple()
+        else:
+            self._active_object_filter = tuple(kinds)
+        self._update_object_layer()
+
+    def _ensure_object_layer(self) -> Optional[Shapes]:
+        """Create or retrieve the napari layer used for object visualization."""
+        if self.viewer is None:
+            return None
+
+        if self.object_layer and self.object_layer in self.viewer.layers:
+            return self.object_layer
+
+        for layer in self.viewer.layers:
+            if isinstance(layer, Shapes) and layer.name == "Objects":
+                self.object_layer = layer
+                self.object_layer.interactive = False
+                self.object_layer.visible = False
+                return self.object_layer
+
+        self.object_layer = self.viewer.add_shapes(
+            name="Objects",
+            shape_type="path",
+            edge_color="yellow",
+            face_color="transparent",
+            edge_width=1
+        )
+        self.object_layer.interactive = False
+        self.object_layer.visible = False
+        return self.object_layer
+
+    def _update_object_layer(self, highlight_ids: Optional[Iterable[int]] = None):
+        """Refresh the object overlay layer."""
+        layer = self._ensure_object_layer()
+        if layer is None:
+            return
+
+        kinds = self._active_object_filter or ("cell", "fiber")
+        displayed_objects = list(self._iter_objects(kinds))
+        if not displayed_objects:
+            layer.data = []
+            layer.visible = False
+            layer.selected_data = set()
+            return
+
+        data = [obj.boundary_rc for obj in displayed_objects]
+        edge_color = ['#ffd200' if obj.kind == 'cell' else '#ff4fe1' for obj in displayed_objects]
+        layer.data = data
+        layer.edge_color = edge_color
+        layer.face_color = ['transparent'] * len(displayed_objects)
+        layer.mode = 'pan_zoom'
+        layer.visible = True
+
+        if highlight_ids:
+            highlight_ids = set(highlight_ids)
+            selected = {idx for idx, obj in enumerate(displayed_objects) if obj.id in highlight_ids}
+            layer.selected_data = selected
+        else:
+            layer.selected_data = set()
+
+    def highlight_objects(self, object_ids: Iterable[int]):
+        """Highlight specific objects in the viewer."""
+        self._update_object_layer(highlight_ids=object_ids)
+
+    def get_objects(self, kinds: Optional[Sequence[str]] = None) -> List[AnnotationObject]:
+        """Return objects filtered by type."""
+        return list(self._iter_objects(kinds))
+
+    def get_object(self, object_id: int) -> Optional[AnnotationObject]:
+        """Return object by identifier."""
+        return self.object_lookup.get(object_id)
+
+    def register_cell_objects(
+        self,
+        roi_data_list: List[Dict],
+        *,
+        replace_existing: bool = True
+    ):
+        """Register cell objects generated from segmentation data."""
+        if replace_existing:
+            self.clear_objects(["cell"])
+
+        for entry in roi_data_list:
+            coords = np.asarray(entry.get("coordinates", []), dtype=float)
+            if coords.size == 0:
+                continue
+            # masks_to_roi_data stores coordinates as (row, col)
+            boundary_rc = coords
+            centroid = entry.get("centroid", (0.0, 0.0))
+            obj = AnnotationObject(
+                id=self._next_object_id(),
+                name=entry.get("name", f"cell_{len(self.objects['cell']) + 1}"),
+                kind="cell",
+                boundary_rc=boundary_rc,
+                centroid_rc=(centroid[0], centroid[1]),
+                area=float(entry.get("area", 0.0)),
+                metadata={"bbox": entry.get("bbox")}
+            )
+            self._register_object(obj)
+
+        self._update_object_layer()
+
+    def register_fiber_objects(
+        self,
+        features: Union[pd.DataFrame, List[Dict]],
+        *,
+        replace_existing: bool = False,
+        default_length: float = 5.0
+    ):
+        """Register fiber objects from CurveAlign features."""
+        if features is None:
+            return
+        if replace_existing:
+            self.clear_objects(["fiber"])
+
+        if isinstance(features, pd.DataFrame):
+            records = features.to_dict(orient="records")
+        else:
+            records = features
+
+        for entry in records:
+            if not isinstance(entry, dict):
+                if hasattr(entry, "_asdict"):
+                    entry = entry._asdict()
+                else:
+                    continue
+            center = self._extract_center(entry)
+            if center is None:
+                continue
+            angle = self._extract_orientation(entry)
+            if angle is None:
+                continue
+
+            boundary_rc = self._fiber_boundary_from_feature(
+                center,
+                angle,
+                length=entry.get("fiber_length", default_length)
+            )
+            obj = AnnotationObject(
+                id=self._next_object_id(),
+                name=entry.get("name", f"fiber_{len(self.objects['fiber']) + 1}"),
+                kind="fiber",
+                boundary_rc=boundary_rc,
+                centroid_rc=(center[1], center[0]),
+                orientation=angle,
+                area=float(entry.get("area", 0.0)),
+                metadata={"source": entry}
+            )
+            self._register_object(obj)
+
+        self._update_object_layer()
+
+    @staticmethod
+    def _fiber_boundary_from_feature(center_xy: Tuple[float, float], angle_deg: float, length: float = 5.0) -> np.ndarray:
+        """Create a short line segment representing a fiber."""
+        angle_rad = np.deg2rad(angle_deg)
+        dx = np.cos(angle_rad) * length * 0.5
+        dy = np.sin(angle_rad) * length * 0.5
+        x, y = center_xy
+        # Return as (row, col)
+        return np.array(
+            [
+                [y - dy, x - dx],
+                [y + dy, x + dx],
+            ],
+            dtype=float,
+        )
+
+    @staticmethod
+    def _extract_center(entry: Dict) -> Optional[Tuple[float, float]]:
+        """Extract center coordinate (x, y) from a feature entry."""
+        for keys in (("x", "y"), ("col", "row"), ("center_x", "center_y"), ("xc", "yc")):
+            if keys[0] in entry and keys[1] in entry:
+                return (float(entry[keys[0]]), float(entry[keys[1]]))
+        if "center" in entry and len(entry["center"]) == 2:
+            return (float(entry["center"][0]), float(entry["center"][1]))
+        return None
+
+    @staticmethod
+    def _extract_orientation(entry: Dict) -> Optional[float]:
+        """Extract orientation in degrees from a feature entry."""
+        for key in ("orientation", "angle", "theta"):
+            if key in entry:
+                return float(entry[key])
         return None
     
     def analyze_roi(
@@ -407,8 +770,88 @@ class ROIManager:
             "features": result.features
         }
         roi.analysis_method = method
+
+        # Attempt to expose curvelet features as fiber objects for annotation workflow
+        try:
+            if hasattr(result, "features") and result.features is not None:
+                self.register_fiber_objects(result.features, replace_existing=False)
+        except Exception as exc:
+            print(f"Fiber registration skipped: {exc}")
         
         return roi.analysis_result
+
+    def detect_objects_in_roi(
+        self,
+        roi_id: int,
+        object_types: Optional[Sequence[str]] = None,
+        distance: Optional[int] = None
+    ) -> Dict[str, List[AnnotationObject]]:
+        """
+        Detect registered objects contained within a given ROI.
+        
+        Parameters
+        ----------
+        roi_id : int
+            Target ROI identifier.
+        object_types : Sequence[str], optional
+            Object kinds to inspect (defaults to current filter).
+        distance : int, optional
+            Additional dilation distance (pixels) around ROI boundary.
+        """
+        roi = self.get_roi(roi_id)
+        if roi is None:
+            raise ValueError(f"ROI {roi_id} not found")
+        if self.current_image_shape is None:
+            raise ValueError("Image shape is not set; call set_image_shape first")
+        
+        mask = roi.to_mask(self.current_image_shape)
+        dilation_pixels = distance if distance is not None else self.detection_distance
+        if dilation_pixels and dilation_pixels > 0 and HAS_SKIMAGE and binary_dilation is not None:
+            mask = binary_dilation(mask, disk(int(dilation_pixels)))
+        
+        kinds = object_types or self._active_object_filter or ("cell", "fiber")
+        result: Dict[str, List[AnnotationObject]] = {kind: [] for kind in kinds}
+        
+        for kind in kinds:
+            for obj in self.objects.get(kind, []):
+                row = int(round(obj.centroid_rc[0]))
+                col = int(round(obj.centroid_rc[1]))
+                if row < 0 or col < 0 or row >= mask.shape[0] or col >= mask.shape[1]:
+                    continue
+                if mask[row, col]:
+                    result[kind].append(obj)
+        
+        highlight_ids = [obj.id for objs in result.values() for obj in objs]
+        if highlight_ids:
+            self.highlight_objects(highlight_ids)
+        else:
+            self.highlight_objects([])
+        return result
+
+    def add_annotation_from_object(
+        self,
+        object_id: int,
+        *,
+        annotation_type: Optional[str] = None
+    ) -> Optional[ROI]:
+        """Create an annotation ROI from an existing object."""
+        obj = self.get_object(object_id)
+        if obj is None:
+            return None
+
+        coords = obj.to_roi_coordinates()
+        if coords.size == 0:
+            return None
+
+        roi = self.add_roi(
+            coords,
+            ROIShape.POLYGON,
+            name=f"{obj.kind}_{object_id}",
+            annotation_type=annotation_type or f"{obj.kind}_computed",
+            metadata={"source_object_ids": [object_id], "source_kind": obj.kind}
+        )
+        roi.source_object_ids = [object_id]
+        return roi
     
     def get_analysis_table(self) -> pd.DataFrame:
         """
@@ -435,7 +878,8 @@ class ROIManager:
                 "Shape": roi.shape.value,
                 "Xc": roi.center[0],
                 "Yc": roi.center[1],
-                "Z": roi.metadata.get("z_slice", 0)
+                "Z": roi.metadata.get("z_slice", 0),
+                "Annotation": roi.annotation_type
             })
         
         return pd.DataFrame(rows)
@@ -464,7 +908,9 @@ class ROIManager:
                     "analysis_method": roi.analysis_method.value if roi.analysis_method else None,
                     "boundary_mode": roi.boundary_mode,
                     "crop_mode": roi.crop_mode,
-                    "metadata": roi.metadata
+                    "metadata": roi.metadata,
+                    "annotation_type": roi.annotation_type,
+                    "source_object_ids": roi.source_object_ids
                 }
                 rois_data.append(roi_dict)
         
@@ -490,8 +936,14 @@ class ROIManager:
         for roi_data in data.get("rois", []):
             coords = np.asarray(roi_data["coordinates"], dtype=float)
             shape = ROIShape(roi_data["shape"])
-            
-            roi = self.add_roi(coords, shape, roi_data["name"])
+            annotation_type = roi_data.get("annotation_type") or roi_data.get("metadata", {}).get("annotation_type", "custom_annotation")
+            roi = self.add_roi(
+                coords,
+                shape,
+                roi_data["name"],
+                annotation_type=annotation_type,
+                metadata=roi_data.get("metadata")
+            )
             roi.center = tuple(roi_data["center"])
             roi.area = roi_data["area"]
             roi.analysis_result = roi_data.get("analysis_result")
@@ -499,7 +951,10 @@ class ROIManager:
                 roi.analysis_method = ROIAnalysisMethod(roi_data["analysis_method"])
             roi.boundary_mode = roi_data.get("boundary_mode")
             roi.crop_mode = roi_data.get("crop_mode", True)
-            roi.metadata = roi_data.get("metadata", {})
+            roi.metadata = roi_data.get("metadata", {}) or {}
+            roi.annotation_type = annotation_type
+            roi.metadata.setdefault("annotation_type", annotation_type)
+            roi.source_object_ids = roi_data.get("source_object_ids", roi.metadata.get("source_object_ids", []))
             loaded_rois.append(roi)
         
         return loaded_rois
@@ -943,29 +1398,33 @@ class ROIManager:
         for roi in self.rois:
             if roi.shape == ROIShape.RECTANGLE:
                 # Use add_rectangles for rectangles
+                coords_rc = self._xy_to_rc(roi.coordinates)
                 self.shapes_layer.add_rectangles(
-                    [roi.coordinates],
+                    [coords_rc],
                     edge_color="cyan",
                     face_color="transparent"
                 )
             elif roi.shape == ROIShape.ELLIPSE:
                 # Use add_ellipses for ellipses
+                coords_rc = self._xy_to_rc(roi.coordinates)
                 self.shapes_layer.add_ellipses(
-                    [roi.coordinates],
+                    [coords_rc],
                     edge_color="cyan",
                     face_color="transparent"
                 )
             elif roi.shape == ROIShape.POLYGON:
                 # Use add_polygons for filled polygons
+                coords_rc = self._xy_to_rc(roi.coordinates)
                 self.shapes_layer.add_polygons(
-                    [roi.coordinates],
+                    [coords_rc],
                     edge_color="cyan",
                     face_color="transparent"
                 )
             elif roi.shape == ROIShape.FREEHAND:
                 # Use add_paths for unfilled freehand
+                coords_rc = self._xy_to_rc(roi.coordinates)
                 self.shapes_layer.add_paths(
-                    [roi.coordinates],
+                    [coords_rc],
                     edge_color="cyan",
                     edge_width=2
                 )

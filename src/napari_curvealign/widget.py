@@ -1,6 +1,6 @@
 import os
 from enum import Enum
-from typing import List, Dict, TYPE_CHECKING, Optional
+from typing import List, Dict, TYPE_CHECKING, Optional, Sequence
 
 import napari
 import numpy as np
@@ -170,6 +170,8 @@ class CurveAlignWidget(QWidget):
         
         # Initialize ROI Manager
         self.roi_manager = ROIManager(viewer=self._viewer)
+        if self._viewer is not None:
+            self.roi_manager.set_viewer(self._viewer)
         
         # Initialize Fiji bridge
         self.fiji_bridge = get_fiji_bridge()
@@ -1016,11 +1018,20 @@ class CurveAlignWidget(QWidget):
             
             # Add to ROI Manager
             for roi_data in roi_data_list:
+                coords_rc = np.asarray(roi_data['coordinates'], dtype=float)
+                coords_xy = np.column_stack((coords_rc[:, 1], coords_rc[:, 0]))
                 self.roi_manager.add_roi(
-                    coordinates=roi_data['coordinates'],
+                    coordinates=coords_xy,
                     shape=ROIShape.POLYGON,
-                    name=roi_data['name']
+                    name=roi_data['name'],
+                    annotation_type="tumor",
+                    metadata={"source": "segmentation"}
                 )
+
+            # Register cell objects for annotation workflow
+            self.roi_manager.set_image_shape(self._last_segmentation.shape)
+            self.roi_manager.register_cell_objects(roi_data_list)
+            self._update_object_list()
             
             # Update ROI list
             self._update_roi_list()
@@ -1035,7 +1046,8 @@ class CurveAlignWidget(QWidget):
     
     def _setup_roi_tab(self):
         """Setup ROI Manager tab."""
-        layout = QVBoxLayout()
+        layout = QHBoxLayout()
+        left_panel = QVBoxLayout()
         
         # ROI creation buttons
         create_group = QGroupBox("Create ROI")
@@ -1049,7 +1061,7 @@ class CurveAlignWidget(QWidget):
         create_layout.addWidget(self.create_polygon_btn)
         create_layout.addWidget(self.create_freehand_btn)
         create_group.setLayout(create_layout)
-        layout.addWidget(create_group)
+        left_panel.addWidget(create_group)
         
         # ROI management buttons
         manage_group = QGroupBox("Manage ROIs")
@@ -1065,7 +1077,7 @@ class CurveAlignWidget(QWidget):
         manage_layout.addWidget(self.rename_roi_btn)
         manage_layout.addWidget(self.combine_rois_btn)
         manage_group.setLayout(manage_layout)
-        layout.addWidget(manage_group)
+        left_panel.addWidget(manage_group)
         
         # ROI analysis
         analysis_group = QGroupBox("ROI Analysis")
@@ -1077,13 +1089,26 @@ class CurveAlignWidget(QWidget):
         analysis_layout.addWidget(self.analyze_all_rois_btn)
         analysis_layout.addWidget(self.roi_table_btn)
         analysis_group.setLayout(analysis_layout)
-        layout.addWidget(analysis_group)
+        left_panel.addWidget(analysis_group)
         
         # ROI list
-        layout.addWidget(QLabel("ROIs:"))
+        left_panel.addWidget(QLabel("ROIs:"))
         self.roi_list = QListWidget()
         self.roi_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        layout.addWidget(self.roi_list)
+        left_panel.addWidget(self.roi_list)
+        left_panel.addStretch()
+        
+        # Annotations / Objects manager
+        annotation_group = self._build_annotation_group()
+        objects_group = self._build_object_group()
+        right_panel = QVBoxLayout()
+        right_panel.addWidget(annotation_group)
+        right_panel.addWidget(objects_group)
+        right_panel.addStretch()
+        
+        layout.addLayout(left_panel, 1)
+        layout.addLayout(right_panel, 1)
+        self.roi_tab.setLayout(layout)
         
         # Connect signals
         self.create_rect_btn.clicked.connect(lambda: self._create_roi(ROIShape.RECTANGLE))
@@ -1099,18 +1124,288 @@ class CurveAlignWidget(QWidget):
         self.analyze_all_rois_btn.clicked.connect(self._analyze_all_rois)
         self.roi_table_btn.clicked.connect(self._show_roi_table)
         
-        layout.addStretch()
-        self.roi_tab.setLayout(layout)
+    def _build_annotation_group(self) -> QGroupBox:
+        group = QGroupBox("Annotations")
+        layout = QVBoxLayout()
+        
+        shape_row = QHBoxLayout()
+        shape_row.addWidget(QLabel("Shape"))
+        self.annotation_shape_combo = QComboBox()
+        self.annotation_shape_combo.addItem("Rectangle", ROIShape.RECTANGLE)
+        self.annotation_shape_combo.addItem("Ellipse", ROIShape.ELLIPSE)
+        self.annotation_shape_combo.addItem("Polygon", ROIShape.POLYGON)
+        self.annotation_shape_combo.addItem("Freehand", ROIShape.FREEHAND)
+        shape_row.addWidget(self.annotation_shape_combo)
+        
+        shape_row.addWidget(QLabel("Type"))
+        self.annotation_type_combo = QComboBox()
+        self.annotation_type_combo.addItem("Tumor", "tumor")
+        self.annotation_type_combo.addItem("Custom", "custom_annotation")
+        self.annotation_type_combo.addItem("Cell (computed)", "cell_computed")
+        self.annotation_type_combo.addItem("Fiber (computed)", "fiber_computed")
+        shape_row.addWidget(self.annotation_type_combo)
+        layout.addLayout(shape_row)
+        
+        button_row = QHBoxLayout()
+        self.draw_annotation_btn = QPushButton("Draw (d)")
+        self.draw_annotation_btn.setShortcut("D")
+        self.add_annotation_btn = QPushButton("Add (t)")
+        self.add_annotation_btn.setShortcut("T")
+        self.delete_annotation_btn = QPushButton("Delete (r)")
+        self.delete_annotation_btn.setShortcut("R")
+        button_row.addWidget(self.draw_annotation_btn)
+        button_row.addWidget(self.add_annotation_btn)
+        button_row.addWidget(self.delete_annotation_btn)
+        layout.addLayout(button_row)
+        
+        detect_row = QHBoxLayout()
+        self.detect_object_btn = QPushButton("Detect object")
+        detect_row.addWidget(self.detect_object_btn)
+        detect_row.addWidget(QLabel("Distance"))
+        self.detect_distance_spin = QSpinBox()
+        self.detect_distance_spin.setRange(0, 200)
+        self.detect_distance_spin.setValue(self.roi_manager.detection_distance)
+        detect_row.addWidget(self.detect_distance_spin)
+        layout.addLayout(detect_row)
+        
+        layout.addWidget(QLabel("Annotations"))
+        self.annotation_list = QListWidget()
+        self.annotation_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        layout.addWidget(self.annotation_list)
+        
+        group.setLayout(layout)
+        
+        # Connections
+        self.draw_annotation_btn.clicked.connect(self._draw_annotation)
+        self.add_annotation_btn.clicked.connect(self._add_annotation_from_shapes)
+        self.delete_annotation_btn.clicked.connect(self._delete_annotation)
+        self.detect_object_btn.clicked.connect(self._detect_objects_in_annotation)
+        self.annotation_list.itemSelectionChanged.connect(self._on_annotation_selected)
+        
+        return group
+
+    def _build_object_group(self) -> QGroupBox:
+        group = QGroupBox("Objects")
+        layout = QVBoxLayout()
+        
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Show"))
+        self.object_filter_combo = QComboBox()
+        self.object_filter_combo.addItems(["Cell", "Fiber", "Cell + Fiber", "All", "None"])
+        self.object_filter_combo.setCurrentText("Cell + Fiber")
+        filter_row.addWidget(self.object_filter_combo)
+        layout.addLayout(filter_row)
+        
+        self.set_annotation_btn = QPushButton("Set Annotation")
+        layout.addWidget(self.set_annotation_btn)
+        
+        layout.addWidget(QLabel("Objects"))
+        self.object_list = QListWidget()
+        self.object_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        layout.addWidget(self.object_list)
+        
+        group.setLayout(layout)
+        
+        self.object_filter_combo.currentIndexChanged.connect(self._on_object_filter_changed)
+        self.object_list.itemSelectionChanged.connect(self._on_object_selected)
+        self.set_annotation_btn.clicked.connect(self._set_objects_as_annotation)
+        self._update_object_list()
+        
+        return group
+
+    def _ensure_roi_viewer(self):
+        """Make sure ROI manager is connected to the active viewer."""
+        viewer = self.viewer
+        if viewer is None:
+            raise RuntimeError("Napari viewer is not available")
+        if self.roi_manager.viewer is not viewer:
+            self.roi_manager.set_viewer(viewer)
+        shape = self.current_image_shape
+        if shape and shape != self.roi_manager.current_image_shape:
+            self.roi_manager.set_image_shape(shape)
+        return viewer
+
+    def _draw_annotation(self):
+        """Activate drawing mode for the selected annotation shape."""
+        try:
+            self._ensure_roi_viewer()
+        except RuntimeError as exc:
+            print(f"Unable to draw annotation: {exc}")
+            return
+        try:
+            layer = self.roi_manager.create_shapes_layer()
+        except ValueError as exc:
+            print(f"Unable to draw annotation: {exc}")
+            return
+        
+        shape = self.annotation_shape_combo.currentData()
+        mode_map = {
+            ROIShape.RECTANGLE: 'add_rectangle',
+            ROIShape.ELLIPSE: 'add_ellipse',
+            ROIShape.POLYGON: 'add_polygon',
+            ROIShape.FREEHAND: 'add_path'
+        }
+        layer.mode = mode_map.get(shape, 'add_polygon')
+        if self.viewer:
+            self.viewer.layers.selection.active = layer
+
+    def _add_annotation_from_shapes(self):
+        """Convert selected shapes into managed annotations."""
+        try:
+            self._ensure_roi_viewer()
+        except RuntimeError as exc:
+            print(f"Unable to add annotation: {exc}")
+            return
+        annotation_type = self.annotation_type_combo.currentData()
+        new_rois = self.roi_manager.add_rois_from_shapes(annotation_type=annotation_type)
+        if not new_rois:
+            print("No shapes available to add as annotations.")
+            return
+        self._update_roi_list()
+        self._update_annotation_list()
+
+    def _delete_annotation(self):
+        """Delete selected annotations."""
+        items = self.annotation_list.selectedItems()
+        if not items:
+            return
+        for item in items:
+            roi_id = item.data(Qt.UserRole)
+            self.roi_manager.delete_roi(roi_id)
+        self._update_roi_list()
+        self._update_annotation_list()
+
+    def _detect_objects_in_annotation(self):
+        """Detect objects that fall within the selected annotation."""
+        roi_id = self._selected_annotation_id()
+        if roi_id is None:
+            print("Select an annotation before detecting objects.")
+            return
+        distance = self.detect_distance_spin.value()
+        types = self._object_filter_types()
+        if not types:
+            types = ["cell", "fiber"]
+        self.roi_manager.detection_distance = distance
+        try:
+            detected = self.roi_manager.detect_objects_in_roi(
+                roi_id,
+                object_types=types,
+                distance=distance
+            )
+        except ValueError as exc:
+            print(f"Object detection failed: {exc}")
+            return
+        object_ids = []
+        for objs in detected.values():
+            object_ids.extend(obj.id for obj in objs)
+        self._update_object_list(object_ids=object_ids)
+
+    def _set_objects_as_annotation(self):
+        """Convert selected objects to annotations."""
+        items = self.object_list.selectedItems()
+        if not items:
+            return
+        annotation_type = self.annotation_type_combo.currentData()
+        for item in items:
+            obj_id = item.data(Qt.UserRole)
+            self.roi_manager.add_annotation_from_object(obj_id, annotation_type=annotation_type)
+        self._update_roi_list()
+        self._update_annotation_list()
+
+    def _on_annotation_selected(self):
+        """Highlight annotation within napari when selected."""
+        roi_id = self._selected_annotation_id()
+        if roi_id is None:
+            return
+        self.roi_manager.highlight_roi(roi_id)
+
+    def _on_object_selected(self):
+        """Highlight selected objects."""
+        object_ids = [item.data(Qt.UserRole) for item in self.object_list.selectedItems()]
+        if object_ids:
+            self.roi_manager.highlight_objects(object_ids)
+
+    def _on_object_filter_changed(self):
+        """Update object visibility based on filter dropdown."""
+        types = self._object_filter_types()
+        if types:
+            self.roi_manager.set_object_display_filter(types)
+        else:
+            self.roi_manager.set_object_display_filter(())
+        self._update_object_list()
+
+    def _object_filter_types(self) -> List[str]:
+        """Map filter dropdown selection to object type list."""
+        mapping = {
+            "Cell": ["cell"],
+            "Fiber": ["fiber"],
+            "Cell + Fiber": ["cell", "fiber"],
+            "All": ["cell", "fiber"],
+            "None": []
+        }
+        return mapping.get(self.object_filter_combo.currentText(), ["cell", "fiber"])
+
+    def _selected_annotation_id(self) -> Optional[int]:
+        """Return currently selected annotation ROI id."""
+        items = self.annotation_list.selectedItems()
+        if not items:
+            return None
+        return items[0].data(Qt.UserRole)
+
+    def _update_annotation_list(self):
+        """Refresh annotation list widget."""
+        if not hasattr(self, "annotation_list"):
+            return
+        selected_id = self._selected_annotation_id()
+        self.annotation_list.clear()
+        for roi in self.roi_manager.rois:
+            label = f"{roi.id}: {roi.name} [{roi.annotation_type}]"
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, roi.id)
+            self.annotation_list.addItem(item)
+            if selected_id is not None and roi.id == selected_id:
+                item.setSelected(True)
+        if selected_id is not None:
+            self.roi_manager.highlight_roi(selected_id)
+
+    def _update_object_list(self, object_ids: Optional[Sequence[int]] = None):
+        """Refresh object list display."""
+        if not hasattr(self, "object_list"):
+            return
+        self.object_list.clear()
+        if object_ids:
+            objects = [self.roi_manager.get_object(obj_id) for obj_id in object_ids]
+            objects = [obj for obj in objects if obj]
+        else:
+            objects = self.roi_manager.get_objects(self._object_filter_types())
+        for obj in objects:
+            label = f"{obj.kind.title()} {obj.id}"
+            if obj.area:
+                label += f" ({int(obj.area)} px)"
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, obj.id)
+            self.object_list.addItem(item)
     
     def _create_roi(self, shape: ROIShape):
         """Create ROI of specified shape."""
-        if self.viewer is None:
+        try:
+            self._ensure_roi_viewer()
+        except RuntimeError as exc:
+            print(f"Cannot create ROI: {exc}")
             return
         
         # Enable shape creation in napari
         self.roi_manager.create_shapes_layer()
-        self.roi_manager.shapes_layer.mode = 'add_rectangle' if shape == ROIShape.RECTANGLE else 'add_ellipse'
-        # Note: Full implementation would need to handle different shape types
+        mode_map = {
+            ROIShape.RECTANGLE: "add_rectangle",
+            ROIShape.ELLIPSE: "add_ellipse",
+            ROIShape.POLYGON: "add_polygon",
+            ROIShape.FREEHAND: "add_path",
+        }
+        mode = mode_map.get(shape, "add_polygon")
+        self.roi_manager.shapes_layer.mode = mode
+        if self.viewer:
+            self.viewer.layers.selection.active = self.roi_manager.shapes_layer
     
     def _save_roi(self):
         """Save selected ROI(s) in multiple formats."""
@@ -1231,6 +1526,7 @@ class CurveAlignWidget(QWidget):
         for roi in self.roi_manager.rois:
             status = "✓" if roi.analysis_result else ""
             self.roi_list.addItem(f"{roi.id}: {roi.name} {status}")
+        self._update_annotation_list()
 
 # Factory function to create the widget
 def create_curve_align_widget(viewer: "napari.viewer.Viewer" = None):
