@@ -51,10 +51,10 @@ def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
     fiber_sizes = np.ceil(np.array(box_sizes) / 2)
 
     density_list = np.full(
-        (fiber_number, len(fiber_sizes) + 2 + len(nearest_fibers)), np.nan
+        (fiber_number, len(fiber_sizes) + len(nearest_fibers)), np.nan
     )
     alignment_list = np.full(
-        (fiber_number, len(fiber_sizes) + 2 + len(nearest_fibers)), np.nan
+        (fiber_number, len(fiber_sizes) + len(nearest_fibers)), np.nan
     )
 
     K = nearest_fibers[-1] + 1
@@ -90,7 +90,7 @@ def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
 
             # get all fibers in that area
             vals = np.vstack(fiber_structure[square_mask].angle)
-            col_idx = len(nearest_fibers) + 2 + j
+            col_idx = len(nearest_fibers) + j
             density_list[i, col_idx] = len(vals)
             alignment_list[i, col_idx] = circ_r(vals * 2 * np.pi / 180, axis=None)
 
@@ -98,18 +98,62 @@ def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
 
     density_df = pd.DataFrame(
         {
-            "density_mean": np.mean(density_list[:, : len(nearest_fibers)], axis=1),
-            "density_std": np.std(
-                density_list[:, : len(nearest_fibers)], axis=1, ddof=0
+            f"distance_to_nearest_{(2 ** 0) * minimum_nearest_fibers}_fibers": [
+                density_list[i][0] for i in range(len(density_list))
+            ],
+            f"distance_to_nearest_{(2 ** 1) * minimum_nearest_fibers}_fibers": [
+                density_list[i][1] for i in range(len(density_list))
+            ],
+            f"distance_to_nearest_{(2 ** 2) * minimum_nearest_fibers}_fibers": [
+                density_list[i][2] for i in range(len(density_list))
+            ],
+            f"distance_to_nearest_{(2 ** 3) * minimum_nearest_fibers}_fibers": [
+                density_list[i][3] for i in range(len(density_list))
+            ],
+            "distance_to_nearest_fiber_mean": np.mean(
+                density_list[:, : len(nearest_fibers)], axis=1
             ),
+            "distance_to_nearest_fiber_std": np.std(
+                density_list[:, : len(nearest_fibers)], axis=1, ddof=1
+            ),
+            f"fibers_within_box_density{(2 ** 0) * minimum_box_size}": [
+                density_list[i][4] for i in range(len(density_list))
+            ],
+            f"fibers_within_box_density{(2 ** 1) * minimum_box_size}": [
+                density_list[i][5] for i in range(len(density_list))
+            ],
+            f"fibers_within_box_density{(2 ** 2) * minimum_box_size}": [
+                density_list[i][6] for i in range(len(density_list))
+            ],
         }
     )
     alignment_df = pd.DataFrame(
         {
+            f"alignment_of_nearest_{(2 ** 0) * minimum_nearest_fibers}_fibers": [
+                alignment_list[i][0] for i in range(len(alignment_list))
+            ],
+            f"alignment_of_nearest_{(2 ** 1) * minimum_nearest_fibers}_fibers": [
+                alignment_list[i][1] for i in range(len(alignment_list))
+            ],
+            f"alignment_of_nearest_{(2 ** 2) * minimum_nearest_fibers}_fibers": [
+                alignment_list[i][2] for i in range(len(alignment_list))
+            ],
+            f"alignment_of_nearest_{(2 ** 3) * minimum_nearest_fibers}_fibers": [
+                alignment_list[i][3] for i in range(len(alignment_list))
+            ],
             "alignment_mean": np.mean(alignment_list[:, : len(nearest_fibers)], axis=1),
             "alignment_std": np.std(
-                alignment_list[:, : len(nearest_fibers)], axis=1, ddof=0
+                alignment_list[:, : len(nearest_fibers)], axis=1, ddof=1
             ),
+            f"fiber_alignment_in_box_{(2 ** 0) * minimum_box_size}": [
+                alignment_list[i][4] for i in range(len(alignment_list))
+            ],
+            f"fiber_alignment_in_box_{(2 ** 1) * minimum_box_size}": [
+                alignment_list[i][5] for i in range(len(alignment_list))
+            ],
+            f"fiber_alignment_in_box_{(2 ** 2) * minimum_box_size}": [
+                alignment_list[i][6] for i in range(len(alignment_list))
+            ],
         }
     )
 

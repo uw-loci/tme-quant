@@ -117,8 +117,11 @@ def process_image(
 
     Returns
     -------
-    bool
-        Returns True if the image was processed successfully.
+    dict or None
+        Returns a dictionary containing processing results if successful:
+        - 'fib_feat_df': pd.DataFrame (if make_feature_file is True)
+            Fiber features dataframe with all computed features
+        Returns None if processing failed.
 
     Notes
     -----
@@ -228,7 +231,7 @@ def process_image(
             bins = boundary_results["bins"]
         elif tif_boundary == 1 or tif_boundary == 2:
             # TODO: implement getBoundary
-            return
+            return None
 
     else:
         # No boundary measurement - analyze absolute fiber angles
@@ -251,8 +254,9 @@ def process_image(
         bins = np.arange(2.5, 180, 5)  # 2.5:5:177.5
 
     # Save fiber features if make_feature_file is enabled
+    fib_feat_df = None
     if make_feature_file:
-        save_fiber_features(
+        fib_feat_df = save_fiber_features(
             fiber_structure=fiber_structure,
             fiber_key=fiber_key,
             total_length_list=total_length_list,
@@ -346,7 +350,14 @@ def process_image(
             advanced_options=advanced_options,
         )
 
-    plt.show()
+    # plt.show()
+
+    # Return results for testing
+    results = {}
+    if fib_feat_df is not None:
+        results["fib_feat_df"] = fib_feat_df
+
+    return results if results else None
 
 
 def process_single_roi(
@@ -762,6 +773,11 @@ def save_fiber_features(
         Number of sections in stack
     slice_num : int
         Current slice number
+
+    Returns
+    -------
+    pd.DataFrame
+        Fiber features dataframe with all computed features
     """
     print("Saving fiber features...")
 
@@ -847,6 +863,8 @@ def save_fiber_features(
 
     format_df_to_excel(fib_feat_df, save_fib_feat, sheet_name="Fiber Features")
     print(f"Saved fiber features to {save_fib_feat}")
+
+    return fib_feat_df
 
 
 def generate_reconstruction(

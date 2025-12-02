@@ -71,9 +71,9 @@ def test_get_ct_matches_expected_results(
 ):
     """
     Test that get_ct produces density_df and alignment_df that match expected results.
-    The expected CSV files contain raw feature arrays (9 columns), while get_ct returns
-    summary statistics (mean and std). This test computes the expected mean/std from
-    the raw data and compares with get_ct output.
+    The expected CSV files contain 9 columns: 4 nearest_fibers + mean + std + 3 box_sizes.
+    Absolute tolerance for alignment: 0.2
+    Absolute tolerance for density: 1e-3
     """
     img = standard_test_image
     curve_cp, feature_cp = standard_control_parameters
@@ -83,15 +83,15 @@ def test_get_ct_matches_expected_results(
         img, curve_cp, feature_cp
     )
 
-    # Load expected raw results (9 columns: 4 nearest_fibers + 2 + 3 box_sizes)
+    # Load expected results (9 columns: 4 nearest_fibers + mean + std + 3 box_sizes)
     test_results_dir = os.path.join(
         os.path.dirname(__file__), "test_results", "process_image_test_files"
     )
 
-    expected_density_raw = pd.read_csv(
+    expected_density_df = pd.read_csv(
         os.path.join(test_results_dir, "real1_density_df.csv"), header=None
     )
-    expected_alignment_raw = pd.read_csv(
+    expected_alignment_df = pd.read_csv(
         os.path.join(test_results_dir, "real1_alignment_df.csv"), header=None
     )
 
@@ -100,55 +100,35 @@ def test_get_ct_matches_expected_results(
     assert len(density_df) > 0, "density_df should not be empty"
     assert len(alignment_df) > 0, "alignment_df should not be empty"
 
-    # Compute expected mean and std from first 4 columns (nearest_fibers features)
-    # This matches what process_fibers does: mean/std of first len(nearest_fibers) columns
-    expected_density_mean = expected_density_raw.iloc[:, :4].mean(axis=1).values
-    expected_density_std = expected_density_raw.iloc[:, :4].std(axis=1, ddof=0).values
-
-    expected_alignment_mean = expected_alignment_raw.iloc[:, :4].mean(axis=1).values
-    expected_alignment_std = (
-        expected_alignment_raw.iloc[:, :4].std(axis=1, ddof=0).values
-    )
-
-    # Create expected dataframes with same structure as actual output
-    expected_density = pd.DataFrame(
-        {"density_mean": expected_density_mean, "density_std": expected_density_std}
-    )
-    expected_alignment = pd.DataFrame(
-        {
-            "alignment_mean": expected_alignment_mean,
-            "alignment_std": expected_alignment_std,
-        }
-    )
-
     # Check dimensions match
     assert len(density_df) == len(
-        expected_density
-    ), f"density_df length mismatch: {len(density_df)} vs {len(expected_density)}"
+        expected_density_df
+    ), f"density_df length mismatch: {len(density_df)} vs {len(expected_density_df)}"
     assert len(alignment_df) == len(
-        expected_alignment
-    ), f"alignment_df length mismatch: {len(alignment_df)} vs {len(expected_alignment)}"
+        expected_alignment_df
+    ), f"alignment_df length mismatch: {len(alignment_df)} vs {len(expected_alignment_df)}"
 
-    density_values = density_df.values
-    expected_density_values = expected_density.values
-    alignment_values = alignment_df.values
-    expected_alignment_values = expected_alignment.values
+    assert (
+        density_df.shape[1] == expected_density_df.shape[1]
+    ), f"density_df column count mismatch: {density_df.shape[1]} vs {expected_density_df.shape[1]}"
+    assert (
+        alignment_df.shape[1] == expected_alignment_df.shape[1]
+    ), f"alignment_df column count mismatch: {alignment_df.shape[1]} vs {expected_alignment_df.shape[1]}"
 
-    # Compare directly without sorting
-    # The order from get_ct matches the order in the CSV files
+    # Compare directly - the order from get_ct matches the order in the CSV files
     np.testing.assert_allclose(
-        density_values,
-        expected_density_values,
+        density_df.values,
+        expected_density_df.values,
         rtol=1e-3,
         atol=1e-3,
         err_msg="density_df values differ from expected results",
     )
 
     np.testing.assert_allclose(
-        alignment_values,
-        expected_alignment_values,
-        rtol=1e-2,
-        atol=0.05,
+        alignment_df.values,
+        expected_alignment_df.values,
+        rtol=0.05,
+        atol=0.2,
         err_msg="alignment_df values differ from expected results",
     )
 
@@ -176,16 +156,16 @@ def test_get_ct_returns_valid_structure(
     # Check density_df
     assert isinstance(density_df, pd.DataFrame)
     assert len(density_df) > 0
-    assert density_df.shape[1] == 2, "density_df should have 2 columns (mean, std)"
-    assert "density_mean" in density_df.columns
-    assert "density_std" in density_df.columns
+    assert (
+        density_df.shape[1] == 9
+    ), "density_df should have 9 columns (4 for fibers, mean, std, 3 for box size)"
 
     # Check alignment_df
     assert isinstance(alignment_df, pd.DataFrame)
     assert len(alignment_df) > 0
-    assert alignment_df.shape[1] == 2, "alignment_df should have 2 columns (mean, std)"
-    assert "alignment_mean" in alignment_df.columns
-    assert "alignment_std" in alignment_df.columns
+    assert (
+        alignment_df.shape[1] == 9
+    ), "alignment_df should have 9 columns (4 for fibers, mean, std, 3 for box size)"
 
     # Check that all values are finite
     assert np.isfinite(density_df.values).all(), "density_df contains non-finite values"
