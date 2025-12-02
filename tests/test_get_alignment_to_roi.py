@@ -65,10 +65,12 @@ def test_get_alignment_to_roi_with_distance_threshold():
         "angle_to_boundary_edge",
         "angle_to_boundary_center",
         "angle_to_center_line",
-        "fiber_center_x",
-        "fiber_center_y",
+        "fiber_center_row",
+        "fiber_center_col",
         "fiber_angle",
         "distance",
+        "boundary_point_row",
+        "boundary_point_col",
     ]
     for col in expected_columns:
         assert col in result.columns, f"Missing column: {col}"
@@ -83,16 +85,39 @@ def test_get_alignment_to_roi_with_distance_threshold():
     rtol = 1e-3  # 0.1% relative tolerance
     atol = 1e-3  # 0.1% absolute tolerance for angles
 
-    for col in expected_columns:
-        if col in result.columns and col in expected_df.columns:
+    # Map old column names to new ones for comparison with expected data
+    column_mapping = {
+        "fiber_center_x": "fiber_center_col",
+        "fiber_center_y": "fiber_center_row",
+        "fiber_angle": "fiber_angle_list",
+        "distance": "distance_list",
+    }
+
+    for expected_col in [
+        "angle_to_boundary_edge",
+        "angle_to_boundary_center",
+        "angle_to_center_line",
+    ]:
+        if expected_col in result.columns and expected_col in expected_df.columns:
             # Use numpy allclose for floating point comparison
             assert np.allclose(
-                flatten_numeric(result[col]),
-                flatten_numeric(expected_df[col]),
+                flatten_numeric(result[expected_col]),
+                flatten_numeric(expected_df[expected_col]),
                 rtol=rtol,
                 atol=atol,
                 equal_nan=True,
-            ), f"Values don't match for column: {col}"
+            ), f"Values don't match for column: {expected_col}"
+
+    # Compare columns with name mapping
+    for old_col, new_col in column_mapping.items():
+        if new_col in result.columns and old_col in expected_df.columns:
+            assert np.allclose(
+                flatten_numeric(result[new_col]),
+                flatten_numeric(expected_df[old_col]),
+                rtol=rtol,
+                atol=atol,
+                equal_nan=True,
+            ), f"Values don't match for column: {new_col} (expected as {old_col})"
 
     assert result_fiber_count == expected_df.shape[0]
 

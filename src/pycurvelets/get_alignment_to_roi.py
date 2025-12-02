@@ -73,14 +73,18 @@ def get_alignment_to_roi(
             Angles between fiber orientation and ROI center orientation
         - angle_to_center_line : float
             Angles between fiber orientation and fiber-to-ROI-center line
-        - fiber_center_x : float
-            Fiber center X coordinate (column)
-        - fiber_center_y : float
-            Fiber center Y coordinate (row)
-        - fiber_angle : float
+        - fiber_center_row : float
+            Fiber center row coordinate (y)
+        - fiber_center_col : float
+            Fiber center column coordinate (x)
+        - fiber_angle_list : float
             Fiber orientation angles in degrees
-        - distance : float
+        - distance_list : float
             Distances from fibers to closest ROI boundary points
+        - boundary_point_row : float
+            Row coordinate of the nearest boundary point
+        - boundary_point_col : float
+            Column coordinate of the nearest boundary point
     fiber_count: int
       Number of fibers
     """
@@ -239,6 +243,7 @@ def get_alignment_to_roi(
         from pycurvelets.utils.math import find_outline_slope, circ_r
 
         angles_to_edge = []
+        boundary_points = []  # Store boundary point coordinates
         for fiber_i in range(n_fibers):
             i = fiber_indices[fiber_i]
             if select_fiber_flag:
@@ -251,6 +256,7 @@ def get_alignment_to_roi(
                 boundary_idx = 0
 
             boundary_pt = roi_coords[boundary_idx]
+            boundary_points.append(boundary_pt)  # Store the boundary point
             boundary_angle = find_outline_slope(roi_coords, boundary_idx)
 
             if (
@@ -275,18 +281,21 @@ def get_alignment_to_roi(
         # Store all measurements
         for fiber_i in range(n_fibers):
             i = fiber_indices[fiber_i]
+            boundary_pt = boundary_points[fiber_i]
             measurement = {
                 "angle_to_boundary_edge": angles_to_edge[fiber_i],
                 "angle_to_boundary_center": angle_diffs[fiber_i],
                 "angle_to_center_line": angle_to_centers[fiber_i],
-                "fiber_center_x": fiber_centers[fiber_i, 1],
-                "fiber_center_y": fiber_centers[fiber_i, 0],
+                "fiber_center_row": fiber_centers[fiber_i, 0],
+                "fiber_center_col": fiber_centers[fiber_i, 1],
                 "fiber_angle": fiber_angles[fiber_i],
                 "distance": (
                     dist[i][0]
                     if select_fiber_flag and hasattr(dist[i], "__getitem__")
                     else (dist[i] if select_fiber_flag else None)
                 ),
+                "boundary_point_row": boundary_pt[0],
+                "boundary_point_col": boundary_pt[1],
             }
             all_measurements.append(measurement)
 
