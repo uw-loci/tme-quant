@@ -1,19 +1,42 @@
 import os
 from enum import Enum
-from typing import List, Dict, TYPE_CHECKING, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, TYPE_CHECKING
 
 import napari
 import numpy as np
 import pandas as pd
 from qtpy.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QListWidget,
-    QLabel, QDoubleSpinBox, QSpinBox, QCheckBox, QGroupBox, QFileDialog,
-    QDialog, QDialogButtonBox, QListWidgetItem, QAbstractItemView,
-    QTableView, QAbstractScrollArea, QHeaderView, QVBoxLayout, QTabWidget
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QComboBox,
+    QListWidget,
+    QLabel,
+    QDoubleSpinBox,
+    QSpinBox,
+    QCheckBox,
+    QGroupBox,
+    QFileDialog,
+    QDialog,
+    QDialogButtonBox,
+    QListWidgetItem,
+    QAbstractItemView,
+    QMenu,
+    QInputDialog,
+    QMessageBox,
+    QTableView,
+    QTableWidget,
+    QTableWidgetItem,
+    QAbstractScrollArea,
+    QHeaderView,
+    QTabWidget,
 )
 from qtpy.QtCore import Qt, QAbstractTableModel
 from qtpy.QtGui import QColor
 from skimage.io import imread
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 # Import new modules
 from .preprocessing import (
@@ -34,6 +57,14 @@ if TYPE_CHECKING:
 class BoundaryType(Enum):
     NO_BOUNDARY = "No boundary"
     TIFF_BOUNDARY = "Tiff boundary"
+
+
+class LogTab(Enum):
+    SUMMARY = 0
+    OPTIONS = 1
+    LOG = 2
+    FIJI = 3
+    ROIS = 4
 
 class AdvancedParametersDialog(QDialog):
     """Advanced parameters dialog with getter method"""
@@ -77,6 +108,69 @@ class AdvancedParametersDialog(QDialog):
         layout.addWidget(button_box)
         
         self.setLayout(layout)
+
+
+class ROIMetricsDialog(QDialog):
+    """Dialog presenting ROI measurement statistics and histogram."""
+    def __init__(self, metrics: Dict[str, Any], parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.setWindowTitle(f"ROI {metrics.get('roi_id')} Measurements")
+        self.metrics = metrics
+        layout = QVBoxLayout(self)
+
+        self.table = QTableWidget()
+        rows = [
+            ("Area (px)", f"{metrics.get('area_px', 0):.2f}"),
+            ("Perimeter (px)", f"{metrics.get('perimeter_px', 0):.2f}"),
+            ("Centroid (x, y)", f"{metrics.get('centroid', [0, 0])}"),
+            ("Bounding Box", f"{metrics.get('bbox')}"),
+            ("Eccentricity", f"{metrics.get('eccentricity', 0):.3f}"),
+            ("Orientation (deg)", f"{metrics.get('orientation_deg', 0):.2f}"),
+            ("Mean Intensity", f"{metrics.get('mean_intensity', 0):.3f}"),
+            ("Median Intensity", f"{metrics.get('median_intensity', 0):.3f}"),
+            ("Std. Dev.", f"{metrics.get('std_intensity', 0):.3f}"),
+        ]
+        self.table.setColumnCount(2)
+        self.table.setRowCount(len(rows))
+        self.table.setHorizontalHeaderLabels(["Metric", "Value"])
+        for r, (name, value) in enumerate(rows):
+            self.table.setItem(r, 0, QTableWidgetItem(str(name)))
+            self.table.setItem(r, 1, QTableWidgetItem(str(value)))
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.table)
+
+        hist = metrics.get("histogram")
+        if hist:
+            fig = Figure(figsize=(5, 3))
+            ax = fig.add_subplot(111)
+            centers = hist["bins"][:-1]
+            width = centers[1] - centers[0] if len(centers) > 1 else 0.05
+            ax.bar(centers, hist["counts"], width=width, color="#4a90e2")
+            ax.set_title("Intensity Distribution")
+            ax.set_xlabel("Normalized Intensity")
+            ax.set_ylabel("Count")
+            self.canvas = FigureCanvas(fig)
+            layout.addWidget(self.canvas)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        export_btn = QPushButton("Export CSV")
+        button_box.addButton(export_btn, QDialogButtonBox.ActionRole)
+        button_box.rejected.connect(self.reject)
+        export_btn.clicked.connect(self._export_metrics)
+        layout.addWidget(button_box)
+
+    def _export_metrics(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export ROI Metrics",
+            "",
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        if not path:
+            return
+        rows = [(k, v) for k, v in self.metrics.items() if k != "histogram"]
+        df = pd.DataFrame(rows, columns=["Metric", "Value"])
+        df.to_csv(path, index=False)
     
     def get_parameters(self):
         """Return advanced parameters as a dictionary"""
@@ -151,6 +245,35 @@ class ResultsDialog(QDialog):
         
         self.setLayout(layout)
 
+
+class MetricsDialog(QDialog):
+    """Dialog for displaying ROI measurements with export support."""
+
+    def __init__(self, data: pd.DataFrame, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("ROI Measurements")
+        self.df = data
+
+        layout = QVBoxLayout()
+        self.table_view = QTableView()
+        self.table_view.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
+        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.model = ResultsTableModel(data)
+        self.table_view.setModel(self.model)
+        layout.addWidget(self.table_view)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        export_btn = button_box.addButton("Export CSV", QDialogButtonBox.ActionCommandRole)
+        button_box.rejected.connect(self.reject)
+        export_btn.clicked.connect(self._export_csv)
+        layout.addWidget(button_box)
+        self.setLayout(layout)
+
+    def _export_csv(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Export Measurements", "", "CSV Files (*.csv)")
+        if path:
+            self.df.to_csv(path, index=False)
+
 class CurveAlignWidget(QWidget):
     """Main CurveAlign widget implemented with pure Qt"""
     def __init__(self, viewer: "napari.viewer.Viewer" = None, parent=None):
@@ -169,12 +292,11 @@ class CurveAlignWidget(QWidget):
         }
         
         # Initialize ROI Manager
-        self.roi_manager = ROIManager(viewer=self._viewer)
-        if self._viewer is not None:
-            self.roi_manager.set_viewer(self._viewer)
-        
         # Initialize Fiji bridge
         self.fiji_bridge = get_fiji_bridge()
+        self.roi_manager = ROIManager(viewer=self._viewer, overlay_callback=self._handle_roi_overlay)
+        if self._viewer is not None:
+            self.roi_manager.set_viewer(self._viewer)
         
         # Main layout with tabs
         main_layout = QVBoxLayout()
@@ -367,17 +489,46 @@ class CurveAlignWidget(QWidget):
                 filename = os.path.basename(path)
                 try:
                     # Read image data using skimage
-                    image_data = imread(path)
+                    raw_image = imread(path)
+                    image_data = raw_image
+                    added_rgb_layer = None
+
+                    # Handle common multi-dimensional cases
+                    if raw_image.ndim == 3 and raw_image.shape[-1] in (3, 4):
+                        # Optionally display the original RGB image
+                        try:
+                            added_rgb_layer = self.viewer.add_image(
+                                raw_image,
+                                name=f"{filename} (RGB)",
+                                rgb=True,
+                                blending="translucent",
+                                opacity=0.85,
+                            )
+                            added_rgb_layer.visible = True
+                        except Exception as exc:
+                            print(f"Unable to display RGB layer for {filename}: {exc}")
+
+                        # Convert RGB/RGBA to grayscale for analysis
+                        rgb = raw_image[..., :3].astype(np.float32)
+                        image_data = (
+                            0.2125 * rgb[..., 0]
+                            + 0.7154 * rgb[..., 1]
+                            + 0.0721 * rgb[..., 2]
+                        )
+                    elif raw_image.ndim > 2 and raw_image.shape[0] > 1:
+                        # Multi-page/stacked TIFF: take first plane
+                        image_data = raw_image[0]
+                    else:
+                        # Remove singleton axes if any
+                        image_data = np.squeeze(raw_image)
                     
-                    # For multi-page TIFFs, take the first page
-                    if image_data.ndim > 2 and image_data.shape[0] > 1:
-                        image_data = image_data[0]
-                    
-                    # Add to viewer
-                    layer = self.viewer.add_image(image_data, name=filename)
+                    # Add grayscale image (analysis layer) to viewer
+                    layer = self.viewer.add_image(image_data, name=filename, visible=False)
                     
                     # Store layer reference with metadata
                     layer.metadata['curvealign_path'] = path
+                    if added_rgb_layer is not None:
+                        added_rgb_layer.metadata['curvealign_rgb_of'] = filename
                     
                     # Store layer reference
                     self.image_layers[filename] = layer
@@ -385,6 +536,7 @@ class CurveAlignWidget(QWidget):
                     # Add to list widget
                     item = QListWidgetItem(filename)
                     item.setData(Qt.UserRole, path)  # Store full path
+                    item.setData(Qt.UserRole + 1, bool(added_rgb_layer))
                     self.image_list.addItem(item)
                     
                     # Initially hide all images except the first one
@@ -396,11 +548,7 @@ class CurveAlignWidget(QWidget):
             # Select first image by default
             if self.image_list.count() > 0:
                 self.image_list.setCurrentRow(0)
-                if self.image_list.currentItem().text() in self.image_layers:
-                    layer = self.image_layers[self.image_list.currentItem().text()]
-                    self.viewer.layers.selection.select_only(layer)
-                    layer.visible = True
-                    self.viewer.reset_view()
+                self._show_selected_image()
 
     def on_image_selected(self):
         """Handle image selection change in widget"""
@@ -409,27 +557,60 @@ class CurveAlignWidget(QWidget):
             
         selected_items = self.image_list.selectedItems()
         if selected_items:
-            filename = selected_items[0].text()
-            if filename in self.image_layers:
-                # Temporarily ignore layer selection events
-                self.ignore_selection_events = True
-                
-                # Hide all other images
-                for layer_name, layer in self.image_layers.items():
-                    layer.visible = (layer_name == filename)
-                
-                # Select and show the corresponding layer in the viewer
-                layer = self.image_layers[filename]
-                self.viewer.layers.selection.select_only(layer)
-                layer.visible = True
-                
-                # Center and zoom to the selected image
-                self.viewer.reset_view()
-                
-                # Reset slice position for multi-dimensional images
-                self.viewer.dims.current_step = (0,) * (self.viewer.dims.ndim - 2)
-                
-                self.ignore_selection_events = False
+            self._show_selected_image()
+
+    def _show_selected_image(self):
+        """Display the currently selected image (and linked RGB layer) in the viewer."""
+        selected_items = self.image_list.selectedItems()
+        if not selected_items or not self.viewer:
+            return
+
+        filename = selected_items[0].text()
+        layer = self.image_layers.get(filename)
+        if layer is None:
+            return
+
+        self.ignore_selection_events = True
+        try:
+            for layer_name, lyr in self.image_layers.items():
+                is_active = layer_name == filename
+                lyr.visible = is_active
+                rgb_label = f"{layer_name} (RGB)"
+                if rgb_label in self.viewer.layers:
+                    self.viewer.layers[rgb_label].visible = is_active
+
+            self.viewer.layers.selection.select_only(layer)
+            layer.visible = True
+            self.viewer.reset_view()
+            if self.viewer.dims.ndim > 2:
+                steps = list(self.viewer.dims.current_step)
+                for i in range(len(steps) - 2):
+                    steps[i] = 0
+                self.viewer.dims.current_step = tuple(steps)
+        finally:
+            self.ignore_selection_events = False
+
+    def _handle_roi_overlay(self, payload: Optional[Dict[str, Any]] = None):
+        """Render a simple overlay layer for analyzed ROIs."""
+        if not payload or not self.viewer:
+            return
+        roi_id = payload.get("roi_id")
+        mask = payload.get("mask")
+        method = payload.get("method", "analysis")
+        if roi_id is None or mask is None:
+            return
+
+        overlay = mask.astype(float)
+        layer_name = f"ROI_{roi_id}_{method}_overlay"
+        if layer_name in self.viewer.layers:
+            self.viewer.layers.remove(self.viewer.layers[layer_name])
+        self.viewer.add_image(
+            overlay,
+            name=layer_name,
+            blending="additive",
+            opacity=0.4,
+            colormap="cividis" if method == "curvelets" else "magma",
+        )
 
     def on_active_layer_changed(self, event):
         """Handle active layer change in napari viewer"""
@@ -454,6 +635,9 @@ class CurveAlignWidget(QWidget):
                         # Hide all other images
                         for layer_name, layer in self.image_layers.items():
                             layer.visible = (layer_name == filename)
+                            rgb_label = f"{layer_name} (RGB)"
+                            if rgb_label in self.viewer.layers:
+                                self.viewer.layers[rgb_label].visible = (layer_name == filename)
                         
                         self.ignore_selection_events = False
                         break
@@ -1084,18 +1268,33 @@ class CurveAlignWidget(QWidget):
         analysis_layout = QVBoxLayout()
         self.analyze_roi_btn = QPushButton("Analyze Selected ROI")
         self.analyze_all_rois_btn = QPushButton("Analyze All ROIs")
+        self.analyze_roi_ctfire_btn = QPushButton("Analyze ROI (CT-FIRE)")
+        self.measure_roi_btn = QPushButton("Measure / Stats")
         self.roi_table_btn = QPushButton("Show ROI Table")
         analysis_layout.addWidget(self.analyze_roi_btn)
         analysis_layout.addWidget(self.analyze_all_rois_btn)
+        analysis_layout.addWidget(self.analyze_roi_ctfire_btn)
+        analysis_layout.addWidget(self.measure_roi_btn)
         analysis_layout.addWidget(self.roi_table_btn)
         analysis_group.setLayout(analysis_layout)
         left_panel.addWidget(analysis_group)
         
         # ROI list
         left_panel.addWidget(QLabel("ROIs:"))
+        self.roi_tabs = QTabWidget()
         self.roi_list = QListWidget()
         self.roi_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        left_panel.addWidget(self.roi_list)
+        self.roi_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.roi_list.customContextMenuRequested.connect(self._roi_list_context_menu)
+        self.roi_list.itemSelectionChanged.connect(self._on_roi_list_selection)
+        self.roi_tabs.addTab(self.roi_list, "List")
+        self.roi_table_view = QTableWidget()
+        self.roi_table_view.setColumnCount(6)
+        self.roi_table_view.setHorizontalHeaderLabels(["ID", "Name", "Type", "Source", "Area", "Status"])
+        self.roi_tabs.addTab(self.roi_table_view, "Table")
+        left_panel.addWidget(self.roi_tabs)
+        self.roi_details_group = self._build_roi_details_group()
+        left_panel.addWidget(self.roi_details_group)
         left_panel.addStretch()
         
         # Annotations / Objects manager
@@ -1122,6 +1321,8 @@ class CurveAlignWidget(QWidget):
         self.combine_rois_btn.clicked.connect(self._combine_rois)
         self.analyze_roi_btn.clicked.connect(self._analyze_selected_roi)
         self.analyze_all_rois_btn.clicked.connect(self._analyze_all_rois)
+        self.analyze_roi_ctfire_btn.clicked.connect(lambda: self._analyze_selected_roi(ctfire=True))
+        self.measure_roi_btn.clicked.connect(self._open_measurements)
         self.roi_table_btn.clicked.connect(self._show_roi_table)
         
     def _build_annotation_group(self) -> QGroupBox:
@@ -1166,6 +1367,15 @@ class CurveAlignWidget(QWidget):
         self.detect_distance_spin.setRange(0, 200)
         self.detect_distance_spin.setValue(self.roi_manager.detection_distance)
         detect_row.addWidget(self.detect_distance_spin)
+        self.exclude_inside_checkbox = QCheckBox("Exclude interior")
+        self.boundary_only_checkbox = QCheckBox("Boundary ring only")
+        self.boundary_width_spin = QSpinBox()
+        self.boundary_width_spin.setRange(1, 50)
+        self.boundary_width_spin.setValue(5)
+        detect_row.addWidget(self.exclude_inside_checkbox)
+        detect_row.addWidget(self.boundary_only_checkbox)
+        detect_row.addWidget(QLabel("Ring px"))
+        detect_row.addWidget(self.boundary_width_spin)
         layout.addLayout(detect_row)
         
         layout.addWidget(QLabel("Annotations"))
@@ -1182,6 +1392,20 @@ class CurveAlignWidget(QWidget):
         self.detect_object_btn.clicked.connect(self._detect_objects_in_annotation)
         self.annotation_list.itemSelectionChanged.connect(self._on_annotation_selected)
         
+        return group
+
+    def _build_roi_details_group(self) -> QGroupBox:
+        group = QGroupBox("ROI Details")
+        layout = QVBoxLayout()
+        self.roi_detail_labels = {}
+        for label in ["Type", "Source", "Area", "Center", "Status", "Analysis"]:
+            row = QHBoxLayout()
+            row.addWidget(QLabel(f"{label}:"))
+            value_label = QLabel("-")
+            row.addWidget(value_label)
+            layout.addLayout(row)
+            self.roi_detail_labels[label.lower()] = value_label
+        group.setLayout(layout)
         return group
 
     def _build_object_group(self) -> QGroupBox:
@@ -1212,6 +1436,72 @@ class CurveAlignWidget(QWidget):
         self._update_object_list()
         
         return group
+
+    def _on_roi_list_selection(self):
+        selected = self.roi_list.selectedItems()
+        if not selected:
+            self._update_roi_details(None)
+            return
+        roi_id = int(selected[0].text().split(":")[0])
+        self._update_roi_details(roi_id)
+        try:
+            self.roi_manager.highlight_roi(roi_id)
+        except Exception:
+            pass
+
+    def _roi_list_context_menu(self, pos):
+        menu = QMenu(self.roi_list)
+        rename_action = menu.addAction("Rename ROI")
+        delete_action = menu.addAction("Delete ROI")
+        analyze_action = menu.addAction("Analyze ROI")
+        analyze_ctfire_action = menu.addAction("Analyze ROI (CT-FIRE)")
+        action = menu.exec_(self.roi_list.mapToGlobal(pos))
+        if not action:
+            return
+        selected = self.roi_list.selectedItems()
+        if not selected:
+            return
+        roi_id = int(selected[0].text().split(":")[0])
+        if action == rename_action:
+            self._rename_roi_dialog(roi_id)
+        elif action == delete_action:
+            self.roi_manager.delete_roi(roi_id)
+            self._update_roi_list()
+        elif action == analyze_action:
+            self._analyze_roi_by_id(roi_id)
+        elif action == analyze_ctfire_action:
+            self._analyze_roi_by_id(roi_id, ctfire=True)
+
+    def _rename_roi_dialog(self, roi_id: int):
+        roi = self.roi_manager.get_roi(roi_id)
+        if roi is None:
+            return
+        text, ok = QInputDialog.getText(self, "Rename ROI", "ROI name:", text=roi.name)
+        if ok and text:
+            roi.name = text
+            self._update_roi_list()
+
+    def _update_roi_details(self, roi_id: Optional[int]):
+        if roi_id is None:
+            for label in self.roi_detail_labels.values():
+                label.setText("-")
+            return
+        summary = self.roi_manager.get_roi_summary(roi_id)
+        if not summary:
+            for label in self.roi_detail_labels.values():
+                label.setText("-")
+            return
+        self.roi_detail_labels["type"].setText(summary["annotation_type"])
+        self.roi_detail_labels["source"].setText(summary["source"])
+        self.roi_detail_labels["area"].setText(f"{summary['area']:.0f} px")
+        center = summary["center"]
+        self.roi_detail_labels["center"].setText(f"{center[0]:.1f}, {center[1]:.1f}")
+        status = "Analyzed" if summary["has_analysis"] else "Pending"
+        self.roi_detail_labels["status"].setText(status)
+        analysis_text = summary["analysis_method"] or "-"
+        if summary["n_curvelets"]:
+            analysis_text += f" ({summary['n_curvelets']} feats)"
+        self.roi_detail_labels["analysis"].setText(analysis_text.strip())
 
     def _ensure_roi_viewer(self):
         """Make sure ROI manager is connected to the active viewer."""
@@ -1286,11 +1576,17 @@ class CurveAlignWidget(QWidget):
         if not types:
             types = ["cell", "fiber"]
         self.roi_manager.detection_distance = distance
+        include_interior = not self.exclude_inside_checkbox.isChecked()
+        boundary_only = self.boundary_only_checkbox.isChecked()
+        boundary_width = self.boundary_width_spin.value()
         try:
             detected = self.roi_manager.detect_objects_in_roi(
                 roi_id,
                 object_types=types,
-                distance=distance
+                distance=distance,
+                include_interior=include_interior,
+                include_boundary_ring=boundary_only,
+                boundary_width=boundary_width
             )
         except ValueError as exc:
             print(f"Object detection failed: {exc}")
@@ -1462,7 +1758,7 @@ class CurveAlignWidget(QWidget):
         """Delete selected ROI(s)."""
         selected = self.roi_list.selectedItems()
         for item in selected:
-            roi_id = int(item.text().split()[0])
+            roi_id = int(item.text().split(":")[0])
             self.roi_manager.delete_roi(roi_id)
         self._update_roi_list()
     
@@ -1472,7 +1768,7 @@ class CurveAlignWidget(QWidget):
         if not selected:
             return
         
-        roi_id = int(selected[0].text().split()[0])
+        roi_id = int(selected[0].text().split(":")[0])
         # Would show dialog for new name
         # For now, just update list
         self._update_roi_list()
@@ -1483,23 +1779,26 @@ class CurveAlignWidget(QWidget):
         if len(selected) < 2:
             return
         
-        roi_ids = [int(item.text().split()[0]) for item in selected]
+        roi_ids = [int(item.text().split(":")[0]) for item in selected]
         self.roi_manager.combine_rois(roi_ids)
         self._update_roi_list()
     
-    def _analyze_selected_roi(self):
+    def _analyze_selected_roi(self, ctfire: bool = False):
         """Analyze selected ROI."""
         selected = self.roi_list.selectedItems()
         if not selected:
             return
         
-        roi_id = int(selected[0].text().split()[0])
-        # Get current image
+        roi_id = int(selected[0].text().split(":")[0])
+        self._analyze_roi_by_id(roi_id, ctfire=ctfire)
+
+    def _analyze_roi_by_id(self, roi_id: int, ctfire: bool = False):
         if self.viewer and len(self.viewer.layers) > 0:
             image_layer = self.viewer.layers[0]
             if hasattr(image_layer, 'data'):
-                image = image_layer.data
-                self.roi_manager.analyze_roi(roi_id, image)
+                image = self._prepare_analysis_image(image_layer.data)
+                method = ROIAnalysisMethod.CTFIRE if ctfire else ROIAnalysisMethod.CURVELETS
+                self.roi_manager.analyze_roi(roi_id, image, method=method)
                 self._update_roi_list()
     
     def _analyze_all_rois(self):
@@ -1507,10 +1806,25 @@ class CurveAlignWidget(QWidget):
         if self.viewer and len(self.viewer.layers) > 0:
             image_layer = self.viewer.layers[0]
             if hasattr(image_layer, 'data'):
-                image = image_layer.data
+                image = self._prepare_analysis_image(image_layer.data)
                 for roi in self.roi_manager.rois:
                     self.roi_manager.analyze_roi(roi.id, image)
                 self._update_roi_list()
+
+    def _prepare_analysis_image(self, image: np.ndarray) -> np.ndarray:
+        """Ensure analysis image is grayscale 2D."""
+        prepared = image
+        if prepared.ndim > 2:
+            if prepared.shape[-1] in (3, 4):
+                rgb = prepared[..., :3].astype(np.float32)
+                prepared = (
+                    0.2125 * rgb[..., 0]
+                    + 0.7154 * rgb[..., 1]
+                    + 0.0721 * rgb[..., 2]
+                )
+            else:
+                prepared = prepared[0]
+        return prepared
     
     def _show_roi_table(self):
         """Show ROI analysis table."""
@@ -1520,13 +1834,90 @@ class CurveAlignWidget(QWidget):
             dialog.setWindowTitle("ROI Analysis Results")
             dialog.exec_()
     
+    def _selected_roi_ids(self) -> List[int]:
+        items = self.roi_list.selectedItems()
+        ids = []
+        for item in items:
+            try:
+                ids.append(int(item.text().split(":")[0]))
+            except (ValueError, IndexError):
+                continue
+        return ids
+
+    def _get_active_image_data(self, grayscale: bool = False) -> Optional[np.ndarray]:
+        if not self.viewer:
+            return None
+        layer = self.viewer.layers.selection.active
+        if layer is None:
+            for lyr in self.viewer.layers:
+                if hasattr(lyr, "data"):
+                    layer = lyr
+                    break
+        if layer is None or not hasattr(layer, "data"):
+            return None
+        data = np.asarray(layer.data)
+        if grayscale and data.ndim > 2:
+            if data.shape[-1] in (3, 4):
+                rgb = data[..., :3].astype(np.float32)
+                data = 0.2125 * rgb[..., 0] + 0.7154 * rgb[..., 1] + 0.0721 * rgb[..., 2]
+            else:
+                data = np.mean(data, axis=0)
+        return data
+
+    def _open_measurements(self):
+        roi_ids = self._selected_roi_ids()
+        if not roi_ids:
+            roi_ids = self.roi_manager.get_all_roi_ids()
+        if not roi_ids:
+            QMessageBox.information(self, "Measurements", "No ROIs available.")
+            return
+        image = self._get_active_image_data(grayscale=True)
+        try:
+            df = self.roi_manager.get_metrics_dataframe(roi_ids, intensity_image=image)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Measurements", str(exc))
+            return
+        if df.empty:
+            QMessageBox.information(self, "Measurements", "No metrics computed for selection.")
+            return
+        dialog = MetricsDialog(df, self)
+        dialog.exec_()
+    
     def _update_roi_list(self):
-        """Update ROI list widget."""
+        """Update ROI list widget and table."""
         self.roi_list.clear()
+        table_rows = []
         for roi in self.roi_manager.rois:
             status = "✓" if roi.analysis_result else ""
-            self.roi_list.addItem(f"{roi.id}: {roi.name} {status}")
+            source = roi.metadata.get("source", "manual")
+            text = f"{roi.id}: {roi.name} [{roi.annotation_type}|{source}] {status}"
+            item = QListWidgetItem(text.strip())
+            item.setData(Qt.UserRole, roi.id)
+            if roi.analysis_result:
+                item.setForeground(QColor("#3fb950"))
+            self.roi_list.addItem(item)
+            table_rows.append(
+                [
+                    str(roi.id),
+                    roi.name,
+                    roi.annotation_type,
+                    source,
+                    f"{int(roi.area) if roi.area else ''}",
+                    "Analyzed" if roi.analysis_result else "Pending",
+                ]
+            )
+        self._populate_roi_table(table_rows)
         self._update_annotation_list()
+
+    def _populate_roi_table(self, rows: List[List[str]]):
+        if not hasattr(self, "roi_table_view"):
+            return
+        self.roi_table_view.setRowCount(len(rows))
+        for r_index, row in enumerate(rows):
+            for c_index, value in enumerate(row):
+                item = QTableWidgetItem(value)
+                self.roi_table_view.setItem(r_index, c_index, item)
+        self.roi_table_view.resizeColumnsToContents()
 
 # Factory function to create the widget
 def create_curve_align_widget(viewer: "napari.viewer.Viewer" = None):

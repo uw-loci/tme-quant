@@ -15,7 +15,7 @@ import struct
 import zipfile
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Optional, Tuple, Union, Iterable, Sequence
+from typing import List, Dict, Optional, Tuple, Union, Iterable, Sequence, Any
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from enum import Enum
@@ -30,12 +30,14 @@ except ImportError:
 
 try:
     from skimage import io
+    from skimage.color import rgb2gray
     from skimage.measure import label, regionprops
-    from skimage.morphology import binary_dilation, disk
+    from skimage.morphology import binary_dilation, binary_erosion, disk
     HAS_SKIMAGE = True
 except ImportError:
     HAS_SKIMAGE = False
     binary_dilation = None
+    binary_erosion = None
     disk = None
 
 try:
@@ -83,6 +85,7 @@ class ROI:
     metadata: Dict = field(default_factory=dict)
     annotation_type: str = "custom_annotation"
     source_object_ids: List[int] = field(default_factory=list)
+    metrics: Dict[str, Any] = field(default_factory=dict)
 
     def to_boundary(self, image_shape: Tuple[int, int]) -> Boundary:
         """Convert ROI to CurveAlign Boundary object."""
@@ -99,10 +102,10 @@ class ROI:
             contour = max(contours, key=len)
             # Convert to (row, col) format
             boundary_coords = np.array([[int(r), int(c)] for r, c in contour])
-        else:
-            boundary_coords = np.array([])
+            return Boundary(kind="polygon", data=boundary_coords)
 
-        return Boundary(coords=boundary_coords)
+        # Fallback to mask boundary definition
+        return Boundary(kind="mask", data=mask.astype(np.uint8))
 
     def to_mask(self, image_shape: Tuple[int, int]) -> np.ndarray:
         """Convert ROI to binary mask."""
@@ -130,6 +133,19 @@ class ROI:
             mask[rr, cc] = True
 
         return mask
+
+    @staticmethod
+    def _ensure_grayscale(image: np.ndarray) -> np.ndarray:
+        if image.ndim == 2:
+            return image
+        if image.ndim >= 3:
+            if image.shape[-1] in (3, 4):
+                img = image[..., :3]
+                if HAS_SKIMAGE:
+                    return rgb2gray(img)
+                return np.mean(img, axis=-1)
+            return image[0]
+        return image
 
 
 @dataclass
@@ -164,7 +180,11 @@ class ROIManager:
     napari Shapes layer and CurveAlign API.
     """
     
-    def __init__(self, viewer: Optional['napari.viewer.Viewer'] = None):
+    def __init__(
+        self,
+        viewer: Optional['napari.viewer.Viewer'] = None,
+        overlay_callback: Optional[callable] = None,
+    ):
         """
         Initialize ROI Manager.
         
@@ -184,6 +204,7 @@ class ROIManager:
         self.object_layer: Optional[Shapes] = None
         self._active_object_filter: Sequence[str] = ("cell", "fiber")
         self.detection_distance: int = 25
+        self.overlay_callback = overlay_callback
         
     def set_viewer(self, viewer: 'napari.viewer.Viewer'):
         """Set the napari viewer."""
@@ -348,6 +369,7 @@ class ROIManager:
         
         roi_metadata = metadata.copy() if metadata else {}
         roi_metadata.setdefault("annotation_type", annotation_type)
+        roi_metadata.setdefault("source", roi_metadata.get("source", "manual"))
 
         roi = ROI(
             id=self.roi_counter,
@@ -457,6 +479,30 @@ class ROIManager:
             if roi.id == roi_id:
                 return roi
         return None
+
+    def get_all_roi_ids(self) -> List[int]:
+        return [roi.id for roi in self.rois]
+
+    def get_roi_summary(self, roi_id: int) -> Dict:
+        """Return metadata summary for UI."""
+        roi = self.get_roi(roi_id)
+        if roi is None:
+            return {}
+        summary = {
+            "id": roi.id,
+            "name": roi.name,
+            "annotation_type": roi.annotation_type,
+            "source": roi.metadata.get("source", "manual"),
+            "area": float(roi.area),
+            "center": tuple(roi.center),
+            "has_analysis": roi.analysis_result is not None,
+            "analysis_method": roi.analysis_method.value if roi.analysis_method else "",
+            "n_curvelets": roi.analysis_result.get("n_curvelets", 0) if roi.analysis_result else 0,
+        }
+        if roi.analysis_result:
+            summary["alignment"] = roi.analysis_result.get("alignment")
+            summary["mean_angle"] = roi.analysis_result.get("mean_angle")
+        return summary
 
     def highlight_roi(self, roi_id: int):
         """Highlight ROI inside napari."""
@@ -722,20 +768,23 @@ class ROIManager:
         if roi is None:
             return None
         
-        # Convert ROI to boundary
+        # Convert ROI to boundary and prepare masks
         boundary = roi.to_boundary(image.shape[:2])
+        boundary_data = boundary.data
+        base_mask = roi.to_mask(image.shape[:2])
+        bbox = (0, 0, image.shape[0], image.shape[1])
         
         # Prepare image
         if roi.crop_mode:
-            # Crop image to ROI
-            mask = roi.to_mask(image.shape[:2])
+            mask = base_mask
             bbox = self._get_bbox(mask)
             cropped_image = image[bbox[0]:bbox[2], bbox[1]:bbox[3]]
-            # Adjust boundary coordinates
-            boundary.coords = boundary.coords - np.array([bbox[0], bbox[1]])
+            if boundary.kind == "polygon" and isinstance(boundary_data, np.ndarray):
+                adjusted = boundary_data - np.array([bbox[0], bbox[1]])
+                boundary = Boundary(kind="polygon", data=adjusted, spacing_xy=boundary.spacing_xy)
         else:
             cropped_image = image
-        
+
         # Run analysis
         if options is None:
             options = {}
@@ -778,13 +827,79 @@ class ROIManager:
         except Exception as exc:
             print(f"Fiber registration skipped: {exc}")
         
+        if self.overlay_callback and self.current_image_shape is not None:
+            try:
+                full_mask = roi.to_mask(self.current_image_shape)
+                overlay_payload = {
+                    "roi_id": roi.id,
+                    "method": method.value,
+                    "mask": full_mask,
+                    "bbox": bbox if roi.crop_mode else (0, 0, *self.current_image_shape),
+                    "result": roi.analysis_result,
+                }
+                self.overlay_callback(overlay_payload)
+            except Exception as exc:
+                print(f"Overlay callback failed: {exc}")
         return roi.analysis_result
+
+    def measure_roi(
+        self,
+        roi_id: int,
+        image: np.ndarray,
+        histogram_bins: int = 32
+    ) -> Optional[Dict[str, Any]]:
+        if not HAS_SKIMAGE:
+            raise ImportError("scikit-image is required for ROI measurements")
+        roi = self.get_roi(roi_id)
+        if roi is None:
+            return None
+
+        gray = self._ensure_grayscale(image.astype(np.float32))
+        gray_norm = gray
+        if gray_norm.max() > 1.0:
+            gray_norm = gray_norm / np.max(gray_norm)
+
+        mask = roi.to_mask(gray_norm.shape)
+        if not np.any(mask):
+            return None
+
+        labeled = mask.astype(np.uint8)
+        props = regionprops(labeled)
+        if not props:
+            return None
+        prop = props[0]
+
+        values = gray_norm[mask]
+        hist, bin_edges = np.histogram(values, bins=histogram_bins, range=(0.0, 1.0))
+
+        metrics = {
+            "roi_id": roi_id,
+            "area_px": float(prop.area),
+            "perimeter_px": float(prop.perimeter),
+            "centroid": [float(prop.centroid[1]), float(prop.centroid[0])],
+            "bbox": [float(v) for v in prop.bbox],
+            "eccentricity": float(prop.eccentricity),
+            "orientation_deg": float(np.degrees(prop.orientation)),
+            "mean_intensity": float(np.mean(values)),
+            "median_intensity": float(np.median(values)),
+            "std_intensity": float(np.std(values)),
+            "histogram": {
+                "bins": bin_edges.tolist(),
+                "counts": hist.tolist(),
+            },
+        }
+
+        roi.metrics = metrics
+        return metrics
 
     def detect_objects_in_roi(
         self,
         roi_id: int,
         object_types: Optional[Sequence[str]] = None,
-        distance: Optional[int] = None
+        distance: Optional[int] = None,
+        include_interior: bool = True,
+        include_boundary_ring: bool = False,
+        boundary_width: int = 5
     ) -> Dict[str, List[AnnotationObject]]:
         """
         Detect registered objects contained within a given ROI.
@@ -808,6 +923,11 @@ class ROIManager:
         dilation_pixels = distance if distance is not None else self.detection_distance
         if dilation_pixels and dilation_pixels > 0 and HAS_SKIMAGE and binary_dilation is not None:
             mask = binary_dilation(mask, disk(int(dilation_pixels)))
+        boundary_mask = None
+        if include_boundary_ring and HAS_SKIMAGE and binary_erosion is not None:
+            inner = binary_erosion(mask, disk(max(1, boundary_width // 2)))
+            outer = binary_dilation(mask, disk(max(1, boundary_width)))
+            boundary_mask = np.logical_and(outer, np.logical_not(inner))
         
         kinds = object_types or self._active_object_filter or ("cell", "fiber")
         result: Dict[str, List[AnnotationObject]] = {kind: [] for kind in kinds}
@@ -818,8 +938,13 @@ class ROIManager:
                 col = int(round(obj.centroid_rc[1]))
                 if row < 0 or col < 0 or row >= mask.shape[0] or col >= mask.shape[1]:
                     continue
-                if mask[row, col]:
-                    result[kind].append(obj)
+                inside = mask[row, col]
+                if not include_interior and inside and boundary_mask is None:
+                    continue
+                if boundary_mask is not None:
+                    if not boundary_mask[row, col]:
+                        continue
+                result[kind].append(obj)
         
         highlight_ids = [obj.id for objs in result.values() for obj in objs]
         if highlight_ids:
@@ -852,6 +977,77 @@ class ROIManager:
         )
         roi.source_object_ids = [object_id]
         return roi
+
+    def compute_roi_metrics(
+        self,
+        roi_ids: Sequence[int],
+        intensity_image: Optional[np.ndarray] = None,
+    ) -> List[Dict[str, Any]]:
+        if self.current_image_shape is None:
+            raise ValueError("Image shape is not set; call set_image_shape first")
+
+        metrics: List[Dict[str, Any]] = []
+        if intensity_image is not None and intensity_image.ndim > 2:
+            if intensity_image.shape[:2] != self.current_image_shape:
+                intensity_image = np.mean(intensity_image, axis=-1)
+
+        for roi_id in roi_ids:
+            roi = self.get_roi(roi_id)
+            if not roi:
+                continue
+            mask = roi.to_mask(self.current_image_shape)
+            if not np.any(mask):
+                continue
+            label_image = mask.astype(np.uint8)
+            props = regionprops(
+                label_image,
+                intensity_image=intensity_image if intensity_image is not None else None,
+            )
+            if not props:
+                continue
+            prop = props[0]
+            stat = {
+                "id": roi.id,
+                "name": roi.name,
+                "type": roi.annotation_type,
+                "source": roi.metadata.get("source", ""),
+                "area_px": float(prop.area),
+                "perimeter_px": float(prop.perimeter),
+                "major_axis_px": float(getattr(prop, "major_axis_length", 0.0) or 0.0),
+                "minor_axis_px": float(getattr(prop, "minor_axis_length", 0.0) or 0.0),
+                "eccentricity": float(getattr(prop, "eccentricity", 0.0) or 0.0),
+                "solidity": float(getattr(prop, "solidity", 0.0) or 0.0),
+                "orientation_deg": float(
+                    np.degrees(getattr(prop, "orientation", 0.0) or 0.0)
+                ),
+                "centroid_row": float(prop.centroid[0]),
+                "centroid_col": float(prop.centroid[1]),
+                "bbox_min_row": int(prop.bbox[0]),
+                "bbox_min_col": int(prop.bbox[1]),
+                "bbox_max_row": int(prop.bbox[2]),
+                "bbox_max_col": int(prop.bbox[3]),
+            }
+            if intensity_image is not None:
+                intensities = intensity_image[mask]
+                if intensities.size:
+                    stat["intensity_mean"] = float(np.mean(intensities))
+                    stat["intensity_std"] = float(np.std(intensities))
+                    stat["intensity_min"] = float(np.min(intensities))
+                    stat["intensity_max"] = float(np.max(intensities))
+            metrics.append(stat)
+        return metrics
+
+    def get_metrics_dataframe(
+        self,
+        roi_ids: Optional[Sequence[int]] = None,
+        intensity_image: Optional[np.ndarray] = None,
+    ) -> pd.DataFrame:
+        if roi_ids is None:
+            roi_ids = self.get_all_roi_ids()
+        data = self.compute_roi_metrics(roi_ids, intensity_image=intensity_image)
+        if not data:
+            return pd.DataFrame()
+        return pd.DataFrame(data)
     
     def get_analysis_table(self) -> pd.DataFrame:
         """
@@ -883,6 +1079,12 @@ class ROIManager:
             })
         
         return pd.DataFrame(rows)
+
+    def get_metrics(self, roi_id: int) -> Optional[Dict[str, Any]]:
+        roi = self.get_roi(roi_id)
+        if roi is None:
+            return None
+        return roi.metrics if roi.metrics else None
     
     def save_rois_json(self, file_path: str, roi_ids: Optional[List[int]] = None):
         """
