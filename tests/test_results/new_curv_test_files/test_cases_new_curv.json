@@ -1,28 +1,36 @@
 {
   "test_cases": [
     {
-      "name": "real1_standard",
+      "name": "real1_keep0.01_radius3",
       "image": "real1.tif",
       "keep": 0.01,
       "scale": 1,
       "radius": 3,
-      "matlab_reference_csv": "test_new_curvs_real1_standard.csv"
+      "matlab_reference_csv": "test_new_curv_real1_keep0.01_radius3.csv"
     },
     {
-      "name": "real1_no_boundary_1",
+      "name": "real1_keep0.05_radius10",
       "image": "real1.tif",
       "keep": 0.05,
       "scale": 1,
       "radius": 10,
-      "matlab_reference_csv": "test_new_curvs_real1_no_boundary_1.csv"
+      "matlab_reference_csv": "test_new_curv_real1_keep0.05_radius10.csv"
     },
     {
-      "name": "real1_no_boundary_2",
+      "name": "real1_keep0.1_radius10",
       "image": "real1.tif",
       "keep": 0.1,
       "scale": 1,
       "radius": 10,
-      "matlab_reference_csv": "test_new_curvs_real1_no_boundary_2.csv"
+      "matlab_reference_csv": "test_new_curv_real1_keep0.1_radius10.csv"
+    },
+        {
+      "name": "real1_keep0.05_radius5",
+      "image": "real1.tif",
+      "keep": 0.05,
+      "scale": 1,
+      "radius": 5,
+      "matlab_reference_csv": "test_new_curv_real1_keep0.05_radius5.csv"
     }
   ]
 }
