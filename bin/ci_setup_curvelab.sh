@@ -52,6 +52,15 @@ if [ ! -d "CurveLab-${CURVELAB_VERSION}" ]; then
   else
     MIME_TYPE=""
   fi
+  if [[ "${MIME_TYPE}" == text/html* ]]; then
+    echo "::error title=CurveLab download failed::${ARCHIVE_NAME} is HTML (likely an auth error or redirect)."
+    if command -v head >/dev/null 2>&1; then
+      echo "First 40 lines of response:"
+      head -n 40 "${ARCHIVE_NAME}"
+    fi
+    echo "Ensure FETCH_FDCT runs a curl command that downloads the actual CurveLab-${CURVELAB_VERSION} archive."
+    exit 1
+  fi
   case "${MIME_TYPE}" in
     application/gzip|application/x-gzip)
       tar xzf "${ARCHIVE_NAME}"
