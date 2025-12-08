@@ -30,17 +30,19 @@ else
   echo "FFTW already present, skipping rebuild."
 fi
 
-echo "== Downloading CurveLab ${CURVELAB_VERSION} =="
-for var in RESTRICTED_USER RESTRICTED_PASSWORD RESTRICTED_URL; do
-  if [ -z "${!var:-}" ]; then
-    echo "::error title=Missing secret::${var} is not set"
+ARCHIVE_NAME="$(basename "${RESTRICTED_URL:-CurveLab-${CURVELAB_VERSION}.tar.gz}")"
+DEFAULT_ARCHIVE="CurveLab-${CURVELAB_VERSION}.tar.gz"
+
+echo "== Preparing CurveLab ${CURVELAB_VERSION} archive =="
+if [ -f "${DEFAULT_ARCHIVE}" ]; then
+  ARCHIVE_NAME="${DEFAULT_ARCHIVE}"
+elif [ ! -f "${ARCHIVE_NAME}" ]; then
+  if [ -n "${RESTRICTED_USER:-}" ] && [ -n "${RESTRICTED_PASSWORD:-}" ] && [ -n "${RESTRICTED_URL:-}" ]; then
+    curl -fL -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" -O "${RESTRICTED_URL}"
+  else
+    echo "::error title=CurveLab archive missing::Provide FETCH_FDCT secret (preferred) or define RESTRICTED_USER/RESTRICTED_PASSWORD/RESTRICTED_URL."
     exit 1
   fi
-done
-
-ARCHIVE_NAME="$(basename "${RESTRICTED_URL}")"
-if [ ! -f "${ARCHIVE_NAME}" ]; then
-  curl -fL -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" -O "${RESTRICTED_URL}"
 fi
 
 if [ ! -d "CurveLab-${CURVELAB_VERSION}" ]; then
