@@ -13,6 +13,10 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.12", "3.13"]
+    env:
+      RESTRICTED_USER: ${{ secrets.RESTRICTED_USER }}
+      RESTRICTED_PASSWORD: ${{ secrets.RESTRICTED_PASSWORD }}
+      RESTRICTED_URL: ${{ secrets.RESTRICTED_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,11 +29,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential gcc g++ make wget curl
 
+      - name: Verify CurveLab secrets
+        run: |
+          for var in RESTRICTED_USER RESTRICTED_PASSWORD RESTRICTED_URL; do
+            if [ -z "${!var}" ]; then
+              echo "::error title=Missing CurveLab secret::${var} is empty. Define it in repo or environment secrets.";
+              exit 1;
+            fi;
+          done
+
       - name: Prepare FFTW + CurveLab toolchain
-        env:
-          RESTRICTED_USER: ${{ secrets.RESTRICTED_USER }}
-          RESTRICTED_PASSWORD: ${{ secrets.RESTRICTED_PASSWORD }}
-          RESTRICTED_URL: ${{ secrets.RESTRICTED_URL }}
         run: |
           bash bin/ci_setup_curvelab.sh
 
@@ -55,6 +64,10 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.12"]
+    env:
+      RESTRICTED_USER: ${{ secrets.RESTRICTED_USER }}
+      RESTRICTED_PASSWORD: ${{ secrets.RESTRICTED_PASSWORD }}
+      RESTRICTED_URL: ${{ secrets.RESTRICTED_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -66,11 +79,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential gcc g++ make wget curl
 
+      - name: Verify CurveLab secrets
+        run: |
+          for var in RESTRICTED_USER RESTRICTED_PASSWORD RESTRICTED_URL; do
+            if [ -z "${!var}" ]; then
+              echo "::error title=Missing CurveLab secret::${var} is empty. Define it in repo or environment secrets.";
+              exit 1;
+            fi;
+          done
+
       - name: Prepare FFTW + CurveLab toolchain
-        env:
-          RESTRICTED_USER: ${{ secrets.RESTRICTED_USER }}
-          RESTRICTED_PASSWORD: ${{ secrets.RESTRICTED_PASSWORD }}
-          RESTRICTED_URL: ${{ secrets.RESTRICTED_URL }}
         run: |
           bash bin/ci_setup_curvelab.sh
 
