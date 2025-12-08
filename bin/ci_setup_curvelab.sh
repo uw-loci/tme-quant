@@ -46,7 +46,28 @@ elif [ ! -f "${ARCHIVE_NAME}" ]; then
 fi
 
 if [ ! -d "CurveLab-${CURVELAB_VERSION}" ]; then
-  tar xzf "${ARCHIVE_NAME}"
+  echo "== Extracting ${ARCHIVE_NAME} =="
+  if command -v file >/dev/null 2>&1; then
+    MIME_TYPE=$(file -b --mime-type "${ARCHIVE_NAME}")
+  else
+    MIME_TYPE=""
+  fi
+  case "${MIME_TYPE}" in
+    application/gzip|application/x-gzip)
+      tar xzf "${ARCHIVE_NAME}"
+      ;;
+    application/x-tar|"")
+      # Fallback to plain tar if mime type unknown
+      tar xf "${ARCHIVE_NAME}"
+      ;;
+    application/zip)
+      unzip -q "${ARCHIVE_NAME}"
+      ;;
+    *)
+      echo "::error title=Unknown archive format::Don't know how to extract ${ARCHIVE_NAME} (${MIME_TYPE})."
+      exit 1
+      ;;
+  esac
 fi
 
 echo "== Building CurveLab binaries =="
