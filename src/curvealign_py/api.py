@@ -345,9 +345,11 @@ def _compute_summary_statistics(
             'n_curvelets': 0,
             'mean_angle': 0.0,
             'angle_std': 0.0,
+            'std_angle': 0.0,
             'mean_weight': 0.0,
             'alignment': 0.0,
-            'density': 0.0
+            'density': 0.0,
+            'total_curvelets': 0,
         }
     
     angles = np.array([c.angle_deg for c in curvelets])
