@@ -38,7 +38,10 @@ if [ -f "${DEFAULT_ARCHIVE}" ]; then
   ARCHIVE_NAME="${DEFAULT_ARCHIVE}"
 elif [ ! -f "${ARCHIVE_NAME}" ]; then
   if [ -n "${RESTRICTED_USER:-}" ] && [ -n "${RESTRICTED_PASSWORD:-}" ] && [ -n "${RESTRICTED_URL:-}" ]; then
-    curl -fL -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" -O "${RESTRICTED_URL}"
+    curl --fail-with-body -fL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 600 \
+      -A "Mozilla/5.0 (GitHub Actions)" \
+      -u "${RESTRICTED_USER}:${RESTRICTED_PASSWORD}" \
+      -O "${RESTRICTED_URL}"
   else
     echo "::error title=CurveLab archive missing::Provide FETCH_FDCT secret (preferred) or define RESTRICTED_USER/RESTRICTED_PASSWORD/RESTRICTED_URL."
     exit 1

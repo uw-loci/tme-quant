@@ -64,11 +64,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${FETCH_FDCT}" ]; then
-            echo "::error title=Missing secret::FETCH_FDCT is empty. Add the curl command under repo secrets."
+            echo "::error title=Missing secret::FETCH_FDCT is empty. It must download utils/CurveLab-2.1.3.tar.gz."
             exit 1
           fi
           mkdir -p utils
           cd utils
+          echo "Downloading CurveLab archive via FETCH_FDCT..."
           eval "${FETCH_FDCT}"
           if [ ! -f "CurveLab-2.1.3.tar.gz" ]; then
             echo "::error title=CurveLab archive missing after FETCH_FDCT::Expected utils/CurveLab-2.1.3.tar.gz to exist after running FETCH_FDCT."
@@ -78,7 +79,14 @@ jobs:
           fi
           if command -v file >/dev/null 2>&1; then
             echo "Downloaded archive mime-type:"
-            file -b --mime-type "CurveLab-2.1.3.tar.gz" || true
+            MIME="$(file -b --mime-type "CurveLab-2.1.3.tar.gz" || true)"
+            echo "${MIME}"
+            if [[ "${MIME}" == text/html* ]]; then
+              echo "::error title=CurveLab download returned HTML::Likely a 403/redirect. Showing first 40 lines:"
+              head -n 40 "CurveLab-2.1.3.tar.gz" || true
+              echo "Fix: update FETCH_FDCT to use 'curl --fail-with-body -fL ... -o CurveLab-2.1.3.tar.gz <URL>' so it fails on 403 instead of saving HTML."
+              exit 1
+            fi
           fi
 
       - name: Prepare FFTW + CurveLab toolchain
