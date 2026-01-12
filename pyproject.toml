@@ -29,11 +29,13 @@ dependencies = [
   "magicgui>=0.10.0",
   "superqt>=0.7.0",
   "vispy>=0.15.0",
-  # Curvelops for curvelet analysis
-  "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
 ]
 
 [project.optional-dependencies]
+# Optional: authentic CurveLab FDCT via curvelops (requires external FFTW+CurveLab builds).
+curvelab = [
+  "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
+]
 dev = [
   "build",
   "pytest>=6.0",
