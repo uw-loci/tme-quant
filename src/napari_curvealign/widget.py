@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, TYPE_CHECKING
 
@@ -31,7 +32,11 @@ from qtpy.QtWidgets import (
     QAbstractScrollArea,
     QHeaderView,
     QTabWidget,
+    QScrollArea,
+    QFrame,
+    QSizePolicy,
 )
+from qtpy import QtCore
 from qtpy.QtCore import Qt, QAbstractTableModel
 from qtpy.QtGui import QColor
 from skimage.io import imread
@@ -281,6 +286,9 @@ class CurveAlignWidget(QWidget):
         self._viewer = viewer  # Store viewer reference
         self.image_paths = []
         self.image_layers = {}  # Store image layers by filename
+        self.current_image_label: Optional[str] = None
+        self._last_segmentation_by_image: Dict[str, np.ndarray] = {}
+        self._seg_layers_by_image: Dict[str, List[Any]] = defaultdict(list)
         self.ignore_layer_events = False  # Flag to prevent event recursion
         self.ignore_selection_events = False  # Flag for selection events
         self.results_viewer = None  # Separate viewer for results
@@ -298,10 +306,27 @@ class CurveAlignWidget(QWidget):
         if self._viewer is not None:
             self.roi_manager.set_viewer(self._viewer)
         
-        # Main layout with tabs
+        # Main layout with scrollable tabs so the dock can compress
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(4, 4, 4, 4)
         self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)
+        self.tab_widget.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
+        scroll_container = QWidget()
+        scroll_layout = QVBoxLayout()
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.addWidget(self.tab_widget)
+        scroll_container.setLayout(scroll_layout)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        self.scroll_area.setWidget(scroll_container)
+        # Encourage the widget to fit comfortably in ~1/3 screen width before scrolling
+        self.scroll_area.setMinimumWidth(520)
+        self.tab_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        scroll_container.setMinimumWidth(520)
+        main_layout.addWidget(self.scroll_area)
         
         # Create tabs
         self.main_tab = QWidget()
@@ -419,6 +444,8 @@ class CurveAlignWidget(QWidget):
         self._setup_roi_tab()
         
         self.setLayout(main_layout)
+        self.setMinimumWidth(360)
+        self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Expanding)
         
         # Connect signals
         self.open_btn.clicked.connect(self.open_images)
@@ -559,17 +586,44 @@ class CurveAlignWidget(QWidget):
         if selected_items:
             self._show_selected_image()
 
+    def _active_image_label(self) -> Optional[str]:
+        """Return the filename/label for the currently selected image."""
+        selected_items = self.image_list.selectedItems()
+        if not selected_items:
+            return None
+        return selected_items[0].text()
+
+    def _selected_image_layer(self) -> Optional[Any]:
+        """Return the image layer corresponding to the image list selection."""
+        label = self._active_image_label()
+        if label and label in self.image_layers:
+            return self.image_layers[label]
+        return None
+
+    def _set_active_image_context(self, layer: Optional[Any] = None):
+        """Sync ROI manager with the active image label and shape."""
+        label = self._active_image_label()
+        if layer is None and self.viewer:
+            layer = self.viewer.layers.selection.active
+        shape = None
+        if layer is not None and hasattr(layer, "data"):
+            data = np.asarray(layer.data)
+            shape = data.shape[:2]
+        self.current_image_label = label
+        self.roi_manager.set_active_image(label, shape)
+        # Keep shapes layer and lists in sync with the active image
+        self.roi_manager._update_shapes_layer()
+        self._update_roi_list()
+
     def _show_selected_image(self):
         """Display the currently selected image (and linked RGB layer) in the viewer."""
         selected_items = self.image_list.selectedItems()
         if not selected_items or not self.viewer:
             return
-
         filename = selected_items[0].text()
         layer = self.image_layers.get(filename)
         if layer is None:
             return
-
         self.ignore_selection_events = True
         try:
             for layer_name, lyr in self.image_layers.items():
@@ -578,7 +632,6 @@ class CurveAlignWidget(QWidget):
                 rgb_label = f"{layer_name} (RGB)"
                 if rgb_label in self.viewer.layers:
                     self.viewer.layers[rgb_label].visible = is_active
-
             self.viewer.layers.selection.select_only(layer)
             layer.visible = True
             self.viewer.reset_view()
@@ -587,6 +640,8 @@ class CurveAlignWidget(QWidget):
                 for i in range(len(steps) - 2):
                     steps[i] = 0
                 self.viewer.dims.current_step = tuple(steps)
+            # Sync ROI manager to the active image
+            self._set_active_image_context(layer)
         finally:
             self.ignore_selection_events = False
 
@@ -640,6 +695,7 @@ class CurveAlignWidget(QWidget):
                                 self.viewer.layers[rgb_label].visible = (layer_name == filename)
                         
                         self.ignore_selection_events = False
+                        self._set_active_image_context(active_layer)
                         break
 
     def on_layer_added(self, event):
@@ -1082,6 +1138,16 @@ class CurveAlignWidget(QWidget):
         self.create_rois_btn = QPushButton("Create ROIs from Mask")
         self.create_rois_btn.clicked.connect(self._create_rois_from_segmentation)
         button_layout.addWidget(self.create_rois_btn)
+        # Segmentation layer visibility helpers
+        self.show_active_layers_btn = QPushButton("Show Active Set")
+        self.show_active_layers_btn.clicked.connect(self._show_active_image_layers)
+        self.show_all_layers_btn = QPushButton("Show All Sets")
+        self.show_all_layers_btn.clicked.connect(self._show_all_layers)
+        button_layout.addWidget(self.show_active_layers_btn)
+        button_layout.addWidget(self.show_all_layers_btn)
+        self.seg_source_note = QLabel("Mask source: select a labels layer to use it directly.")
+        self.seg_source_note.setStyleSheet("color: #aaa; font-size: 10pt;")
+        layout.addWidget(self.seg_source_note)
         
         layout.addLayout(button_layout)
         
@@ -1114,8 +1180,8 @@ class CurveAlignWidget(QWidget):
             print("No image loaded. Please open an image first.")
             return
         
-        # Get current image
-        image_layer = self._viewer.layers[0]
+        # Get current image (respect active selection / image list)
+        image_layer = self._get_active_image_layer()
         if not hasattr(image_layer, 'data'):
             print("Selected layer is not an image.")
             return
@@ -1161,19 +1227,33 @@ class CurveAlignWidget(QWidget):
         # Run segmentation
         try:
             print(f"Running {method_text} segmentation...")
+            # Sync ROI context to this image before running
+            self._set_active_image_context(image_layer)
+            # Ensure the image layer is active so downstream tools know which image we’re on
+            if self.viewer:
+                try:
+                    self.viewer.layers.selection.select_only(image_layer)
+                except Exception:
+                    pass
             labeled_mask = segment_image(image, options)
             n_objects = labeled_mask.max()
             print(f"Found {n_objects} objects")
             
             # Add mask as labels layer
             if self._viewer:
-                self._viewer.add_labels(
+                layer_name = f"{self._active_image_label() or image_layer.name}/seg/{method_text}"
+                labels_layer = self._viewer.add_labels(
                     labeled_mask,
-                    name=f"Segmentation - {method_text}",
-                    opacity=0.5
+                    name=layer_name,
+                    opacity=0.5,
+                    metadata={"curvealign_parent": self._active_image_label() or image_layer.name}
                 )
                 # Store for ROI creation
                 self._last_segmentation = labeled_mask
+                label_key = self._active_image_label() or image_layer.name
+                if label_key:
+                    self._last_segmentation_by_image[label_key] = labeled_mask
+                    self._seg_layers_by_image[label_key].append(labels_layer)
                 
         except Exception as e:
             print(f"Segmentation failed: {e}")
@@ -1186,14 +1266,37 @@ class CurveAlignWidget(QWidget):
     
     def _create_rois_from_segmentation(self):
         """Convert last segmentation mask to ROIs."""
-        if not hasattr(self, '_last_segmentation'):
-            print("No segmentation available. Run segmentation first.")
-            return
-        
         try:
+            # Prefer the currently selected labels layer; fall back to per-image cache, then last global
+            mask = None
+            active_layer = self.viewer.layers.selection.active if self.viewer else None
+            if active_layer is not None and active_layer.__class__.__name__ == "Labels" and hasattr(active_layer, "data"):
+                mask = np.asarray(active_layer.data)
+
+            source_desc = None
+            if mask is not None and active_layer is not None and active_layer.__class__.__name__ == "Labels":
+                source_desc = f"selected labels layer: {active_layer.name}"
+
+            if mask is None:
+                label_key = self._active_image_label()
+                if label_key and label_key in self._last_segmentation_by_image:
+                    mask = self._last_segmentation_by_image[label_key]
+                    source_desc = f"cached segmentation for image: {label_key}"
+
+            if mask is None and hasattr(self, "_last_segmentation"):
+                mask = self._last_segmentation
+                source_desc = "last segmentation (global fallback)"
+
+            if mask is None:
+                print("No segmentation available. Select a labels layer or run segmentation first.")
+                return
+
             print("Converting segmentation to ROIs...")
+            if self.seg_source_note:
+                self.seg_source_note.setText(f"Mask source: {source_desc or 'unknown'}")
+            self.roi_manager.set_active_image(self._active_image_label(), mask.shape)
             roi_data_list = masks_to_roi_data(
-                self._last_segmentation,
+                mask,
                 min_area=self.seg_min_area.value(),
                 simplify_tolerance=1.0
             )
@@ -1513,6 +1616,8 @@ class CurveAlignWidget(QWidget):
         shape = self.current_image_shape
         if shape and shape != self.roi_manager.current_image_shape:
             self.roi_manager.set_image_shape(shape)
+        # Keep active image context in sync for ROI scoping
+        self._set_active_image_context(viewer.layers.selection.active if viewer.layers else None)
         return viewer
 
     def _draw_annotation(self):
@@ -1621,6 +1726,25 @@ class CurveAlignWidget(QWidget):
         if object_ids:
             self.roi_manager.highlight_objects(object_ids)
 
+    def _show_active_image_layers(self):
+        """Show only layers belonging to the active image (and hide others)."""
+        label = self._active_image_label()
+        if not self.viewer or not label:
+            return
+        parent_names = {label, f"{label} (RGB)"}
+        for lyr in list(self.viewer.layers):
+            parent = getattr(lyr, "metadata", {}).get("curvealign_parent")
+            is_parent = lyr.name in parent_names
+            is_child = parent in parent_names
+            lyr.visible = is_parent or is_child
+
+    def _show_all_layers(self):
+        """Show all layers again."""
+        if not self.viewer:
+            return
+        for lyr in list(self.viewer.layers):
+            lyr.visible = True
+
     def _on_object_filter_changed(self):
         """Update object visibility based on filter dropdown."""
         types = self._object_filter_types()
@@ -1654,7 +1778,7 @@ class CurveAlignWidget(QWidget):
             return
         selected_id = self._selected_annotation_id()
         self.annotation_list.clear()
-        for roi in self.roi_manager.rois:
+        for roi in self.roi_manager.get_rois_for_active_image():
             label = f"{roi.id}: {roi.name} [{roi.annotation_type}]"
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, roi.id)
@@ -1738,7 +1862,7 @@ class CurveAlignWidget(QWidget):
             # Set image shape if available
             shape = self.current_image_shape
             if shape:
-                self.roi_manager.set_image_shape(shape)
+                self.roi_manager.set_active_image(self._active_image_label(), shape)
             
             # Load based on format
             if "JSON" in selected_filter or file_path.endswith('.json'):
@@ -1807,7 +1931,7 @@ class CurveAlignWidget(QWidget):
             image_layer = self.viewer.layers[0]
             if hasattr(image_layer, 'data'):
                 image = self._prepare_analysis_image(image_layer.data)
-                for roi in self.roi_manager.rois:
+                for roi in self.roi_manager.get_rois_for_active_image():
                     self.roi_manager.analyze_roi(roi.id, image)
                 self._update_roi_list()
 
@@ -1845,15 +1969,8 @@ class CurveAlignWidget(QWidget):
         return ids
 
     def _get_active_image_data(self, grayscale: bool = False) -> Optional[np.ndarray]:
-        if not self.viewer:
-            return None
-        layer = self.viewer.layers.selection.active
+        layer = self._get_active_image_layer()
         if layer is None:
-            for lyr in self.viewer.layers:
-                if hasattr(lyr, "data"):
-                    layer = lyr
-                    break
-        if layer is None or not hasattr(layer, "data"):
             return None
         data = np.asarray(layer.data)
         if grayscale and data.ndim > 2:
@@ -1863,6 +1980,30 @@ class CurveAlignWidget(QWidget):
             else:
                 data = np.mean(data, axis=0)
         return data
+
+    def _get_active_image_layer(self):
+        """Return the image layer corresponding to the selected item or active layer."""
+        if not self.viewer:
+            return None
+        # First, honor the image list selection
+        selected_image_layer = self._selected_image_layer()
+        if selected_image_layer is not None:
+            return selected_image_layer
+        # Next, inspect active layer
+        layer = self.viewer.layers.selection.active
+        # If a labels layer is active, try to jump to its parent image
+        if layer is not None and getattr(layer, "metadata", {}).get("curvealign_parent"):
+            parent = layer.metadata.get("curvealign_parent")
+            if parent in self.image_layers:
+                return self.image_layers[parent]
+        # If the active layer is an image, use it
+        if layer is not None and hasattr(layer, "data"):
+            return layer
+        # Fallback: first image layer in the stack
+        for lyr in self.viewer.layers:
+            if hasattr(lyr, "data"):
+                return lyr
+        return None
 
     def _open_measurements(self):
         roi_ids = self._selected_roi_ids()
@@ -1887,7 +2028,7 @@ class CurveAlignWidget(QWidget):
         """Update ROI list widget and table."""
         self.roi_list.clear()
         table_rows = []
-        for roi in self.roi_manager.rois:
+        for roi in self.roi_manager.get_rois_for_active_image():
             status = "✓" if roi.analysis_result else ""
             source = roi.metadata.get("source", "manual")
             text = f"{roi.id}: {roi.name} [{roi.annotation_type}|{source}] {status}"
@@ -1918,6 +2059,13 @@ class CurveAlignWidget(QWidget):
                 item = QTableWidgetItem(value)
                 self.roi_table_view.setItem(r_index, c_index, item)
         self.roi_table_view.resizeColumnsToContents()
+
+    def sizeHint(self):
+        """
+        Prefer a compact default size so the dock fits in narrower panels.
+        This keeps the full UI visible until roughly 1/3 of a 16\" screen.
+        """
+        return QtCore.QSize(700, 900)
 
 # Factory function to create the widget
 def create_curve_align_widget(viewer: "napari.viewer.Viewer" = None):

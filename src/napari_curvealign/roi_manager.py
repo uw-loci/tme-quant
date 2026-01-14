@@ -198,6 +198,7 @@ class ROIManager:
         self.roi_counter = 0
         self.shapes_layer: Optional[Shapes] = None
         self.current_image_shape: Optional[Tuple[int, int]] = None
+        self.active_image_label: Optional[str] = None
         self.objects: Dict[str, List[AnnotationObject]] = {"cell": [], "fiber": []}
         self.object_lookup: Dict[int, AnnotationObject] = {}
         self._object_id_counter = 0
@@ -215,6 +216,14 @@ class ROIManager:
     def set_image_shape(self, shape: Tuple[int, int]):
         """Set current image shape for ROI operations."""
         self.current_image_shape = shape
+
+    def set_active_image(self, label: Optional[str], shape: Optional[Tuple[int, int]] = None):
+        """
+        Set the active image label and shape so ROIs can be scoped per image.
+        """
+        self.active_image_label = label
+        if shape is not None:
+            self.current_image_shape = shape
         
     def create_shapes_layer(self) -> Shapes:
         """Create or get napari Shapes layer for ROIs."""
@@ -370,6 +379,8 @@ class ROIManager:
         roi_metadata = metadata.copy() if metadata else {}
         roi_metadata.setdefault("annotation_type", annotation_type)
         roi_metadata.setdefault("source", roi_metadata.get("source", "manual"))
+        if self.active_image_label:
+            roi_metadata.setdefault("image_label", self.active_image_label)
 
         roi = ROI(
             id=self.roi_counter,
@@ -509,7 +520,8 @@ class ROIManager:
         if self.shapes_layer is None:
             return
         selection = set()
-        for idx, roi in enumerate(self.rois):
+        visible_rois = self.get_rois_for_active_image()
+        for idx, roi in enumerate(visible_rois):
             if roi.id == roi_id:
                 selection.add(idx)
                 break
@@ -616,6 +628,16 @@ class ROIManager:
     def get_objects(self, kinds: Optional[Sequence[str]] = None) -> List[AnnotationObject]:
         """Return objects filtered by type."""
         return list(self._iter_objects(kinds))
+
+    def get_rois_for_active_image(self) -> List[ROI]:
+        """Return ROIs scoped to the active image label (or all if none set)."""
+        if not self.active_image_label:
+            return list(self.rois)
+        return [
+            roi for roi in self.rois
+            if roi.metadata.get("image_label") == self.active_image_label
+            or "image_label" not in roi.metadata
+        ]
 
     def get_object(self, object_id: int) -> Optional[AnnotationObject]:
         """Return object by identifier."""
@@ -1146,6 +1168,8 @@ class ROIManager:
                 annotation_type=annotation_type,
                 metadata=roi_data.get("metadata")
             )
+            if self.active_image_label and "image_label" not in roi.metadata:
+                roi.metadata["image_label"] = self.active_image_label
             roi.center = tuple(roi_data["center"])
             roi.area = roi_data["area"]
             roi.analysis_result = roi_data.get("analysis_result")
@@ -1596,8 +1620,8 @@ class ROIManager:
         # Clear existing shapes
         self.shapes_layer.data = []
         
-        # Add all ROIs using proper API
-        for roi in self.rois:
+        # Add ROIs for active image using proper API
+        for roi in self.get_rois_for_active_image():
             if roi.shape == ROIShape.RECTANGLE:
                 # Use add_rectangles for rectangles
                 coords_rc = self._xy_to_rc(roi.coordinates)
