@@ -81,7 +81,7 @@ class ROI:
     analysis_result: Optional[Dict] = None
     analysis_method: Optional[ROIAnalysisMethod] = None
     boundary_mode: Optional[str] = None
-    crop_mode: bool = True  # True: cropped ROI, False: mask-based
+    crop_mode: bool = False  # True: cropped ROI, False: mask-based (MATLAB default)
     metadata: Dict = field(default_factory=dict)
     annotation_type: str = "custom_annotation"
     source_object_ids: List[int] = field(default_factory=list)
@@ -639,6 +639,16 @@ class ROIManager:
             or "image_label" not in roi.metadata
         ]
 
+    def get_rois_for_label(self, label: Optional[str]) -> List[ROI]:
+        """Return ROIs scoped to a specific image label."""
+        if label is None:
+            return []
+        return [
+            roi for roi in self.rois
+            if roi.metadata.get("image_label") == label
+            or "image_label" not in roi.metadata
+        ]
+
     def get_object(self, object_id: int) -> Optional[AnnotationObject]:
         """Return object by identifier."""
         return self.object_lookup.get(object_id)
@@ -790,6 +800,8 @@ class ROIManager:
         if roi is None:
             return None
         
+        image = self._ensure_grayscale(image)
+        
         # Convert ROI to boundary and prepare masks
         boundary = roi.to_boundary(image.shape[:2])
         boundary_data = boundary.data
@@ -797,10 +809,15 @@ class ROIManager:
         bbox = (0, 0, image.shape[0], image.shape[1])
         
         # Prepare image
-        if roi.crop_mode:
+        use_crop = roi.crop_mode
+        if use_crop:
             mask = base_mask
             bbox = self._get_bbox(mask)
             cropped_image = image[bbox[0]:bbox[2], bbox[1]:bbox[3]]
+            # Avoid unstable FDCT on very small crops
+            if min(cropped_image.shape) < 32:
+                cropped_image = image
+                use_crop = False
             if boundary.kind == "polygon" and isinstance(boundary_data, np.ndarray):
                 adjusted = boundary_data - np.array([bbox[0], bbox[1]])
                 boundary = Boundary(kind="polygon", data=adjusted, spacing_xy=boundary.spacing_xy)
@@ -813,19 +830,43 @@ class ROIManager:
         
         ca_options = curvealign.CurveAlignOptions(**options)
         
+        opts = options or {}
+        # Sanitize options to valid CurveAlignOptions fields and add MATLAB-like defaults
+        base_defaults = {
+            "keep": 0.001,
+            "scale": 1,  # MATLAB default selected scale
+            "group_radius": 10.0,  # MATLAB curvelets_group_radius
+            "dist_thresh": 150.0,  # MATLAB distVal
+            "exclude_inside_mask": False,
+            "minimum_nearest_fibers": 2,
+            "minimum_box_size": 32,
+            "map_std_window": 28,
+        }
+        allowed_keys = {
+            "keep",
+            "scale",
+            "group_radius",
+            "dist_thresh",
+            "min_dist",
+            "exclude_inside_mask",
+            "minimum_nearest_fibers",
+            "minimum_box_size",
+            "map_std_window",
+        }
+        merged = {**base_defaults, **{k: v for k, v in opts.items() if k in allowed_keys}}
         if method == ROIAnalysisMethod.CURVELETS:
             result = curvealign.analyze_image(
                 cropped_image,
-                boundary=boundary if not roi.crop_mode else None,
+                boundary=boundary if not use_crop else None,
                 mode="curvelets",
-                options=ca_options
+                options=curvealign.CurveAlignOptions(**merged)
             )
         elif method == ROIAnalysisMethod.CTFIRE:
             result = curvealign.analyze_image(
                 cropped_image,
-                boundary=boundary if not roi.crop_mode else None,
+                boundary=boundary if not use_crop else None,
                 mode="ctfire",
-                options=ca_options
+                options=curvealign.CurveAlignOptions(**merged)
             )
         else:
             # Post-analysis - would need previously computed features
@@ -1107,6 +1148,22 @@ class ROIManager:
         if roi is None:
             return None
         return roi.metrics if roi.metrics else None
+
+    @staticmethod
+    def _ensure_grayscale(image: np.ndarray) -> np.ndarray:
+        """Convert image to 2D grayscale float32 in [0,1] if possible."""
+        arr = np.asarray(image)
+        if arr.ndim > 2:
+            if arr.shape[-1] in (3, 4):
+                rgb = arr[..., :3].astype(np.float32)
+                arr = 0.2125 * rgb[..., 0] + 0.7154 * rgb[..., 1] + 0.0721 * rgb[..., 2]
+            else:
+                arr = arr[0].astype(np.float32)
+        arr = arr.astype(np.float32, copy=False)
+        max_val = np.max(arr) if arr.size else 0.0
+        if max_val > 0:
+            arr = arr / max_val
+        return arr
     
     def save_rois_json(self, file_path: str, roi_ids: Optional[List[int]] = None):
         """

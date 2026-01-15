@@ -333,11 +333,13 @@ class CurveAlignWidget(QWidget):
         self.preprocessing_tab = QWidget()
         self.segmentation_tab = QWidget()
         self.roi_tab = QWidget()
+        self.post_tab = QWidget()
         
         self.tab_widget.addTab(self.main_tab, "Main")
         self.tab_widget.addTab(self.preprocessing_tab, "Preprocessing")
         self.tab_widget.addTab(self.segmentation_tab, "Segmentation")
         self.tab_widget.addTab(self.roi_tab, "ROI Manager")
+        self.tab_widget.addTab(self.post_tab, "Post-Processing")
         
         # Setup main tab
         main_tab_layout = QVBoxLayout()
@@ -1131,9 +1133,7 @@ class CurveAlignWidget(QWidget):
         self.segment_btn.clicked.connect(self._run_segmentation)
         button_layout.addWidget(self.segment_btn)
         
-        self.preview_seg_btn = QPushButton("Preview")
-        self.preview_seg_btn.clicked.connect(self._preview_segmentation)
-        button_layout.addWidget(self.preview_seg_btn)
+        # Preview action removed (duplicate of Run Segmentation)
         
         self.create_rois_btn = QPushButton("Create ROIs from Mask")
         self.create_rois_btn.clicked.connect(self._create_rois_from_segmentation)
@@ -1186,13 +1186,50 @@ class CurveAlignWidget(QWidget):
             print("Selected layer is not an image.")
             return
         
-        image = image_layer.data
-        if image.ndim > 2:
-            image = image[0] if image.shape[0] < 10 else image  # Handle multi-channel
-        
         # Get segmentation method
+        try:
+            method_text = self.seg_method.currentText().split(" ✓")[0].split(" ✗")[0]
+            print(f"Running {method_text} segmentation...")
+            # Sync ROI context to this image before running
+            self._set_active_image_context(image_layer)
+            # Ensure the image layer is active so downstream tools know which image we’re on
+            if self.viewer:
+                try:
+                    self.viewer.layers.selection.select_only(image_layer)
+                except Exception:
+                    pass
+            labeled_mask = self._run_segmentation_on_layer(image_layer, add_labels=True)
+            if labeled_mask is None:
+                return
+            n_objects = labeled_mask.max()
+            print(f"Found {n_objects} objects")
+                
+        except Exception as e:
+            print(f"Segmentation failed: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _preview_segmentation(self):
+        """Preview segmentation with current settings (same as run)."""
+        self._run_segmentation()
+
+    def _segment_image_data(self, image: np.ndarray) -> Optional[np.ndarray]:
+        """Run segmentation on a raw image array and return labeled mask."""
+        if image is None:
+            return None
+        image = np.asarray(image)
+        if image.ndim > 2:
+            if image.shape[-1] in (3, 4):
+                rgb = image[..., :3].astype(np.float32)
+                image = (
+                    0.2125 * rgb[..., 0]
+                    + 0.7154 * rgb[..., 1]
+                    + 0.0721 * rgb[..., 2]
+                )
+            else:
+                image = image[0] if image.shape[0] < 10 else image
+
         method_text = self.seg_method.currentText().split(" ✓")[0].split(" ✗")[0]
-        
         if "Threshold" in method_text:
             method = SegmentationMethod.THRESHOLD
         elif "Cellpose" in method_text and "Cytoplasm" in method_text:
@@ -1203,12 +1240,10 @@ class CurveAlignWidget(QWidget):
             method = SegmentationMethod.STARDIST
         else:
             print(f"Unknown method: {method_text}")
-            return
-        
-        # Create options
+            return None
+
         max_area = self.seg_max_area.value() if self.seg_max_area.value() > 0 else None
         cellpose_diam = self.cellpose_diameter.value() if self.cellpose_diameter.value() > 0 else None
-        
         options = SegmentationOptions(
             method=method,
             threshold_method=self.seg_threshold_method.currentText().lower(),
@@ -1223,46 +1258,32 @@ class CurveAlignWidget(QWidget):
             fill_holes=self.seg_fill_holes.isChecked(),
             smooth_contours=self.seg_smooth_contours.isChecked()
         )
-        
-        # Run segmentation
-        try:
-            print(f"Running {method_text} segmentation...")
-            # Sync ROI context to this image before running
-            self._set_active_image_context(image_layer)
-            # Ensure the image layer is active so downstream tools know which image we’re on
-            if self.viewer:
-                try:
-                    self.viewer.layers.selection.select_only(image_layer)
-                except Exception:
-                    pass
-            labeled_mask = segment_image(image, options)
-            n_objects = labeled_mask.max()
-            print(f"Found {n_objects} objects")
-            
-            # Add mask as labels layer
-            if self._viewer:
-                layer_name = f"{self._active_image_label() or image_layer.name}/seg/{method_text}"
-                labels_layer = self._viewer.add_labels(
-                    labeled_mask,
-                    name=layer_name,
-                    opacity=0.5,
-                    metadata={"curvealign_parent": self._active_image_label() or image_layer.name}
-                )
-                # Store for ROI creation
-                self._last_segmentation = labeled_mask
-                label_key = self._active_image_label() or image_layer.name
-                if label_key:
-                    self._last_segmentation_by_image[label_key] = labeled_mask
-                    self._seg_layers_by_image[label_key].append(labels_layer)
-                
-        except Exception as e:
-            print(f"Segmentation failed: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def _preview_segmentation(self):
-        """Preview segmentation with current settings (same as run)."""
-        self._run_segmentation()
+        return segment_image(image, options)
+
+    def _run_segmentation_on_layer(self, image_layer, add_labels: bool = True) -> Optional[np.ndarray]:
+        """Run segmentation on a specific image layer."""
+        if image_layer is None or not hasattr(image_layer, "data"):
+            return None
+        labeled_mask = self._segment_image_data(image_layer.data)
+        if labeled_mask is None:
+            return None
+        if add_labels and self._viewer:
+            method_text = self.seg_method.currentText().split(" ✓")[0].split(" ✗")[0]
+            layer_name = f"{self._active_image_label() or image_layer.name}/seg/{method_text}"
+            labels_layer = self._viewer.add_labels(
+                labeled_mask,
+                name=layer_name,
+                opacity=0.5,
+                metadata={"curvealign_parent": self._active_image_label() or image_layer.name}
+            )
+            label_key = self._active_image_label() or image_layer.name
+            if label_key:
+                self._seg_layers_by_image[label_key].append(labels_layer)
+        self._last_segmentation = labeled_mask
+        label_key = self._active_image_label() or image_layer.name
+        if label_key:
+            self._last_segmentation_by_image[label_key] = labeled_mask
+        return labeled_mask
     
     def _create_rois_from_segmentation(self):
         """Convert last segmentation mask to ROIs."""
@@ -1372,13 +1393,19 @@ class CurveAlignWidget(QWidget):
         self.analyze_roi_btn = QPushButton("Analyze Selected ROI")
         self.analyze_all_rois_btn = QPushButton("Analyze All ROIs")
         self.analyze_roi_ctfire_btn = QPushButton("Analyze ROI (CT-FIRE)")
+        self.analyze_all_images_btn = QPushButton("Analyze All Images (batch)")
+        self.batch_pipeline_btn = QPushButton("Batch Pipeline (seg→ROI→analysis→export)")
         self.measure_roi_btn = QPushButton("Measure / Stats")
         self.roi_table_btn = QPushButton("Show ROI Table")
+        self.ca_options_btn = QPushButton("CurveAlign Options")
         analysis_layout.addWidget(self.analyze_roi_btn)
         analysis_layout.addWidget(self.analyze_all_rois_btn)
         analysis_layout.addWidget(self.analyze_roi_ctfire_btn)
+        analysis_layout.addWidget(self.analyze_all_images_btn)
+        analysis_layout.addWidget(self.batch_pipeline_btn)
         analysis_layout.addWidget(self.measure_roi_btn)
         analysis_layout.addWidget(self.roi_table_btn)
+        analysis_layout.addWidget(self.ca_options_btn)
         analysis_group.setLayout(analysis_layout)
         left_panel.addWidget(analysis_group)
         
@@ -1412,6 +1439,21 @@ class CurveAlignWidget(QWidget):
         layout.addLayout(right_panel, 1)
         self.roi_tab.setLayout(layout)
         
+        # Post-Processing tab (histograms/graphs)
+        post_layout = QVBoxLayout()
+        post_layout.addWidget(QLabel("ROIs (current image)"))
+        self.post_roi_list = QListWidget()
+        self.post_roi_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.post_roi_list.itemSelectionChanged.connect(self._update_post_plots)
+        post_layout.addWidget(self.post_roi_list)
+        refresh_post_btn = QPushButton("Refresh ROIs")
+        refresh_post_btn.clicked.connect(self._refresh_post_roi_list)
+        post_layout.addWidget(refresh_post_btn)
+        self.post_fig = Figure(figsize=(5, 3))
+        self.post_canvas = FigureCanvas(self.post_fig)
+        post_layout.addWidget(self.post_canvas)
+        self.post_tab.setLayout(post_layout)
+        
         # Connect signals
         self.create_rect_btn.clicked.connect(lambda: self._create_roi(ROIShape.RECTANGLE))
         self.create_ellipse_btn.clicked.connect(lambda: self._create_roi(ROIShape.ELLIPSE))
@@ -1425,8 +1467,11 @@ class CurveAlignWidget(QWidget):
         self.analyze_roi_btn.clicked.connect(self._analyze_selected_roi)
         self.analyze_all_rois_btn.clicked.connect(self._analyze_all_rois)
         self.analyze_roi_ctfire_btn.clicked.connect(lambda: self._analyze_selected_roi(ctfire=True))
+        self.analyze_all_images_btn.clicked.connect(self._batch_analyze_all_images)
+        self.batch_pipeline_btn.clicked.connect(self._batch_pipeline_all_images)
         self.measure_roi_btn.clicked.connect(self._open_measurements)
         self.roi_table_btn.clicked.connect(self._show_roi_table)
+        self.ca_options_btn.clicked.connect(self._open_curvealign_options)
         
     def _build_annotation_group(self) -> QGroupBox:
         group = QGroupBox("Annotations")
@@ -1787,6 +1832,7 @@ class CurveAlignWidget(QWidget):
                 item.setSelected(True)
         if selected_id is not None:
             self.roi_manager.highlight_roi(selected_id)
+        self._refresh_post_roi_list()
 
     def _update_object_list(self, object_ids: Optional[Sequence[int]] = None):
         """Refresh object list display."""
@@ -1805,6 +1851,7 @@ class CurveAlignWidget(QWidget):
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, obj.id)
             self.object_list.addItem(item)
+        self._refresh_post_roi_list()
     
     def _create_roi(self, shape: ROIShape):
         """Create ROI of specified shape."""
@@ -1935,9 +1982,100 @@ class CurveAlignWidget(QWidget):
                     self.roi_manager.analyze_roi(roi.id, image)
                 self._update_roi_list()
 
+    def _batch_analyze_all_images(self):
+        """Analyze ROIs for each loaded image in batch mode."""
+        if not self.image_layers:
+            print("No images loaded for batch analysis.")
+            return
+        for label, layer in self.image_layers.items():
+            if not hasattr(layer, "data"):
+                continue
+            data = self._prepare_analysis_image(layer.data)
+            shape = data.shape[:2] if data is not None else None
+            self.roi_manager.set_active_image(label, shape)
+            rois = self.roi_manager.get_rois_for_label(label)
+            if not rois:
+                continue
+            for roi in rois:
+                self.roi_manager.analyze_roi(roi.id, data)
+        self._update_roi_list()
+
+    def _batch_pipeline_all_images(self):
+        """Batch pipeline: segmentation (if needed) -> ROI -> analysis -> export."""
+        if not self.image_layers:
+            print("No images loaded for batch processing.")
+            return
+        output_dir = QFileDialog.getExistingDirectory(self, "Select output folder")
+        if not output_dir:
+            return
+        all_tables = []
+        for label, layer in self.image_layers.items():
+            if not hasattr(layer, "data"):
+                continue
+            self.current_image_label = label
+            self.roi_manager.set_active_image(label, layer.data.shape[:2])
+            rois = self.roi_manager.get_rois_for_label(label)
+            if not rois:
+                mask = self._run_segmentation_on_layer(layer, add_labels=False)
+                if mask is None:
+                    continue
+                roi_data_list = masks_to_roi_data(
+                    mask,
+                    min_area=self.seg_min_area.value(),
+                    simplify_tolerance=1.0
+                )
+                for roi_data in roi_data_list:
+                    coords_rc = np.asarray(roi_data['coordinates'], dtype=float)
+                    coords_xy = np.column_stack((coords_rc[:, 1], coords_rc[:, 0]))
+                    self.roi_manager.add_roi(
+                        coordinates=coords_xy,
+                        shape=ROIShape.POLYGON,
+                        name=roi_data['name'],
+                        annotation_type="tumor",
+                        metadata={"source": "segmentation"}
+                    )
+                self.roi_manager.set_image_shape(mask.shape)
+                self.roi_manager.register_cell_objects(roi_data_list)
+                rois = self.roi_manager.get_rois_for_label(label)
+            if not rois:
+                continue
+
+            data = self._prepare_analysis_image(layer.data)
+            mode = self.analysis_mode_combo.currentText()
+            for roi in rois:
+                if mode == "CT-FIRE":
+                    self.roi_manager.analyze_roi(roi.id, data, method=ROIAnalysisMethod.CTFIRE)
+                elif mode == "Both":
+                    self.roi_manager.analyze_roi(roi.id, data, method=ROIAnalysisMethod.CURVELETS)
+                    self.roi_manager.analyze_roi(roi.id, data, method=ROIAnalysisMethod.CTFIRE)
+                else:
+                    self.roi_manager.analyze_roi(roi.id, data, method=ROIAnalysisMethod.CURVELETS)
+
+            roi_ids = [roi.id for roi in rois]
+            json_path = os.path.join(output_dir, f"{label}_rois.json")
+            self.roi_manager.save_rois_json(json_path, roi_ids)
+
+            df = self.roi_manager.get_analysis_table()
+            df_img = df[df["Image Label"] == label]
+            df_img.to_csv(os.path.join(output_dir, f"{label}_analysis.csv"), index=False)
+            all_tables.append(df_img)
+
+        if all_tables:
+            combined = pd.concat(all_tables, ignore_index=True)
+            combined.to_csv(os.path.join(output_dir, "batch_analysis.csv"), index=False)
+        self._update_roi_list()
+
+    def _open_curvealign_options(self):
+        """Placeholder to expose CurveAlign/CT-FIRE options (to be expanded)."""
+        QMessageBox.information(
+            self,
+            "CurveAlign Options",
+            "CurveAlign/CT-FIRE option panel will surface MATLAB-equivalent parameters here."
+        )
+
     def _prepare_analysis_image(self, image: np.ndarray) -> np.ndarray:
         """Ensure analysis image is grayscale 2D."""
-        prepared = image
+        prepared = np.asarray(image)
         if prepared.ndim > 2:
             if prepared.shape[-1] in (3, 4):
                 rgb = prepared[..., :3].astype(np.float32)
@@ -1948,6 +2086,11 @@ class CurveAlignWidget(QWidget):
                 )
             else:
                 prepared = prepared[0]
+        prepared = prepared.astype(np.float32, copy=False)
+        max_val = np.max(prepared) if prepared.size else 0.0
+        if max_val > 0:
+            # Normalize to [0,1] to match MATLAB/curvealign expectations
+            prepared = prepared / max_val
         return prepared
     
     def _show_roi_table(self):
@@ -1958,6 +2101,73 @@ class CurveAlignWidget(QWidget):
             dialog.setWindowTitle("ROI Analysis Results")
             dialog.exec_()
     
+    def _refresh_post_roi_list(self):
+        """Refresh post-processing ROI list."""
+        if not hasattr(self, "post_roi_list"):
+            return
+        self.post_roi_list.clear()
+        for roi in self.roi_manager.get_rois_for_active_image():
+            item = QListWidgetItem(f"{roi.id}: {roi.name}")
+            item.setData(Qt.UserRole, roi.id)
+            self.post_roi_list.addItem(item)
+        if self.post_roi_list.count() > 0:
+            self.post_roi_list.setCurrentRow(0)
+
+    def _update_post_plots(self):
+        """Update histograms/graphs for the selected ROI."""
+        if not hasattr(self, "post_roi_list") or not hasattr(self, "post_fig"):
+            return
+        items = self.post_roi_list.selectedItems()
+        if not items:
+            return
+        roi_id = items[0].data(Qt.UserRole)
+        if roi_id is None:
+            return
+        image = self._get_active_image_data(grayscale=True)
+        if image is None:
+            return
+        metrics = self.roi_manager.get_metrics(roi_id)
+        if metrics is None:
+            try:
+                metrics = self.roi_manager.measure_roi(roi_id, image, histogram_bins=32)
+            except ValueError:
+                metrics = None
+        roi = self.roi_manager.get_roi(roi_id)
+        angles = None
+        if roi and roi.analysis_result:
+            feats = roi.analysis_result.get("features")
+            if feats:
+                angles = []
+                for entry in feats:
+                    if isinstance(entry, dict):
+                        angle = entry.get("orientation") or entry.get("angle") or entry.get("theta")
+                        if angle is not None:
+                            angles.append(float(angle))
+        self.post_fig.clear()
+        ax1 = self.post_fig.add_subplot(121)
+        ax2 = self.post_fig.add_subplot(122)
+        if metrics and metrics.get("histogram"):
+            bins = metrics["histogram"]["bins"]
+            counts = metrics["histogram"]["counts"]
+            width = (bins[1] - bins[0]) if len(bins) > 1 else 0.05
+            ax1.bar(bins[:-1], counts, width=width, color="#4a90e2")
+            ax1.set_title("Intensity Histogram")
+            ax1.set_xlabel("Normalized Intensity")
+            ax1.set_ylabel("Count")
+        else:
+            ax1.text(0.5, 0.5, "No histogram", ha="center", va="center")
+            ax1.set_axis_off()
+        if angles:
+            ax2.hist(angles, bins=30, color="#ff7f0e")
+            ax2.set_title("Curvelet Angles")
+            ax2.set_xlabel("Angle (deg)")
+            ax2.set_ylabel("Count")
+        else:
+            ax2.text(0.5, 0.5, "No angle data", ha="center", va="center")
+            ax2.set_axis_off()
+        self.post_fig.tight_layout()
+        self.post_canvas.draw_idle()
+
     def _selected_roi_ids(self) -> List[int]:
         items = self.roi_list.selectedItems()
         ids = []
@@ -2049,6 +2259,7 @@ class CurveAlignWidget(QWidget):
             )
         self._populate_roi_table(table_rows)
         self._update_annotation_list()
+        self._refresh_post_roi_list()
 
     def _populate_roi_table(self, rows: List[List[str]]):
         if not hasattr(self, "roi_table_view"):

@@ -164,7 +164,10 @@ def find_outline_slope(boundary_mask: np.ndarray, idx: int) -> float:
     run = con_pts[num - 1, 1] - con_pts[0, 1]   # col difference
     
     # theta = atan(rise/run); %range -pi/2 to pi/2
-    theta = np.arctan(rise / run)  # Use atan like MATLAB, not atan2
+    if run == 0:
+        theta = np.sign(rise) * (np.pi / 2) if rise != 0 else 0.0
+    else:
+        theta = np.arctan(rise / run)  # Use atan like MATLAB, not atan2
     
     # Scale to 0 to 180 degrees
     slope = theta * 180 / np.pi

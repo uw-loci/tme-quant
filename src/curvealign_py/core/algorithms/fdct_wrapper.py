@@ -25,7 +25,42 @@ except ImportError:
     )
 
 
-def apply_fdct(image: np.ndarray, finest: int = 0, nbangles_coarsest: int = 2) -> CtCoeffs:
+def _next_pow2(n: int) -> int:
+    return 1 if n <= 1 else 2 ** int(np.ceil(np.log2(n)))
+
+
+def _pad_to_pow2(image: np.ndarray) -> Tuple[np.ndarray, Tuple[int, int]]:
+    """Pad image to next power-of-two size (bottom/right) using reflect."""
+    rows, cols = image.shape
+    target_rows = _next_pow2(rows)
+    target_cols = _next_pow2(cols)
+    pad_rows = max(0, target_rows - rows)
+    pad_cols = max(0, target_cols - cols)
+    if pad_rows == 0 and pad_cols == 0:
+        return image, image.shape
+    mode = "reflect" if rows > 1 and cols > 1 else "edge"
+    padded = np.pad(image, ((0, pad_rows), (0, pad_cols)), mode=mode)
+    return padded, padded.shape
+
+
+def _compute_fdct(
+    img: np.ndarray,
+    nbscales: int,
+    nbangles_coarse: int,
+    allcurvelets: bool
+) -> Tuple[np.ndarray, 'curvelops.FDCT2D']:
+    cop = curvelops.FDCT2D(
+        dims=img.shape,
+        nbscales=nbscales,
+        nbangles_coarse=nbangles_coarse,
+        allcurvelets=allcurvelets
+    )
+    img_flat = img.ravel()
+    coeffs_flat = cop @ img_flat
+    return coeffs_flat, cop
+
+
+def apply_fdct(image: np.ndarray, finest: int = 0, nbangles_coarsest: int = 2) -> Tuple[CtCoeffs, Tuple[int, int]]:
     """
     Apply forward Fast Discrete Curvelet Transform.
     
@@ -49,9 +84,22 @@ def apply_fdct(image: np.ndarray, finest: int = 0, nbangles_coarsest: int = 2) -
     # Try to use real Curvelops implementation first
     if HAS_CURVELOPS:
         try:
+            # Sanitize image to match MATLAB im2double behavior
+            img = np.asarray(image, dtype=np.float64)
+            img = np.nan_to_num(img, nan=0.0, posinf=0.0, neginf=0.0)
+            min_val = np.min(img) if img.size else 0.0
+            max_val = np.max(img) if img.size else 0.0
+            if max_val > 1.0 or min_val < 0.0:
+                # Scale to [0,1] when needed
+                if max_val > min_val:
+                    img = (img - min_val) / (max_val - min_val)
+                else:
+                    img = np.zeros_like(img)
+            # CurveLab-like padding to power-of-two
+            img, padded_shape = _pad_to_pow2(img)
             # Determine appropriate number of scales based on image size
             # Curvelops requires at least 3 scales for most image sizes
-            min_dim = min(image.shape)
+            min_dim = min(img.shape)
             if min_dim >= 512:
                 nbscales = 5
             elif min_dim >= 256:
@@ -63,28 +111,47 @@ def apply_fdct(image: np.ndarray, finest: int = 0, nbangles_coarsest: int = 2) -
             # Curvelops requires at least nbangles_coarse=4
             nbangles_coarse = max(4, nbangles_coarsest)
             
-            cop = curvelops.FDCT2D(
-                dims=image.shape,
-                nbscales=nbscales,  # Explicit number of scales
+            coeffs_flat, cop = _compute_fdct(
+                img,
+                nbscales=nbscales,
                 nbangles_coarse=nbangles_coarse,
                 allcurvelets=(finest == 0)
             )
             
-            # Apply forward transform
-            img_flat = image.astype(np.float64).ravel()  # Ensure float64
-            coeffs_flat = cop @ img_flat
-            
             # Filter out NaN values and normalize coefficients
+            coeffs_flat = np.nan_to_num(coeffs_flat, nan=0.0, posinf=0.0, neginf=0.0)
             nan_mask = np.isnan(coeffs_flat)
             if np.any(nan_mask):
                 warnings.warn(f"Found {np.sum(nan_mask)} NaN values in FDCT coefficients. Filtering them out.", UserWarning)
                 coeffs_flat = np.where(nan_mask, 0.0, coeffs_flat)
             
-            # Check for extremely large coefficients and normalize them
-            max_coeff = np.max(np.abs(coeffs_flat))
-            if max_coeff > 1e6:  # If coefficients are too large
-                warnings.warn(f"Found extremely large coefficients (max: {max_coeff:.2e}). Normalizing.", UserWarning)
-                coeffs_flat = coeffs_flat / max_coeff * 100.0  # Scale down to reasonable range
+            # Check for extremely large coefficients; retry with conservative settings
+            max_coeff = np.max(np.abs(coeffs_flat)) if coeffs_flat.size else 0.0
+            if max_coeff > 1e6:
+                warnings.warn(
+                    f"Found extremely large coefficients (max: {max_coeff:.2e}). "
+                    "Retrying with conservative FDCT settings.",
+                    UserWarning
+                )
+                alt_nbscales = max(3, nbscales - 1)
+                coeffs_alt, cop_alt = _compute_fdct(
+                    img,
+                    nbscales=alt_nbscales,
+                    nbangles_coarse=nbangles_coarse,
+                    allcurvelets=False
+                )
+                coeffs_alt = np.nan_to_num(coeffs_alt, nan=0.0, posinf=0.0, neginf=0.0)
+                alt_max = np.max(np.abs(coeffs_alt)) if coeffs_alt.size else 0.0
+                if alt_max and alt_max < max_coeff:
+                    coeffs_flat = coeffs_alt
+                    cop = cop_alt
+                    max_coeff = alt_max
+                if max_coeff > 0:
+                    warnings.warn(
+                        f"Normalizing coefficients (max: {max_coeff:.2e}).",
+                        UserWarning
+                    )
+                    coeffs_flat = coeffs_flat / max_coeff
             
             # For now, create a simple structure that matches the expected format
             # TODO: Implement proper coefficient unflattening when Curvelops structure is stable
@@ -108,13 +175,15 @@ def apply_fdct(image: np.ndarray, finest: int = 0, nbangles_coarsest: int = 2) -
                 
                 coeffs.append(scale_coeffs)
             
-            return coeffs
+            return coeffs, padded_shape
             
         except Exception as e:
             warnings.warn(f"Curvelops FDCT failed: {e}. Using placeholder.", UserWarning)
-    
-    # Fallback to MATLAB-compatible placeholder implementation
-    return _apply_fdct_placeholder(image, finest, nbangles_coarsest)
+
+    raise ImportError(
+        "Curvelops/CurveLab FDCT is required for analysis. "
+        "Install curvelops with CurveLab/FFTW support and retry."
+    )
 
 
 def _unflatten_coeffs(coeffs_flat: np.ndarray, cop: 'curvelops.FDCT2D') -> CtCoeffs:

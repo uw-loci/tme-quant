@@ -51,7 +51,7 @@ def extract_curvelets(
     """
     # Apply forward FDCT - equivalent to: C = fdct_wrapping(IMG,0,2)
     # Note: MATLAB's third parameter (2) is nbangles_coarsest=2
-    C = apply_fdct(image, finest=0, nbangles_coarsest=2)
+    C, fdct_shape = apply_fdct(image, finest=0, nbangles_coarsest=2)
     
     # Create empty coefficient structure for thresholding
     Ct = create_empty_coeffs_like(C)
@@ -73,7 +73,7 @@ def extract_curvelets(
     Ct[s] = threshold_coefficients_at_scale(C[s], keep)
     
     # Extract center positions and angles (pass image shape for better scaling)
-    X_rows, Y_cols = extract_parameters(Ct, img_shape=image.shape)
+    X_rows, Y_cols = extract_parameters(Ct, img_shape=fdct_shape)
     
     # Convert coefficient positions to curvelet objects
     curvelets = extract_curvelets_from_coeffs(Ct[s], X_rows[s], Y_cols[s], s)
