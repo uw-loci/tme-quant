@@ -11,7 +11,15 @@ import pandas as pd
 import pytest
 import matplotlib.pyplot as plt
 
-from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
+from pycurvelets.models import (
+    AdvancedAnalysisOptions,
+    BoundaryParameters,
+    CurveletControlParameters,
+    FeatureControlParameters,
+    FiberAnalysisParameters,
+    ImageInputParameters,
+    OutputControlParameters,
+)
 
 # By default, skip curvelops-dependent tests (e.g., on CI). Enable locally with:
 #   TMEQ_RUN_CURVELETS=1 pytest -q
@@ -80,19 +88,18 @@ def test_data():
 @pytest.fixture(scope="module")
 def advanced_options():
     """Create advanced options for testing."""
-    return {
-        "exclude_fibers_in_mask_flag": 1,
-        "curvelets_group_radius": 10,
-        "selected_scale": 1,
-        "heatmap_STD_filter_size": 16,
-        "heatmap_SQUARE_max_filter_size": 12,
-        "heatmap_GAUSSIAN_disc_filter_sigma": 4,
-        "plot_rgb_flag": 0,
-        "minimum_nearest_fibers": 2,
-        "minimum_box_size": 32,
-        "fiber_midpoint_estimate": 1,
-        "min_dist": [],
-    }
+    return AdvancedAnalysisOptions(
+        exclude_fibers_in_mask_flag=1,
+        curvelets_group_radius=10,
+        selected_scale=1,
+        heatmap_STD_filter_size=16,
+        heatmap_SQUARE_max_filter_size=12,
+        heatmap_GAUSSIAN_disc_filter_sigma=4,
+        minimum_nearest_fibers=2,
+        minimum_box_size=32,
+        fiber_midpoint_estimate=1,
+        min_dist=[],
+    )
 
 
 def test_process_image_returns_fiber_features(test_data, advanced_options, tmp_path):
@@ -102,24 +109,41 @@ def test_process_image_returns_fiber_features(test_data, advanced_options, tmp_p
     """
     img, coords, boundary_img, expected_fib_feat = test_data
 
-    # Run process_image with same parameters as __main__
-    results = process_image(
+    # Create parameter objects
+    image_params = ImageInputParameters(
         img=img,
         img_name="test_real1",
-        output_directory=str(tmp_path),
+        slice_num=1,
+        num_sections=1,
+    )
+    
+    fiber_params = FiberAnalysisParameters(
+        fiber_mode=0,
         keep=0.05,
+        fire_directory=str(tmp_path),
+    )
+    
+    output_params = OutputControlParameters(
+        output_directory=str(tmp_path),
+        make_associations=True,
+        make_map=True,
+        make_overlay=True,
+        make_feature_file=True,
+    )
+    
+    boundary_params = BoundaryParameters(
         coordinates=coords,
         distance_threshold=100,
-        make_associations=1,
-        make_map=1,
-        make_overlay=1,
-        make_feature_file=1,
-        slice_num=1,
         tif_boundary=3,
         boundary_img=boundary_img,
-        fire_directory=str(tmp_path),
-        fiber_mode=0,
-        num_sections=1,
+    )
+
+    # Run process_image with same parameters as __main__
+    results = process_image(
+        image_params=image_params,
+        fiber_params=fiber_params,
+        output_params=output_params,
+        boundary_params=boundary_params,
         advanced_options=advanced_options,
     )
 
@@ -184,24 +208,41 @@ def test_process_image_without_feature_file(test_data, advanced_options, tmp_pat
     """
     img, coords, boundary_img, _ = test_data
 
-    # Run process_image without make_feature_file
-    results = process_image(
+    # Create parameter objects
+    image_params = ImageInputParameters(
         img=img,
         img_name="test_real1",
-        output_directory=str(tmp_path),
+        slice_num=1,
+        num_sections=1,
+    )
+    
+    fiber_params = FiberAnalysisParameters(
+        fiber_mode=0,
         keep=0.05,
+        fire_directory=str(tmp_path),
+    )
+    
+    output_params = OutputControlParameters(
+        output_directory=str(tmp_path),
+        make_associations=False,
+        make_map=False,
+        make_overlay=False,
+        make_feature_file=False,
+    )
+    
+    boundary_params = BoundaryParameters(
         coordinates=coords,
         distance_threshold=100,
-        make_associations=0,
-        make_map=0,
-        make_overlay=0,
-        make_feature_file=0,
-        slice_num=1,
         tif_boundary=3,
         boundary_img=boundary_img,
-        fire_directory=str(tmp_path),
-        fiber_mode=0,
-        num_sections=1,
+    )
+
+    # Run process_image without make_feature_file
+    results = process_image(
+        image_params=image_params,
+        fiber_params=fiber_params,
+        output_params=output_params,
+        boundary_params=boundary_params,
         advanced_options=advanced_options,
     )
 
@@ -267,19 +308,18 @@ if __name__ == "__main__":
 
     test_data_tuple = (img, coords, boundary_img, expected_fib_feat)
 
-    adv_opts = {
-        "exclude_fibers_in_mask_flag": 1,
-        "curvelets_group_radius": 10,
-        "selected_scale": 1,
-        "heatmap_STD_filter_size": 16,
-        "heatmap_SQUARE_max_filter_size": 12,
-        "heatmap_GAUSSIAN_disc_filter_sigma": 4,
-        "plot_rgb_flag": 0,
-        "minimum_nearest_fibers": 2,
-        "minimum_box_size": 32,
-        "fiber_midpoint_estimate": 1,
-        "min_dist": [],
-    }
+    adv_opts = AdvancedAnalysisOptions(
+        exclude_fibers_in_mask_flag=1,
+        curvelets_group_radius=10,
+        selected_scale=1,
+        heatmap_STD_filter_size=16,
+        heatmap_SQUARE_max_filter_size=12,
+        heatmap_GAUSSIAN_disc_filter_sigma=4,
+        minimum_nearest_fibers=2,
+        minimum_box_size=32,
+        fiber_midpoint_estimate=1,
+        min_dist=[],
+    )
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         test_process_image_returns_fiber_features(test_data_tuple, adv_opts, tmp_dir)
