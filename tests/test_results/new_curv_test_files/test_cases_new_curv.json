@@ -6,7 +6,7 @@
       "keep": 0.01,
       "scale": 1,
       "radius": 3,
-      "matlab_reference_csv": "test_new_curv_real1_keep0.01_radius3.csv"
+      "matlab_reference_csv": "test_new_curvs_real1.csv"
     },
     {
       "name": "real1_keep0.05_radius10",
