@@ -176,3 +176,6 @@ lastPATH_CTF.mat
 *.tif
 
 pycurvelets/opt/*.*
+
+# test tmp folder
+tests/test_images/CA_Out/
