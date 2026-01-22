@@ -2115,7 +2115,7 @@ class CurveAlignWidget(QWidget):
             traceback.print_exc()
     
     def _save_all_rois_quick(self):
-        """Quick save all ROIs to JSON format."""
+        """Quick save all ROIs to multiple formats."""
         all_roi_ids = self.roi_manager.get_all_roi_ids()
         
         if not all_roi_ids:
@@ -2123,28 +2123,60 @@ class CurveAlignWidget(QWidget):
             return
         
         # Suggest a filename based on current image
-        default_name = "all_rois.json"
+        default_name = "all_rois"
         if self.current_image_label:
             image_name = os.path.splitext(self.current_image_label)[0]
-            default_name = f"{image_name}_rois.json"
+            default_name = f"{image_name}_rois"
         
-        file_path, _ = QFileDialog.getSaveFileName(
+        file_path, selected_filter = QFileDialog.getSaveFileName(
             self, 
-            "Save All ROIs (JSON)", 
+            "Save All ROIs", 
             default_name,
-            "JSON files (*.json)"
+            "JSON files (*.json);;"
+            "Fiji/ImageJ ROI (*.roi *.zip);;"
+            "StarDist ROI (*.roi *.zip);;"
+            "Cellpose mask (*.npy);;"
+            "QuPath annotations (*.geojson);;"
+            "CSV files (*.csv);;"
+            "TIFF mask (*.tif);;"
+            "All files (*)"
         )
         
         if not file_path:
             return
         
         try:
-            self.roi_manager.save_rois(file_path, all_roi_ids, format='json')
+            # Determine format from filter or extension
+            if "JSON" in selected_filter or file_path.endswith('.json'):
+                self.roi_manager.save_rois(file_path, all_roi_ids, format='json')
+                format_name = "JSON"
+            elif "Fiji" in selected_filter or (file_path.endswith(('.roi', '.zip')) and "StarDist" not in selected_filter):
+                self.roi_manager.save_rois(file_path, all_roi_ids, format='fiji')
+                format_name = "Fiji/ImageJ"
+            elif "StarDist" in selected_filter:
+                self.roi_manager.save_rois(file_path, all_roi_ids, format='stardist')
+                format_name = "StarDist"
+            elif "Cellpose" in selected_filter or file_path.endswith('.npy'):
+                self.roi_manager.save_rois(file_path, all_roi_ids, format='cellpose')
+                format_name = "Cellpose"
+            elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
+                self.roi_manager.save_rois(file_path, all_roi_ids, format='qupath')
+                format_name = "QuPath"
+            elif "CSV" in selected_filter or file_path.endswith('.csv'):
+                self.roi_manager.save_rois(file_path, all_roi_ids, format='csv')
+                format_name = "CSV"
+            elif "TIFF" in selected_filter or file_path.endswith(('.tif', '.tiff')):
+                self.roi_manager.save_rois(file_path, all_roi_ids, format='mask')
+                format_name = "TIFF mask"
+            else:
+                self.roi_manager.save_rois(file_path, all_roi_ids, format='auto')
+                format_name = "auto-detected"
+
             print(f"Saved {len(all_roi_ids)} ROI(s) to {file_path}")
             QMessageBox.information(
                 self,
                 "Save Successful",
-                f"Successfully saved all {len(all_roi_ids)} ROI(s) to:\n{file_path}"
+                f"Successfully saved all {len(all_roi_ids)} ROI(s) to:\n{file_path}\n(Format: {format_name})"
             )
         except Exception as e:
             QMessageBox.critical(
