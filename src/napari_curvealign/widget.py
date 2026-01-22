@@ -608,9 +608,21 @@ class CurveAlignWidget(QWidget):
         if layer is None and self.viewer:
             layer = self.viewer.layers.selection.active
         shape = None
-        if layer is not None and hasattr(layer, "data"):
-            data = np.asarray(layer.data)
-            shape = data.shape[:2]
+        image_layer = self._selected_image_layer()
+        if image_layer is not None and hasattr(image_layer, "data"):
+            try:
+                data = np.asarray(image_layer.data)
+                if data.ndim >= 2:
+                    shape = data.shape[:2]
+            except Exception:
+                shape = None
+        elif layer is not None and hasattr(layer, "data"):
+            try:
+                data = np.asarray(layer.data)
+                if data.ndim >= 2:
+                    shape = data.shape[:2]
+            except Exception:
+                shape = None
         self.current_image_label = label
         self.roi_manager.set_active_image(label, shape)
         # Keep shapes layer and lists in sync with the active image
@@ -1357,6 +1369,24 @@ class CurveAlignWidget(QWidget):
         layout = QHBoxLayout()
         left_panel = QVBoxLayout()
         
+        # Workflow guide
+        guide_frame = QFrame()
+        guide_frame.setFrameStyle(QFrame.StyledPanel)
+        guide_layout = QVBoxLayout()
+        guide_label = QLabel(
+            "<b>ROI Workflow:</b><br>"
+            "1. Click shape button (Rectangle/Ellipse)<br>"
+            "2. Draw on image, release mouse<br>"
+            "3. ROI appears in list below<br>"
+            "4. Repeat for more ROIs<br>"
+            "5. Click 'Save All' to export"
+        )
+        guide_label.setWordWrap(True)
+        guide_label.setStyleSheet("QLabel { padding: 5px; background-color: #f0f0f0; }")
+        guide_layout.addWidget(guide_label)
+        guide_frame.setLayout(guide_layout)
+        left_panel.addWidget(guide_frame)
+        
         # ROI creation buttons
         create_group = QGroupBox("Create ROI")
         create_layout = QVBoxLayout()
@@ -1374,13 +1404,26 @@ class CurveAlignWidget(QWidget):
         # ROI management buttons
         manage_group = QGroupBox("Manage ROIs")
         manage_layout = QVBoxLayout()
-        self.save_roi_btn = QPushButton("Save ROI")
-        self.load_roi_btn = QPushButton("Load ROI")
-        self.delete_roi_btn = QPushButton("Delete ROI")
+        
+        # Save/Load row with tooltips
+        save_load_row = QHBoxLayout()
+        self.save_roi_btn = QPushButton("Save Selected")
+        self.save_roi_btn.setToolTip("Save selected ROIs to file (or all if none selected)")
+        self.load_roi_btn = QPushButton("Load")
+        self.load_roi_btn.setToolTip("Load ROIs from file")
+        save_load_row.addWidget(self.save_roi_btn)
+        save_load_row.addWidget(self.load_roi_btn)
+        manage_layout.addLayout(save_load_row)
+        
+        # Quick save all button
+        self.save_all_roi_btn = QPushButton("Save All ROIs (Quick)")
+        self.save_all_roi_btn.setToolTip("Quickly save all ROIs to JSON format")
+        manage_layout.addWidget(self.save_all_roi_btn)
+        
+        self.delete_roi_btn = QPushButton("Delete Selected")
+        self.delete_roi_btn.setToolTip("Delete selected ROIs from the list below")
         self.rename_roi_btn = QPushButton("Rename ROI")
         self.combine_rois_btn = QPushButton("Combine ROIs")
-        manage_layout.addWidget(self.save_roi_btn)
-        manage_layout.addWidget(self.load_roi_btn)
         manage_layout.addWidget(self.delete_roi_btn)
         manage_layout.addWidget(self.rename_roi_btn)
         manage_layout.addWidget(self.combine_rois_btn)
@@ -1396,6 +1439,7 @@ class CurveAlignWidget(QWidget):
         self.analyze_all_images_btn = QPushButton("Analyze All Images (batch)")
         self.batch_pipeline_btn = QPushButton("Batch Pipeline (seg→ROI→analysis→export)")
         self.measure_roi_btn = QPushButton("Measure / Stats")
+        self.summary_stats_btn = QPushButton("Export Summary Statistics")
         self.roi_table_btn = QPushButton("Show ROI Table")
         self.ca_options_btn = QPushButton("CurveAlign Options")
         analysis_layout.addWidget(self.analyze_roi_btn)
@@ -1404,13 +1448,16 @@ class CurveAlignWidget(QWidget):
         analysis_layout.addWidget(self.analyze_all_images_btn)
         analysis_layout.addWidget(self.batch_pipeline_btn)
         analysis_layout.addWidget(self.measure_roi_btn)
+        analysis_layout.addWidget(self.summary_stats_btn)
         analysis_layout.addWidget(self.roi_table_btn)
         analysis_layout.addWidget(self.ca_options_btn)
         analysis_group.setLayout(analysis_layout)
         left_panel.addWidget(analysis_group)
         
-        # ROI list
-        left_panel.addWidget(QLabel("ROIs:"))
+        # ROI list with prominent header
+        roi_list_header = QLabel("<b>ROI List</b> (select here to delete/save)")
+        roi_list_header.setStyleSheet("QLabel { padding: 5px; background-color: #2a2a2a; }")
+        left_panel.addWidget(roi_list_header)
         self.roi_tabs = QTabWidget()
         self.roi_list = QListWidget()
         self.roi_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -1460,6 +1507,7 @@ class CurveAlignWidget(QWidget):
         self.create_polygon_btn.clicked.connect(lambda: self._create_roi(ROIShape.POLYGON))
         self.create_freehand_btn.clicked.connect(lambda: self._create_roi(ROIShape.FREEHAND))
         self.save_roi_btn.clicked.connect(self._save_roi)
+        self.save_all_roi_btn.clicked.connect(self._save_all_rois_quick)
         self.load_roi_btn.clicked.connect(self._load_roi)
         self.delete_roi_btn.clicked.connect(self._delete_roi)
         self.rename_roi_btn.clicked.connect(self._rename_roi)
@@ -1470,12 +1518,23 @@ class CurveAlignWidget(QWidget):
         self.analyze_all_images_btn.clicked.connect(self._batch_analyze_all_images)
         self.batch_pipeline_btn.clicked.connect(self._batch_pipeline_all_images)
         self.measure_roi_btn.clicked.connect(self._open_measurements)
+        self.summary_stats_btn.clicked.connect(self._export_summary_statistics)
         self.roi_table_btn.clicked.connect(self._show_roi_table)
         self.ca_options_btn.clicked.connect(self._open_curvealign_options)
         
     def _build_annotation_group(self) -> QGroupBox:
-        group = QGroupBox("Annotations")
+        group = QGroupBox("Annotations (Advanced)")
+        group.setToolTip("Advanced feature: Draw large boundary regions, then detect objects within them")
         layout = QVBoxLayout()
+        
+        # Add explanation label
+        info_label = QLabel(
+            "<i>For advanced workflows: Draw boundary regions (e.g., tumor areas), "
+            "then detect cells/fibers within them.</i>"
+        )
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("QLabel { color: #888; font-size: 10px; padding: 3px; }")
+        layout.addWidget(info_label)
         
         shape_row = QHBoxLayout()
         shape_row.addWidget(QLabel("Shape"))
@@ -1670,12 +1729,12 @@ class CurveAlignWidget(QWidget):
         try:
             self._ensure_roi_viewer()
         except RuntimeError as exc:
-            print(f"Unable to draw annotation: {exc}")
+            QMessageBox.warning(self, "Cannot Draw", f"Unable to draw annotation: {exc}")
             return
         try:
             layer = self.roi_manager.create_shapes_layer()
         except ValueError as exc:
-            print(f"Unable to draw annotation: {exc}")
+            QMessageBox.warning(self, "Cannot Draw", f"Unable to draw annotation: {exc}")
             return
         
         shape = self.annotation_shape_combo.currentData()
@@ -1688,19 +1747,35 @@ class CurveAlignWidget(QWidget):
         layer.mode = mode_map.get(shape, 'add_polygon')
         if self.viewer:
             self.viewer.layers.selection.active = layer
+        
+        # Show helpful message
+        shape_name = shape.value if hasattr(shape, 'value') else str(shape)
+        print(f"Draw mode active: {shape_name}. After drawing, click 'Add (t)' to save the ROI.")
 
     def _add_annotation_from_shapes(self):
         """Convert selected shapes into managed annotations."""
         try:
             self._ensure_roi_viewer()
         except RuntimeError as exc:
-            print(f"Unable to add annotation: {exc}")
+            QMessageBox.warning(self, "Cannot Add", f"Unable to add annotation: {exc}")
             return
+        
         annotation_type = self.annotation_type_combo.currentData()
         new_rois = self.roi_manager.add_rois_from_shapes(annotation_type=annotation_type)
+        
         if not new_rois:
-            print("No shapes available to add as annotations.")
+            QMessageBox.information(
+                self, 
+                "No Shapes", 
+                "No shapes available to add as ROIs.\n\n"
+                "Tip: First draw shapes using 'Draw (d)', then click 'Add (t)' to save them as ROIs."
+            )
             return
+        
+        # Success feedback
+        roi_names = ", ".join([roi.name for roi in new_rois])
+        print(f"Added {len(new_rois)} ROI(s): {roi_names}")
+        
         self._update_roi_list()
         self._update_annotation_list()
 
@@ -1709,11 +1784,24 @@ class CurveAlignWidget(QWidget):
         items = self.annotation_list.selectedItems()
         if not items:
             return
+        
+        # Set sync flag to prevent shape callback from interfering
+        if not hasattr(self, '_syncing_shapes'):
+            self._syncing_shapes = False
+        self._syncing_shapes = True
+        
         for item in items:
             roi_id = item.data(Qt.UserRole)
             self.roi_manager.delete_roi(roi_id)
+        
         self._update_roi_list()
         self._update_annotation_list()
+        
+        # Update shape count to match current state
+        if self.roi_manager.shapes_layer is not None:
+            self._last_shape_count = len(self.roi_manager.shapes_layer.data)
+        
+        self._syncing_shapes = False
 
     def _detect_objects_in_annotation(self):
         """Detect objects that fall within the selected annotation."""
@@ -1862,7 +1950,7 @@ class CurveAlignWidget(QWidget):
             return
         
         # Enable shape creation in napari
-        self.roi_manager.create_shapes_layer()
+        layer = self.roi_manager.create_shapes_layer()
         mode_map = {
             ROIShape.RECTANGLE: "add_rectangle",
             ROIShape.ELLIPSE: "add_ellipse",
@@ -1870,68 +1958,318 @@ class CurveAlignWidget(QWidget):
             ROIShape.FREEHAND: "add_path",
         }
         mode = mode_map.get(shape, "add_polygon")
-        self.roi_manager.shapes_layer.mode = mode
+        layer.mode = mode
         if self.viewer:
-            self.viewer.layers.selection.active = self.roi_manager.shapes_layer
+            self.viewer.layers.selection.active = layer
+        
+        # Set up safe auto-sync callback that prevents recursion
+        if not hasattr(self, '_last_shape_count'):
+            self._last_shape_count = 0
+        if not hasattr(self, '_syncing_shapes'):
+            self._syncing_shapes = False
+        
+        if not hasattr(self, '_shape_callback_connected') or not self._shape_callback_connected:
+            def on_data_change(event):
+                # Prevent recursion when we're updating shapes programmatically
+                if self._syncing_shapes:
+                    return
+                
+                current_count = len(layer.data)
+                count_diff = current_count - self._last_shape_count
+                
+                if count_diff > 0:
+                    # Shapes were added - auto-add as ROIs
+                    try:
+                        self._syncing_shapes = True
+                        annotation_type = self.annotation_type_combo.currentData() if hasattr(self, 'annotation_type_combo') else "custom_annotation"
+                        indices_to_add = list(range(self._last_shape_count, current_count))
+                        new_rois = self.roi_manager.add_rois_from_shapes(
+                            indices=indices_to_add,
+                            annotation_type=annotation_type
+                        )
+                        if new_rois:
+                            self._update_roi_list()
+                            print(f"Auto-added {len(new_rois)} ROI(s)")
+                        # Detach cursor from drawing mode after successful add
+                        if layer.mode.startswith("add_"):
+                            layer.mode = "select"
+                        self._last_shape_count = len(layer.data)
+                    except Exception as e:
+                        print(f"Auto-add failed: {e}")
+                    finally:
+                        self._syncing_shapes = False
+                        
+                elif count_diff < 0:
+                    # Shapes were deleted - clear ROIs and rebuild from remaining shapes
+                    print(f"Shapes deleted from layer. Rebuilding ROI list from remaining {current_count} shape(s)...")
+                    try:
+                        # Clear current ROIs for this image
+                        self._syncing_shapes = True
+                        current_rois = list(self.roi_manager.get_rois_for_active_image())
+                        for roi in current_rois:
+                            self.roi_manager.delete_roi(roi.id)
+                        
+                        # Rebuild ROIs from remaining shapes
+                        if current_count > 0:
+                            annotation_type = self.annotation_type_combo.currentData() if hasattr(self, 'annotation_type_combo') else "custom_annotation"
+                            new_rois = self.roi_manager.add_rois_from_shapes(
+                                indices=list(range(current_count)),
+                                annotation_type=annotation_type
+                            )
+                            print(f"Rebuilt {len(new_rois)} ROI(s) from shapes")
+                        
+                        self._update_roi_list()
+                        self._last_shape_count = len(layer.data)
+                    except Exception as e:
+                        print(f"Auto-sync after deletion failed: {e}")
+                    finally:
+                        self._syncing_shapes = False
+            
+            layer.events.data.connect(on_data_change)
+            self._shape_callback_connected = True
+        
+        # Update the initial count
+        self._last_shape_count = len(layer.data)
+        
+        print(f"Draw {shape.value} - ROI will be added automatically when you finish drawing")
     
     def _save_roi(self):
         """Save selected ROI(s) in multiple formats."""
         selected = self.roi_list.selectedItems()
         if not selected:
+            # If nothing selected, offer to save all
+            reply = QMessageBox.question(
+                self,
+                "No Selection",
+                "No ROIs selected. Save all ROIs?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                selected = [self.roi_list.item(i) for i in range(self.roi_list.count())]
+            else:
+                return
+        
+        if not selected:
+            QMessageBox.information(self, "No ROIs", "No ROIs available to save.")
             return
         
         file_path, selected_filter = QFileDialog.getSaveFileName(
             self, "Save ROI", "", 
-            "JSON files (*.json);;Fiji ROI (*.roi *.zip);;CSV files (*.csv);;TIFF mask (*.tif);;All files (*)"
+            "JSON files (*.json);;"
+            "Fiji/ImageJ ROI (*.roi *.zip);;"
+            "StarDist ROI (*.roi *.zip);;"
+            "Cellpose mask (*.npy);;"
+            "QuPath annotations (*.geojson);;"
+            "CSV files (*.csv);;"
+            "TIFF mask (*.tif);;"
+            "All files (*)"
         )
-        if file_path:
-            roi_ids = [int(item.text().split()[0]) for item in selected]
+        
+        if not file_path:
+            return
+        
+        try:
+            # Use stored UserRole data instead of parsing text (which has colons)
+            roi_ids = [item.data(Qt.UserRole) for item in selected]
             
             # Determine format from filter or extension
             if "JSON" in selected_filter or file_path.endswith('.json'):
                 self.roi_manager.save_rois(file_path, roi_ids, format='json')
-            elif "Fiji" in selected_filter or file_path.endswith(('.roi', '.zip')):
+                format_name = "JSON"
+            elif "Fiji" in selected_filter or (file_path.endswith(('.roi', '.zip')) and "StarDist" not in selected_filter):
                 self.roi_manager.save_rois(file_path, roi_ids, format='fiji')
+                format_name = "Fiji/ImageJ"
+            elif "StarDist" in selected_filter:
+                self.roi_manager.save_rois(file_path, roi_ids, format='stardist')
+                format_name = "StarDist"
+            elif "Cellpose" in selected_filter or file_path.endswith('.npy'):
+                self.roi_manager.save_rois(file_path, roi_ids, format='cellpose')
+                format_name = "Cellpose"
+            elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
+                self.roi_manager.save_rois(file_path, roi_ids, format='qupath')
+                format_name = "QuPath"
             elif "CSV" in selected_filter or file_path.endswith('.csv'):
                 self.roi_manager.save_rois(file_path, roi_ids, format='csv')
+                format_name = "CSV"
             elif "TIFF" in selected_filter or file_path.endswith(('.tif', '.tiff')):
                 self.roi_manager.save_rois(file_path, roi_ids, format='mask')
+                format_name = "TIFF mask"
             else:
                 self.roi_manager.save_rois(file_path, roi_ids, format='auto')
+                format_name = "auto-detected"
+            
+            print(f"Saved {len(roi_ids)} ROI(s) to {file_path} ({format_name} format)")
+            QMessageBox.information(
+                self,
+                "Save Successful",
+                f"Successfully saved {len(roi_ids)} ROI(s) in {format_name} format."
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Save Failed",
+                f"Failed to save ROIs:\n{str(e)}"
+            )
+            import traceback
+            traceback.print_exc()
+    
+    def _save_all_rois_quick(self):
+        """Quick save all ROIs to JSON format."""
+        all_roi_ids = self.roi_manager.get_all_roi_ids()
+        
+        if not all_roi_ids:
+            QMessageBox.information(self, "No ROIs", "No ROIs available to save.")
+            return
+        
+        # Suggest a filename based on current image
+        default_name = "all_rois.json"
+        if self.current_image_label:
+            image_name = os.path.splitext(self.current_image_label)[0]
+            default_name = f"{image_name}_rois.json"
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, 
+            "Save All ROIs (JSON)", 
+            default_name,
+            "JSON files (*.json)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            self.roi_manager.save_rois(file_path, all_roi_ids, format='json')
+            print(f"Saved {len(all_roi_ids)} ROI(s) to {file_path}")
+            QMessageBox.information(
+                self,
+                "Save Successful",
+                f"Successfully saved all {len(all_roi_ids)} ROI(s) to:\n{file_path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Save Failed",
+                f"Failed to save ROIs:\n{str(e)}"
+            )
+            import traceback
+            traceback.print_exc()
     
     def _load_roi(self):
         """Load ROI(s) from file in multiple formats."""
         file_path, selected_filter = QFileDialog.getOpenFileName(
             self, "Load ROI", "", 
-            "JSON files (*.json);;Fiji ROI (*.roi *.zip);;CSV files (*.csv);;TIFF mask (*.tif);;All files (*)"
+            "All supported formats (*.json *.roi *.zip *.npy *.geojson *.csv *.tif);;"
+            "JSON files (*.json);;"
+            "Fiji/ImageJ ROI (*.roi *.zip);;"
+            "StarDist ROI (*.roi *.zip);;"
+            "Cellpose mask (*.npy);;"
+            "QuPath annotations (*.geojson);;"
+            "CSV files (*.csv);;"
+            "TIFF mask (*.tif);;"
+            "All files (*)"
         )
-        if file_path:
+        
+        if not file_path:
+            return
+        
+        try:
             # Set image shape if available
             shape = self.current_image_shape
             if shape:
                 self.roi_manager.set_active_image(self._active_image_label(), shape)
             
             # Load based on format
+            loaded_rois = []
             if "JSON" in selected_filter or file_path.endswith('.json'):
-                self.roi_manager.load_rois(file_path, format='json')
-            elif "Fiji" in selected_filter or file_path.endswith(('.roi', '.zip')):
-                self.roi_manager.load_rois(file_path, format='fiji')
+                loaded_rois = self.roi_manager.load_rois(file_path, format='json')
+                format_name = "JSON"
+            elif "Fiji" in selected_filter or (file_path.endswith(('.roi', '.zip')) and "StarDist" not in selected_filter):
+                loaded_rois = self.roi_manager.load_rois(file_path, format='fiji')
+                format_name = "Fiji/ImageJ"
+            elif "StarDist" in selected_filter:
+                loaded_rois = self.roi_manager.load_rois(file_path, format='stardist')
+                format_name = "StarDist"
+            elif "Cellpose" in selected_filter or file_path.endswith('.npy'):
+                loaded_rois = self.roi_manager.load_rois(file_path, format='cellpose')
+                format_name = "Cellpose"
+            elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
+                loaded_rois = self.roi_manager.load_rois(file_path, format='qupath')
+                format_name = "QuPath"
             elif "CSV" in selected_filter or file_path.endswith('.csv'):
-                self.roi_manager.load_rois(file_path, format='csv')
+                loaded_rois = self.roi_manager.load_rois(file_path, format='csv')
+                format_name = "CSV"
             elif file_path.endswith(('.tif', '.tiff')):
-                self.roi_manager.load_rois(file_path, format='mask')
+                loaded_rois = self.roi_manager.load_rois(file_path, format='mask')
+                format_name = "TIFF mask"
             else:
-                self.roi_manager.load_rois(file_path, format='auto')
+                loaded_rois = self.roi_manager.load_rois(file_path, format='auto')
+                format_name = "auto-detected"
             
             self._update_roi_list()
+            
+            if loaded_rois:
+                print(f"Loaded {len(loaded_rois)} ROI(s) from {file_path} ({format_name} format)")
+                QMessageBox.information(
+                    self,
+                    "Load Successful",
+                    f"Successfully loaded {len(loaded_rois)} ROI(s) from {format_name} format."
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "No ROIs Loaded",
+                    "No ROIs were found in the file."
+                )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Load Failed",
+                f"Failed to load ROIs:\n{str(e)}"
+            )
+            import traceback
+            traceback.print_exc()
     
     def _delete_roi(self):
-        """Delete selected ROI(s)."""
+        """Delete selected ROI(s) from the main ROI list."""
         selected = self.roi_list.selectedItems()
-        for item in selected:
-            roi_id = int(item.text().split(":")[0])
-            self.roi_manager.delete_roi(roi_id)
-        self._update_roi_list()
+        
+        if not selected:
+            QMessageBox.information(
+                self,
+                "No Selection",
+                "Please select ROI(s) from the 'ROI List' at the bottom of the left panel before deleting."
+            )
+            return
+        
+        # Confirm deletion
+        roi_names = [item.text().split()[1] for item in selected if len(item.text().split()) > 1]
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Delete {len(selected)} ROI(s)?\n{', '.join(roi_names[:5])}{'...' if len(roi_names) > 5 else ''}",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            # Set sync flag to prevent shape callback from interfering
+            if not hasattr(self, '_syncing_shapes'):
+                self._syncing_shapes = False
+            self._syncing_shapes = True
+            
+            for item in selected:
+                roi_id = item.data(Qt.UserRole)
+                self.roi_manager.delete_roi(roi_id)
+            
+            self._update_roi_list()
+            
+            # Update shape count to match current ROI count
+            if self.roi_manager.shapes_layer is not None:
+                self._last_shape_count = len(self.roi_manager.shapes_layer.data)
+            
+            self._syncing_shapes = False
+            print(f"Deleted {len(selected)} ROI(s)")
     
     def _rename_roi(self):
         """Rename selected ROI."""
@@ -1950,7 +2288,7 @@ class CurveAlignWidget(QWidget):
         if len(selected) < 2:
             return
         
-        roi_ids = [int(item.text().split(":")[0]) for item in selected]
+        roi_ids = [item.data(Qt.UserRole) for item in selected]
         self.roi_manager.combine_rois(roi_ids)
         self._update_roi_list()
     
@@ -2169,13 +2507,13 @@ class CurveAlignWidget(QWidget):
         self.post_canvas.draw_idle()
 
     def _selected_roi_ids(self) -> List[int]:
+        """Get IDs of selected ROIs from the list widget."""
         items = self.roi_list.selectedItems()
         ids = []
         for item in items:
-            try:
-                ids.append(int(item.text().split(":")[0]))
-            except (ValueError, IndexError):
-                continue
+            roi_id = item.data(Qt.UserRole)
+            if roi_id is not None:
+                ids.append(roi_id)
         return ids
 
     def _get_active_image_data(self, grayscale: bool = False) -> Optional[np.ndarray]:
@@ -2233,6 +2571,53 @@ class CurveAlignWidget(QWidget):
             return
         dialog = MetricsDialog(df, self)
         dialog.exec_()
+    
+    def _export_summary_statistics(self):
+        """Export summary statistics for selected or all ROIs."""
+        roi_ids = self._selected_roi_ids()
+        if not roi_ids:
+            roi_ids = self.roi_manager.get_all_roi_ids()
+        if not roi_ids:
+            QMessageBox.information(self, "Export Statistics", "No ROIs available.")
+            return
+        
+        # Get file path for export
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Summary Statistics", "", 
+            "CSV files (*.csv);;All files (*)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            # Get intensity image if available
+            image = self._get_active_image_data(grayscale=True)
+            
+            # Export summary statistics
+            self.roi_manager.export_summary_statistics(
+                file_path,
+                roi_ids=roi_ids,
+                include_morphology=True,
+                include_fiber_metrics=True,
+                group_by_annotation_type=True,
+                intensity_image=image
+            )
+            
+            QMessageBox.information(
+                self, 
+                "Export Complete", 
+                f"Summary statistics exported to:\n{file_path}\n\n"
+                f"Per-ROI data exported to:\n{os.path.splitext(file_path)[0]}_per_roi.csv"
+            )
+        except Exception as e:
+            QMessageBox.warning(
+                self, 
+                "Export Failed", 
+                f"Failed to export summary statistics:\n{str(e)}"
+            )
+            import traceback
+            traceback.print_exc()
     
     def _update_roi_list(self):
         """Update ROI list widget and table."""

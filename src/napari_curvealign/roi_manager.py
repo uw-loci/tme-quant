@@ -1540,6 +1540,375 @@ class ROIManager:
         
         return loaded_rois
     
+    def save_rois_cellpose(self, file_path: str, roi_ids: Optional[List[int]] = None):
+        """
+        Save ROIs to Cellpose format (instance segmentation mask).
+        
+        Cellpose expects a .npy file with integer labels where each unique
+        integer > 0 represents a different object/ROI.
+        
+        Parameters
+        ----------
+        file_path : str
+            Output .npy file path
+        roi_ids : List[int], optional
+            IDs of ROIs to save (default: all)
+        """
+        if not self.current_image_shape:
+            raise ValueError("Image shape must be set before saving to Cellpose format")
+        
+        if roi_ids is None:
+            roi_ids = [roi.id for roi in self.rois]
+        
+        # Create instance mask
+        instance_mask = np.zeros(self.current_image_shape, dtype=np.uint16)
+        
+        for idx, roi_id in enumerate(roi_ids, start=1):
+            roi = self.get_roi(roi_id)
+            if roi:
+                roi_mask = roi.to_mask(self.current_image_shape)
+                instance_mask[roi_mask > 0] = idx
+        
+        # Save as .npy
+        np.save(file_path, instance_mask)
+        
+        # Also save metadata JSON with ROI info
+        base_path = os.path.splitext(file_path)[0]
+        metadata_path = base_path + "_metadata.json"
+        
+        metadata = {
+            "format": "cellpose",
+            "image_shape": list(self.current_image_shape),
+            "rois": []
+        }
+        
+        for idx, roi_id in enumerate(roi_ids, start=1):
+            roi = self.get_roi(roi_id)
+            if roi:
+                metadata["rois"].append({
+                    "label_id": idx,
+                    "original_id": roi.id,
+                    "name": roi.name,
+                    "annotation_type": roi.annotation_type
+                })
+        
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+    
+    def load_rois_cellpose(self, file_path: str) -> List[ROI]:
+        """
+        Load ROIs from Cellpose format (instance segmentation mask).
+        
+        Loads from .npy file containing integer labels. Optionally loads
+        metadata from accompanying JSON file if available.
+        
+        Parameters
+        ----------
+        file_path : str
+            Input .npy file path
+            
+        Returns
+        -------
+        List[ROI]
+            Loaded ROIs
+        """
+        # Load instance mask
+        instance_mask = np.load(file_path)
+        
+        if len(instance_mask.shape) != 2:
+            raise ValueError(f"Expected 2D mask, got shape {instance_mask.shape}")
+        
+        # Set image shape
+        self.current_image_shape = instance_mask.shape
+        
+        # Try to load metadata
+        base_path = os.path.splitext(file_path)[0]
+        metadata_path = base_path + "_metadata.json"
+        metadata = {}
+        
+        if os.path.exists(metadata_path):
+            try:
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+            except:
+                pass
+        
+        # Extract unique labels
+        unique_labels = np.unique(instance_mask)
+        unique_labels = unique_labels[unique_labels > 0]  # Exclude background
+        
+        loaded_rois = []
+        
+        for label_id in unique_labels:
+            # Create mask for this object
+            object_mask = (instance_mask == label_id).astype(np.uint8)
+            
+            # Find contours
+            if HAS_SKIMAGE:
+                from skimage import measure
+                contours = measure.find_contours(object_mask, 0.5)
+                
+                if len(contours) == 0:
+                    continue
+                
+                # Use the longest contour
+                contour = max(contours, key=len)
+                
+                # Convert from (row, col) to (x, y) for napari
+                coords = np.column_stack((contour[:, 1], contour[:, 0]))
+                
+                # Get metadata for this label
+                roi_name = f"cellpose_{label_id}"
+                annotation_type = "cellpose_cell"
+                
+                if metadata.get("rois"):
+                    for roi_meta in metadata["rois"]:
+                        if roi_meta.get("label_id") == int(label_id):
+                            roi_name = roi_meta.get("name", roi_name)
+                            annotation_type = roi_meta.get("annotation_type", annotation_type)
+                            break
+                
+                # Add ROI
+                roi = self.add_roi(
+                    coords,
+                    ROIShape.POLYGON,
+                    roi_name,
+                    annotation_type=annotation_type,
+                    metadata={"source": "cellpose", "label_id": int(label_id)}
+                )
+                
+                if self.active_image_label and "image_label" not in roi.metadata:
+                    roi.metadata["image_label"] = self.active_image_label
+                
+                loaded_rois.append(roi)
+        
+        return loaded_rois
+    
+    def save_rois_qupath(self, file_path: str, roi_ids: Optional[List[int]] = None):
+        """
+        Save ROIs to QuPath GeoJSON format.
+        
+        QuPath uses GeoJSON with specific properties for annotation classification
+        and object type.
+        
+        Parameters
+        ----------
+        file_path : str
+            Output .geojson file path
+        roi_ids : List[int], optional
+            IDs of ROIs to save (default: all)
+        """
+        if roi_ids is None:
+            roi_ids = [roi.id for roi in self.rois]
+        
+        features = []
+        
+        for roi_id in roi_ids:
+            roi = self.get_roi(roi_id)
+            if roi:
+                # Convert coordinates to GeoJSON format
+                # QuPath uses (x, y) coordinates
+                coords = roi.coordinates.tolist()
+                
+                # Close the polygon if not already closed
+                if roi.shape in [ROIShape.POLYGON, ROIShape.FREEHAND]:
+                    if not np.allclose(coords[0], coords[-1]):
+                        coords.append(coords[0])
+                
+                # Create geometry based on shape
+                if roi.shape == ROIShape.RECTANGLE:
+                    # Convert rectangle to polygon
+                    geometry_type = "Polygon"
+                    coordinates = [[coords]]  # GeoJSON Polygon format
+                elif roi.shape == ROIShape.ELLIPSE:
+                    # Convert ellipse to polygon approximation
+                    geometry_type = "Polygon"
+                    coordinates = [[coords]]
+                else:  # POLYGON or FREEHAND
+                    geometry_type = "Polygon"
+                    coordinates = [[coords]]
+                
+                # Create feature with QuPath-specific properties
+                feature = {
+                    "type": "Feature",
+                    "id": str(roi.id),
+                    "geometry": {
+                        "type": geometry_type,
+                        "coordinates": coordinates
+                    },
+                    "properties": {
+                        "object_type": "annotation",
+                        "classification": {
+                            "name": roi.annotation_type,
+                            "colorRGB": -3140401  # Default color
+                        },
+                        "name": roi.name,
+                        "isLocked": False,
+                        "measurements": roi.metrics if roi.metrics else {}
+                    }
+                }
+                
+                features.append(feature)
+        
+        # Create GeoJSON FeatureCollection
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": features
+        }
+        
+        with open(file_path, 'w') as f:
+            json.dump(geojson_data, f, indent=2)
+    
+    def save_rois_stardist(self, file_path: str, roi_ids: Optional[List[int]] = None):
+        """
+        Save ROIs to StarDist-compatible format.
+        
+        StarDist typically uses ImageJ ROI format (.roi/.zip), so this
+        delegates to the Fiji saver with appropriate metadata.
+        
+        Parameters
+        ----------
+        file_path : str
+            Output .roi or .zip file path
+        roi_ids : List[int], optional
+            IDs of ROIs to save (default: all)
+        """
+        # StarDist uses Fiji/ImageJ ROI format
+        # Add source metadata to identify StarDist origin
+        if roi_ids is None:
+            roi_ids = [roi.id for roi in self.rois]
+        
+        for roi_id in roi_ids:
+            roi = self.get_roi(roi_id)
+            if roi:
+                roi.metadata["stardist_compatible"] = True
+        
+        self.save_rois_fiji(file_path, roi_ids)
+    
+    def load_rois_stardist(self, file_path: str) -> List[ROI]:
+        """
+        Load ROIs from StarDist format.
+        
+        StarDist typically outputs to ImageJ ROI format (.roi/.zip),
+        so this delegates to the Fiji loader and marks ROIs as StarDist-sourced.
+        
+        Parameters
+        ----------
+        file_path : str
+            Input .roi or .zip file path
+            
+        Returns
+        -------
+        List[ROI]
+            Loaded ROIs
+        """
+        # StarDist uses Fiji/ImageJ ROI format
+        loaded_rois = self.load_rois_fiji(file_path)
+        
+        # Mark as StarDist source
+        for roi in loaded_rois:
+            if "source" not in roi.metadata:
+                roi.metadata["source"] = "stardist"
+            if "annotation_type" == "custom_annotation":
+                roi.annotation_type = "stardist_nucleus"
+        
+        return loaded_rois
+    
+    def load_rois_qupath(self, file_path: str) -> List[ROI]:
+        """
+        Load ROIs from QuPath GeoJSON format.
+        
+        Parses GeoJSON annotations from QuPath including classification
+        and object properties.
+        
+        Parameters
+        ----------
+        file_path : str
+            Input .geojson file path
+            
+        Returns
+        -------
+        List[ROI]
+            Loaded ROIs
+        """
+        with open(file_path, 'r') as f:
+            geojson_data = json.load(f)
+        
+        if geojson_data.get("type") != "FeatureCollection":
+            raise ValueError("Expected GeoJSON FeatureCollection")
+        
+        loaded_rois = []
+        
+        for feature in geojson_data.get("features", []):
+            geometry = feature.get("geometry", {})
+            properties = feature.get("properties", {})
+            
+            geometry_type = geometry.get("type")
+            coordinates = geometry.get("coordinates", [])
+            
+            if geometry_type == "Polygon" and coordinates:
+                # Extract outer ring (first element)
+                coords_list = coordinates[0]
+                
+                # Convert to numpy array (x, y format)
+                coords = np.array(coords_list, dtype=float)
+                
+                # Remove duplicate closing point if present
+                if len(coords) > 1 and np.allclose(coords[0], coords[-1]):
+                    coords = coords[:-1]
+                
+                # Get ROI properties
+                classification = properties.get("classification", {})
+                annotation_type = classification.get("name", "qupath_annotation")
+                roi_name = properties.get("name", f"qupath_{feature.get('id', 'unknown')}")
+                
+                # Determine shape (default to polygon for QuPath imports)
+                shape = ROIShape.POLYGON
+                
+                # Add ROI
+                roi = self.add_roi(
+                    coords,
+                    shape,
+                    roi_name,
+                    annotation_type=annotation_type,
+                    metadata={
+                        "source": "qupath",
+                        "object_type": properties.get("object_type", "annotation"),
+                        "qupath_id": feature.get("id")
+                    }
+                )
+                
+                # Add measurements if available
+                measurements = properties.get("measurements", {})
+                if measurements:
+                    roi.metrics = measurements
+                
+                if self.active_image_label and "image_label" not in roi.metadata:
+                    roi.metadata["image_label"] = self.active_image_label
+                
+                loaded_rois.append(roi)
+            elif geometry_type == "LineString":
+                # Handle line annotations
+                coords = np.array(coordinates, dtype=float)
+                
+                roi_name = properties.get("name", f"qupath_line_{feature.get('id', 'unknown')}")
+                annotation_type = properties.get("classification", {}).get("name", "qupath_line")
+                
+                roi = self.add_roi(
+                    coords,
+                    ROIShape.FREEHAND,
+                    roi_name,
+                    annotation_type=annotation_type,
+                    metadata={"source": "qupath", "geometry_type": "LineString"}
+                )
+                
+                if self.active_image_label and "image_label" not in roi.metadata:
+                    roi.metadata["image_label"] = self.active_image_label
+                
+                loaded_rois.append(roi)
+        
+        return loaded_rois
+    
     def save_rois(self, file_path: str, roi_ids: Optional[List[int]] = None, format: str = 'auto'):
         """
         Save ROIs to file in specified format.
@@ -1551,18 +1920,22 @@ class ROIManager:
         roi_ids : List[int], optional
             IDs of ROIs to save (default: all)
         format : str
-            Format to use: 'json', 'fiji', 'csv', 'mask', or 'auto' (detect from extension)
+            Format to use: 'json', 'fiji', 'stardist', 'csv', 'mask', 'cellpose', 'qupath', or 'auto' (detect from extension)
         """
         if format == 'auto':
             ext = os.path.splitext(file_path)[1].lower()
             if ext == '.json':
                 format = 'json'
             elif ext in ['.roi', '.zip']:
-                format = 'fiji'
+                format = 'fiji'  # Default to fiji; can be stardist too
             elif ext == '.csv':
                 format = 'csv'
             elif ext in ['.tif', '.tiff']:
                 format = 'mask'
+            elif ext == '.npy':
+                format = 'cellpose'
+            elif ext == '.geojson':
+                format = 'qupath'
             else:
                 format = 'json'  # Default
         
@@ -1570,8 +1943,14 @@ class ROIManager:
             self.save_rois_json(file_path, roi_ids)
         elif format == 'fiji':
             self.save_rois_fiji(file_path, roi_ids)
+        elif format == 'stardist':
+            self.save_rois_stardist(file_path, roi_ids)
         elif format == 'csv':
             self.save_rois_csv(file_path, roi_ids)
+        elif format == 'cellpose':
+            self.save_rois_cellpose(file_path, roi_ids)
+        elif format == 'qupath':
+            self.save_rois_qupath(file_path, roi_ids)
         elif format == 'mask':
             # Save all ROIs as separate mask files
             for roi_id in (roi_ids or [r.id for r in self.rois]):
@@ -1590,7 +1969,7 @@ class ROIManager:
         file_path : str
             Input file path
         format : str
-            Format: 'json', 'fiji', 'csv', 'mask', or 'auto'
+            Format: 'json', 'fiji', 'stardist', 'csv', 'mask', 'cellpose', 'qupath', or 'auto'
         
         Returns
         -------
@@ -1602,11 +1981,15 @@ class ROIManager:
             if ext == '.json':
                 format = 'json'
             elif ext in ['.roi', '.zip']:
-                format = 'fiji'
+                format = 'fiji'  # Default to fiji; can be stardist too
             elif ext == '.csv':
                 format = 'csv'
             elif ext in ['.tif', '.tiff']:
                 format = 'mask'
+            elif ext == '.npy':
+                format = 'cellpose'
+            elif ext == '.geojson':
+                format = 'qupath'
             else:
                 format = 'json'  # Default
         
@@ -1614,8 +1997,14 @@ class ROIManager:
             return self.load_rois_json(file_path)
         elif format == 'fiji':
             return self.load_rois_fiji(file_path)
+        elif format == 'stardist':
+            return self.load_rois_stardist(file_path)
         elif format == 'csv':
             return self.load_rois_csv(file_path)
+        elif format == 'cellpose':
+            return self.load_rois_cellpose(file_path)
+        elif format == 'qupath':
+            return self.load_rois_qupath(file_path)
         elif format == 'mask':
             roi = self.load_roi_from_mask(file_path)
             return [roi] if roi else []
