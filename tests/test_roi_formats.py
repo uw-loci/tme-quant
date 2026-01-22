@@ -80,8 +80,8 @@ class TestCellposeFormat:
         # Check metadata
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
-        assert "roi_info" in metadata
-        assert len(metadata["roi_info"]) == 3
+        assert "rois" in metadata
+        assert len(metadata["rois"]) == 3
     
     def test_load_cellpose_format(self, roi_manager, sample_rois, tmp_path):
         """Test loading ROIs from Cellpose format."""
@@ -119,7 +119,7 @@ class TestCellposeFormat:
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
         
-        assert len(metadata["roi_info"]) == 2
+        assert len(metadata["rois"]) == 2
 
 
 class TestQuPathFormat:

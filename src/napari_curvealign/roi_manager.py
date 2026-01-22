@@ -526,6 +526,86 @@ class ROIManager:
                 selection.add(idx)
                 break
         self.shapes_layer.selected_data = selection
+    
+    def compute_summary_statistics(
+        self,
+        roi_ids: Optional[List[int]] = None,
+        include_morphology: bool = True,
+        include_fiber_metrics: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Compute summary statistics for ROIs.
+        
+        Parameters
+        ----------
+        roi_ids : List[int], optional
+            IDs of ROIs to include (default: all)
+        include_morphology : bool
+            Include morphology statistics (area, shape, etc.)
+        include_fiber_metrics : bool
+            Include fiber analysis metrics if available
+            
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing summary statistics
+        """
+        # Get ROIs to analyze
+        if roi_ids is None:
+            rois_to_analyze = list(self.rois)
+        else:
+            rois_to_analyze = [self.get_roi(roi_id) for roi_id in roi_ids]
+            rois_to_analyze = [roi for roi in rois_to_analyze if roi is not None]
+        
+        # Initialize stats dictionary
+        stats = {
+            "roi_count": len(rois_to_analyze),
+            "roi_details": []
+        }
+        
+        if len(rois_to_analyze) == 0:
+            stats["total_area"] = 0
+            return stats
+        
+        # Collect per-ROI details
+        areas = []
+        for roi in rois_to_analyze:
+            roi_detail = {
+                "id": roi.id,
+                "name": roi.name,
+                "shape": roi.shape.value,
+                "annotation_type": roi.annotation_type,
+                "center": tuple(roi.center),
+                "area": float(roi.area)
+            }
+            
+            areas.append(roi.area)
+            
+            # Add fiber metrics if requested and available
+            if include_fiber_metrics:
+                if "fiber_count" in roi.metadata:
+                    roi_detail["fiber_count"] = roi.metadata["fiber_count"]
+                if "mean_length" in roi.metadata:
+                    roi_detail["mean_length"] = roi.metadata["mean_length"]
+                if "mean_angle" in roi.metadata:
+                    roi_detail["mean_angle"] = roi.metadata["mean_angle"]
+                if "alignment_score" in roi.metadata:
+                    roi_detail["alignment_score"] = roi.metadata["alignment_score"]
+            
+            stats["roi_details"].append(roi_detail)
+        
+        # Compute aggregate morphology statistics
+        if include_morphology and areas:
+            stats["total_area"] = float(np.sum(areas))
+            stats["mean_area"] = float(np.mean(areas))
+            stats["median_area"] = float(np.median(areas))
+            stats["std_area"] = float(np.std(areas))
+            stats["min_area"] = float(np.min(areas))
+            stats["max_area"] = float(np.max(areas))
+        else:
+            stats["total_area"] = 0
+        
+        return stats
 
     def _next_object_id(self) -> int:
         """Return the next unique object identifier."""
@@ -1574,7 +1654,7 @@ class ROIManager:
         
         # Also save metadata JSON with ROI info
         base_path = os.path.splitext(file_path)[0]
-        metadata_path = base_path + "_metadata.json"
+        metadata_path = base_path + ".json"
         
         metadata = {
             "format": "cellpose",
@@ -1623,7 +1703,7 @@ class ROIManager:
         
         # Try to load metadata
         base_path = os.path.splitext(file_path)[0]
-        metadata_path = base_path + "_metadata.json"
+        metadata_path = base_path + ".json"
         metadata = {}
         
         if os.path.exists(metadata_path):
@@ -1708,25 +1788,47 @@ class ROIManager:
             if roi:
                 # Convert coordinates to GeoJSON format
                 # QuPath uses (x, y) coordinates
-                coords = roi.coordinates.tolist()
-                
-                # Close the polygon if not already closed
-                if roi.shape in [ROIShape.POLYGON, ROIShape.FREEHAND]:
-                    if not np.allclose(coords[0], coords[-1]):
-                        coords.append(coords[0])
                 
                 # Create geometry based on shape
                 if roi.shape == ROIShape.RECTANGLE:
-                    # Convert rectangle to polygon
+                    # Convert rectangle (2 corners) to polygon (4 corners)
+                    x1, y1 = roi.coordinates[0]
+                    x2, y2 = roi.coordinates[1]
+                    coords = [
+                        [x1, y1],
+                        [x2, y1],
+                        [x2, y2],
+                        [x1, y2],
+                        [x1, y1]  # Close the polygon
+                    ]
                     geometry_type = "Polygon"
-                    coordinates = [[coords]]  # GeoJSON Polygon format
+                    coordinates = [coords]  # GeoJSON Polygon format: [ring]
                 elif roi.shape == ROIShape.ELLIPSE:
-                    # Convert ellipse to polygon approximation
+                    # Convert ellipse to polygon approximation using mask contours
+                    if self.current_image_shape:
+                        mask = roi.to_mask(self.current_image_shape)
+                        from skimage import measure
+                        contours = measure.find_contours(mask, 0.5)
+                        if contours:
+                            contour = max(contours, key=len)
+                            # Convert (row, col) to (x, y) and close
+                            coords = [[float(c), float(r)] for r, c in contour]
+                            coords.append(coords[0])  # Close the polygon
+                        else:
+                            # Fallback to center point if contour fails
+                            coords = [[float(roi.center[0]), float(roi.center[1])]]
+                    else:
+                        # Fallback if no image shape
+                        coords = [[float(roi.center[0]), float(roi.center[1])]]
                     geometry_type = "Polygon"
-                    coordinates = [[coords]]
+                    coordinates = [coords]
                 else:  # POLYGON or FREEHAND
+                    coords = roi.coordinates.tolist()
+                    # Close the polygon if not already closed
+                    if not np.allclose(coords[0], coords[-1]):
+                        coords.append(coords[0])
                     geometry_type = "Polygon"
-                    coordinates = [[coords]]
+                    coordinates = [coords]
                 
                 # Create feature with QuPath-specific properties
                 feature = {
