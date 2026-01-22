@@ -283,6 +283,14 @@ class CurveAlignWidget(QWidget):
     """Main CurveAlign widget implemented with pure Qt"""
     def __init__(self, viewer: "napari.viewer.Viewer" = None, parent=None):
         super().__init__(parent)
+        
+        # Apply style to center text in all buttons
+        self.setStyleSheet("""
+            QPushButton {
+                text-align: center;
+            }
+        """)
+        
         self._viewer = viewer  # Store viewer reference
         self.image_paths = []
         self.image_layers = {}  # Store image layers by filename
@@ -1748,8 +1756,8 @@ class CurveAlignWidget(QWidget):
         
         if count > 0:
             print(f"Set {count} ROI(s) as '{region_type}' regions")
-            self._update_roi_list()
-            self._update_annotation_list()
+        self._update_roi_list()
+        self._update_annotation_list()
 
     def _delete_annotation(self):
         """Remove the region designation (reset to custom_annotation)."""
