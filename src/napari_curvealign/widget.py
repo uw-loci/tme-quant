@@ -1523,80 +1523,84 @@ class CurveAlignWidget(QWidget):
         self.ca_options_btn.clicked.connect(self._open_curvealign_options)
         
     def _build_annotation_group(self) -> QGroupBox:
-        group = QGroupBox("Annotations (Advanced)")
-        group.setToolTip("Advanced feature: Draw large boundary regions, then detect objects within them")
+        group = QGroupBox("Region Analysis (Advanced)")
+        group.setToolTip("Advanced feature: Use drawn ROIs as boundary regions (e.g., tumor areas) to detect objects within them")
         layout = QVBoxLayout()
         
         # Add explanation label
         info_label = QLabel(
-            "<i>For advanced workflows: Draw boundary regions (e.g., tumor areas), "
-            "then detect cells/fibers within them.</i>"
+            "<i>Define boundary regions (e.g., tumor) to detect cells/fibers within them.<br>"
+            "1. Draw ROI in 'Create ROI' panel<br>"
+            "2. Select ROI in list<br>"
+            "3. Click 'Use Selected ROI' below</i>"
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet("QLabel { color: #888; font-size: 10px; padding: 3px; }")
         layout.addWidget(info_label)
         
-        shape_row = QHBoxLayout()
-        shape_row.addWidget(QLabel("Shape"))
-        self.annotation_shape_combo = QComboBox()
-        self.annotation_shape_combo.addItem("Rectangle", ROIShape.RECTANGLE)
-        self.annotation_shape_combo.addItem("Ellipse", ROIShape.ELLIPSE)
-        self.annotation_shape_combo.addItem("Polygon", ROIShape.POLYGON)
-        self.annotation_shape_combo.addItem("Freehand", ROIShape.FREEHAND)
-        shape_row.addWidget(self.annotation_shape_combo)
-        
-        shape_row.addWidget(QLabel("Type"))
+        # ROI to Annotation conversion
+        conversion_layout = QHBoxLayout()
+        conversion_layout.addWidget(QLabel("Type:"))
         self.annotation_type_combo = QComboBox()
         self.annotation_type_combo.addItem("Tumor", "tumor")
+        self.annotation_type_combo.addItem("Cell", "cell")
+        self.annotation_type_combo.addItem("Fiber", "fiber")
         self.annotation_type_combo.addItem("Custom", "custom_annotation")
-        self.annotation_type_combo.addItem("Cell (computed)", "cell_computed")
-        self.annotation_type_combo.addItem("Fiber (computed)", "fiber_computed")
-        shape_row.addWidget(self.annotation_type_combo)
-        layout.addLayout(shape_row)
+        conversion_layout.addWidget(self.annotation_type_combo)
         
-        button_row = QHBoxLayout()
-        self.draw_annotation_btn = QPushButton("Draw (d)")
-        self.draw_annotation_btn.setShortcut("D")
-        self.add_annotation_btn = QPushButton("Add (t)")
-        self.add_annotation_btn.setShortcut("T")
-        self.delete_annotation_btn = QPushButton("Delete (r)")
-        self.delete_annotation_btn.setShortcut("R")
-        button_row.addWidget(self.draw_annotation_btn)
-        button_row.addWidget(self.add_annotation_btn)
-        button_row.addWidget(self.delete_annotation_btn)
-        layout.addLayout(button_row)
+        self.use_roi_btn = QPushButton("Use Selected ROI")
+        self.use_roi_btn.setToolTip("Convert the selected ROI from the main list into an analysis region")
+        conversion_layout.addWidget(self.use_roi_btn)
+        layout.addLayout(conversion_layout)
         
-        detect_row = QHBoxLayout()
-        self.detect_object_btn = QPushButton("Detect object")
-        detect_row.addWidget(self.detect_object_btn)
-        detect_row.addWidget(QLabel("Distance"))
+        # Detection controls
+        detect_group = QGroupBox("Detection")
+        detect_layout = QVBoxLayout()
+        
+        param_row = QHBoxLayout()
+        param_row.addWidget(QLabel("Distance:"))
         self.detect_distance_spin = QSpinBox()
         self.detect_distance_spin.setRange(0, 200)
         self.detect_distance_spin.setValue(self.roi_manager.detection_distance)
-        detect_row.addWidget(self.detect_distance_spin)
+        self.detect_distance_spin.setSuffix(" px")
+        param_row.addWidget(self.detect_distance_spin)
+        
+        self.detect_object_btn = QPushButton("Detect Objects")
+        param_row.addWidget(self.detect_object_btn)
+        detect_layout.addLayout(param_row)
+        
+        options_row = QHBoxLayout()
         self.exclude_inside_checkbox = QCheckBox("Exclude interior")
-        self.boundary_only_checkbox = QCheckBox("Boundary ring only")
+        self.boundary_only_checkbox = QCheckBox("Ring only")
+        options_row.addWidget(self.exclude_inside_checkbox)
+        options_row.addWidget(self.boundary_only_checkbox)
+        
         self.boundary_width_spin = QSpinBox()
         self.boundary_width_spin.setRange(1, 50)
         self.boundary_width_spin.setValue(5)
-        detect_row.addWidget(self.exclude_inside_checkbox)
-        detect_row.addWidget(self.boundary_only_checkbox)
-        detect_row.addWidget(QLabel("Ring px"))
-        detect_row.addWidget(self.boundary_width_spin)
-        layout.addLayout(detect_row)
+        self.boundary_width_spin.setPrefix("Width: ")
+        options_row.addWidget(self.boundary_width_spin)
+        detect_layout.addLayout(options_row)
         
-        layout.addWidget(QLabel("Annotations"))
+        detect_group.setLayout(detect_layout)
+        layout.addWidget(detect_group)
+        
+        # Annotation/Region list
+        layout.addWidget(QLabel("Defined Regions:"))
         self.annotation_list = QListWidget()
         self.annotation_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.annotation_list.setFixedHeight(100)
         layout.addWidget(self.annotation_list)
+        
+        self.remove_region_btn = QPushButton("Remove Region")
+        layout.addWidget(self.remove_region_btn)
         
         group.setLayout(layout)
         
         # Connections
-        self.draw_annotation_btn.clicked.connect(self._draw_annotation)
-        self.add_annotation_btn.clicked.connect(self._add_annotation_from_shapes)
-        self.delete_annotation_btn.clicked.connect(self._delete_annotation)
+        self.use_roi_btn.clicked.connect(self._convert_roi_to_annotation)
         self.detect_object_btn.clicked.connect(self._detect_objects_in_annotation)
+        self.remove_region_btn.clicked.connect(self._delete_annotation)
         self.annotation_list.itemSelectionChanged.connect(self._on_annotation_selected)
         
         return group
@@ -1724,90 +1728,56 @@ class CurveAlignWidget(QWidget):
         self._set_active_image_context(viewer.layers.selection.active if viewer.layers else None)
         return viewer
 
-    def _draw_annotation(self):
-        """Activate drawing mode for the selected annotation shape."""
-        try:
-            self._ensure_roi_viewer()
-        except RuntimeError as exc:
-            QMessageBox.warning(self, "Cannot Draw", f"Unable to draw annotation: {exc}")
-            return
-        try:
-            layer = self.roi_manager.create_shapes_layer()
-        except ValueError as exc:
-            QMessageBox.warning(self, "Cannot Draw", f"Unable to draw annotation: {exc}")
+    def _convert_roi_to_annotation(self):
+        """Convert selected ROIs from main list into analysis regions."""
+        roi_ids = self._selected_roi_ids()
+        
+        if not roi_ids:
+            QMessageBox.information(self, "No ROI Selected", "Please select an ROI from the 'ROI List' to use as a region.")
             return
         
-        shape = self.annotation_shape_combo.currentData()
-        mode_map = {
-            ROIShape.RECTANGLE: 'add_rectangle',
-            ROIShape.ELLIPSE: 'add_ellipse',
-            ROIShape.POLYGON: 'add_polygon',
-            ROIShape.FREEHAND: 'add_path'
-        }
-        layer.mode = mode_map.get(shape, 'add_polygon')
-        if self.viewer:
-            self.viewer.layers.selection.active = layer
+        region_type = self.annotation_type_combo.currentData()
+        count = 0
         
-        # Show helpful message
-        shape_name = shape.value if hasattr(shape, 'value') else str(shape)
-        print(f"Draw mode active: {shape_name}. After drawing, click 'Add (t)' to save the ROI.")
-
-    def _add_annotation_from_shapes(self):
-        """Convert selected shapes into managed annotations."""
-        try:
-            self._ensure_roi_viewer()
-        except RuntimeError as exc:
-            QMessageBox.warning(self, "Cannot Add", f"Unable to add annotation: {exc}")
-            return
+        for roi_id in roi_ids:
+            roi = self.roi_manager.get_roi(roi_id)
+            if roi:
+                # Update annotation type
+                roi.annotation_type = region_type
+                count += 1
         
-        annotation_type = self.annotation_type_combo.currentData()
-        new_rois = self.roi_manager.add_rois_from_shapes(annotation_type=annotation_type)
-        
-        if not new_rois:
-            QMessageBox.information(
-                self, 
-                "No Shapes", 
-                "No shapes available to add as ROIs.\n\n"
-                "Tip: First draw shapes using 'Draw (d)', then click 'Add (t)' to save them as ROIs."
-            )
-            return
-        
-        # Success feedback
-        roi_names = ", ".join([roi.name for roi in new_rois])
-        print(f"Added {len(new_rois)} ROI(s): {roi_names}")
-        
-        self._update_roi_list()
-        self._update_annotation_list()
+        if count > 0:
+            print(f"Set {count} ROI(s) as '{region_type}' regions")
+            self._update_roi_list()
+            self._update_annotation_list()
 
     def _delete_annotation(self):
-        """Delete selected annotations."""
+        """Remove the region designation (reset to custom_annotation)."""
         items = self.annotation_list.selectedItems()
         if not items:
             return
         
-        # Set sync flag to prevent shape callback from interfering
-        if not hasattr(self, '_syncing_shapes'):
-            self._syncing_shapes = False
-        self._syncing_shapes = True
+        reply = QMessageBox.question(
+            self, "Remove Region", 
+            f"Remove {len(items)} region(s)?\nThis will reset their type to 'custom_annotation' but keep the ROIs.",
+            QMessageBox.Yes | QMessageBox.No
+        )
         
-        for item in items:
-            roi_id = item.data(Qt.UserRole)
-            self.roi_manager.delete_roi(roi_id)
-        
-        self._update_roi_list()
-        self._update_annotation_list()
-        
-        # Update shape count to match current state
-        if self.roi_manager.shapes_layer is not None:
-            self._last_shape_count = len(self.roi_manager.shapes_layer.data)
-        
-        self._syncing_shapes = False
+        if reply == QMessageBox.Yes:
+            for item in items:
+                roi_id = item.data(Qt.UserRole)
+                roi = self.roi_manager.get_roi(roi_id)
+                if roi:
+                    roi.annotation_type = "custom_annotation"
+            
+            self._update_roi_list()
+            self._update_annotation_list()
 
     def _detect_objects_in_annotation(self):
         """Detect objects that fall within the selected annotation."""
         roi_id = self._selected_annotation_id()
         if roi_id is None:
-            print("Select an annotation before detecting objects.")
+            QMessageBox.information(self, "Select Region", "Please select a region from 'Defined Regions' list.")
             return
         distance = self.detect_distance_spin.value()
         types = self._object_filter_types()
@@ -1826,13 +1796,17 @@ class CurveAlignWidget(QWidget):
                 include_boundary_ring=boundary_only,
                 boundary_width=boundary_width
             )
+            # Update object list with detected objects only
+            if detected:
+                object_ids = []
+                for objs in detected.values():
+                    object_ids.extend(obj.id for obj in objs)
+                self._update_object_list(object_ids=object_ids)
+                print(f"Detected {len(object_ids)} objects in region {roi_id}")
+            else:
+                print("No objects detected in region")
         except ValueError as exc:
             print(f"Object detection failed: {exc}")
-            return
-        object_ids = []
-        for objs in detected.values():
-            object_ids.extend(obj.id for obj in objs)
-        self._update_object_list(object_ids=object_ids)
 
     def _set_objects_as_annotation(self):
         """Convert selected objects to annotations."""
