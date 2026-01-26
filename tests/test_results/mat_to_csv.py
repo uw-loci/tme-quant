@@ -1,64 +1,57 @@
 import argparse
 from scipy.io import loadmat
-import pandas as pd
 import numpy as np
 
 
-def extract_field(field):
-    """
-    Safely extract a MATLAB struct field that may be nested ndarray.
-    Returns a flat numpy array for 'center' or a float for 'angle'.
-    """
-    # Squeeze to remove singleton dimensions
-    if isinstance(field, np.ndarray):
-        field = field.squeeze()
-    # If it's still an ndarray with size 1, extract the scalar
-    if isinstance(field, np.ndarray) and field.size == 1:
-        field = field.item()
-    return field
-
-
 def mat_to_csv(mat_file_path, csv_file_path):
+    """
+    Convert a MATLAB .mat file to CSV format.
+    Handles various data structures and saves without column names.
+    """
     mat_data = loadmat(mat_file_path)
 
-    if "inCurvs" not in mat_data:
-        raise KeyError("Expected 'inCurvs' in .mat file")
+    # Filter out MATLAB metadata keys (start with __)
+    data_keys = [k for k in mat_data.keys() if not k.startswith("__")]
 
-    in_curvs_array = mat_data["inCurvs"]
+    if not data_keys:
+        raise ValueError("No data found in .mat file")
 
-    # Flatten to 1D array
-    in_curvs_flat = in_curvs_array.ravel()
+    # Get the first (and usually only) data variable
+    key = data_keys[0]
+    data = mat_data[key]
 
-    centers_list = []
-    angles_list = []
-
-    for entry in in_curvs_flat:
-        # Entry is a numpy.void with 'center' and 'angle' fields
-        center = extract_field(entry["center"])
-        angle = extract_field(entry["angle"])
-
-        # Ensure center is a 1D array with 2 elements
-        if isinstance(center, np.ndarray):
-            center = center.flatten()
+    # Handle different data structures
+    if isinstance(data, np.ndarray):
+        # Check if it's a structured array (MATLAB struct)
+        if data.dtype.names:
+            # Structured array - extract fields
+            rows = []
+            for entry in data.ravel():
+                row = []
+                for field_name in data.dtype.names:
+                    field_value = entry[field_name]
+                    # Squeeze and flatten
+                    if isinstance(field_value, np.ndarray):
+                        field_value = field_value.flatten()
+                        if field_value.size == 1:
+                            field_value = field_value.item()
+                    row.extend(np.atleast_1d(field_value))
+                rows.append(row)
+            data_array = np.array(rows)
         else:
-            center = np.array([center])
+            # Regular array
+            data_array = (
+                data.reshape(-1, data.shape[-1])
+                if data.ndim > 1
+                else data.reshape(-1, 1)
+            )
+    else:
+        # Scalar or other type
+        data_array = np.atleast_2d(data)
 
-        # Ensure angle is a scalar
-        if isinstance(angle, np.ndarray):
-            angle = angle.item()
-
-        centers_list.append(center)
-        angles_list.append(angle)
-
-    centers = np.array(centers_list)
-    angles = np.array(angles_list)
-
-    df = pd.DataFrame(
-        {"center_0": centers[:, 0], "center_1": centers[:, 1], "angle": angles}
-    )
-
-    df.to_csv(csv_file_path, index=False)
-    print(f"Saved CSV to {csv_file_path} with {len(df)} rows")
+    # Save to CSV without header
+    np.savetxt(csv_file_path, data_array, delimiter=",", fmt="%g")
+    print(f"Saved CSV to {csv_file_path} with shape {data_array.shape}")
 
 
 if __name__ == "__main__":
