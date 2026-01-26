@@ -2015,6 +2015,32 @@ class CurveAlignWidget(QWidget):
         
         print(f"Draw {shape.value} - ROI will be added automatically when you finish drawing")
     
+    def _get_roi_save_dir(self) -> str:
+        """Get or create the ROI management directory for the current image."""
+        if not self.image_paths or not self.current_image_label:
+            return os.path.expanduser("~")
+            
+        # Find the path for the current image
+        current_path = None
+        for path in self.image_paths:
+            if os.path.basename(path) == self.current_image_label:
+                current_path = path
+                break
+        
+        if not current_path:
+            return os.path.expanduser("~")
+            
+        # Structure: parent_dir/ROI_management/image_name_no_ext/
+        parent_dir = os.path.dirname(current_path)
+        image_name = os.path.splitext(self.current_image_label)[0]
+        roi_man_dir = os.path.join(parent_dir, "ROI_management", image_name)
+        
+        try:
+            os.makedirs(roi_man_dir, exist_ok=True)
+            return roi_man_dir
+        except OSError:
+            return os.path.dirname(current_path)
+
     def _save_roi(self):
         """Save selected ROI(s) in multiple formats."""
         selected = self.roi_list.selectedItems()
@@ -2037,7 +2063,7 @@ class CurveAlignWidget(QWidget):
             return
         
         file_path, selected_filter = QFileDialog.getSaveFileName(
-            self, "Save ROI", "", 
+            self, "Save ROI", self._get_roi_save_dir(), 
             "JSON files (*.json);;"
             "Fiji/ImageJ ROI (*.roi *.zip);;"
             "StarDist ROI (*.roi *.zip);;"
@@ -2110,10 +2136,13 @@ class CurveAlignWidget(QWidget):
             image_name = os.path.splitext(self.current_image_label)[0]
             default_name = f"{image_name}_rois"
         
+        save_dir = self._get_roi_save_dir()
+        default_path = os.path.join(save_dir, default_name)
+        
         file_path, selected_filter = QFileDialog.getSaveFileName(
             self, 
             "Save All ROIs", 
-            default_name,
+            default_path,
             "JSON files (*.json);;"
             "Fiji/ImageJ ROI (*.roi *.zip);;"
             "StarDist ROI (*.roi *.zip);;"
