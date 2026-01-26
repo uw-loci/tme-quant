@@ -2039,7 +2039,13 @@ class CurveAlignWidget(QWidget):
             os.makedirs(roi_man_dir, exist_ok=True)
             return roi_man_dir
         except OSError:
-            return os.path.dirname(current_path)
+            # Fallback to a folder in the user's home directory if we can't write to the image location
+            fallback_dir = os.path.join(os.path.expanduser("~"), "ROI_management_Fallback", image_name)
+            try:
+                os.makedirs(fallback_dir, exist_ok=True)
+                return fallback_dir
+            except OSError:
+                return os.path.dirname(current_path)
 
     def _save_roi(self):
         """Save selected ROI(s) in multiple formats."""
