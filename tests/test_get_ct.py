@@ -38,7 +38,7 @@ def standard_test_image():
 def standard_control_parameters():
     """Create standard control parameters for testing."""
     advanced_options = {
-        "exclude_fibers_in_mask_flag": 1,
+        "exclude_fibers_in_mask": 1,
         "curvelets_group_radius": 10,
         "selected_scale": 1,
         "heatmap_STD_filter_size": 16,

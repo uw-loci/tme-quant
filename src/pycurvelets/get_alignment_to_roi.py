@@ -40,9 +40,9 @@ def get_alignment_to_roi(
         Single ROI or list of ROIs. Each ROI should be a ROIList dataclass containing:
         - 'coordinates' : tuple
             ROI boundary coordinates as (y, x) pairs
-        - 'image_width' : int
+        - 'img_width' : int
             Image width in pixels
-        - 'image_height' : int
+        - 'img_height' : int
             Image height in pixels
         For pre-selected fiber mode, additional attributes may be present:
         - 'dist' : array_like, optional
@@ -193,7 +193,7 @@ def get_alignment_to_roi(
         from skimage.draw import polygon2mask
         from skimage.measure import regionprops, label
 
-        mask = polygon2mask((roi_list.image_height, roi_list.image_width), roi_coords)
+        mask = polygon2mask((roi_list.img_height, roi_list.img_width), roi_coords)
         labeled = label(mask.astype(np.uint8))
         props = regionprops(labeled)
 
@@ -261,8 +261,8 @@ def get_alignment_to_roi(
 
             if (
                 any(boundary_pt == 1)
-                or boundary_pt[0] == roi_list.image_height
-                or boundary_pt[1] == roi_list.image_width
+                or boundary_pt[0] == roi_list.img_height
+                or boundary_pt[1] == roi_list.img_width
             ):
                 temp_ang = 0
             else:

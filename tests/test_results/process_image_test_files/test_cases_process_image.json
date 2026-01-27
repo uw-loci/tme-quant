@@ -1,30 +1,102 @@
 {
   "test_cases": [
     {
-      "name": "real1_keep0.05",
-      "image": "real1.tif",
-      "keep": 0.05,
-      "scale": 1,
-      "radius": 5,
-      "use_boundary": true,
-      // "matlab_reference_csv": "test_process_image_real1_keep0.05.csv"
+      "name": "real1_keep0.05_no_boundary",
+      "image_params": {
+        "img" : "real1.tif",
+        "img_name": "real1",
+        "slice_num" : 1,
+        "num_sections" : 1
+      },
+      "fiber_params": {
+        "fiber_mode": 0,
+        "keep": 0.05
+      },
+      "output_params": {
+        "make_associations": false,
+        "make_map" : true,
+        "make_overlay": true,
+        "make_feature_file": true
+      },
+      "boundary_params" : null,
+      "advanced_options" : {
+        "exclude_fibers_in_mask":  true,
+        "curvelets_group_radius": 10.0,
+        "selected_scale": 1,
+        "min_dist": [],
+        "minimum_nearest_fibers": 2,
+        "minimum_box_size": 32,
+        "fiber_midpoint_estimate": 1,
+        "heatmap_STD_filter_size": 16,
+        "heatmap_SQUARE_max_filter_size": 12,
+        "heatmap_GAUSSIAN_disc_filter_sigma":  4.0
+      },
+      "matlab_reference_csv": "test_process_image_real1_keep0.05_no_boundary.csv"
     },
     {
       "name": "real1_keep0.1_no_boundary",
-      "image": "real1.tif",
-      "keep": 0.1,
-      "scale": 1,
-      "radius": 5,
-      "use_boundary": false,
+      "image_params": {
+        "img" : "real1.tif",
+        "img_name": "real1",
+        "slice_num" : 1,
+        "num_sections" : 1
+      },
+      "fiber_params": {
+        "fiber_mode": 0,
+        "keep": 0.1
+      },
+      "output_params": {
+        "make_associations": false,
+        "make_map" : true,
+        "make_overlay": true,
+        "make_feature_file": true
+      },
+      "boundary_params" : null,
+      "advanced_options" : {
+        "exclude_fibers_in_mask":  true,
+        "curvelets_group_radius": 10.0,
+        "selected_scale": 1,
+        "min_dist": [],
+        "minimum_nearest_fibers": 2,
+        "minimum_box_size": 32,
+        "fiber_midpoint_estimate": 1,
+        "heatmap_STD_filter_size": 16,
+        "heatmap_SQUARE_max_filter_size": 12,
+        "heatmap_GAUSSIAN_disc_filter_sigma":  4.0
+      },
       "matlab_reference_csv": "test_process_image_real1_keep0.1_no_boundary.csv"
     },
     {
       "name": "real1_keep0.05_radius5_no_boundary",
-      "image": "real1.tif",
-      "keep": 0.05,
-      "scale": 1,
-      "radius": 5,
-      "use_boundary": false,
+      "image_params": {
+        "img" : "real1.tif",
+        "img_name": "real1",
+        "slice_num" : 1,
+        "num_sections" : 1
+      },
+      "fiber_params": {
+        "fiber_mode": 0,
+        "keep": 0.05
+      },
+      "output_params": {
+        "make_associations": false,
+        "make_map" : true,
+        "make_overlay": true,
+        "make_feature_file": true
+      },
+      "boundary_params" : null,
+      "advanced_options" : {
+        "exclude_fibers_in_mask":  true,
+        "curvelets_group_radius": 5.0,
+        "selected_scale": 1,
+        "min_dist": [],
+        "minimum_nearest_fibers": 2,
+        "minimum_box_size": 32,
+        "fiber_midpoint_estimate": 1,
+        "heatmap_STD_filter_size": 16,
+        "heatmap_SQUARE_max_filter_size": 12,
+        "heatmap_GAUSSIAN_disc_filter_sigma":  4.0
+      },
       "matlab_reference_csv": "test_process_image_real1_keep0.05_radius5_no_boundary.csv"
     }
   ]

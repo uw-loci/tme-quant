@@ -46,8 +46,8 @@ def test_get_alignment_to_roi_with_distance_threshold():
     # Create ROIList with single ROI
     roi_list = ROIList(
         coordinates=[roi_coords],
-        image_width=512,
-        image_height=512,
+        img_width=512,
+        img_height=512,
     )
 
     distance_threshold = 100
@@ -127,8 +127,8 @@ def test_get_alignment_to_roi_empty_fiber_structure():
     roi_coords = [(10, 10), (20, 10), (20, 20), (10, 20)]
     roi_list = ROIList(
         coordinates=[roi_coords],
-        image_width=100,
-        image_height=100,
+        img_width=100,
+        img_height=100,
     )
 
     empty_df = pd.DataFrame()

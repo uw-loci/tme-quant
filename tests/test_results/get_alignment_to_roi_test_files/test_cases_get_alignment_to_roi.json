@@ -5,8 +5,8 @@
       "roi_coords_csv": "roi_df.csv",
       "fiber_structure_csv": "fiber_structure.csv",
       "distance_threshold": 100,
-      "image_width": 512,
-      "image_height": 512,
+      "img_width": 512,
+      "img_height": 512,
       "expected_roi_measurements_csv": "ROImeasurements.csv"
     }
   ]

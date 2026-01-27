@@ -72,8 +72,8 @@ class FiberFeatures:
 @dataclass
 class ROI:
     coordinates: tuple
-    image_width: int
-    image_height: int
+    img_width: int
+    img_height: int
     distance: Optional[float]
     index_to_object: Optional[int]
 
@@ -81,13 +81,14 @@ class ROI:
 @dataclass
 class ROIList:
     coordinates: list[tuple]
-    image_width: int
-    image_height: int
+    img_width: int
+    img_height: int
 
 
 @dataclass
 class ImageInputParameters:
     """Parameters related to input image and identification."""
+
     img: np.ndarray
     img_name: str
     slice_num: int = 1
@@ -97,6 +98,7 @@ class ImageInputParameters:
 @dataclass
 class BoundaryParameters:
     """Parameters for boundary analysis."""
+
     coordinates: Optional[Dict] = None
     distance_threshold: float = 100.0
     tif_boundary: int = 0  # 0=none, 1/2=CSV, 3=TIFF
@@ -106,6 +108,7 @@ class BoundaryParameters:
 @dataclass
 class FiberAnalysisParameters:
     """Parameters for fiber/curvelet analysis method."""
+
     fiber_mode: int = 0  # 0=curvelet, 1/2/3=FIRE
     keep: float = 0.05  # Percentage of curvelets to keep
     fire_directory: Optional[str] = None
@@ -114,6 +117,7 @@ class FiberAnalysisParameters:
 @dataclass
 class OutputControlParameters:
     """Control flags for output generation."""
+
     output_directory: str = "."
     make_associations: bool = False
     make_map: bool = False
@@ -124,22 +128,23 @@ class OutputControlParameters:
 @dataclass
 class AdvancedAnalysisOptions:
     """Advanced options for analysis customization."""
+
     # Fiber exclusion and grouping
-    exclude_fibers_in_mask_flag: int = 0
+    exclude_fibers_in_mask: bool = True
     curvelets_group_radius: float = 10.0
     selected_scale: int = 1
     min_dist: Union[List, float] = None
-    
+
     # Feature extraction
     minimum_nearest_fibers: int = 2
     minimum_box_size: int = 32
     fiber_midpoint_estimate: int = 1
-    
+
     # Heatmap visualization
     heatmap_STD_filter_size: int = 24
     heatmap_SQUARE_max_filter_size: int = 12
     heatmap_GAUSSIAN_disc_filter_sigma: float = 4.0
-    
+
     def __post_init__(self):
         """Initialize min_dist to empty list if None."""
         if self.min_dist is None:
