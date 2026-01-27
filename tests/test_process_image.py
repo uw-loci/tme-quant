@@ -70,6 +70,53 @@ def load_test_cases():
     return [(tc["name"], tc) for tc in cases]
 
 
+def load_boundary_data_from_json(boundary_params_dict):
+    """
+    Load boundary data from CSV files referenced in JSON.
+
+    Converts "from_file:" markers in the JSON into actual numpy arrays.
+    """
+    if boundary_params_dict is None:
+        return None
+
+    boundary_params_dict = boundary_params_dict.copy()
+
+    # Load coordinates if they reference files
+    if "coordinates" in boundary_params_dict and boundary_params_dict["coordinates"]:
+        coords_dict = boundary_params_dict["coordinates"]
+        loaded_coords = {}
+
+        for key, value in coords_dict.items():
+            if isinstance(value, str) and value.startswith("from_file:"):
+                filename = value.replace("from_file:", "")
+                filepath = os.path.join(
+                    os.path.dirname(__file__),
+                    "test_results",
+                    "get_tif_boundary_test_files",
+                    filename,
+                )
+                loaded_coords[key] = np.loadtxt(filepath, delimiter=",")
+            else:
+                loaded_coords[key] = value
+
+        boundary_params_dict["coordinates"] = loaded_coords
+
+    # Load boundary_img if it references a file
+    if "boundary_img" in boundary_params_dict and boundary_params_dict["boundary_img"]:
+        value = boundary_params_dict["boundary_img"]
+        if isinstance(value, str) and value.startswith("from_file:"):
+            filename = value.replace("from_file:", "")
+            filepath = os.path.join(
+                os.path.dirname(__file__),
+                "test_results",
+                "get_tif_boundary_test_files",
+                filename,
+            )
+            boundary_params_dict["boundary_img"] = np.loadtxt(filepath, delimiter=",")
+
+    return BoundaryParameters(**boundary_params_dict)
+
+
 # --------------------------
 # Tests
 # --------------------------
@@ -107,10 +154,8 @@ def test_process_image_returns_fiber_features(test_name, test_case, tmp_path):
     output_params = OutputControlParameters(**output_params_dict)
 
     # Build BoundaryParameters from JSON (may be None)
-    if test_case["boundary_params"] is None:
-        boundary_params = None
-    else:
-        boundary_params = BoundaryParameters(**test_case["boundary_params"])
+    # This handles loading CSV files referenced with "from_file:" markers
+    boundary_params = load_boundary_data_from_json(test_case["boundary_params"])
 
     # Build AdvancedAnalysisOptions from JSON
     advanced_options = AdvancedAnalysisOptions(**test_case["advanced_options"])

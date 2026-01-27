@@ -3,10 +3,15 @@ from scipy.io import loadmat
 import numpy as np
 
 
-def mat_to_csv(mat_file_path, csv_file_path):
+def mat_to_csv(mat_file_path, csv_file_path, swap_last_cols=False):
     """
     Convert a MATLAB .mat file to CSV format.
     Handles various data structures and saves without column names.
+    
+    Args:
+        mat_file_path: Path to input .mat file
+        csv_file_path: Path to output CSV file
+        swap_last_cols: If True, swap the last two columns (row/col coordinates)
     """
     mat_data = loadmat(mat_file_path)
 
@@ -49,6 +54,11 @@ def mat_to_csv(mat_file_path, csv_file_path):
         # Scalar or other type
         data_array = np.atleast_2d(data)
 
+    # Swap last two columns if requested (for row/col coordinates)
+    if swap_last_cols and data_array.shape[1] >= 2:
+        data_array[:, [-2, -1]] = data_array[:, [-1, -2]]
+        print(f"Swapped last two columns")
+
     # Save to CSV without header
     np.savetxt(csv_file_path, data_array, delimiter=",", fmt="%g")
     print(f"Saved CSV to {csv_file_path} with shape {data_array.shape}")
@@ -58,6 +68,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert MATLAB .mat file to CSV")
     parser.add_argument("mat_file", help="Path to input .mat file")
     parser.add_argument("csv_file", help="Path to output CSV file")
+    parser.add_argument("--swap-last-cols", action="store_true", help="Swap the last two columns (row/col coordinates)")
     args = parser.parse_args()
 
-    mat_to_csv(args.mat_file, args.csv_file)
+    mat_to_csv(args.mat_file, args.csv_file, swap_last_cols=args.swap_last_cols)

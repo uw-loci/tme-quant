@@ -1633,6 +1633,6 @@ if __name__ == "__main__":
         image_params=image_params,
         fiber_params=fiber_params,
         output_params=output_params,
-        boundary_params=None,
+        boundary_params=boundary_params,
         advanced_options=advanced_options,
     )
