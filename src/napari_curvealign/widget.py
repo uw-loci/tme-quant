@@ -783,9 +783,7 @@ class CurveAlignWidget(QWidget):
                         self._update_roi_list()
                         self._last_shape_count = current_count
                         
-                        # Reset mode to select if it was adding
-                        if layer.mode.startswith("add_"):
-                             layer.mode = "select"
+                        # Note: We do NOT reset mode to select here, to allow continuous drawing.
                              
                     except Exception as e:
                         print(f"Error syncing shape: {e}")
@@ -2033,6 +2031,23 @@ class CurveAlignWidget(QWidget):
             ROIShape.FREEHAND: "add_path",
         }
         mode = mode_map.get(shape, "add_polygon")
+        
+        # If the shape is Ellipse or Rectangle, they're typically single-drag operations.
+        # However, Polygon and Path (Freehand) can be continuous.
+        # Napari doesn't strictly enforce "one-shot" mode easily via public API except by
+        # resetting mode after an event, which we handle in the callback (but optionally).
+        
+        # NOTE: For Freehand (Path), there's a known napari/vispy bug with "last_cursor_position" 
+        # being None if mouse move events fire before a click/drag starts.
+        # We enforce a safeguard by ensuring the layer has a valid cursor position initialized if needed.
+        if mode == "add_path":
+             # Force initialization of internal cursor state to prevent NoneType error in napari < 0.5.0
+             # This mimics a "fake" mouse move to set the state
+             try:
+                 layer._last_cursor_position = np.array([0, 0])
+             except:
+                 pass
+
         layer.mode = mode
         if self.viewer:
             self.viewer.layers.selection.active = layer
@@ -2042,77 +2057,33 @@ class CurveAlignWidget(QWidget):
             self._last_shape_count = 0
         if not hasattr(self, '_syncing_shapes'):
             self._syncing_shapes = False
-        
-        if not hasattr(self, '_shape_callback_connected') or not self._shape_callback_connected:
-            def on_data_change(event):
-                # Prevent recursion when we're updating shapes programmatically
-                if self._syncing_shapes:
-                    return
-                
-                current_count = len(layer.data)
-                count_diff = current_count - self._last_shape_count
-                
-                if count_diff > 0:
-                    # Shapes were added - auto-add as ROIs
-                    try:
-                        self._syncing_shapes = True
-                        annotation_type = self.annotation_type_combo.currentData() if hasattr(self, 'annotation_type_combo') else "custom_annotation"
-                        indices_to_add = list(range(self._last_shape_count, current_count))
-                        new_rois = self.roi_manager.add_rois_from_shapes(
-                            indices=indices_to_add,
-                            annotation_type=annotation_type
-                        )
-                        if new_rois:
-                            self._update_roi_list()
-                            print(f"Auto-added {len(new_rois)} ROI(s)")
-                        # Detach cursor from drawing mode after successful add
-                        if layer.mode.startswith("add_"):
-                            layer.mode = "select"
-                        self._last_shape_count = len(layer.data)
-                    except Exception as e:
-                        print(f"Auto-add failed: {e}")
-                    finally:
-                        self._syncing_shapes = False
-                        
-                elif count_diff < 0:
-                    # Shapes were deleted - clear ROIs and rebuild from remaining shapes
-                    print(f"Shapes deleted from layer. Rebuilding ROI list from remaining {current_count} shape(s)...")
-                    try:
-                        # Clear current ROIs for this image
-                        self._syncing_shapes = True
-                        current_rois = list(self.roi_manager.get_rois_for_active_image())
-                        for roi in current_rois:
-                            self.roi_manager.delete_roi(roi.id)
-                        
-                        # Rebuild ROIs from remaining shapes
-                        if current_count > 0:
-                            annotation_type = self.annotation_type_combo.currentData() if hasattr(self, 'annotation_type_combo') else "custom_annotation"
-                            new_rois = self.roi_manager.add_rois_from_shapes(
-                                indices=list(range(current_count)),
-                                annotation_type=annotation_type
-                            )
-                            print(f"Rebuilt {len(new_rois)} ROI(s) from shapes")
-                        
-                        self._update_roi_list()
-                        self._last_shape_count = len(layer.data)
-                    except Exception as e:
-                        print(f"Auto-sync after deletion failed: {e}")
-                    finally:
-                        self._syncing_shapes = False
             
-            layer.events.data.connect(on_data_change)
-            self._shape_callback_connected = True
+        # Ensure events are connected (idempotent)
+        self._connect_shapes_events(layer)
         
         # Update the initial count
         self._last_shape_count = len(layer.data)
         
-        # Force an initial sync in case shapes were added before the hook was connected
-        if hasattr(self, '_shape_callback_connected') and self._shape_callback_connected:
-             # Manually trigger a check (simulated event)
-             pass 
-
         print(f"Draw {shape.value} - ROI will be added automatically when you finish drawing")
-    
+        if shape == ROIShape.POLYGON:
+            print("Tip: Press 'Esc' to finish the polygon, or double-click to close it.")
+            
+            # Add binding to allow Esc key to finish drawing without resetting mode entirely
+            # This is a workaround for napari's sticky "add_polygon" mode
+            @layer.bind_key('Escape', overwrite=True)
+            def finish_drawing(layer):
+                # Finishing the shape will trigger the data event which adds the ROI
+                # We then manually toggle mode to 'select' and back to 'add_polygon' if desired
+                # But our auto-sync logic generally handles the "add to list" part.
+                # Just switching mode to select is enough to "commit" the current shape.
+                layer.mode = 'select'
+                if shape == ROIShape.POLYGON:
+                     # Re-enable drawing for continuous workflow
+                     # Use a small timer or deferred call if immediate switch is buggy
+                     # For now, just switching to select finishes the shape.
+                     # The user can click the button again or we can re-enable it.
+                     pass 
+        
     def _get_roi_save_dir(self) -> str:
         """Get or create the ROI management directory for the current image."""
         if not self.image_paths or not self.current_image_label:

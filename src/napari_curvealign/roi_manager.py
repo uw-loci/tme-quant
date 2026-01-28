@@ -288,12 +288,26 @@ class ROIManager:
             coords_xy = np.array([[x1, y1], [x2, y2]], dtype=float)
             return coords_xy, ROIShape.RECTANGLE
         if shape_type == "ellipse":
-            rows = coords_rc[:, 0]
-            cols = coords_rc[:, 1]
-            y1, y2 = rows.min(), rows.max()
-            x1, x2 = cols.min(), cols.max()
-            coords_xy = np.array([[x1, y1], [x2, y2]], dtype=float)
-            return coords_xy, ROIShape.ELLIPSE
+            # Ellipses in napari are stored as 4 corners of bounding box or center+radii depending on context
+            # but usually data is 4 points: min, max extent.
+            # Actually napari stores ellipse as 4 corners: bottom-left, top-left, top-right, bottom-right (rotated)
+            # OR just axis-aligned bounds.
+            # Let's check dimensions.
+            if len(coords_rc) >= 4:
+                # Axis-aligned check: min/max
+                rows = coords_rc[:, 0]
+                cols = coords_rc[:, 1]
+                y1, y2 = rows.min(), rows.max()
+                x1, x2 = cols.min(), cols.max()
+                
+                # Check if it looks like the huge default ellipse problem (sometimes napari defaults to large shape)
+                # But here we just extract what's drawn.
+                coords_xy = np.array([[x1, y1], [x2, y2]], dtype=float)
+                return coords_xy, ROIShape.ELLIPSE
+            else:
+                # Fallback for center+radii representation if that ever occurs
+                # But typically layer.data gives vertices
+                 return self._rc_to_xy(coords_rc), ROIShape.ELLIPSE
         if shape_type == "polygon":
             return self._rc_to_xy(coords_rc), ROIShape.POLYGON
         if shape_type == "path":
@@ -372,10 +386,19 @@ class ROIManager:
         if self.current_image_shape is not None:
             max_h, max_w = self.current_image_shape[:2]
             # coordinates are (x, y) = (col, row)
-            # Clip x to [0, max_w]
-            coordinates[:, 0] = np.clip(coordinates[:, 0], 0, max_w)
-            # Clip y to [0, max_h]
-            coordinates[:, 1] = np.clip(coordinates[:, 1], 0, max_h)
+            
+            # For Rectangle/Ellipse defined by 2 corners (bbox), clipping is straightforward
+            # For Polygon/Freehand, we clip all vertices
+            
+            if shape in (ROIShape.RECTANGLE, ROIShape.ELLIPSE) and len(coordinates) == 2:
+                # Bounding box corners: [[x1, y1], [x2, y2]]
+                # Clip each corner
+                coordinates[:, 0] = np.clip(coordinates[:, 0], 0, max_w)
+                coordinates[:, 1] = np.clip(coordinates[:, 1], 0, max_h)
+            else:
+                # Point list
+                coordinates[:, 0] = np.clip(coordinates[:, 0], 0, max_w)
+                coordinates[:, 1] = np.clip(coordinates[:, 1], 0, max_h)
         
         if name is None:
             name = f"ROI_{self.roi_counter + 1}"
@@ -388,6 +411,21 @@ class ROIManager:
             )
             area = abs((coordinates[1, 0] - coordinates[0, 0]) * 
                        (coordinates[1, 1] - coordinates[0, 1]))
+        elif shape == ROIShape.ELLIPSE:
+            # Ellipse defined by bbox corners [[x1, y1], [x2, y2]]
+            if len(coordinates) == 2:
+                x1, y1 = coordinates[0]
+                x2, y2 = coordinates[1]
+                width = abs(x2 - x1)
+                height = abs(y2 - y1)
+                
+                center = ((x1 + x2) / 2, (y1 + y2) / 2)
+                # Area of ellipse = pi * a * b where a, b are semi-axes
+                area = np.pi * (width / 2) * (height / 2)
+            else:
+                # Fallback if not 2 points
+                center = (np.mean(coordinates[:, 0]), np.mean(coordinates[:, 1]))
+                area = 0.0 # Approximate or recalc later
         else:
             center = (np.mean(coordinates[:, 0]), np.mean(coordinates[:, 1]))
             if self.current_image_shape:
@@ -419,6 +457,8 @@ class ROIManager:
         
         # Update napari shapes layer
         if self.shapes_layer is not None:
+            # Only update if we're not currently syncing from it (avoid loops)
+            # But here we are the source of truth, so we should update visualization to match clipped version
             self._update_shapes_layer()
         
         return roi
@@ -1957,12 +1997,26 @@ class ROIManager:
         with open(file_path, 'r') as f:
             geojson_data = json.load(f)
         
-        if geojson_data.get("type") != "FeatureCollection":
-            raise ValueError("Expected GeoJSON FeatureCollection")
+        
+        # QuPath export might be a list of features directly, or a FeatureCollection
+        if isinstance(geojson_data, list):
+             # Some QuPath versions/plugins export a list of GeoJSON features
+             features = geojson_data
+        elif geojson_data.get("type") == "FeatureCollection":
+             features = geojson_data.get("features", [])
+        elif geojson_data.get("type") == "Feature":
+             features = [geojson_data]
+        else:
+            # Try to handle raw geometry if possible, or fail gracefully
+            if "coordinates" in geojson_data:
+                # treat as single geometry feature
+                features = [{"type": "Feature", "geometry": geojson_data, "properties": {}}]
+            else:
+                raise ValueError("Expected GeoJSON FeatureCollection or List of Features")
         
         loaded_rois = []
         
-        for feature in geojson_data.get("features", []):
+        for feature in features:
             geometry = feature.get("geometry", {})
             properties = feature.get("properties", {})
             
@@ -1971,18 +2025,31 @@ class ROIManager:
             
             if geometry_type == "Polygon" and coordinates:
                 # Extract outer ring (first element)
-                coords_list = coordinates[0]
+                # Check nesting level - QuPath polygons are usually [[[x,y],...]]
+                if not isinstance(coordinates[0][0], (list, tuple)):
+                    # Simple polygon [[x,y],...] - unlikely for proper GeoJSON but possible in some exports
+                    coords_list = coordinates
+                else:
+                    coords_list = coordinates[0]
                 
                 # Convert to numpy array (x, y format)
-                coords = np.array(coords_list, dtype=float)
-                
+                try:
+                    coords = np.array(coords_list, dtype=float)
+                except Exception:
+                    continue 
+
                 # Remove duplicate closing point if present
                 if len(coords) > 1 and np.allclose(coords[0], coords[-1]):
                     coords = coords[:-1]
                 
                 # Get ROI properties
                 classification = properties.get("classification", {})
-                annotation_type = classification.get("name", "qupath_annotation")
+                # Classification can be a dict or string in some versions
+                if isinstance(classification, dict):
+                    annotation_type = classification.get("name", "qupath_annotation")
+                else:
+                    annotation_type = str(classification) if classification else "qupath_annotation"
+                    
                 roi_name = properties.get("name", f"qupath_{feature.get('id', 'unknown')}")
                 
                 # Determine shape (default to polygon for QuPath imports)
@@ -2012,10 +2079,17 @@ class ROIManager:
                 loaded_rois.append(roi)
             elif geometry_type == "LineString":
                 # Handle line annotations
-                coords = np.array(coordinates, dtype=float)
+                try:
+                    coords = np.array(coordinates, dtype=float)
+                except Exception:
+                    continue
                 
                 roi_name = properties.get("name", f"qupath_line_{feature.get('id', 'unknown')}")
-                annotation_type = properties.get("classification", {}).get("name", "qupath_line")
+                classification = properties.get("classification", {})
+                if isinstance(classification, dict):
+                    annotation_type = classification.get("name", "qupath_line")
+                else:
+                    annotation_type = str(classification) if classification else "qupath_line"
                 
                 roi = self.add_roi(
                     coords,
@@ -2194,6 +2268,18 @@ class ROIManager:
             if roi.shape == ROIShape.RECTANGLE:
                 # Use add_rectangles for rectangles
                 coords_rc = self._xy_to_rc(roi.coordinates)
+                
+                # Expand 2 points to 4 if needed
+                if len(coords_rc) == 2:
+                    y1, x1 = coords_rc[0]
+                    y2, x2 = coords_rc[1]
+                    coords_rc = np.array([
+                        [y1, x1],
+                        [y1, x2],
+                        [y2, x2],
+                        [y2, x1]
+                    ])
+
                 self.shapes_layer.add_rectangles(
                     [coords_rc],
                     edge_color="cyan",
@@ -2202,6 +2288,20 @@ class ROIManager:
             elif roi.shape == ROIShape.ELLIPSE:
                 # Use add_ellipses for ellipses
                 coords_rc = self._xy_to_rc(roi.coordinates)
+                
+                # Napari expects 4 corners for ellipse/rectangle bounding box
+                # If we stored just 2 corners (bbox min/max), we need to expand it
+                if len(coords_rc) == 2:
+                    y1, x1 = coords_rc[0]
+                    y2, x2 = coords_rc[1]
+                    # Expand to 4 corners: top-left, top-right, bottom-right, bottom-left
+                    coords_rc = np.array([
+                        [y1, x1],
+                        [y1, x2],
+                        [y2, x2],
+                        [y2, x1]
+                    ])
+                
                 self.shapes_layer.add_ellipses(
                     [coords_rc],
                     edge_color="cyan",
