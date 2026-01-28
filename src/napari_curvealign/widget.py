@@ -723,7 +723,13 @@ class CurveAlignWidget(QWidget):
     def on_layer_added(self, event):
         """Handle layer added to viewer"""
         layer = event.value
-        if 'curvealign_path' in layer.metadata:
+        
+        # Check if it's our shapes layer being re-added
+        if isinstance(layer, napari.layers.Shapes) and layer.name == "ROIs":
+            self.roi_manager.shapes_layer = layer
+            self._connect_shapes_events(layer)
+            
+        elif 'curvealign_path' in layer.metadata:
             # This is one of our layers
             path = layer.metadata['curvealign_path']
             filename = os.path.basename(path)
@@ -739,6 +745,60 @@ class CurveAlignWidget(QWidget):
                 
                 # Hide the new layer by default
                 layer.visible = False
+
+    def _connect_shapes_events(self, layer):
+        """Connect events for a shapes layer."""
+        # Check attribute existence
+        if not hasattr(self, '_shape_callback_connected'):
+            self._shape_callback_connected = False
+            
+        if not self._shape_callback_connected:
+            # Define the callback here to have access to self methods
+            def on_data_change(event):
+                # Prevent recursion
+                if hasattr(self, '_syncing_shapes') and self._syncing_shapes:
+                    return
+                
+                # Check for additions
+                if not hasattr(self, '_last_shape_count'):
+                    self._last_shape_count = 0
+                    
+                current_count = len(layer.data)
+                count_diff = current_count - self._last_shape_count
+                
+                if count_diff > 0:
+                    # New shape added
+                    try:
+                        self._syncing_shapes = True
+                        indices = list(range(self._last_shape_count, current_count))
+                        
+                        # Add to ROI manager
+                        annotation_type = self.annotation_type_combo.currentData() if hasattr(self, 'annotation_type_combo') else "custom_annotation"
+                        
+                        self.roi_manager.add_rois_from_shapes(
+                            indices=indices,
+                            annotation_type=annotation_type
+                        )
+                        
+                        self._update_roi_list()
+                        self._last_shape_count = current_count
+                        
+                        # Reset mode to select if it was adding
+                        if layer.mode.startswith("add_"):
+                             layer.mode = "select"
+                             
+                    except Exception as e:
+                        print(f"Error syncing shape: {e}")
+                    finally:
+                        self._syncing_shapes = False
+                elif count_diff < 0:
+                    # Shape deleted - just update count
+                    self._last_shape_count = current_count
+            
+            layer.events.data.connect(on_data_change)
+            self._shape_callback_connected = True
+            # Update count
+            self._last_shape_count = len(layer.data)
 
     def on_layer_removed(self, event):
         """Handle layer removed from viewer"""
@@ -1438,6 +1498,18 @@ class CurveAlignWidget(QWidget):
         manage_group.setLayout(manage_layout)
         left_panel.addWidget(manage_group)
         
+        # Fiji Integration
+        fiji_group = QGroupBox("Fiji Integration")
+        fiji_layout = QHBoxLayout()
+        self.push_fiji_btn = QPushButton("Push to Fiji")
+        self.push_fiji_btn.setToolTip("Export current ROIs to Fiji ROI Manager")
+        self.pull_fiji_btn = QPushButton("Pull from Fiji")
+        self.pull_fiji_btn.setToolTip("Import ROIs from Fiji ROI Manager")
+        fiji_layout.addWidget(self.push_fiji_btn)
+        fiji_layout.addWidget(self.pull_fiji_btn)
+        fiji_group.setLayout(fiji_layout)
+        left_panel.addWidget(fiji_group)
+        
         # ROI analysis
         analysis_group = QGroupBox("ROI Analysis")
         analysis_layout = QVBoxLayout()
@@ -1529,6 +1601,8 @@ class CurveAlignWidget(QWidget):
         self.summary_stats_btn.clicked.connect(self._export_summary_statistics)
         self.roi_table_btn.clicked.connect(self._show_roi_table)
         self.ca_options_btn.clicked.connect(self._open_curvealign_options)
+        self.push_fiji_btn.clicked.connect(self._push_rois_to_fiji)
+        self.pull_fiji_btn.clicked.connect(self._pull_rois_from_fiji)
         
     def _build_annotation_group(self) -> QGroupBox:
         group = QGroupBox("Region Analysis (Advanced)")
@@ -1603,6 +1677,15 @@ class CurveAlignWidget(QWidget):
         self.remove_region_btn = QPushButton("Remove Region")
         layout.addWidget(self.remove_region_btn)
         
+        # TACS Section
+        tacs_group = QGroupBox("TACS Analysis")
+        tacs_layout = QVBoxLayout()
+        self.run_tacs_btn = QPushButton("Run TACS")
+        self.run_tacs_btn.setToolTip("Compute fiber alignment relative to tumor boundary (selected region)")
+        tacs_layout.addWidget(self.run_tacs_btn)
+        tacs_group.setLayout(tacs_layout)
+        layout.addWidget(tacs_group)
+        
         group.setLayout(layout)
         
         # Connections
@@ -1610,6 +1693,7 @@ class CurveAlignWidget(QWidget):
         self.detect_object_btn.clicked.connect(self._detect_objects_in_annotation)
         self.remove_region_btn.clicked.connect(self._delete_annotation)
         self.annotation_list.itemSelectionChanged.connect(self._on_annotation_selected)
+        self.run_tacs_btn.clicked.connect(self._run_tacs)
         
         return group
 
@@ -1734,6 +1818,15 @@ class CurveAlignWidget(QWidget):
             self.roi_manager.set_image_shape(shape)
         # Keep active image context in sync for ROI scoping
         self._set_active_image_context(viewer.layers.selection.active if viewer.layers else None)
+        
+        # Ensure shapes layer is connected
+        if self.roi_manager.shapes_layer:
+             if self.roi_manager.shapes_layer not in viewer.layers:
+                 # Layer might have been deleted by user, recreate logic needed or just re-add
+                 pass
+             else:
+                 self._connect_shapes_events(self.roi_manager.shapes_layer)
+                 
         return viewer
 
     def _convert_roi_to_annotation(self):
@@ -2013,6 +2106,11 @@ class CurveAlignWidget(QWidget):
         # Update the initial count
         self._last_shape_count = len(layer.data)
         
+        # Force an initial sync in case shapes were added before the hook was connected
+        if hasattr(self, '_shape_callback_connected') and self._shape_callback_connected:
+             # Manually trigger a check (simulated event)
+             pass 
+
         print(f"Draw {shape.value} - ROI will be added automatically when you finish drawing")
     
     def _get_roi_save_dir(self) -> str:
@@ -2203,6 +2301,56 @@ class CurveAlignWidget(QWidget):
             )
             import traceback
             traceback.print_exc()
+
+    def _push_rois_to_fiji(self):
+        """Export ROIs to Fiji."""
+        if not self.fiji_bridge.is_available():
+            # Try initializing
+            if not self.fiji_bridge.initialize():
+                QMessageBox.warning(self, "Fiji Bridge", "Fiji integration is not available. Please install napari-imagej.")
+                return
+
+        # Get all ROIs for active image
+        rois = self.roi_manager.get_rois_for_active_image()
+        if not rois:
+            QMessageBox.information(self, "No ROIs", "No ROIs to export.")
+            return
+
+        success = self.fiji_bridge.export_rois_to_fiji(rois)
+        if success:
+            QMessageBox.information(self, "Success", f"Exported {len(rois)} ROIs to Fiji.")
+        else:
+            QMessageBox.warning(self, "Error", "Failed to export ROIs to Fiji.")
+
+    def _pull_rois_from_fiji(self):
+        """Import ROIs from Fiji."""
+        if not self.fiji_bridge.is_available():
+             if not self.fiji_bridge.initialize():
+                QMessageBox.warning(self, "Fiji Bridge", "Fiji integration is not available. Please install napari-imagej.")
+                return
+
+        rois_data = self.fiji_bridge.import_rois_from_fiji()
+        if not rois_data:
+            QMessageBox.information(self, "No ROIs", "No ROIs found in Fiji ROI Manager.")
+            return
+
+        # Add ROIs to manager
+        count = 0
+        for data in rois_data:
+             coords = data["coordinates"]
+             shape = ROIShape(data["shape"]) if isinstance(data["shape"], str) else data["shape"]
+             
+             self.roi_manager.add_roi(
+                 coordinates=coords,
+                 shape=shape,
+                 name=data["name"],
+                 annotation_type="fiji_import",
+                 metadata={"source": "fiji"}
+             )
+             count += 1
+        
+        self._update_roi_list()
+        QMessageBox.information(self, "Success", f"Imported {count} ROIs from Fiji.")
     
     def _load_roi(self):
         """Load ROI(s) from file in multiple formats."""
@@ -2667,6 +2815,83 @@ class CurveAlignWidget(QWidget):
             )
             import traceback
             traceback.print_exc()
+    
+    def _run_tacs(self):
+        """Run TACS analysis."""
+        # Get selected tumor region
+        selected = self.annotation_list.selectedItems()
+        roi_id = None
+        if selected:
+            try:
+                # Format: "ID: Name [Type]"
+                roi_id = int(selected[0].text().split(":")[0])
+            except ValueError:
+                pass
+        
+        if roi_id is None:
+            QMessageBox.warning(self, "TACS Analysis", "Please select a boundary region from 'Defined Regions'.")
+            return
+            
+        tumor_roi = self.roi_manager.get_roi(roi_id)
+        if not tumor_roi:
+            return
+            
+        # Get fibers
+        fibers = self.roi_manager.objects.get("fiber", [])
+        if not fibers:
+            QMessageBox.warning(self, "TACS Analysis", "No fibers detected. Run analysis first.")
+            return
+            
+        # Prepare data
+        fiber_data = []
+        for f in fibers:
+            if f.orientation is not None:
+                fiber_data.append({
+                    "x": f.centroid_xy[0],
+                    "y": f.centroid_xy[1],
+                    "angle": f.orientation
+                })
+        
+        if not fiber_data:
+            QMessageBox.warning(self, "TACS Analysis", "Fibers missing orientation data.")
+            return
+            
+        # Compute TACS
+        try:
+            from .analysis import compute_tacs
+            # ROI coordinates are (x, y)
+            tacs_df = compute_tacs(fiber_data, tumor_roi.coordinates)
+            
+            if tacs_df.empty:
+                QMessageBox.information(self, "TACS Analysis", "No fibers found near the boundary.")
+                return
+                
+            # Plot
+            self._plot_tacs_results(tacs_df, tumor_roi.name)
+            self.tab_widget.setCurrentWidget(self.post_tab)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"TACS analysis failed: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _plot_tacs_results(self, df: pd.DataFrame, roi_name: str):
+        """Plot TACS relative angle histogram."""
+        self.post_fig.clear()
+        ax = self.post_fig.add_subplot(111)
+        
+        # Relative angle histogram (0-90)
+        ax.hist(df['relative_angle'], bins=18, range=(0, 90), color='purple', alpha=0.7, edgecolor='black')
+        ax.set_title(f"TACS: Relative Angle to '{roi_name}'")
+        ax.set_xlabel("Relative Angle (degrees)")
+        ax.set_ylabel("Count")
+        ax.set_xlim(0, 90)
+        ax.axvline(x=45, color='gray', linestyle='--')
+        ax.text(5, ax.get_ylim()[1]*0.9, "Tangential (TACS-1/2)", fontsize=8)
+        ax.text(60, ax.get_ylim()[1]*0.9, "Perpendicular (TACS-3)", fontsize=8)
+        
+        self.post_fig.tight_layout()
+        self.post_canvas.draw_idle()
     
     def _update_roi_list(self):
         """Update ROI list widget and table."""

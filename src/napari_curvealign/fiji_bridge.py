@@ -212,6 +212,10 @@ class FijiBridge:
         -------
         ROI Manager object if available
         """
+        # Ensure initialization
+        if not self._initialized and HAS_IMAGEJ:
+            self.initialize()
+            
         if not self.is_available():
             return None
         
@@ -240,43 +244,106 @@ class FijiBridge:
             return False
         
         try:
-            # Clear existing ROIs
-            roi_manager.reset()
+            # Get ImageJ gateway
+            ij = self.ij
             
-            # Convert and add ROIs
+            # Clear existing ROIs in Fiji (optional, but cleaner for sync)
+            # roi_manager.reset() 
+            
             for roi in rois:
                 # Convert ROI to ImageJ format
-                # This would need proper conversion based on ROI type
-                pass
+                shape_type = roi.shape.value if hasattr(roi.shape, 'value') else str(roi.shape)
+                name = roi.name
+                coords = roi.coordinates
+                
+                ij_roi = None
+                
+                if shape_type == "Rectangle":
+                    # x, y, w, h
+                    x_min = float(np.min(coords[:, 0]))
+                    y_min = float(np.min(coords[:, 1]))
+                    width = float(np.max(coords[:, 0]) - x_min)
+                    height = float(np.max(coords[:, 1]) - y_min)
+                    ij_roi = ij.gui.Roi(x_min, y_min, width, height)
+                    
+                elif shape_type == "Ellipse":
+                    # x, y, w, h bounding box
+                    x_min = float(np.min(coords[:, 0]))
+                    y_min = float(np.min(coords[:, 1]))
+                    width = float(np.max(coords[:, 0]) - x_min)
+                    height = float(np.max(coords[:, 1]) - y_min)
+                    ij_roi = ij.gui.OvalRoi(x_min, y_min, width, height)
+                    
+                elif shape_type in ["Polygon", "Freehand"]:
+                    # Create polygon
+                    # Note: Napari coordinates are (x, y) in the ROI object (based on roi_manager.py)
+                    x_points = coords[:, 0].astype(float).tolist()
+                    y_points = coords[:, 1].astype(float).tolist()
+                    
+                    # ij.gui.PolygonRoi(float[] xPoints, float[] yPoints, int nPoints, int type)
+                    # 2=POLYGON, 3=FREEROI
+                    roi_type = 2 if shape_type == "Polygon" else 3
+                    
+                    ij_roi = ij.gui.PolygonRoi(x_points, y_points, len(x_points), roi_type)
+
+                if ij_roi:
+                    ij_roi.setName(name)
+                    roi_manager.addRoi(ij_roi)
             
             return True
         except Exception as e:
             warnings.warn(f"Failed to export ROIs to Fiji: {e}")
             return False
     
-    def import_rois_from_fiji(self) -> List[Any]:
+    def import_rois_from_fiji(self) -> List[Dict]:
         """
         Import ROIs from Fiji ROI Manager.
         
         Returns
         -------
-        List
-            List of imported ROIs
+        List[Dict]
+            List of ROI data dictionaries (name, shape, coordinates)
         """
         roi_manager = self.get_roi_manager()
         if roi_manager is None:
             return []
         
         try:
-            rois = []
-            count = roi_manager.getCount()
-            for i in range(count):
-                roi = roi_manager.getRoi(i)
-                # Convert ImageJ ROI to napari format
-                # This would need proper conversion
-                rois.append(roi)
+            rois_data = []
+            rois_array = roi_manager.getRoisAsArray()
             
-            return rois
+            for ij_roi in rois_array:
+                name = ij_roi.getName()
+                roi_type = ij_roi.getType()
+                
+                # Get coordinates
+                poly = ij_roi.getFloatPolygon()
+                x_points = poly.xpoints
+                y_points = poly.ypoints
+                n_points = poly.npoints
+                
+                coords = []
+                for i in range(n_points):
+                    coords.append([x_points[i], y_points[i]])
+                coords = np.array(coords, dtype=float)
+                
+                # Map ImageJ type to napari shape
+                # 0: Rectangle, 1: Oval, 2: Polygon, 3: Freehand, 4: Traced
+                shape_type = "Polygon"
+                if roi_type == 0:
+                    shape_type = "Rectangle"
+                elif roi_type == 1:
+                    shape_type = "Ellipse"
+                elif roi_type == 3 or roi_type == 4:
+                    shape_type = "Freehand"
+                
+                rois_data.append({
+                    "name": name,
+                    "shape": shape_type,
+                    "coordinates": coords
+                })
+            
+            return rois_data
         except Exception as e:
             warnings.warn(f"Failed to import ROIs from Fiji: {e}")
             return []
@@ -315,6 +382,34 @@ class FijiBridge:
         except Exception as e:
             warnings.warn(f"TrackMate failed: {e}")
             return {"tracks": [], "spots": []}
+
+    def run_orientationj(self, image: np.ndarray, **kwargs):
+        """
+        Run OrientationJ Analysis (placeholder).
+        
+        Ideally runs 'OrientationJ Analysis' plugin. 
+        Currently advises user to run manually or use file readers.
+        """
+        if not self.is_available():
+            warnings.warn("Fiji not available")
+            return None
+        
+        warnings.warn("Automated OrientationJ execution not fully implemented. Please run in Fiji and export results.")
+        # Future: self.ij.command().run("OrientationJ Analysis", ...)
+        return None
+
+    def run_ridge_detection(self, image: np.ndarray, **kwargs):
+        """
+        Run Ridge Detection (placeholder).
+        """
+        if not self.is_available():
+            warnings.warn("Fiji not available")
+            return None
+            
+        warnings.warn("Automated Ridge Detection execution not fully implemented. Please run in Fiji and export results.")
+        # Future: self.ij.command().run("Ridge Detection", ...)
+        return None
+
 
 
 # Global bridge instance
