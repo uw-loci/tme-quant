@@ -32,7 +32,19 @@ try:
     from skimage import io
     from skimage.color import rgb2gray
     from skimage.measure import label, regionprops
-    from skimage.morphology import binary_dilation, binary_erosion, disk
+    # binary_dilation/erosion deprecated in skimage 0.20, moved to morphology.erosion/dilation
+    # but some versions still have them at top level. Check morphology module first.
+    from skimage import morphology
+    
+    if hasattr(morphology, 'dilation') and hasattr(morphology, 'erosion'):
+        # Modern skimage
+        binary_dilation = morphology.dilation
+        binary_erosion = morphology.erosion
+    else:
+        # Legacy fallback
+        from skimage.morphology import binary_dilation, binary_erosion
+        
+    from skimage.morphology import disk
     HAS_SKIMAGE = True
 except ImportError:
     HAS_SKIMAGE = False
@@ -355,6 +367,15 @@ class ROIManager:
         """
         # Ensure coordinates are float array for consistency
         coordinates = np.asarray(coordinates, dtype=float)
+        
+        # Clip coordinates to image boundary if image shape is known
+        if self.current_image_shape is not None:
+            max_h, max_w = self.current_image_shape[:2]
+            # coordinates are (x, y) = (col, row)
+            # Clip x to [0, max_w]
+            coordinates[:, 0] = np.clip(coordinates[:, 0], 0, max_w)
+            # Clip y to [0, max_h]
+            coordinates[:, 1] = np.clip(coordinates[:, 1], 0, max_h)
         
         if name is None:
             name = f"ROI_{self.roi_counter + 1}"

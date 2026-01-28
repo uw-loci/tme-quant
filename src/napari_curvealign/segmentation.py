@@ -12,11 +12,24 @@ from enum import Enum
 from dataclasses import dataclass
 
 try:
-    from skimage import measure, morphology, filters
+    from skimage import measure, filters
     from skimage.segmentation import clear_border
+    
+    # Check for morphology.erosion/dilation vs top-level
+    from skimage import morphology
+    if hasattr(morphology, 'dilation') and hasattr(morphology, 'erosion'):
+        # Modern skimage
+        binary_dilation = morphology.dilation
+        binary_erosion = morphology.erosion
+    else:
+        # Legacy fallback
+        from skimage.morphology import binary_dilation, binary_erosion
+        
     HAS_SKIMAGE = True
 except ImportError:
     HAS_SKIMAGE = False
+    binary_dilation = None
+    binary_erosion = None
 
 try:
     import cellpose
