@@ -141,7 +141,7 @@ class AdvancedAnalysisOptions:
     fiber_midpoint_estimate: int = 1
 
     # Heatmap visualization
-    heatmap_STD_filter_size: int = 24
+    heatmap_STD_filter_size: int = 19
     heatmap_SQUARE_max_filter_size: int = 12
     heatmap_GAUSSIAN_disc_filter_sigma: float = 4.0
 

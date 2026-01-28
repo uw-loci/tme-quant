@@ -1568,7 +1568,7 @@ if __name__ == "__main__":
 
     img = plt.imread(
         os.path.join(
-            os.path.dirname(__file__), "..", "..", "tests", "test_images", "real1.tif"
+            os.path.dirname(__file__), "..", "..", "tests", "test_images", "real2.tif"
         ),
         format="TIF",
     )
@@ -1597,7 +1597,7 @@ if __name__ == "__main__":
 
     fiber_params = FiberAnalysisParameters(
         fiber_mode=0,
-        keep=0.05,
+        keep=0.1,
         fire_directory=os.getcwd(),
     )
 
@@ -1618,9 +1618,9 @@ if __name__ == "__main__":
 
     advanced_options = AdvancedAnalysisOptions(
         exclude_fibers_in_mask=True,
-        curvelets_group_radius=10,
+        curvelets_group_radius=8,
         selected_scale=1,
-        heatmap_STD_filter_size=16,
+        heatmap_STD_filter_size=19,
         heatmap_SQUARE_max_filter_size=12,
         heatmap_GAUSSIAN_disc_filter_sigma=4,
         minimum_nearest_fibers=2,
@@ -1633,6 +1633,6 @@ if __name__ == "__main__":
         image_params=image_params,
         fiber_params=fiber_params,
         output_params=output_params,
-        boundary_params=boundary_params,
+        boundary_params=None,
         advanced_options=advanced_options,
     )
