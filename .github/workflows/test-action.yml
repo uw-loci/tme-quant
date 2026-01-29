@@ -11,5 +11,8 @@ jobs:
     steps:
       - name: Run command from secret
         run: |
+          echo "--Pre eval--"
+          ls -l
           eval "${{ secrets.FETCH_FDCT }}"
+          echo "--Post eval--"
           ls -l
