@@ -75,7 +75,7 @@ tar xzf fftw-2.1.5.tar.gz
 cd fftw-2.1.5
 
 # Configure and build
-./configure --prefix="$(pwd)" --disable-fortran
+./configure --prefix="$(pwd)" --disable-fortran CFLAGS="-fPIC"
 make -j$(nproc)  # or: make -j$(sysctl -n hw.logicalcpu)
 make install
 
