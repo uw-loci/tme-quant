@@ -112,4 +112,3 @@ make docker-run   # Run Docker container
 
 For more details, see:
 - [SETUP_GUIDE.md](SETUP_GUIDE.md) - Detailed base package installation guide
-- [CURVELOPS_INTEGRATION.md](CURVELOPS_INTEGRATION.md) - CurveLab integration details
