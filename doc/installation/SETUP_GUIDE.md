@@ -124,7 +124,7 @@ pip install -e ".[all]"
 
 ```bash
 # Run verification
-python -c 'import curvealign_py as ca; import ctfire_py as cf; print("Installation successful!")'
+python -c "import pycurvelets as pc; print('Installed ✅'); print('HAS_CURVELETS =', pc.HAS_CURVELETS); print('new_curv is', 'available' if hasattr(pc, 'new_curv') else 'missing')"
 ```
 
 ## Docker Installation (Alternative)
