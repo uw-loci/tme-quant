@@ -24,13 +24,37 @@
       "radius": 10,
       "matlab_reference_csv": "test_new_curv_real1_keep0.1_radius10.csv"
     },
-        {
+    {
       "name": "real1_keep0.05_radius5",
       "image": "real1.tif",
       "keep": 0.05,
       "scale": 1,
       "radius": 5,
       "matlab_reference_csv": "test_new_curv_real1_keep0.05_radius5.csv"
+    },
+    {
+      "name": "real2_keep0.05_radius10",
+      "image": "real2.tif",
+      "keep": 0.05,
+      "scale": 1,
+      "radius": 10,
+      "matlab_reference_csv": "test_new_curv_real2_keep0.05_radius10.csv"
+    },
+    {
+      "name": "real2_keep0.1_radius10",
+      "image": "real2.tif",
+      "keep": 0.1,
+      "scale": 1,
+      "radius": 10,
+      "matlab_reference_csv": "test_new_curv_real2_keep0.1_radius10.csv"
+    },
+    {
+      "name": "real2_keep0.05_radius8",
+      "image": "real2.tif",
+      "keep": 0.05,
+      "scale": 1,
+      "radius": 8,
+      "matlab_reference_csv": "test_new_curv_real2_keep0.05_radius8.csv"
     }
   ]
 }
