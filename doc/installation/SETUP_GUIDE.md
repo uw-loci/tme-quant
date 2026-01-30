@@ -124,7 +124,7 @@ pip install -e ".[all]"
 
 ```bash
 # Run verification
-python -c "import curvealign_py as ca; import ctfire_py as cf; print('Installation successful!')"
+python -c 'import curvealign_py as ca; import ctfire_py as cf; print("Installation successful!")'
 ```
 
 ## Docker Installation (Alternative)
