@@ -81,9 +81,10 @@ make install
 
 # Set environment variables
 export FFTW="$(pwd)"
-export CPPFLAGS="-I${FFTW}/include"
-export LDFLAGS="-L${FFTW}/lib"
 ```
+
+**Note**: the `FFTW` environment variable must be set in each session you build
+CurveLab (e.g. in a `~/.bashrc` file)
 
 ### Step 4: Install CurveLab
 
@@ -93,16 +94,16 @@ CurveLab requires a separate download due to licensing:
 3. Extract it to a location on your system
 
 ```bash
-# Set the CurveLab path (adjust to your location)
+# Set the CurveLab path (adjust to your version)
 export FDCT="/path/to/CurveLab-2.1.x"
 
 # Build CurveLab components (if needed)
-cd "$FDCT/fdct_wrapping_cpp/src"
-make
-
-cd "$FDCT/fdct3d/src"
-make
+cd "$FDCT"
+make FFTW_DIR="$FFTW"
 ```
+
+**Note**: `FFTW_DIR` is hard-coded in CurveLab's `makefile.opt`, which we must
+explicitly override to point to our local FFTW build.
 
 ### Step 5: Install tme-quant
 
