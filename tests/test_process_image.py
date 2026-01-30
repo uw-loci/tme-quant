@@ -70,18 +70,22 @@ def load_test_cases():
     return [(tc["name"], tc) for tc in cases]
 
 
-def load_boundary_data_from_json(boundary_params_dict):
+def load_boundary_data_from_json(boundary_params_dict, img_name):
     """
     Load boundary data from CSV files referenced in JSON.
 
     Converts "from_file:" markers in the JSON into actual numpy arrays.
+    Supports paths like:
+      - from_file:shared_data/real1/boundary1_coords.csv (relative to test_results/)
+      - from_file:real1_boundary1_coords.csv (legacy, from get_tif_boundary_test_files/)
+    If coordinates are not provided, auto-loads them from shared_data/{img_name}/.
     """
     if boundary_params_dict is None:
         return None
 
     boundary_params_dict = boundary_params_dict.copy()
 
-    # Load coordinates if they reference files
+    # Load coordinates if they reference files, or auto-load from shared_data if not provided
     if "coordinates" in boundary_params_dict and boundary_params_dict["coordinates"]:
         coords_dict = boundary_params_dict["coordinates"]
         loaded_coords = {}
@@ -89,17 +93,46 @@ def load_boundary_data_from_json(boundary_params_dict):
         for key, value in coords_dict.items():
             if isinstance(value, str) and value.startswith("from_file:"):
                 filename = value.replace("from_file:", "")
-                filepath = os.path.join(
-                    os.path.dirname(__file__),
-                    "test_results",
-                    "get_tif_boundary_test_files",
-                    filename,
-                )
+                # Determine base path based on filename format
+                if filename.startswith("shared_data/"):
+                    # New format: from_file:shared_data/real1/boundary1_coords.csv
+                    filepath = os.path.join(
+                        os.path.dirname(__file__),
+                        "test_results",
+                        filename,
+                    )
+                else:
+                    # Legacy format: from_file:real1_boundary1_coords.csv
+                    filepath = os.path.join(
+                        os.path.dirname(__file__),
+                        "test_results",
+                        "get_tif_boundary_test_files",
+                        filename,
+                    )
                 loaded_coords[key] = np.loadtxt(filepath, delimiter=",")
             else:
                 loaded_coords[key] = value
 
         boundary_params_dict["coordinates"] = loaded_coords
+    else:
+        # Auto-load coordinates from shared_data/{img_name}/ if not explicitly provided
+        coords_dict = {}
+        for i in range(
+            1, 4
+        ):  # Try loading boundary1_coords, boundary2_coords, boundary3_coords
+            coord_filename = f"boundary{i}_coords.csv"
+            coord_filepath = os.path.join(
+                os.path.dirname(__file__),
+                "test_results",
+                "shared_data",
+                img_name,
+                coord_filename,
+            )
+            if os.path.exists(coord_filepath):
+                coords_dict[f"csv{i}"] = np.loadtxt(coord_filepath, delimiter=",")
+
+        if coords_dict:
+            boundary_params_dict["coordinates"] = coords_dict
 
     # Load boundary_img if it references a file
     if "boundary_img" in boundary_params_dict and boundary_params_dict["boundary_img"]:
@@ -109,7 +142,6 @@ def load_boundary_data_from_json(boundary_params_dict):
             filepath = os.path.join(
                 os.path.dirname(__file__),
                 "test_results",
-                "get_tif_boundary_test_files",
                 filename,
             )
             boundary_params_dict["boundary_img"] = np.loadtxt(filepath, delimiter=",")
@@ -155,7 +187,10 @@ def test_process_image_returns_fiber_features(test_name, test_case, tmp_path):
 
     # Build BoundaryParameters from JSON (may be None)
     # This handles loading CSV files referenced with "from_file:" markers
-    boundary_params = load_boundary_data_from_json(test_case["boundary_params"])
+    # and auto-loads coordinates from shared_data/{img_name}/ if not explicitly provided
+    boundary_params = load_boundary_data_from_json(
+        test_case["boundary_params"], test_case["image_params"]["img_name"]
+    )
 
     # Build AdvancedAnalysisOptions from JSON
     advanced_options = AdvancedAnalysisOptions(**test_case["advanced_options"])
