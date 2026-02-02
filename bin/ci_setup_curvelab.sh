@@ -29,7 +29,7 @@ else
     fi
     tar xzf "fftw-${FFTW_VERSION}.tar.gz"
     pushd "fftw-${FFTW_VERSION}" >/dev/null
-    ./configure --prefix="$(pwd)" --disable-fortran
+    CFLAGS="-fPIC" CXXFLAGS="-fPIC" ./configure --prefix="$(pwd)" --disable-fortran --enable-shared --disable-static
     make -j"$(nproc)"
     make install
     popd >/dev/null
