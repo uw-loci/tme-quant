@@ -452,6 +452,7 @@ class CurveAlignWidget(QWidget):
         
         # Setup ROI tab
         self._setup_roi_tab()
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
         
         self.setLayout(main_layout)
         self.setMinimumWidth(360)
@@ -1571,14 +1572,16 @@ class CurveAlignWidget(QWidget):
         
         # Post-Processing tab (histograms/graphs)
         post_layout = QVBoxLayout()
-        post_layout.addWidget(QLabel("ROIs (current image)"))
-        self.post_roi_list = QListWidget()
-        self.post_roi_list.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.post_roi_list.itemSelectionChanged.connect(self._update_post_plots)
-        post_layout.addWidget(self.post_roi_list)
-        refresh_post_btn = QPushButton("Refresh ROIs")
-        refresh_post_btn.clicked.connect(self._refresh_post_roi_list)
-        post_layout.addWidget(refresh_post_btn)
+        post_hint = QLabel("Post-processing uses the ROI selected in the ROI Manager list.")
+        post_hint.setWordWrap(True)
+        post_hint.setStyleSheet("QLabel { color: #888; font-size: 10px; padding: 3px; }")
+        post_layout.addWidget(post_hint)
+        self.post_selected_label = QLabel("Selected ROI: None")
+        post_layout.addWidget(self.post_selected_label)
+        self.post_update_btn = QPushButton("Update Plots")
+        self.post_update_btn.setToolTip("Refresh plots for the selected ROI in the ROI Manager list")
+        self.post_update_btn.clicked.connect(lambda: self._sync_post_panel(update_plots=True))
+        post_layout.addWidget(self.post_update_btn)
         self.post_fig = Figure(figsize=(5, 3))
         self.post_canvas = FigureCanvas(self.post_fig)
         post_layout.addWidget(self.post_canvas)
@@ -1622,6 +1625,11 @@ class CurveAlignWidget(QWidget):
         info_label.setWordWrap(True)
         info_label.setStyleSheet("QLabel { color: #888; font-size: 10px; padding: 3px; }")
         layout.addWidget(info_label)
+        self.selected_region_label = QLabel("Selected region: None")
+        self.selected_region_label.setStyleSheet(
+            "QLabel { color: #c9d1d9; font-size: 12px; font-weight: bold; padding: 2px; }"
+        )
+        layout.addWidget(self.selected_region_label)
         
         # ROI to Annotation conversion
         conversion_layout = QHBoxLayout()
@@ -1670,13 +1678,6 @@ class CurveAlignWidget(QWidget):
         detect_group.setLayout(detect_layout)
         layout.addWidget(detect_group)
         
-        # Annotation/Region list
-        layout.addWidget(QLabel("Defined Regions:"))
-        self.annotation_list = QListWidget()
-        self.annotation_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.annotation_list.setFixedHeight(100)
-        layout.addWidget(self.annotation_list)
-        
         self.remove_region_btn = QPushButton("Remove Region")
         layout.addWidget(self.remove_region_btn)
         
@@ -1695,7 +1696,6 @@ class CurveAlignWidget(QWidget):
         self.use_roi_btn.clicked.connect(self._convert_roi_to_annotation)
         self.detect_object_btn.clicked.connect(self._detect_objects_in_annotation)
         self.remove_region_btn.clicked.connect(self._delete_annotation)
-        self.annotation_list.itemSelectionChanged.connect(self._on_annotation_selected)
         self.run_tacs_btn.clicked.connect(self._run_tacs)
         
         return group
@@ -1747,13 +1747,22 @@ class CurveAlignWidget(QWidget):
         selected = self.roi_list.selectedItems()
         if not selected:
             self._update_roi_details(None)
+            self._sync_post_panel(update_plots=self._post_tab_active())
+            self._sync_region_label()
             return
-        roi_id = int(selected[0].text().split(":")[0])
+        roi_id = self._roi_id_from_item(selected[0])
+        if roi_id is None:
+            self._update_roi_details(None)
+            self._sync_post_panel(update_plots=self._post_tab_active())
+            self._sync_region_label()
+            return
         self._update_roi_details(roi_id)
         try:
             self.roi_manager.highlight_roi(roi_id)
         except Exception:
             pass
+        self._sync_post_panel(update_plots=self._post_tab_active())
+        self._sync_region_label()
 
     def _roi_list_context_menu(self, pos):
         menu = QMenu(self.roi_list)
@@ -1767,7 +1776,9 @@ class CurveAlignWidget(QWidget):
         selected = self.roi_list.selectedItems()
         if not selected:
             return
-        roi_id = int(selected[0].text().split(":")[0])
+        roi_id = self._roi_id_from_item(selected[0])
+        if roi_id is None:
+            return
         if action == rename_action:
             self._rename_roi_dialog(roi_id)
         elif action == delete_action:
@@ -1853,35 +1864,33 @@ class CurveAlignWidget(QWidget):
         if count > 0:
             print(f"Set {count} ROI(s) as '{region_type}' regions")
         self._update_roi_list()
-        self._update_annotation_list()
 
     def _delete_annotation(self):
         """Remove the region designation (reset to custom_annotation)."""
-        items = self.annotation_list.selectedItems()
-        if not items:
+        roi_ids = self._selected_roi_ids()
+        if not roi_ids:
+            QMessageBox.information(self, "No ROI Selected", "Select ROI(s) from the 'ROI List' to remove region type.")
             return
         
         reply = QMessageBox.question(
             self, "Remove Region", 
-            f"Remove {len(items)} region(s)?\nThis will reset their type to 'custom_annotation' but keep the ROIs.",
+            f"Remove {len(roi_ids)} region(s)?\nThis will reset their type to 'custom_annotation' but keep the ROIs.",
             QMessageBox.Yes | QMessageBox.No
         )
         
         if reply == QMessageBox.Yes:
-            for item in items:
-                roi_id = item.data(Qt.UserRole)
+            for roi_id in roi_ids:
                 roi = self.roi_manager.get_roi(roi_id)
                 if roi:
                     roi.annotation_type = "custom_annotation"
             
             self._update_roi_list()
-            self._update_annotation_list()
 
     def _detect_objects_in_annotation(self):
         """Detect objects that fall within the selected annotation."""
         roi_id = self._selected_annotation_id()
         if roi_id is None:
-            QMessageBox.information(self, "Select Region", "Please select a region from 'Defined Regions' list.")
+            QMessageBox.information(self, "Select Region", "Please select a region from the 'ROI List'.")
             return
         distance = self.detect_distance_spin.value()
         types = self._object_filter_types()
@@ -1922,7 +1931,6 @@ class CurveAlignWidget(QWidget):
             obj_id = item.data(Qt.UserRole)
             self.roi_manager.add_annotation_from_object(obj_id, annotation_type=annotation_type)
         self._update_roi_list()
-        self._update_annotation_list()
 
     def _on_annotation_selected(self):
         """Highlight annotation within napari when selected."""
@@ -1977,28 +1985,11 @@ class CurveAlignWidget(QWidget):
         return mapping.get(self.object_filter_combo.currentText(), ["cell", "fiber"])
 
     def _selected_annotation_id(self) -> Optional[int]:
-        """Return currently selected annotation ROI id."""
-        items = self.annotation_list.selectedItems()
+        """Return currently selected ROI id from the main list."""
+        items = self.roi_list.selectedItems()
         if not items:
             return None
-        return items[0].data(Qt.UserRole)
-
-    def _update_annotation_list(self):
-        """Refresh annotation list widget."""
-        if not hasattr(self, "annotation_list"):
-            return
-        selected_id = self._selected_annotation_id()
-        self.annotation_list.clear()
-        for roi in self.roi_manager.get_rois_for_active_image():
-            label = f"{roi.id}: {roi.name} [{roi.annotation_type}]"
-            item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, roi.id)
-            self.annotation_list.addItem(item)
-            if selected_id is not None and roi.id == selected_id:
-                item.setSelected(True)
-        if selected_id is not None:
-            self.roi_manager.highlight_roi(selected_id)
-        self._refresh_post_roi_list()
+        return self._roi_id_from_item(items[0])
 
     def _update_object_list(self, object_ids: Optional[Sequence[int]] = None):
         """Refresh object list display."""
@@ -2017,8 +2008,17 @@ class CurveAlignWidget(QWidget):
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, obj.id)
             self.object_list.addItem(item)
-        self._refresh_post_roi_list()
+        self._sync_post_panel(update_plots=self._post_tab_active())
     
+    def _roi_id_from_item(self, item: QListWidgetItem) -> Optional[int]:
+        roi_id = item.data(Qt.UserRole)
+        if roi_id is None:
+            try:
+                roi_id = int(item.text().split(":")[0])
+            except (ValueError, IndexError):
+                roi_id = None
+        return roi_id
+
     def _create_roi(self, shape: ROIShape):
         """Create ROI of specified shape."""
         try:
@@ -2452,7 +2452,11 @@ class CurveAlignWidget(QWidget):
             return
         
         # Confirm deletion
-        roi_names = [item.text().split()[1] for item in selected if len(item.text().split()) > 1]
+        roi_names = []
+        for item in selected:
+            roi_id = self._roi_id_from_item(item)
+            roi = self.roi_manager.get_roi(roi_id) if roi_id is not None else None
+            roi_names.append(roi.name if roi else item.text())
         reply = QMessageBox.question(
             self,
             "Confirm Delete",
@@ -2486,7 +2490,9 @@ class CurveAlignWidget(QWidget):
         if not selected:
             return
         
-        roi_id = int(selected[0].text().split(":")[0])
+        roi_id = self._roi_id_from_item(selected[0])
+        if roi_id is None:
+            return
         # Would show dialog for new name
         # For now, just update list
         self._update_roi_list()
@@ -2507,7 +2513,9 @@ class CurveAlignWidget(QWidget):
         if not selected:
             return
         
-        roi_id = int(selected[0].text().split(":")[0])
+        roi_id = self._roi_id_from_item(selected[0])
+        if roi_id is None:
+            return
         self._analyze_roi_by_id(roi_id, ctfire=ctfire)
 
     def _analyze_roi_by_id(self, roi_id: int, ctfire: bool = False):
@@ -2648,30 +2656,84 @@ class CurveAlignWidget(QWidget):
             dialog.setWindowTitle("ROI Analysis Results")
             dialog.exec_()
     
-    def _refresh_post_roi_list(self):
-        """Refresh post-processing ROI list."""
-        if not hasattr(self, "post_roi_list"):
-            return
-        self.post_roi_list.clear()
-        for roi in self.roi_manager.get_rois_for_active_image():
-            item = QListWidgetItem(f"{roi.id}: {roi.name}")
-            item.setData(Qt.UserRole, roi.id)
-            self.post_roi_list.addItem(item)
-        if self.post_roi_list.count() > 0:
-            self.post_roi_list.setCurrentRow(0)
+    def _post_tab_active(self) -> bool:
+        """Return True when the post-processing tab is active."""
+        if not hasattr(self, "tab_widget") or not hasattr(self, "post_tab"):
+            return False
+        return self.tab_widget.currentWidget() == self.post_tab
 
-    def _update_post_plots(self):
-        """Update histograms/graphs for the selected ROI."""
-        if not hasattr(self, "post_roi_list") or not hasattr(self, "post_fig"):
+    def _on_tab_changed(self, index: int):
+        if not hasattr(self, "tab_widget"):
             return
-        items = self.post_roi_list.selectedItems()
+        if self.tab_widget.widget(index) == self.post_tab:
+            self._sync_post_panel(update_plots=True)
+
+    def _get_selected_roi_for_post(self):
+        if not hasattr(self, "roi_list"):
+            return None, None
+        items = self.roi_list.selectedItems()
         if not items:
+            return None, None
+        roi_id = self._roi_id_from_item(items[0])
+        roi = self.roi_manager.get_roi(roi_id) if roi_id is not None else None
+        return roi_id, roi
+
+    def _set_post_selected_label(self, roi):
+        if not hasattr(self, "post_selected_label"):
             return
-        roi_id = items[0].data(Qt.UserRole)
+        if roi is None:
+            self.post_selected_label.setText("Selected ROI: None")
+        else:
+            self.post_selected_label.setText(f"Selected ROI: {roi.id}: {roi.name}")
+
+    def _sync_region_label(self):
+        """Sync region label to current ROI selection."""
+        if not hasattr(self, "selected_region_label"):
+            return
+        roi_id = self._selected_annotation_id()
+        roi = self.roi_manager.get_roi(roi_id) if roi_id is not None else None
+        if roi is None:
+            self.selected_region_label.setText("Selected region: None")
+            return
+        self.selected_region_label.setText(
+            f"Selected region: {roi.id}: {roi.name} [{roi.annotation_type}]"
+        )
+
+    def _clear_post_plots(self, message: str):
+        if not hasattr(self, "post_fig") or not hasattr(self, "post_canvas"):
+            return
+        self.post_fig.clear()
+        ax = self.post_fig.add_subplot(111)
+        ax.text(0.5, 0.5, message, ha="center", va="center")
+        ax.set_axis_off()
+        self.post_fig.tight_layout()
+        self.post_canvas.draw_idle()
+
+    def _sync_post_panel(self, update_plots: bool = False):
+        """Sync post-processing label/plots to current ROI selection."""
+        roi_id, roi = self._get_selected_roi_for_post()
+        self._set_post_selected_label(roi)
+        if update_plots:
+            if roi_id is None:
+                self._clear_post_plots("No ROI selected")
+            else:
+                self._update_post_plots(roi_id=roi_id)
+
+    def _update_post_plots(self, roi_id: Optional[int] = None):
+        """Update histograms/graphs for the selected ROI."""
+        if not hasattr(self, "post_fig"):
+            return
         if roi_id is None:
+            roi_id, roi = self._get_selected_roi_for_post()
+        else:
+            roi = self.roi_manager.get_roi(roi_id)
+        self._set_post_selected_label(roi)
+        if roi_id is None or roi is None:
+            self._clear_post_plots("No ROI selected")
             return
         image = self._get_active_image_data(grayscale=True)
         if image is None:
+            self._clear_post_plots("No image loaded")
             return
         metrics = self.roi_manager.get_metrics(roi_id)
         if metrics is None:
@@ -2679,9 +2741,8 @@ class CurveAlignWidget(QWidget):
                 metrics = self.roi_manager.measure_roi(roi_id, image, histogram_bins=32)
             except ValueError:
                 metrics = None
-        roi = self.roi_manager.get_roi(roi_id)
         angles = None
-        if roi and roi.analysis_result:
+        if roi.analysis_result:
             feats = roi.analysis_result.get("features")
             if feats:
                 angles = []
@@ -2831,17 +2892,10 @@ class CurveAlignWidget(QWidget):
     def _run_tacs(self):
         """Run TACS analysis."""
         # Get selected tumor region
-        selected = self.annotation_list.selectedItems()
-        roi_id = None
-        if selected:
-            try:
-                # Format: "ID: Name [Type]"
-                roi_id = int(selected[0].text().split(":")[0])
-            except ValueError:
-                pass
+        roi_id = self._selected_annotation_id()
         
         if roi_id is None:
-            QMessageBox.warning(self, "TACS Analysis", "Please select a boundary region from 'Defined Regions'.")
+            QMessageBox.warning(self, "TACS Analysis", "Please select a boundary region from the 'ROI List'.")
             return
             
         tumor_roi = self.roi_manager.get_roi(roi_id)
@@ -2907,17 +2961,24 @@ class CurveAlignWidget(QWidget):
     
     def _update_roi_list(self):
         """Update ROI list widget and table."""
+        selected_ids = set()
+        for item in self.roi_list.selectedItems():
+            roi_id = self._roi_id_from_item(item)
+            if roi_id is not None:
+                selected_ids.add(roi_id)
         self.roi_list.clear()
         table_rows = []
-        for roi in self.roi_manager.get_rois_for_active_image():
+        for display_index, roi in enumerate(self.roi_manager.get_rois_for_active_image(), start=1):
             status = "✓" if roi.analysis_result else ""
             source = roi.metadata.get("source", "manual")
-            text = f"{roi.id}: {roi.name} [{roi.annotation_type}|{source}] {status}"
+            text = f"{display_index}: {roi.name} [{roi.annotation_type}|{source}] {status}"
             item = QListWidgetItem(text.strip())
             item.setData(Qt.UserRole, roi.id)
             if roi.analysis_result:
                 item.setForeground(QColor("#3fb950"))
             self.roi_list.addItem(item)
+            if roi.id in selected_ids:
+                item.setSelected(True)
             table_rows.append(
                 [
                     str(roi.id),
@@ -2928,9 +2989,11 @@ class CurveAlignWidget(QWidget):
                     "Analyzed" if roi.analysis_result else "Pending",
                 ]
             )
+        if self.roi_list.count() > 0 and not self.roi_list.selectedItems():
+            self.roi_list.setCurrentRow(0)
         self._populate_roi_table(table_rows)
-        self._update_annotation_list()
-        self._refresh_post_roi_list()
+        self._sync_post_panel(update_plots=self._post_tab_active())
+        self._sync_region_label()
 
     def _populate_roi_table(self, rows: List[List[str]]):
         if not hasattr(self, "roi_table_view"):
