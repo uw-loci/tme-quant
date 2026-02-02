@@ -93,14 +93,14 @@ jobs:
           fi
 
       - name: Prepare FFTW + CurveLab toolchain
+        env:
+          FDCT: ""
+          FFTW: ""
+          CPPFLAGS: ""
+          LDFLAGS: ""
         run: |
+          unset FDCT FFTW CPPFLAGS LDFLAGS
           bash bin/ci_setup_curvelab.sh
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --break-system-packages -e ".[curvelab]"
-          python -m pip install --break-system-packages pytest pytest-cov ruff
 
       - name: Test CurveLab compilation
         run: |
@@ -109,8 +109,18 @@ jobs:
             echo "❌ FDCT environment variable not set by ci_setup_curvelab.sh"
             exit 1
           fi
+          echo "FDCT=${FDCT}"
+          ls -la "${FDCT}" || true
+          ls -la "${FDCT}/fdct_wrapping_cpp" || true
+          ls -la "${FDCT}/fdct_wrapping_cpp/src" || true
           test -f "${FDCT}/fdct_wrapping_cpp/src/fdct_wrapping_cpp" && echo "✅ fdct_wrapping_cpp built" || (echo "❌ fdct_wrapping_cpp missing"; exit 1)
           test -f "${FDCT}/fdct3d/src/fdct3d" && echo "✅ fdct3d built" || (echo "❌ fdct3d missing"; exit 1)
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --break-system-packages -e ".[curvelab]"
+          python -m pip install --break-system-packages pytest pytest-cov ruff
 
       - name: Run tests with CurveLab
         env:
