@@ -105,8 +105,12 @@ jobs:
       - name: Test CurveLab compilation
         run: |
           echo "Testing CurveLab compilation..."
-          test -f "utils/CurveLab-2.1.3/fdct_wrapping_cpp/src/fdct_wrapping_cpp" && echo "✅ fdct_wrapping_cpp built" || (echo "❌ fdct_wrapping_cpp missing"; exit 1)
-          test -f "utils/CurveLab-2.1.3/fdct3d/src/fdct3d" && echo "✅ fdct3d built" || (echo "❌ fdct3d missing"; exit 1)
+          if [ -z "${FDCT:-}" ]; then
+            echo "❌ FDCT environment variable not set by ci_setup_curvelab.sh"
+            exit 1
+          fi
+          test -f "${FDCT}/fdct_wrapping_cpp/src/fdct_wrapping_cpp" && echo "✅ fdct_wrapping_cpp built" || (echo "❌ fdct_wrapping_cpp missing"; exit 1)
+          test -f "${FDCT}/fdct3d/src/fdct3d" && echo "✅ fdct3d built" || (echo "❌ fdct3d missing"; exit 1)
 
       - name: Run tests with CurveLab
         env:
