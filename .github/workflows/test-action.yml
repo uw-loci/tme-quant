@@ -22,7 +22,17 @@ jobs:
           eval "${{ secrets.FETCH_FDCT }}"
           echo "utils/ contents:"
           ls -la
-          if [ -f "CurveLab-2.1.3.tar.gz" ] && command -v file >/dev/null 2>&1; then
+          if [ ! -f "CurveLab-2.1.3.tar.gz" ]; then
+            echo "::error title=CurveLab archive missing::Expected utils/CurveLab-2.1.3.tar.gz to exist after running FETCH_FDCT."
+            exit 1
+          fi
+          if command -v file >/dev/null 2>&1; then
             echo "CurveLab-2.1.3.tar.gz mime-type:"
-            file -b --mime-type "CurveLab-2.1.3.tar.gz" || true
+            MIME="$(file -b --mime-type "CurveLab-2.1.3.tar.gz" || true)"
+            echo "${MIME}"
+            if [[ "${MIME}" == text/html* ]]; then
+              echo "::error title=CurveLab download returned HTML::Likely a 403/redirect."
+              head -n 40 "CurveLab-2.1.3.tar.gz" || true
+              exit 1
+            fi
           fi
