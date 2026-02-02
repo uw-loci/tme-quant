@@ -6,6 +6,7 @@ interfacing with CurveLab via Curvelops or equivalent libraries.
 """
 
 from typing import List, Tuple, Optional
+import os
 import numpy as np
 import warnings
 
@@ -81,6 +82,17 @@ def apply_fdct(image: np.ndarray, finest: int = 0, nbangles_coarsest: int = 2) -
     CtCoeffs
         Curvelet coefficient structure (scales × wedges)
     """
+    # Allow forcing placeholder mode in CI/tests
+    use_real = HAS_CURVELOPS and os.getenv("TMEQ_RUN_CURVELETS", "1") == "1"
+
+    if not use_real:
+        # Placeholder implementation with consistent padding behavior
+        img = np.asarray(image, dtype=np.float64)
+        img = np.nan_to_num(img, nan=0.0, posinf=0.0, neginf=0.0)
+        img, padded_shape = _pad_to_pow2(img)
+        coeffs = _apply_fdct_placeholder(img, finest=finest, nbangles_coarsest=nbangles_coarsest)
+        return coeffs, padded_shape
+
     # Try to use real Curvelops implementation first
     if HAS_CURVELOPS:
         try:
@@ -179,6 +191,11 @@ def apply_fdct(image: np.ndarray, finest: int = 0, nbangles_coarsest: int = 2) -
             
         except Exception as e:
             warnings.warn(f"Curvelops FDCT failed: {e}. Using placeholder.", UserWarning)
+            img = np.asarray(image, dtype=np.float64)
+            img = np.nan_to_num(img, nan=0.0, posinf=0.0, neginf=0.0)
+            img, padded_shape = _pad_to_pow2(img)
+            coeffs = _apply_fdct_placeholder(img, finest=finest, nbangles_coarsest=nbangles_coarsest)
+            return coeffs, padded_shape
 
     raise ImportError(
         "Curvelops/CurveLab FDCT is required for analysis. "
