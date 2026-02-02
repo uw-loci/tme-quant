@@ -123,6 +123,13 @@ else
   popd >/dev/null
   popd >/dev/null
 
+  if [ ! -f "CurveLab-${CURVELAB_VERSION}/fdct_wrapping_cpp/src/fdct_wrapping_cpp" ]; then
+    echo "::error title=CurveLab build missing::fdct_wrapping_cpp binary not found after build."
+    echo "Contents of fdct_wrapping_cpp/src:"
+    ls -la "CurveLab-${CURVELAB_VERSION}/fdct_wrapping_cpp/src" || true
+    exit 1
+  fi
+
   FDCT_PATH="${UTILS_DIR}/CurveLab-${CURVELAB_VERSION}"
 fi
 
