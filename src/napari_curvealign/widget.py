@@ -1480,6 +1480,11 @@ class CurveAlignWidget(QWidget):
         save_load_row.addWidget(self.save_roi_btn)
         save_load_row.addWidget(self.load_roi_btn)
         manage_layout.addLayout(save_load_row)
+
+        self.clear_rois_on_load_cb = QCheckBox("Clear existing ROIs before load")
+        self.clear_rois_on_load_cb.setToolTip("Remove current ROIs before loading new ones")
+        self.clear_rois_on_load_cb.setChecked(False)
+        manage_layout.addWidget(self.clear_rois_on_load_cb)
         
         # Quick save all button
         self.save_all_roi_btn = QPushButton("Save All ROIs (Quick)")
@@ -2342,39 +2347,75 @@ class CurveAlignWidget(QWidget):
             return
         
         try:
-            # Set image shape if available
-            shape = self.current_image_shape
-            if shape:
-                self.roi_manager.set_active_image(self._active_image_label(), shape)
-            
-            # Load based on format
-            loaded_rois = []
-            if "JSON" in selected_filter or file_path.endswith('.json'):
-                loaded_rois = self.roi_manager.load_rois(file_path, format='json')
-                format_name = "JSON"
-            elif "Fiji" in selected_filter or (file_path.endswith(('.roi', '.zip')) and "StarDist" not in selected_filter):
-                loaded_rois = self.roi_manager.load_rois(file_path, format='fiji')
-                format_name = "Fiji/ImageJ"
-            elif "StarDist" in selected_filter:
-                loaded_rois = self.roi_manager.load_rois(file_path, format='stardist')
-                format_name = "StarDist"
-            elif "Cellpose" in selected_filter or file_path.endswith('.npy'):
-                loaded_rois = self.roi_manager.load_rois(file_path, format='cellpose')
-                format_name = "Cellpose"
-            elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
-                loaded_rois = self.roi_manager.load_rois(file_path, format='qupath')
-                format_name = "QuPath"
-            elif "CSV" in selected_filter or file_path.endswith('.csv'):
-                loaded_rois = self.roi_manager.load_rois(file_path, format='csv')
-                format_name = "CSV"
-            elif file_path.endswith(('.tif', '.tiff')):
-                loaded_rois = self.roi_manager.load_rois(file_path, format='mask')
-                format_name = "TIFF mask"
-            else:
-                loaded_rois = self.roi_manager.load_rois(file_path, format='auto')
-                format_name = "auto-detected"
-            
-            self._update_roi_list()
+            try:
+                self._ensure_roi_viewer()
+            except RuntimeError as exc:
+                QMessageBox.critical(self, "Viewer Unavailable", f"Cannot load ROIs:\n{exc}")
+                return
+            if not hasattr(self, '_syncing_shapes'):
+                self._syncing_shapes = False
+            previous_sync_state = self._syncing_shapes
+            self._syncing_shapes = True
+            try:
+                if getattr(self, "clear_rois_on_load_cb", None) and self.clear_rois_on_load_cb.isChecked():
+                    self.roi_manager.clear_rois()
+                    if self.viewer:
+                        roi_layers = [
+                            layer for layer in list(self.viewer.layers)
+                            if isinstance(layer, napari.layers.Shapes) and layer.name == "ROIs"
+                        ]
+                        for layer in roi_layers:
+                            try:
+                                self.viewer.layers.remove(layer)
+                            except Exception:
+                                pass
+                    self.roi_manager.shapes_layer = None
+                    self._shape_callback_connected = False
+                    self._last_shape_count = 0
+                    self._update_roi_list()
+                    print("Cleared existing ROIs before load.")
+                # Set image shape if available
+                shape = self.current_image_shape
+                if shape:
+                    self.roi_manager.set_active_image(self._active_image_label(), shape)
+                
+                # Load based on format
+                loaded_rois = []
+                if "JSON" in selected_filter or file_path.endswith('.json'):
+                    loaded_rois = self.roi_manager.load_rois(file_path, format='json')
+                    format_name = "JSON"
+                elif "Fiji" in selected_filter or (file_path.endswith(('.roi', '.zip')) and "StarDist" not in selected_filter):
+                    loaded_rois = self.roi_manager.load_rois(file_path, format='fiji')
+                    format_name = "Fiji/ImageJ"
+                elif "StarDist" in selected_filter:
+                    loaded_rois = self.roi_manager.load_rois(file_path, format='stardist')
+                    format_name = "StarDist"
+                elif "Cellpose" in selected_filter or file_path.endswith('.npy'):
+                    loaded_rois = self.roi_manager.load_rois(file_path, format='cellpose')
+                    format_name = "Cellpose"
+                elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
+                    loaded_rois = self.roi_manager.load_rois(file_path, format='qupath')
+                    format_name = "QuPath"
+                elif "CSV" in selected_filter or file_path.endswith('.csv'):
+                    loaded_rois = self.roi_manager.load_rois(file_path, format='csv')
+                    format_name = "CSV"
+                elif file_path.endswith(('.tif', '.tiff')):
+                    loaded_rois = self.roi_manager.load_rois(file_path, format='mask')
+                    format_name = "TIFF mask"
+                else:
+                    loaded_rois = self.roi_manager.load_rois(file_path, format='auto')
+                    format_name = "auto-detected"
+                
+                if loaded_rois:
+                    layer = self.roi_manager.create_shapes_layer()
+                    self.roi_manager._update_shapes_layer()
+                    if layer is not None:
+                        self._connect_shapes_events(layer)
+                        self._last_shape_count = len(layer.data)
+
+                self._update_roi_list()
+            finally:
+                self._syncing_shapes = previous_sync_state
             
             if loaded_rois:
                 print(f"Loaded {len(loaded_rois)} ROI(s) from {file_path} ({format_name} format)")

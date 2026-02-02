@@ -462,6 +462,15 @@ class ROIManager:
             self._update_shapes_layer()
         
         return roi
+
+    def clear_rois(self, *, reset_counter: bool = True) -> None:
+        """Remove all ROIs and clear the shapes layer."""
+        self.rois.clear()
+        if reset_counter:
+            self.roi_counter = 0
+        if self.shapes_layer is not None:
+            self.shapes_layer.data = []
+            self.shapes_layer.selected_data = set()
     
     def delete_roi(self, roi_id: int) -> bool:
         """Delete ROI by ID."""
@@ -2014,96 +2023,116 @@ class ROIManager:
             else:
                 raise ValueError("Expected GeoJSON FeatureCollection or List of Features")
         
-        loaded_rois = []
-        
+        loaded_rois: List[ROI] = []
+
+        def _parse_polygon_coords(coords_payload: Sequence) -> Optional[np.ndarray]:
+            if not coords_payload:
+                return None
+            # coords_payload can be [[x,y], ...] or [[[x,y], ...], ...]
+            if isinstance(coords_payload[0][0], (list, tuple)):
+                coords_list = coords_payload[0]
+            else:
+                coords_list = coords_payload
+            try:
+                coords_array = np.array(coords_list, dtype=float)
+            except Exception as exc:
+                print(f"Warning: Failed to parse QuPath polygon coordinates: {exc}")
+                return None
+            if coords_array.ndim != 2 or coords_array.shape[1] != 2:
+                print("Warning: QuPath polygon coordinates are not Nx2; skipping.")
+                return None
+            # Remove duplicate closing point if present
+            if len(coords_array) > 1 and np.allclose(coords_array[0], coords_array[-1]):
+                coords_array = coords_array[:-1]
+            return coords_array
+
         for feature in features:
-            geometry = feature.get("geometry", {})
-            properties = feature.get("properties", {})
-            
+            geometry = feature.get("geometry", {}) or {}
+            properties = feature.get("properties", {}) or {}
+
             geometry_type = geometry.get("type")
             coordinates = geometry.get("coordinates", [])
-            
-            if geometry_type == "Polygon" and coordinates:
-                # Extract outer ring (first element)
-                # Check nesting level - QuPath polygons are usually [[[x,y],...]]
-                if not isinstance(coordinates[0][0], (list, tuple)):
-                    # Simple polygon [[x,y],...] - unlikely for proper GeoJSON but possible in some exports
-                    coords_list = coordinates
-                else:
-                    coords_list = coordinates[0]
-                
-                # Convert to numpy array (x, y format)
-                try:
-                    coords = np.array(coords_list, dtype=float)
-                except Exception:
-                    continue 
+            feature_id = feature.get("id", "unknown")
 
-                # Remove duplicate closing point if present
-                if len(coords) > 1 and np.allclose(coords[0], coords[-1]):
-                    coords = coords[:-1]
-                
-                # Get ROI properties
-                classification = properties.get("classification", {})
-                # Classification can be a dict or string in some versions
-                if isinstance(classification, dict):
-                    annotation_type = classification.get("name", "qupath_annotation")
-                else:
-                    annotation_type = str(classification) if classification else "qupath_annotation"
-                    
-                roi_name = properties.get("name", f"qupath_{feature.get('id', 'unknown')}")
-                
-                # Determine shape (default to polygon for QuPath imports)
-                shape = ROIShape.POLYGON
-                
-                # Add ROI
+            if not geometry_type:
+                print(f"Warning: QuPath feature {feature_id} missing geometry type.")
+                continue
+
+            # Get ROI properties
+            classification = properties.get("classification", {})
+            if isinstance(classification, dict):
+                annotation_type = classification.get("name", "qupath_annotation")
+            else:
+                annotation_type = str(classification) if classification else "qupath_annotation"
+            roi_name = properties.get("name", f"qupath_{feature_id}")
+
+            base_metadata = {
+                "source": "qupath",
+                "object_type": properties.get("object_type", "annotation"),
+                "qupath_id": feature_id,
+                "geometry_type": geometry_type,
+            }
+
+            if geometry_type == "Polygon" and coordinates:
+                coords = _parse_polygon_coords(coordinates)
+                if coords is None:
+                    continue
                 roi = self.add_roi(
                     coords,
-                    shape,
+                    ROIShape.POLYGON,
                     roi_name,
                     annotation_type=annotation_type,
-                    metadata={
-                        "source": "qupath",
-                        "object_type": properties.get("object_type", "annotation"),
-                        "qupath_id": feature.get("id")
-                    }
+                    metadata=base_metadata,
                 )
-                
-                # Add measurements if available
                 measurements = properties.get("measurements", {})
                 if measurements:
                     roi.metrics = measurements
-                
-                if self.active_image_label and "image_label" not in roi.metadata:
-                    roi.metadata["image_label"] = self.active_image_label
-                
                 loaded_rois.append(roi)
-            elif geometry_type == "LineString":
-                # Handle line annotations
+            elif geometry_type == "MultiPolygon" and coordinates:
+                multi_coords = coordinates if isinstance(coordinates, list) else []
+                if not multi_coords:
+                    print(f"Warning: QuPath feature {feature_id} has empty MultiPolygon.")
+                    continue
+                for part_index, polygon_coords in enumerate(multi_coords, start=1):
+                    coords = _parse_polygon_coords(polygon_coords)
+                    if coords is None:
+                        continue
+                    part_name = roi_name
+                    if len(multi_coords) > 1:
+                        part_name = f"{roi_name}_part{part_index}"
+                    part_metadata = base_metadata.copy()
+                    part_metadata["qupath_part_index"] = part_index
+                    roi = self.add_roi(
+                        coords,
+                        ROIShape.POLYGON,
+                        part_name,
+                        annotation_type=annotation_type,
+                        metadata=part_metadata,
+                    )
+                    measurements = properties.get("measurements", {})
+                    if measurements:
+                        roi.metrics = measurements
+                    loaded_rois.append(roi)
+            elif geometry_type == "LineString" and coordinates:
                 try:
                     coords = np.array(coordinates, dtype=float)
-                except Exception:
+                except Exception as exc:
+                    print(f"Warning: Failed to parse QuPath line coordinates: {exc}")
                     continue
-                
-                roi_name = properties.get("name", f"qupath_line_{feature.get('id', 'unknown')}")
-                classification = properties.get("classification", {})
-                if isinstance(classification, dict):
-                    annotation_type = classification.get("name", "qupath_line")
-                else:
-                    annotation_type = str(classification) if classification else "qupath_line"
-                
+                if coords.ndim != 2 or coords.shape[1] != 2:
+                    print(f"Warning: QuPath line coordinates invalid for {feature_id}.")
+                    continue
                 roi = self.add_roi(
                     coords,
                     ROIShape.FREEHAND,
                     roi_name,
                     annotation_type=annotation_type,
-                    metadata={"source": "qupath", "geometry_type": "LineString"}
+                    metadata=base_metadata,
                 )
-                
-                if self.active_image_label and "image_label" not in roi.metadata:
-                    roi.metadata["image_label"] = self.active_image_label
-                
                 loaded_rois.append(roi)
-        
+            else:
+                print(f"Warning: Unsupported QuPath geometry '{geometry_type}' for {feature_id}.")
+
         return loaded_rois
     
     def save_rois(self, file_path: str, roi_ids: Optional[List[int]] = None, format: str = 'auto'):
