@@ -103,7 +103,7 @@ def test_direct_fdct():
         
         # Forward transform
         print("Testing forward FDCT...")
-        coeffs = apply_fdct(image)
+        coeffs, _ = apply_fdct(image)
         print(f"  Scales: {len(coeffs)}")
         
         # Count total coefficients

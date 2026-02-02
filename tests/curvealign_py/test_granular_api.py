@@ -71,7 +71,7 @@ def test_granular_algorithms():
     test_image[20:30, :] = 1.0  # Horizontal line
     test_image[:, 20:30] = 1.0  # Vertical line
     test_image += np.random.randn(64, 64) * 0.1
-    coeffs = apply_fdct(test_image)
+    coeffs, _ = apply_fdct(test_image)
     assert len(coeffs) > 0
     print("  PASS: apply_fdct working")
     

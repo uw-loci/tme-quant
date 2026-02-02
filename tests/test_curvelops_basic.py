@@ -32,7 +32,7 @@ def test_curvelops_api_functions():
     image = np.random.rand(32, 32)
     
     # Test forward transform
-    coeffs = apply_fdct(image)
+    coeffs, _ = apply_fdct(image)
     assert isinstance(coeffs, list)
     assert len(coeffs) > 0
     
