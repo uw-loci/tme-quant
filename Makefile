@@ -7,8 +7,12 @@ help:
 	@echo "tme-quant Makefile Commands"
 	@echo ""
 	@echo "Setup & Installation:"
-	@echo "  make setup        - Automated setup (recommended for first-time users)"
+	@echo "  make setup        - Automated setup (local dev)"
 	@echo "  make install      - Install tme-quant package"
+setup:
+	@echo "Running automated setup..."
+	bash bin/setup.sh
+
 	@echo "  make install-dev  - Install with development dependencies"
 	@echo "  make install-all  - Install with all optional dependencies"
 	@echo ""
@@ -22,10 +26,6 @@ help:
 	@echo "  make docker-run      - Run Docker container"
 	@echo "  make docker-stop     - Stop Docker container"
 	@echo ""
-
-setup:
-	@echo "Running automated setup..."
-	bash bin/setup.sh
 
 install:
 	pip install -e .

@@ -100,7 +100,7 @@ jobs:
           LDFLAGS: ""
         run: |
           unset FDCT FFTW CPPFLAGS LDFLAGS
-          bash bin/ci_setup_curvelab.sh
+          bash .github/ci_setup_curvelab.sh
 
       - name: Test CurveLab compilation
         run: |

@@ -59,15 +59,9 @@ For the napari plugin with all dependencies including Curvelops:
 
 **Installation:**
 ```bash
-cd tme-quant-napari-curvealign
+cd tme-quant
 bash bin/install.sh
 ```
-
-This script will:
-1. ✅ Check prerequisites (Python, FFTW, CurveLab)
-2. ✅ Create a virtual environment
-3. ✅ Install all dependencies including Curvelops
-4. ✅ Verify the installation
 
 **After installation:**
 ```bash
@@ -82,8 +76,7 @@ The CurveAlign widget will appear in: **Plugins → napari-curvealign → CurveA
 
 ### Quick Start (Native - recommended)
 
-Use our automated setup script:
-
+Use the automated setup script:
 ```bash
 cd tme-quant
 bash bin/setup.sh
@@ -91,7 +84,6 @@ bash bin/setup.sh
 make setup
 ```
 
-This script installs dependencies and guides CurveLab setup (optional).  
 For details see:
 - **Napari Plugin**: [doc/installation/NAPARI_PLUGIN_INSTALLATION.md](doc/installation/NAPARI_PLUGIN_INSTALLATION.md) - Complete guide with one-click installation
 - **Base Package**: [doc/installation/SETUP_GUIDE.md](doc/installation/SETUP_GUIDE.md) - Python API installation
@@ -117,7 +109,7 @@ print(f"Analysis complete: {len(result.curvelets)} features detected")
 ```
 
 ### Curvelet backend (optional)
-To enable authentic CurveLab FDCT via `curvelops`, you need FFTW 2.1.5 and CurveLab. The setup script will prompt for these; see [doc/installation/SETUP_GUIDE.md](doc/installation/SETUP_GUIDE.md) if you prefer manual steps.
+To enable authentic CurveLab FDCT via `curvelops`, you need FFTW 2.1.5 and CurveLab. Use `source bin/setup_curvelops_env.sh` (or set `FFTW`/`FDCT` manually) and install with the `curvelab` extra.
 
 ## Testing (optional)
 ```bash

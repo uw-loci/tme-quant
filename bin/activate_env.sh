@@ -1,31 +1,29 @@
-#!/bin/bash
-# Activate tme-quant environment and set up paths
+#!/usr/bin/env bash
+
+# Activate conda environment for base API development.
 # Usage: source bin/activate_env.sh
 
-# Get script directory
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+ENV_NAME="${ENV_NAME:-tme-quant}"
 
-# Initialize conda
-if [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/anaconda3/etc/profile.d/conda.sh"
-elif [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/miniconda3/etc/profile.d/conda.sh"
+if ! command -v conda >/dev/null 2>&1; then
+  echo "ERROR: conda is required but not found in PATH."
+  echo "Install Miniconda/Anaconda and re-run this script."
+  return 1 2>/dev/null || exit 1
 fi
 
-# Activate environment
-conda activate tme-quant
+CONDA_BASE="$(conda info --base)"
+# shellcheck disable=SC1090
+source "${CONDA_BASE}/etc/profile.d/conda.sh"
 
-# Set environment variables if needed
-if [ -n "$FDCT" ] && [ -d "$FDCT" ]; then
-    export FDCT
-fi
-if [ -n "$FFTW" ] && [ -d "$FFTW" ]; then
-    export FFTW
-    export CPPFLAGS="-I${FFTW}/include"
-    export LDFLAGS="-L${FFTW}/lib"
+conda activate "${ENV_NAME}"
+
+if [ -f "${SCRIPT_DIR}/setup_curvelops_env.sh" ]; then
+  # shellcheck disable=SC1090
+  source "${SCRIPT_DIR}/setup_curvelops_env.sh"
 fi
 
-echo "✅ tme-quant environment activated"
-echo "   Project root: $PROJECT_ROOT"
-
+echo "Environment activated."
+echo "  Conda env: ${ENV_NAME}"

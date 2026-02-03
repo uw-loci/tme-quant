@@ -9,7 +9,6 @@ This guide shows two simple ways to install: native (recommended) and Docker.
 The easiest way to get started is using our automated setup script:
 
 ```bash
-# Using the setup script
 cd tme-quant
 bash bin/setup.sh
 
@@ -18,11 +17,16 @@ make setup
 ```
 
 This script will:
-1. Check/install Conda
-2. Create a Python environment
-3. Optionally build FFTW 2.1.5 (10–15 min)
-4. Prompt for CurveLab path (optional)
-5. Install and verify tme-quant
+1. Create or reuse the `tme-quant` conda environment
+2. Install tme-quant (plus dev tools by default)
+3. Add the `curvelab` extra when FFTW/CurveLab are found
+
+### Lean install (skip dev tools)
+
+```bash
+cd tme-quant
+INSTALL_DEV=0 bash bin/setup.sh
+```
 
 ## Manual Installation
 
@@ -113,7 +117,7 @@ cd tme-quant
 pip install -e .
 
 # Or install with curvelet backend (requires FFTW and CurveLab)
-pip install -e ".[curvelops]"
+pip install -e ".[curvelab]"
 
 # Or install everything
 pip install -e ".[all]"
@@ -151,7 +155,7 @@ docker-compose up -d
 - You still need to provide CurveLab separately due to licensing restrictions
 - On Mac, Docker uses a lightweight VM so performance may be slightly slower than native
 
-Alternatively, you can use the native setup script (`make setup`) which works better on Mac without requiring Docker.
+Alternatively, you can use the native setup steps above, which work better on Mac without requiring Docker.
 
 ## Package Installation Options
 
@@ -177,7 +181,7 @@ Installs napari for interactive analysis.
 
 ### With Curvelet Backend
 ```bash
-pip install -e ".[curvelops]"
+pip install -e ".[curvelab]"
 ```
 Enables authentic CurveLab FDCT transforms (requires FFTW and CurveLab).
 
@@ -219,7 +223,7 @@ pip install -e . --force-reinstall --no-cache-dir
 - Issues: Open an issue on GitHub
 - Examples: Check `simple_usage.py`
 
-## Activation Script
+## Activation
 
 After installation, use the provided activation script:
 
@@ -228,6 +232,7 @@ source bin/activate_env.sh
 ```
 
 Or manually activate:
+
 ```bash
 conda activate tme-quant
 ```

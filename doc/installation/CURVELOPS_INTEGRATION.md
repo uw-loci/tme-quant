@@ -68,17 +68,17 @@ cd ../../fdct3d/src && make
 
 #### 3. Setup Environment and Install Curvelops
 ```bash
-# Use the provided setup script (adjust paths as needed)
-source setup_curvelops_env.sh
+# Use the provided helper (recommended):
+source bin/setup_curvelops_env.sh
 
 # Or manually set environment variables:
-export FFTW="../utils/fftw-2.1.5"
-export FDCT="../utils/CurveLab-2.1.x"
-export CPPFLAGS="-I${FFTW}/include"
-export LDFLAGS="-L${FFTW}/lib"
+# export FFTW="../utils/fftw-2.1.5"
+# export FDCT="../utils/CurveLab-2.1.x"
+# export CPPFLAGS="-I${FFTW}/include"
+# export LDFLAGS="-L${FFTW}/lib"
 
 # Install Curvelops
-pip install -e ".[curvelops]"
+pip install -e ".[curvelab]"
 ```
 
 ## Usage

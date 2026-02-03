@@ -24,18 +24,18 @@ Before installing, ensure you have:
 
 ### Directory Structure
 
-The installation script expects the following directory structure:
+The installation expects the following directory structure:
 
 ```
 Parent_dir/
 ├── utils/
 │   ├── fftw-2.1.5/          # FFTW installation
 │   └── CurveLab-2.1.2/      # CurveLab installation
-└── tme-quant-napari-curvealign/
+└── tme-quant/
     ├── bin/
-    │   ├── install.sh        # Main installation script
-    │   ├── setup_curvelops_env.sh
-    │   └── activate.sh       # Generated after installation
+    │   ├── install.sh
+    │   ├── activate.sh
+    │   └── setup_curvelops_env.sh
     ├── src/
     └── pyproject.toml
 ```
@@ -58,152 +58,49 @@ ls -d ../utils/CurveLab-2.1.2
 
 ## One-Click Installation
 
-The easiest way to install everything is using the automated installation script.
+The easiest way to install everything is using the provided script.
 
 ### Step 1: Navigate to Project Directory
 
 ```bash
-cd /path/to/tme-quant-napari-curvealign
+cd /path/to/tme-quant
 ```
 
-### Step 2: Run Installation Script
+### Step 2: Run Installer
 
 ```bash
 bash bin/install.sh
 ```
 
-### What the Script Does
-
-The installation script automatically:
-
-1. ✅ **Checks Prerequisites**
-   - Verifies Python 3.9+ is installed
-   - Checks for pip
-   - Validates FFTW and CurveLab locations
-
-2. ✅ **Creates Virtual Environment**
-   - Creates `.venv/` directory
-   - Sets up isolated Python environment
-
-3. ✅ **Configures Curvelops**
-   - Sources `bin/setup_curvelops_env.sh`
-   - Sets `FFTW` and `FDCT` environment variables
-   - Configures compiler flags (`CPPFLAGS`, `LDFLAGS`)
-
-4. ✅ **Installs Dependencies**
-   - Upgrades pip, setuptools, wheel
-   - Installs Curvelops with FFTW/CurveLab support
-   - Installs all napari dependencies
-   - Installs core scientific libraries
-   - Installs ROI management tools
-
-5. ✅ **Verifies Installation**
-   - Tests imports of key packages
-   - Confirms all dependencies are working
-
-6. ✅ **Creates Activation Script**
-   - Generates `bin/activate.sh` for easy environment activation
-
-### Installation Output
-
-You'll see progress messages like:
-
-```
-═══════════════════════════════════════════════════════════════
-  Checking Prerequisites
-═══════════════════════════════════════════════════════════════
-
-[✓] Python found: 3.13.3
-[✓] pip found
-[✓] FFTW found at: /path/to/utils/fftw-2.1.5
-[✓] CurveLab found at: /path/to/utils/CurveLab-2.1.2
-
-═══════════════════════════════════════════════════════════════
-  Setting Up Virtual Environment
-═══════════════════════════════════════════════════════════════
-
-[INFO] Creating virtual environment...
-[✓] Virtual environment created
-
-═══════════════════════════════════════════════════════════════
-  Installing Dependencies
-═══════════════════════════════════════════════════════════════
-
-[INFO] Installing Curvelops (this may take a few minutes)...
-[✓] Curvelops installed successfully
-
-[INFO] Installing tme-quant-napari-curvealign and all dependencies...
-[✓] All dependencies installed successfully
-
-═══════════════════════════════════════════════════════════════
-  Verifying Installation
-═══════════════════════════════════════════════════════════════
-
-  ✓ napari 0.6.6
-  ✓ napari_curvealign
-  ✓ curvelops 0.23
-  ✓ roifile 2025.5.10
-  ✓ numpy 2.2.6
-  ✓ pandas 2.3.3
-
-✅ All imports successful!
-[✓] Installation verified successfully
-```
+This will:
+- Create or reuse `.venv`
+- Install tme-quant (adds the `curvelab` extra when FFTW/CurveLab are found)
 
 ---
 
 ## Manual Installation
 
-If you prefer to install semi-automated or the automated script fails, follow these steps:
-
-### Step 1: Create Virtual Environment
+If you prefer to install manually, follow these steps:
 
 ```bash
-cd tme-quant-napari-curvealign
+cd /path/to/tme-quant
 python3 -m venv .venv
-```
-
-### Step 2: Activate Virtual Environment
-
-```bash
 source .venv/bin/activate
-```
-
-### Step 3: Upgrade Build Tools
-
-```bash
 pip install --upgrade pip setuptools wheel
 ```
 
-### Step 4: Set Up Curvelops Environment
+Optional Curvelops setup (requires FFTW/CurveLab):
 
 ```bash
 source bin/setup_curvelops_env.sh
+pip install -e ".[curvelab]"
 ```
 
-This sets:
-- `FFTW=/path/to/utils/fftw-2.1.5`
-- `FDCT=/path/to/utils/CurveLab-2.1.2`
-- `CPPFLAGS=-I${FFTW}/include`
-- `LDFLAGS=-L${FFTW}/lib`
-
-### Step 5: Install Curvelops
-
-```bash
-pip install "curvelops @ git+https://github.com/PyLops/curvelops@0.23"
-```
-
-### Step 6: Install Package
+If you do not have FFTW/CurveLab, install base dependencies:
 
 ```bash
 pip install -e .
 ```
-
-This installs all dependencies from `pyproject.toml`:
-- Core dependencies (numpy, scipy, pandas, etc.)
-- Napari and GUI dependencies
-- ROI management tools
-- Image processing libraries
 
 ---
 
@@ -253,7 +150,6 @@ source bin/activate.sh
 
 This will:
 - Activate the virtual environment
-- Set up Curvelops environment variables
 - Display status information
 
 ### Launching Napari
@@ -388,15 +284,11 @@ If you encounter issues not covered here:
 
 ## Scripts Reference
 
-All installation and setup scripts are located in `bin/`:
-
 | Script | Purpose |
 |--------|---------|
-| `bin/install.sh` | Main automated installation script |
-| `bin/activate.sh` | Quick environment activation (generated by install.sh) |
-| `bin/setup_curvelops_env.sh` | Sets up FFTW/CurveLab environment variables |
-| `bin/setup.sh` | Original setup script (for base tme-quant) |
-| `bin/activate_env.sh` | Original activation script (for base tme-quant) |
+| `bin/install.sh` | Create `.venv` and install dependencies |
+| `bin/activate.sh` | Activate `.venv` and Curvelops env vars |
+| `bin/setup_curvelops_env.sh` | Set `FFTW`/`FDCT`/flags |
 
 ---
 

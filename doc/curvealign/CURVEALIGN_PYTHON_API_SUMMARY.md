@@ -304,7 +304,7 @@ pip install -e .
 # Or install with optional dependencies
 pip install -e ".[visualization]"  # matplotlib support
 pip install -e ".[imagej]"         # ImageJ integration  
-pip install -e ".[curvelops]"      # CurveLab backend
+pip install -e ".[curvelab]"       # CurveLab backend
 pip install -e ".[all]"            # all optional dependencies
 
 # Optional: Install napari separately for napari visualization backend

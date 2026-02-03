@@ -166,4 +166,3 @@ else
 fi
 
 echo "CurveLab setup complete."
-

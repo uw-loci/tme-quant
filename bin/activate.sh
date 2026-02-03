@@ -1,34 +1,28 @@
-#!/bin/bash
-# Quick activation script for tme-quant-napari-curvealign
+#!/usr/bin/env bash
+
+# Activate local virtual environment and Curvelops paths.
 # Usage: source bin/activate.sh
-#
-# This script activates the virtual environment and sets up Curvelops
-# environment variables for FFTW and CurveLab.
 
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$BIN_DIR")"
+set -euo pipefail
 
-# Check if virtual environment exists
-if [ ! -d "$PROJECT_ROOT/.venv" ]; then
-    echo "❌ Virtual environment not found!"
-    echo "   Please run: bash bin/install.sh"
-    return 1 2>/dev/null || exit 1
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "${SCRIPT_DIR}")"
+VENV_DIR="${PROJECT_ROOT}/.venv"
+
+if [ ! -d "${VENV_DIR}" ]; then
+  echo "ERROR: Virtual environment not found at ${VENV_DIR}."
+  echo "Run: bash bin/install.sh"
+  return 1 2>/dev/null || exit 1
 fi
 
-# Activate virtual environment
-source "$PROJECT_ROOT/.venv/bin/activate"
+# shellcheck disable=SC1090
+source "${VENV_DIR}/bin/activate"
 
-# Set up Curvelops environment
-if [ -f "$BIN_DIR/setup_curvelops_env.sh" ]; then
-    source "$BIN_DIR/setup_curvelops_env.sh"
-else
-    echo "⚠️  Warning: setup_curvelops_env.sh not found"
+if [ -f "${SCRIPT_DIR}/setup_curvelops_env.sh" ]; then
+  # shellcheck disable=SC1090
+  source "${SCRIPT_DIR}/setup_curvelops_env.sh"
 fi
 
-echo "✅ Environment activated!"
-echo "   Project: $PROJECT_ROOT"
-echo "   Python: $(python --version 2>/dev/null || echo 'unknown')"
-if [ -n "$FFTW" ] && [ -n "$FDCT" ]; then
-    echo "   FFTW: $FFTW"
-    echo "   CurveLab: $FDCT"
-fi
+echo "Environment activated."
+echo "  Project: ${PROJECT_ROOT}"
+echo "  Python: $(python --version 2>/dev/null || echo 'unknown')"
