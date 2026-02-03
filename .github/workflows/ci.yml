@@ -111,10 +111,10 @@ jobs:
           fi
           echo "FDCT=${FDCT}"
           ls -la "${FDCT}" || true
-          ls -la "${FDCT}/fdct_wrapping_cpp" || true
           ls -la "${FDCT}/fdct_wrapping_cpp/src" || true
-          test -f "${FDCT}/fdct_wrapping_cpp/src/fdct_wrapping_cpp" && echo "✅ fdct_wrapping_cpp built" || (echo "❌ fdct_wrapping_cpp missing"; exit 1)
-          test -f "${FDCT}/fdct3d/src/fdct3d" && echo "✅ fdct3d built" || (echo "❌ fdct3d missing"; exit 1)
+          ls -la "${FDCT}/fdct3d/src" || true
+          test -f "${FDCT}/fdct_wrapping_cpp/src/libfdct_wrapping.a" && echo "✅ libfdct_wrapping.a built" || (echo "❌ libfdct_wrapping.a missing"; exit 1)
+          test -f "${FDCT}/fdct3d/src/libfdct3d.a" && echo "✅ libfdct3d.a built" || (echo "❌ libfdct3d.a missing"; exit 1)
 
       - name: Install Python dependencies
         run: |

@@ -123,10 +123,18 @@ else
   popd >/dev/null
   popd >/dev/null
 
-  if [ ! -f "CurveLab-${CURVELAB_VERSION}/fdct_wrapping_cpp/src/fdct_wrapping_cpp" ]; then
-    echo "::error title=CurveLab build missing::fdct_wrapping_cpp binary not found after build."
+  FDCT_WRAPPING_LIB="CurveLab-${CURVELAB_VERSION}/fdct_wrapping_cpp/src/libfdct_wrapping.a"
+  FDCT3D_LIB="CurveLab-${CURVELAB_VERSION}/fdct3d/src/libfdct3d.a"
+  if [ ! -f "${FDCT_WRAPPING_LIB}" ]; then
+    echo "::error title=CurveLab build missing::libfdct_wrapping.a not found after build."
     echo "Contents of fdct_wrapping_cpp/src:"
     ls -la "CurveLab-${CURVELAB_VERSION}/fdct_wrapping_cpp/src" || true
+    exit 1
+  fi
+  if [ ! -f "${FDCT3D_LIB}" ]; then
+    echo "::error title=CurveLab build missing::libfdct3d.a not found after build."
+    echo "Contents of fdct3d/src:"
+    ls -la "CurveLab-${CURVELAB_VERSION}/fdct3d/src" || true
     exit 1
   fi
 
