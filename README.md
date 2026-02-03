@@ -96,6 +96,43 @@ Testing policy:
   - `TMEQ_RUN_CURVELETS=0` (curvelet tests skipped)
   - `QT_QPA_PLATFORM=offscreen` (headless napari import)
 
+### Working with secrets in GitHub Actions
+This project uses GitHub Actions secrets for tasks that require authentication or access to private resources. Secrets can be configured in the [Settings tab of the repostiory](https://github.com/uw-loci/tme-quant/settings/secrets/actions). For more information about secrets, see:
+- [Secrets as a concept](https://docs.github.com/en/actions/concepts/security/secrets)
+- [Secrets in actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
+
+#### Manual testing workflow
+The `manual-test` workflow allows developers to manually trigger workflows from the GitHub UI without committing changes to `main`. This is useful for testing workflows that require secrets on topic branches.
+
+**How to use it:**
+
+1. Create or edit `.github/workflows/test-action.yml` to define your workflow's structure and declare which secrets it needs via the `secrets:` input in `workflow_call`:
+```yaml
+on:
+  workflow_call:
+    secrets:
+      MY_SECRET_NAME:
+      ANOTHER_SECRET:
+
+jobs:
+  my-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Use a secret
+        run: echo "Secret is ${{ secrets.MY_SECRET_NAME }}"
+```
+
+2. The `manual-test` workflow (`.github/workflows/manual-test.yml`) will call `test-action.yml` and pass repository secrets to it via `secrets: inherit`.
+
+3. To trigger the workflow:
+   - Push your branch with the updated `test-action.yml` to GitHub.
+   - Go to the **Actions** tab in the repository and select the **[Manual Testing Stub](https://github.com/uwloci/tme-quant/actions/workflows/manual-test.yml)** workflow.
+   - Click **Run workflow** and select your branch.
+   - The workflow will execute with access to all secrets configured for the repository.
+
+**NOTE**
+- Never hardcode secrets or access tokens in workflow files; always use the `secrets:` context.
+
 ### Troubleshooting
 - Qt error ("No Qt bindings could be found"): install `pyqt` (or `pyside2`) from conda-forge.
 - Segfault on Viewer creation: avoid creating a `napari.Viewer()` in tests; we only import napari and run offscreen.
