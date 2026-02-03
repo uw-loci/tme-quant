@@ -144,18 +144,25 @@ fi
 echo "FFTW path: ${FFTW_PATH}"
 echo "CurveLab path: ${FDCT_PATH}"
 
+LD_LIBRARY_PATH_VAL="${FFTW_PATH}/lib"
+if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+  LD_LIBRARY_PATH_VAL="${FFTW_PATH}/lib:${LD_LIBRARY_PATH}"
+fi
+
 if [ -n "${GITHUB_ENV:-}" ]; then
   {
     echo "FFTW=${FFTW_PATH}"
     echo "FDCT=${FDCT_PATH}"
     echo "CPPFLAGS=-I${FFTW_PATH}/include"
     echo "LDFLAGS=-L${FFTW_PATH}/lib"
+    echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH_VAL}"
   } >> "${GITHUB_ENV}"
 else
   export FFTW="${FFTW_PATH}"
   export FDCT="${FDCT_PATH}"
   export CPPFLAGS="-I${FFTW_PATH}/include"
   export LDFLAGS="-L${FFTW_PATH}/lib"
+  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH_VAL}"
 fi
 
 echo "CurveLab setup complete."
