@@ -2288,6 +2288,22 @@ class ROIManager:
         """Update napari shapes layer with current ROIs."""
         if self.shapes_layer is None:
             return
+
+        # Avoid interrupting an active draw/move operation
+        if getattr(self.shapes_layer, "_is_creating", False) or getattr(self.shapes_layer, "_is_moving", False):
+            return
+
+        # Reset selection/highlight state before clearing data to avoid stale indices
+        try:
+            self.shapes_layer.selected_data = set()
+            self.shapes_layer._selected_data_stored = set()
+            self.shapes_layer._value = (None, None)
+            self.shapes_layer._value_stored = (None, None)
+            self.shapes_layer._selected_box = None
+            self.shapes_layer._drag_box = None
+            self.shapes_layer._drag_box_stored = None
+        except Exception:
+            pass
         
         # Clear existing shapes
         self.shapes_layer.data = []

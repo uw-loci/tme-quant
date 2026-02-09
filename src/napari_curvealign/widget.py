@@ -747,57 +747,215 @@ class CurveAlignWidget(QWidget):
                 # Hide the new layer by default
                 layer.visible = False
 
+    def _clip_coords_to_active_image_bounds(self, coords):
+        """Clamp coordinates to the active image bounds."""
+        image_shape = self.roi_manager.current_image_shape
+        if not image_shape or coords is None:
+            return coords
+
+        max_h, max_w = image_shape[:2]
+        if max_h <= 0 or max_w <= 0:
+            return coords
+        max_h -= 1
+        max_w -= 1
+
+        arr = np.asarray(coords, dtype=float)
+        if arr.ndim == 1 and arr.shape[0] >= 2:
+            arr = arr.copy()
+            arr[-2] = np.clip(arr[-2], 0, max_h)
+            arr[-1] = np.clip(arr[-1], 0, max_w)
+            return tuple(arr) if isinstance(coords, tuple) else arr
+        if arr.ndim == 2 and arr.shape[1] >= 2:
+            arr = arr.copy()
+            arr[:, -2] = np.clip(arr[:, -2], 0, max_h)
+            arr[:, -1] = np.clip(arr[:, -1], 0, max_w)
+            return arr
+        return coords
+
+    def _ensure_shapes_layer_bounds_clamp(self, layer: napari.layers.Shapes) -> None:
+        """Ensure the shapes layer clamps world->data to image bounds."""
+        if layer is None:
+            return
+        if getattr(layer, "_curvealign_world_to_data_clamped", False):
+            return
+        original_world_to_data = layer.world_to_data
+
+        def clamped_world_to_data(*args, **kwargs):
+            coords = original_world_to_data(*args, **kwargs)
+            return self._clip_coords_to_active_image_bounds(coords)
+
+        layer.world_to_data = clamped_world_to_data
+        layer._curvealign_original_world_to_data = original_world_to_data
+        layer._curvealign_world_to_data_clamped = True
+
+    def _reset_shapes_drawing_state(self, layer: napari.layers.Shapes) -> None:
+        """Stop any in-progress drawing so shape modes can switch cleanly."""
+        if layer is None:
+            return
+        try:
+            layer._finish_drawing()
+        except Exception as exc:
+            # Avoid getting stuck in a draw mode if napari errors mid-finish
+            print(f"Warning: could not finish drawing shape: {exc}")
+        try:
+            layer._is_creating = False
+            layer._moving_value = (None, None)
+            layer._value = (None, None)
+            layer._moving_coordinates = None
+            layer._drag_start = None
+            layer._drag_box = None
+            layer._drag_box_stored = None
+            layer._fixed_vertex = None
+            layer._is_moving = False
+            layer._is_selecting = False
+        except Exception:
+            pass
+        try:
+            layer.mode = "select"
+        except Exception:
+            pass
+
+    def _recreate_shapes_layer(self) -> Optional[napari.layers.Shapes]:
+        """Recreate the ROI shapes layer to clear stuck modes."""
+        if not self.viewer:
+            return None
+        old_layer = self.roi_manager.shapes_layer
+        if old_layer is not None and old_layer in self.viewer.layers:
+            self.viewer.layers.remove(old_layer)
+        self.roi_manager.shapes_layer = None
+        layer = self.roi_manager.create_shapes_layer()
+        self._connect_shapes_events(layer)
+        self.roi_manager._update_shapes_layer()
+        return layer
+
+    @staticmethod
+    def _normalize_layer_mode(mode_value: Any) -> str:
+        """Return a normalized mode string for comparisons."""
+        try:
+            return mode_value.value
+        except Exception:
+            return str(mode_value)
+
+    def _clip_shapes_to_active_image_bounds(self, layer: napari.layers.Shapes) -> bool:
+        """Clamp shape coordinates to the active image bounds."""
+        image_shape = self.roi_manager.current_image_shape
+        if not image_shape:
+            return False
+        if layer is None or len(layer.data) == 0:
+            return False
+        if getattr(layer, "_is_creating", False) or getattr(layer, "_is_moving", False):
+            return False
+
+        max_h, max_w = image_shape[:2]
+        if max_h <= 0 or max_w <= 0:
+            return False
+        max_h -= 1
+        max_w -= 1
+        clipped_data = []
+        changed = False
+        for coords in layer.data:
+            coords_rc = np.asarray(coords, dtype=float)
+            if coords_rc.ndim != 2 or coords_rc.shape[1] != 2:
+                clipped_data.append(coords)
+                continue
+            clipped = coords_rc.copy()
+            clipped[:, 0] = np.clip(clipped[:, 0], 0, max_h)
+            clipped[:, 1] = np.clip(clipped[:, 1], 0, max_w)
+            if not np.array_equal(clipped, coords_rc):
+                changed = True
+            clipped_data.append(clipped)
+
+        if not changed:
+            return False
+
+        selected = set(layer.selected_data)
+        self._clipping_shapes = True
+        try:
+            layer.data = clipped_data
+            if selected:
+                layer.selected_data = selected
+        finally:
+            self._clipping_shapes = False
+        return True
+
     def _connect_shapes_events(self, layer):
         """Connect events for a shapes layer."""
         # Check attribute existence
-        if not hasattr(self, '_shape_callback_connected'):
-            self._shape_callback_connected = False
+        if not hasattr(self, '_clipping_shapes'):
+            self._clipping_shapes = False
+
+        self._ensure_shapes_layer_bounds_clamp(layer)
+        self._ensure_freehand_cursor_guard(layer)
+        if getattr(layer, "_curvealign_events_connected", False):
+            return
+
+        # Define the callback here to have access to self methods
+        def on_data_change(event):
+            # Prevent recursion
+            if hasattr(self, '_syncing_shapes') and self._syncing_shapes:
+                return
+            if self._clipping_shapes:
+                return
+            if getattr(layer, "_is_creating", False) or getattr(layer, "_is_moving", False):
+                return
+
+            # Clamp drawn shapes to the active image bounds
+            self._clip_shapes_to_active_image_bounds(layer)
             
-        if not self._shape_callback_connected:
-            # Define the callback here to have access to self methods
-            def on_data_change(event):
-                # Prevent recursion
-                if hasattr(self, '_syncing_shapes') and self._syncing_shapes:
-                    return
-                
-                # Check for additions
-                if not hasattr(self, '_last_shape_count'):
-                    self._last_shape_count = 0
+            # Check for additions
+            last_count = getattr(layer, "_curvealign_last_shape_count", 0)
+            current_count = len(layer.data)
+            count_diff = current_count - last_count
+            
+            if count_diff > 0:
+                # New shape added
+                try:
+                    self._syncing_shapes = True
+                    indices = list(range(last_count, current_count))
                     
-                current_count = len(layer.data)
-                count_diff = current_count - self._last_shape_count
-                
-                if count_diff > 0:
-                    # New shape added
-                    try:
-                        self._syncing_shapes = True
-                        indices = list(range(self._last_shape_count, current_count))
-                        
-                        # Add to ROI manager
-                        annotation_type = self.annotation_type_combo.currentData() if hasattr(self, 'annotation_type_combo') else "custom_annotation"
-                        
-                        self.roi_manager.add_rois_from_shapes(
-                            indices=indices,
-                            annotation_type=annotation_type
-                        )
-                        
-                        self._update_roi_list()
-                        self._last_shape_count = current_count
-                        
-                        # Note: We do NOT reset mode to select here, to allow continuous drawing.
-                             
-                    except Exception as e:
-                        print(f"Error syncing shape: {e}")
-                    finally:
-                        self._syncing_shapes = False
-                elif count_diff < 0:
-                    # Shape deleted - just update count
-                    self._last_shape_count = current_count
-            
-            layer.events.data.connect(on_data_change)
-            self._shape_callback_connected = True
-            # Update count
-            self._last_shape_count = len(layer.data)
+                    # Add to ROI manager
+                    annotation_type = self.annotation_type_combo.currentData() if hasattr(self, 'annotation_type_combo') else "custom_annotation"
+                    
+                    self.roi_manager.add_rois_from_shapes(
+                        indices=indices,
+                        annotation_type=annotation_type
+                    )
+                    
+                    self._update_roi_list()
+                    layer._curvealign_last_shape_count = current_count
+                    
+                    # Note: We do NOT reset mode to select here, to allow continuous drawing.
+                         
+                except Exception as e:
+                    print(f"Error syncing shape: {e}")
+                finally:
+                    self._syncing_shapes = False
+            elif count_diff < 0:
+                # Shape deleted - just update count
+                layer._curvealign_last_shape_count = current_count
+        
+        layer.events.data.connect(on_data_change)
+        layer._curvealign_events_connected = True
+        # Update count
+        layer._curvealign_last_shape_count = len(layer.data)
+
+    def _ensure_freehand_cursor_guard(self, layer: napari.layers.Shapes) -> None:
+        """Ensure freehand modes always have a last cursor position."""
+        if layer is None:
+            return
+        if getattr(layer, "_curvealign_freehand_guard", False):
+            return
+
+        def guard_last_cursor_position(layer, event):
+            try:
+                mode_value = self._normalize_layer_mode(getattr(layer, "mode", ""))
+                if mode_value in {"add_path", "add_polygon_lasso"} and layer._last_cursor_position is None:
+                    layer._last_cursor_position = np.array(event.pos)
+            except Exception:
+                pass
+
+        layer.mouse_move_callbacks.append(guard_last_cursor_position)
+        layer._curvealign_freehand_guard = True
 
     def on_layer_removed(self, event):
         """Handle layer removed from viewer"""
@@ -2033,19 +2191,27 @@ class CurveAlignWidget(QWidget):
             ROIShape.RECTANGLE: "add_rectangle",
             ROIShape.ELLIPSE: "add_ellipse",
             ROIShape.POLYGON: "add_polygon",
-            ROIShape.FREEHAND: "add_path",
+            ROIShape.FREEHAND: "add_polygon_lasso",
         }
         mode = mode_map.get(shape, "add_polygon")
+        freehand_modes = {"add_path", "add_polygon_lasso"}
+
+        # Reset any in-progress drawing before switching tools
+        self._reset_shapes_drawing_state(layer)
+        current_mode = self._normalize_layer_mode(getattr(layer, "mode", ""))
+        if current_mode in freehand_modes and mode not in freehand_modes:
+            # Freehand mode can get sticky; recreate the layer to reset tool state
+            layer = self._recreate_shapes_layer() or layer
         
         # If the shape is Ellipse or Rectangle, they're typically single-drag operations.
         # However, Polygon and Path (Freehand) can be continuous.
         # Napari doesn't strictly enforce "one-shot" mode easily via public API except by
         # resetting mode after an event, which we handle in the callback (but optionally).
         
-        # NOTE: For Freehand (Path), there's a known napari/vispy bug with "last_cursor_position" 
+        # NOTE: For Freehand modes, there's a known napari/vispy bug with "last_cursor_position" 
         # being None if mouse move events fire before a click/drag starts.
         # We enforce a safeguard by ensuring the layer has a valid cursor position initialized if needed.
-        if mode == "add_path":
+        if mode in freehand_modes:
              # Force initialization of internal cursor state to prevent NoneType error in napari < 0.5.0
              # This mimics a "fake" mouse move to set the state
              try:
@@ -2053,7 +2219,15 @@ class CurveAlignWidget(QWidget):
              except:
                  pass
 
-        layer.mode = mode
+        try:
+            layer.mode = mode
+        except Exception as exc:
+            print(f"Warning: could not set draw mode '{mode}': {exc}")
+        # Re-apply in next event loop in case a draw handler overwrote it
+        try:
+            QtCore.QTimer.singleShot(0, lambda: setattr(layer, "mode", mode))
+        except Exception:
+            pass
         if self.viewer:
             self.viewer.layers.selection.active = layer
         
