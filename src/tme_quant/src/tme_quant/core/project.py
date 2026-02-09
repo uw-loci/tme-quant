@@ -557,3 +557,237 @@ class TMEProject:
             tacs_score = 1 - mean_straightness
         
         return tacs_type, tacs_score
+    
+
+    """Extended with boundary-relative fiber analysis."""
+    
+    def analyze_fibers_relative_to_boundary(
+        self,
+        tumor_region_id: str,
+        boundary_width: float = 50.0,
+        use_nearest_point: bool = True,
+        pixel_size: float = 1.0
+    ) -> Dict[str, Any]:
+        """
+        Analyze fibers relative to tumor boundary using nearest-point method.
+        
+        Args:
+            tumor_region_id: ID of tumor region
+            boundary_width: Width of boundary zone in microns
+            use_nearest_point: If True, use nearest point; if False, use global boundary
+            pixel_size: Pixel size in microns
+            
+        Returns:
+            Dictionary with comprehensive boundary-relative analysis
+        """
+        # Get tumor region
+        tumor = self.hierarchy.get_object(tumor_region_id)
+        if tumor is None:
+            raise ValueError(f"Tumor region {tumor_region_id} not found")
+        
+        # Get tumor boundary ROI
+        boundary_roi = tumor.roi
+        
+        # Get all fibers in the region
+        fibers = self.get_fibers_in_region(tumor_region_id, include_children=True)
+        
+        if not fibers:
+            return {'error': 'No fibers found in region'}
+        
+        # Compute boundary-relative metrics for each fiber
+        boundary_fibers = []
+        core_fibers = []
+        
+        for fiber in fibers:
+            if use_nearest_point:
+                # NEW: Compute relative to nearest boundary point
+                metrics = fiber.compute_boundary_relative_metrics(
+                    boundary_roi, pixel_size
+                )
+            else:
+                # OLD: Use global boundary alignment
+                metrics = fiber.compute_alignment_to_boundary(boundary_roi)
+            
+            # Classify fiber location
+            if metrics['distance'] <= boundary_width:
+                fiber.in_tumor_boundary = True
+                fiber.in_tumor_core = False
+                boundary_fibers.append(fiber)
+            else:
+                fiber.in_tumor_boundary = False
+                fiber.in_tumor_core = True
+                core_fibers.append(fiber)
+        
+        # Analyze boundary fibers
+        results = self._analyze_boundary_fiber_population(
+            boundary_fibers, 
+            use_nearest_point=use_nearest_point
+        )
+        
+        results.update({
+            'tumor_region_id': tumor_region_id,
+            'boundary_width': boundary_width,
+            'total_fibers': len(fibers),
+            'boundary_fibers': len(boundary_fibers),
+            'core_fibers': len(core_fibers),
+            'use_nearest_point_method': use_nearest_point,
+            'fibers': {
+                'boundary': boundary_fibers,
+                'core': core_fibers
+            }
+        })
+        
+        return results
+    
+    def _analyze_boundary_fiber_population(
+        self,
+        fibers: List[FiberObject],
+        use_nearest_point: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Analyze population-level metrics for boundary fibers.
+        
+        Args:
+            fibers: List of fibers in boundary zone
+            use_nearest_point: Whether nearest-point method was used
+            
+        Returns:
+            Population statistics and TACS classification
+        """
+        if not fibers:
+            return {}
+        
+        results = {}
+        
+        if use_nearest_point:
+            # NEW: Analyze with nearest-point metrics
+            angles_to_normal = [
+                f.relative_angle_to_boundary_normal 
+                for f in fibers 
+                if f.relative_angle_to_boundary_normal is not None
+            ]
+            angles_to_tangent = [
+                f.relative_angle_to_boundary_tangent
+                for f in fibers
+                if f.relative_angle_to_boundary_tangent is not None
+            ]
+            
+            if angles_to_normal:
+                # TACS-3: Perpendicular fibers (angle to normal < 30°)
+                perpendicular_count = sum(1 for a in angles_to_normal if a < 30)
+                perpendicular_ratio = perpendicular_count / len(angles_to_normal)
+                
+                # TACS-2: Parallel fibers (angle to tangent < 30°)
+                parallel_count = sum(1 for a in angles_to_tangent if a < 30)
+                parallel_ratio = parallel_count / len(angles_to_tangent)
+                
+                results.update({
+                    'mean_angle_to_normal': np.mean(angles_to_normal),
+                    'std_angle_to_normal': np.std(angles_to_normal),
+                    'mean_angle_to_tangent': np.mean(angles_to_tangent),
+                    'std_angle_to_tangent': np.std(angles_to_tangent),
+                    'perpendicular_ratio': perpendicular_ratio,  # TACS-3
+                    'parallel_ratio': parallel_ratio,  # TACS-2
+                })
+        else:
+            # OLD: Global boundary method
+            angles = [
+                f.angle_to_tumor_boundary 
+                for f in fibers 
+                if f.angle_to_tumor_boundary is not None
+            ]
+            
+            if angles:
+                parallel_count = sum(1 for a in angles if abs(a) < 30)
+                perpendicular_count = sum(1 for a in angles if abs(a) > 60)
+                
+                results.update({
+                    'mean_alignment_angle': np.mean(angles),
+                    'std_alignment_angle': np.std(angles),
+                    'parallel_ratio': parallel_count / len(angles),
+                    'perpendicular_ratio': perpendicular_count / len(angles),
+                })
+        
+        # TACS classification from individual fiber scores
+        tacs_types = [f.tacs_type for f in fibers if f.tacs_type is not None]
+        tacs_scores = [f.tacs_score for f in fibers if f.tacs_score is not None]
+        
+        if tacs_types:
+            from collections import Counter
+            tacs_counts = Counter(tacs_types)
+            
+            # Dominant TACS type
+            dominant_tacs = tacs_counts.most_common(1)[0][0]
+            
+            results.update({
+                'tacs_type_distribution': dict(tacs_counts),
+                'dominant_tacs_type': dominant_tacs,
+                'tacs1_ratio': tacs_counts.get('TACS-1', 0) / len(tacs_types),
+                'tacs2_ratio': tacs_counts.get('TACS-2', 0) / len(tacs_types),
+                'tacs3_ratio': tacs_counts.get('TACS-3', 0) / len(tacs_types),
+            })
+        
+        if tacs_scores:
+            results['mean_tacs_score'] = np.mean(tacs_scores)
+        
+        # Fiber morphology statistics
+        lengths = [f.length for f in fibers]
+        widths = [f.width for f in fibers]
+        straightnesses = [f.straightness for f in fibers]
+        
+        results.update({
+            'mean_length': np.mean(lengths),
+            'mean_width': np.mean(widths),
+            'mean_straightness': np.mean(straightnesses),
+        })
+        
+        return results
+    
+    def compare_nearest_point_vs_global_methods(
+        self,
+        tumor_region_id: str,
+        boundary_width: float = 50.0
+    ) -> Dict[str, Any]:
+        """
+        Compare nearest-point method vs global boundary method.
+        
+        Useful for validation and method comparison.
+        """
+        # Analyze with nearest-point method
+        nearest_results = self.analyze_fibers_relative_to_boundary(
+            tumor_region_id,
+            boundary_width=boundary_width,
+            use_nearest_point=True
+        )
+        
+        # Analyze with global method
+        global_results = self.analyze_fibers_relative_to_boundary(
+            tumor_region_id,
+            boundary_width=boundary_width,
+            use_nearest_point=False
+        )
+        
+        # Compare results
+        comparison = {
+            'nearest_point_method': {
+                'perpendicular_ratio': nearest_results.get('perpendicular_ratio', 0),
+                'parallel_ratio': nearest_results.get('parallel_ratio', 0),
+                'dominant_tacs': nearest_results.get('dominant_tacs_type', None),
+            },
+            'global_method': {
+                'perpendicular_ratio': global_results.get('perpendicular_ratio', 0),
+                'parallel_ratio': global_results.get('parallel_ratio', 0),
+            },
+            'differences': {
+                'perpendicular_diff': abs(
+                    nearest_results.get('perpendicular_ratio', 0) - 
+                    global_results.get('perpendicular_ratio', 0)
+                ),
+                'parallel_diff': abs(
+                    nearest_results.get('parallel_ratio', 0) - 
+                    global_results.get('parallel_ratio', 0)
+                ),
+            }
+        }
+        
+        return comparison
