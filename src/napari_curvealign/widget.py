@@ -896,7 +896,10 @@ class CurveAlignWidget(QWidget):
                 return
             if self._clipping_shapes:
                 return
-            if getattr(layer, "_is_creating", False) or getattr(layer, "_is_moving", False):
+            if getattr(layer, "_curvealign_programmatic_update", False):
+                layer._curvealign_last_shape_count = len(layer.data)
+                return
+            if getattr(layer, "_is_creating", False):
                 return
 
             # Clamp drawn shapes to the active image bounds
@@ -956,6 +959,31 @@ class CurveAlignWidget(QWidget):
 
         layer.mouse_move_callbacks.append(guard_last_cursor_position)
         layer._curvealign_freehand_guard = True
+
+    def _sync_pending_shapes(self, layer: napari.layers.Shapes) -> None:
+        """Sync newly finished shapes that have not been added as ROIs yet."""
+        if layer is None:
+            return
+        last_count = getattr(layer, "_curvealign_last_shape_count", 0)
+        current_count = len(layer.data)
+        if current_count <= last_count:
+            layer._curvealign_last_shape_count = current_count
+            return
+
+        try:
+            self._syncing_shapes = True
+            indices = list(range(last_count, current_count))
+            annotation_type = self.annotation_type_combo.currentData() if hasattr(self, "annotation_type_combo") else "custom_annotation"
+            self.roi_manager.add_rois_from_shapes(
+                indices=indices,
+                annotation_type=annotation_type
+            )
+            layer._curvealign_last_shape_count = current_count
+            self._update_roi_list()
+        except Exception as exc:
+            print(f"Error syncing pending shape(s): {exc}")
+        finally:
+            self._syncing_shapes = False
 
     def on_layer_removed(self, event):
         """Handle layer removed from viewer"""
@@ -1619,10 +1647,13 @@ class CurveAlignWidget(QWidget):
         self.create_ellipse_btn = QPushButton("Ellipse")
         self.create_polygon_btn = QPushButton("Polygon")
         self.create_freehand_btn = QPushButton("Freehand")
+        self.exit_drawing_btn = QPushButton("Exit Drawing Mode")
+        self.exit_drawing_btn.setToolTip("Stop ROI drawing and return to selection mode")
         create_layout.addWidget(self.create_rect_btn)
         create_layout.addWidget(self.create_ellipse_btn)
         create_layout.addWidget(self.create_polygon_btn)
         create_layout.addWidget(self.create_freehand_btn)
+        create_layout.addWidget(self.exit_drawing_btn)
         create_group.setLayout(create_layout)
         left_panel.addWidget(create_group)
         
@@ -1750,6 +1781,7 @@ class CurveAlignWidget(QWidget):
         self.create_ellipse_btn.clicked.connect(lambda: self._create_roi(ROIShape.ELLIPSE))
         self.create_polygon_btn.clicked.connect(lambda: self._create_roi(ROIShape.POLYGON))
         self.create_freehand_btn.clicked.connect(lambda: self._create_roi(ROIShape.FREEHAND))
+        self.exit_drawing_btn.clicked.connect(self._exit_roi_drawing_mode)
         self.save_roi_btn.clicked.connect(self._save_roi)
         self.save_all_roi_btn.clicked.connect(self._save_all_rois_quick)
         self.load_roi_btn.clicked.connect(self._load_roi)
@@ -1988,6 +2020,10 @@ class CurveAlignWidget(QWidget):
         shape = self.current_image_shape
         if shape and shape != self.roi_manager.current_image_shape:
             self.roi_manager.set_image_shape(shape)
+        # Preserve just-finished freehand/path shapes before any layer refresh.
+        existing_shapes = self.roi_manager.shapes_layer
+        if existing_shapes is not None and existing_shapes in viewer.layers:
+            self._sync_pending_shapes(existing_shapes)
         # Keep active image context in sync for ROI scoping
         self._set_active_image_context(viewer.layers.selection.active if viewer.layers else None)
         
@@ -2000,6 +2036,19 @@ class CurveAlignWidget(QWidget):
                  self._connect_shapes_events(self.roi_manager.shapes_layer)
                  
         return viewer
+
+    def _exit_roi_drawing_mode(self):
+        """Exit ROI drawing mode and return to selection."""
+        if not self.viewer:
+            return
+        layer = self.roi_manager.shapes_layer or self.roi_manager.create_shapes_layer()
+        self._reset_shapes_drawing_state(layer)
+        self._sync_pending_shapes(layer)
+        try:
+            layer.mode = "select"
+            self.viewer.layers.selection.active = layer
+        except Exception as exc:
+            print(f"Warning: could not exit drawing mode cleanly: {exc}")
 
     def _convert_roi_to_annotation(self):
         """Convert selected ROIs from main list into analysis regions."""
@@ -2195,11 +2244,12 @@ class CurveAlignWidget(QWidget):
         }
         mode = mode_map.get(shape, "add_polygon")
         freehand_modes = {"add_path", "add_polygon_lasso"}
+        previous_mode = self._normalize_layer_mode(getattr(layer, "mode", ""))
 
         # Reset any in-progress drawing before switching tools
         self._reset_shapes_drawing_state(layer)
-        current_mode = self._normalize_layer_mode(getattr(layer, "mode", ""))
-        if current_mode in freehand_modes and mode not in freehand_modes:
+        self._sync_pending_shapes(layer)
+        if previous_mode in freehand_modes and mode not in freehand_modes:
             # Freehand mode can get sticky; recreate the layer to reset tool state
             layer = self._recreate_shapes_layer() or layer
         

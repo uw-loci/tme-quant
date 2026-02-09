@@ -2288,86 +2288,104 @@ class ROIManager:
         """Update napari shapes layer with current ROIs."""
         if self.shapes_layer is None:
             return
+        if getattr(self.shapes_layer, "_curvealign_programmatic_update", False):
+            return
 
         # Avoid interrupting an active draw/move operation
         if getattr(self.shapes_layer, "_is_creating", False) or getattr(self.shapes_layer, "_is_moving", False):
             return
 
-        # Reset selection/highlight state before clearing data to avoid stale indices
+        self.shapes_layer._curvealign_programmatic_update = True
         try:
-            self.shapes_layer.selected_data = set()
-            self.shapes_layer._selected_data_stored = set()
-            self.shapes_layer._value = (None, None)
-            self.shapes_layer._value_stored = (None, None)
-            self.shapes_layer._selected_box = None
-            self.shapes_layer._drag_box = None
-            self.shapes_layer._drag_box_stored = None
-        except Exception:
-            pass
-        
-        # Clear existing shapes
-        self.shapes_layer.data = []
-        
-        # Add ROIs for active image using proper API
-        for roi in self.get_rois_for_active_image():
-            if roi.shape == ROIShape.RECTANGLE:
-                # Use add_rectangles for rectangles
-                coords_rc = self._xy_to_rc(roi.coordinates)
-                
-                # Expand 2 points to 4 if needed
-                if len(coords_rc) == 2:
-                    y1, x1 = coords_rc[0]
-                    y2, x2 = coords_rc[1]
-                    coords_rc = np.array([
-                        [y1, x1],
-                        [y1, x2],
-                        [y2, x2],
-                        [y2, x1]
-                    ])
+            # Reset selection/highlight state before clearing data to avoid stale indices
+            try:
+                highlight_events = getattr(self.shapes_layer, "events", None)
+                highlight_blocker = (
+                    highlight_events.highlight.blocker()
+                    if highlight_events is not None and hasattr(highlight_events, "highlight")
+                    else None
+                )
+                if highlight_blocker is not None:
+                    highlight_blocker.__enter__()
+                try:
+                    self.shapes_layer.selected_data = set()
+                    self.shapes_layer._selected_data_stored = set()
+                    self.shapes_layer._value = (None, None)
+                    self.shapes_layer._value_stored = (None, None)
+                    self.shapes_layer._selected_box = None
+                    self.shapes_layer._drag_box = None
+                    self.shapes_layer._drag_box_stored = None
+                    # Clear existing shapes
+                    self.shapes_layer.data = []
+                finally:
+                    if highlight_blocker is not None:
+                        highlight_blocker.__exit__(None, None, None)
+            except Exception:
+                # Fallback: clear without highlight suppression
+                self.shapes_layer.data = []
+            
+            # Add ROIs for active image using proper API
+            for roi in self.get_rois_for_active_image():
+                if roi.shape == ROIShape.RECTANGLE:
+                    # Use add_rectangles for rectangles
+                    coords_rc = self._xy_to_rc(roi.coordinates)
+                    
+                    # Expand 2 points to 4 if needed
+                    if len(coords_rc) == 2:
+                        y1, x1 = coords_rc[0]
+                        y2, x2 = coords_rc[1]
+                        coords_rc = np.array([
+                            [y1, x1],
+                            [y1, x2],
+                            [y2, x2],
+                            [y2, x1]
+                        ])
 
-                self.shapes_layer.add_rectangles(
-                    [coords_rc],
-                    edge_color="cyan",
-                    face_color="transparent"
-                )
-            elif roi.shape == ROIShape.ELLIPSE:
-                # Use add_ellipses for ellipses
-                coords_rc = self._xy_to_rc(roi.coordinates)
-                
-                # Napari expects 4 corners for ellipse/rectangle bounding box
-                # If we stored just 2 corners (bbox min/max), we need to expand it
-                if len(coords_rc) == 2:
-                    y1, x1 = coords_rc[0]
-                    y2, x2 = coords_rc[1]
-                    # Expand to 4 corners: top-left, top-right, bottom-right, bottom-left
-                    coords_rc = np.array([
-                        [y1, x1],
-                        [y1, x2],
-                        [y2, x2],
-                        [y2, x1]
-                    ])
-                
-                self.shapes_layer.add_ellipses(
-                    [coords_rc],
-                    edge_color="cyan",
-                    face_color="transparent"
-                )
-            elif roi.shape == ROIShape.POLYGON:
-                # Use add_polygons for filled polygons
-                coords_rc = self._xy_to_rc(roi.coordinates)
-                self.shapes_layer.add_polygons(
-                    [coords_rc],
-                    edge_color="cyan",
-                    face_color="transparent"
-                )
-            elif roi.shape == ROIShape.FREEHAND:
-                # Use add_paths for unfilled freehand
-                coords_rc = self._xy_to_rc(roi.coordinates)
-                self.shapes_layer.add_paths(
-                    [coords_rc],
-                    edge_color="cyan",
-                    edge_width=2
-                )
+                    self.shapes_layer.add_rectangles(
+                        [coords_rc],
+                        edge_color="cyan",
+                        face_color="transparent"
+                    )
+                elif roi.shape == ROIShape.ELLIPSE:
+                    # Use add_ellipses for ellipses
+                    coords_rc = self._xy_to_rc(roi.coordinates)
+                    
+                    # Napari expects 4 corners for ellipse/rectangle bounding box
+                    # If we stored just 2 corners (bbox min/max), we need to expand it
+                    if len(coords_rc) == 2:
+                        y1, x1 = coords_rc[0]
+                        y2, x2 = coords_rc[1]
+                        # Expand to 4 corners: top-left, top-right, bottom-right, bottom-left
+                        coords_rc = np.array([
+                            [y1, x1],
+                            [y1, x2],
+                            [y2, x2],
+                            [y2, x1]
+                        ])
+                    
+                    self.shapes_layer.add_ellipses(
+                        [coords_rc],
+                        edge_color="cyan",
+                        face_color="transparent"
+                    )
+                elif roi.shape == ROIShape.POLYGON:
+                    # Use add_polygons for filled polygons
+                    coords_rc = self._xy_to_rc(roi.coordinates)
+                    self.shapes_layer.add_polygons(
+                        [coords_rc],
+                        edge_color="cyan",
+                        face_color="transparent"
+                    )
+                elif roi.shape == ROIShape.FREEHAND:
+                    # Use add_paths for unfilled freehand
+                    coords_rc = self._xy_to_rc(roi.coordinates)
+                    self.shapes_layer.add_paths(
+                        [coords_rc],
+                        edge_color="cyan",
+                        edge_width=2
+                    )
+        finally:
+            self.shapes_layer._curvealign_programmatic_update = False
     
     def _get_bbox(self, mask: np.ndarray) -> Tuple[int, int, int, int]:
         """Get bounding box from mask (y1, x1, y2, x2)."""
