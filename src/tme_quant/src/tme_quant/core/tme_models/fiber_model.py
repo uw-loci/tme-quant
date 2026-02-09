@@ -1,259 +1,196 @@
-# fiber_model.py
-"""
-Fiber-related data models with comprehensive fiber types and networks
-"""
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any
 import numpy as np
-from enum import Enum, auto
-from scipy.interpolate import splprep, splev
-from ..base_models import TMEObject, Geometry, Measurement
+from shapely.geometry import LineString, Point
 
-class FiberType(Enum):
-    """Fiber type classification"""
-    COLLAGEN = "collagen"
-    RETICULAR = "reticular"
-    ELASTIC = "elastic"
-    MUSCLE = "muscle"
-    NERVE = "nerve"
-    UNKNOWN = "unknown"
+from .base_models import TMEObject
+from ..geometry import BoundingBox
 
-class CollagenType(Enum):
-    """Collagen fiber subtypes"""
-    TYPE_I = "type_i"
-    TYPE_II = "type_ii"
-    TYPE_III = "type_iii"
-    TYPE_IV = "type_iv"
-    TYPE_V = "type_v"
 
 @dataclass
-class Fiber(TMEObject):
-    """Base fiber model with comprehensive properties"""
-    points: np.ndarray  # Nx3 array of points along the fiber
-    fiber_type: FiberType = FiberType.UNKNOWN
-    thickness: float = 1.0
-    intensity_profile: Optional[np.ndarray] = None
+class FiberObject(TMEObject):
+    """
+    Individual fiber object in the TME hierarchy.
     
-    # Geometric properties
-    curvature: Optional[np.ndarray] = None
-    torsion: Optional[np.ndarray] = None
-    orientation: Optional[float] = None  # Average orientation in degrees
+    Inherits from TMEObject to be part of the hierarchy.
+    Contains both geometric and analysis properties.
+    """
+    # Inherited from TMEObject:
+    # - object_id: str
+    # - object_type: ObjectType (FIBER)
+    # - parent_id: Optional[str]
+    # - roi: Optional[ROI]
+    # - metadata: Dict[str, Any]
     
-    # Structural properties
-    waviness: float = 0.0
-    straightness: float = 1.0
-    branching_points: List[np.ndarray] = field(default_factory=list)
+    # Geometric properties (from fiber extraction)
+    centerline: np.ndarray  # Nx2 or Nx3 coordinates
+    length: float  # microns
+    width: float  # microns
     
-    # Measurements
-    measurements: List[Measurement] = field(default_factory=list)
+    # Orientation properties
+    angle: float  # degrees (-90 to 90)
+    mean_orientation: float  # degrees, same as angle for individual fiber
+    
+    # Shape properties
+    straightness: float  # 0-1
+    curvature: float  # 1/microns
+    tortuosity: Optional[float] = None
+    
+    # Spatial relationships (computed after extraction)
+    distance_to_tumor_boundary: Optional[float] = None
+    angle_to_tumor_boundary: Optional[float] = None  # Alignment angle
+    in_tumor_core: Optional[bool] = None
+    in_tumor_boundary: Optional[bool] = None
+    in_stroma: Optional[bool] = None
+    
+    # Derived properties
+    aspect_ratio: Optional[float] = None
+    
+    # Analysis metadata
+    extraction_mode: Optional[str] = None  # "ctfire", "ridge_detection", etc.
+    confidence: Optional[float] = None
     
     def __post_init__(self):
-        """Initialize fiber object"""
-        super().__post_init__()
-        self.type = TMEType.FIBER
-        self.properties['object_type'] = 'fiber'
+        """Initialize derived properties."""
+        if self.aspect_ratio is None and self.width > 0:
+            self.aspect_ratio = self.length / self.width
         
-        # Calculate derived properties
-        self._calculate_geometry()
+        # Set object type
+        self.object_type = ObjectType.FIBER
     
     @property
-    def length(self) -> float:
-        """Calculate fiber length"""
-        if len(self.points) < 2:
-            return 0.0
-        
-        # Calculate cumulative distance along fiber
-        diffs = np.diff(self.points, axis=0)
-        distances = np.linalg.norm(diffs, axis=1)
-        return float(np.sum(distances))
+    def geometry(self) -> LineString:
+        """Get fiber as Shapely LineString for spatial operations."""
+        return LineString(self.centerline)
     
     @property
-    def centroid(self) -> np.ndarray:
-        """Calculate fiber centroid"""
-        return np.mean(self.points, axis=0)
+    def start_point(self) -> Point:
+        """Get fiber start point."""
+        return Point(self.centerline[0])
     
-    def _calculate_geometry(self) -> None:
-        """Calculate geometric properties of the fiber"""
-        if len(self.points) < 3:
-            return
-        
-        # Calculate tangent vectors
-        tangents = np.diff(self.points, axis=0)
-        tangents = tangents / np.linalg.norm(tangents, axis=1, keepdims=True)
-        
-        # Calculate curvature
-        if len(tangents) > 1:
-            tangent_changes = np.diff(tangents, axis=0)
-            self.curvature = np.linalg.norm(tangent_changes, axis=1)
-        
-        # Calculate average orientation
-        if len(tangents) > 0:
-            # Use first principal component
-            cov_matrix = np.cov(tangents.T)
-            eigenvalues, eigenvectors = np.linalg.eig(cov_matrix)
-            principal_component = eigenvectors[:, np.argmax(eigenvalues)]
-            self.orientation = np.arctan2(principal_component[1], principal_component[0])
-            self.orientation = np.degrees(self.orientation) % 180
-        
-        # Calculate waviness (ratio of actual length to straight line distance)
-        straight_distance = np.linalg.norm(self.points[-1] - self.points[0])
-        if straight_distance > 0:
-            self.waviness = self.length / straight_distance
-            self.straightness = 1.0 / self.waviness
+    @property
+    def end_point(self) -> Point:
+        """Get fiber end point."""
+        return Point(self.centerline[-1])
     
-    def resample(self, num_points: int = 100) -> np.ndarray:
-        """Resample fiber with uniform spacing"""
-        if len(self.points) < 2:
-            return self.points
-        
-        # Calculate cumulative distance
-        diffs = np.diff(self.points, axis=0)
-        distances = np.linalg.norm(diffs, axis=1)
-        cumulative_distances = np.cumsum(distances)
-        cumulative_distances = np.insert(cumulative_distances, 0, 0)
-        
-        # Normalize to [0, 1]
-        normalized_distances = cumulative_distances / cumulative_distances[-1]
-        
-        # Interpolate
-        resampled_points = []
-        for dim in range(self.points.shape[1]):
-            interp_func = np.interp(
-                np.linspace(0, 1, num_points),
-                normalized_distances,
-                self.points[:, dim]
-            )
-            resampled_points.append(interp_func)
-        
-        return np.column_stack(resampled_points)
+    @property
+    def midpoint(self) -> Point:
+        """Get fiber midpoint."""
+        mid_idx = len(self.centerline) // 2
+        return Point(self.centerline[mid_idx])
     
-    def get_orientation_at_point(self, point_index: int) -> Optional[float]:
-        """Get fiber orientation at specific point"""
-        if len(self.points) < 2:
-            return None
-        
-        if point_index >= len(self.points) - 1:
-            point_index = len(self.points) - 2
-        
-        # Calculate tangent at point
-        tangent = self.points[point_index + 1] - self.points[point_index]
-        if np.linalg.norm(tangent) > 0:
-            tangent = tangent / np.linalg.norm(tangent)
-            orientation = np.arctan2(tangent[1], tangent[0])
-            return np.degrees(orientation) % 180
-        
-        return None
-    
-    def to_geometry(self) -> Geometry:
-        """Convert fiber to geometry object"""
-        return Geometry(
-            type=GeometryType.PATH,
-            coordinates=self.points,
-            is_3d=self.points.shape[1] >= 3
+    def get_bounding_box(self) -> BoundingBox:
+        """Get bounding box of fiber."""
+        min_coords = np.min(self.centerline, axis=0)
+        max_coords = np.max(self.centerline, axis=0)
+        return BoundingBox(
+            min_x=min_coords[0],
+            max_x=max_coords[0],
+            min_y=min_coords[1],
+            max_y=max_coords[1]
         )
+    
+    def compute_alignment_to_boundary(
+        self,
+        boundary: 'ROI'
+    ) -> Dict[str, float]:
+        """
+        Compute fiber alignment relative to a tumor boundary.
+        
+        Returns:
+            dict with:
+                - distance_to_boundary: shortest distance
+                - angle_to_boundary: alignment angle (0° = parallel, 90° = perpendicular)
+                - alignment_score: 0-1 (1 = parallel, 0 = perpendicular)
+        """
+        from ..geometry import compute_fiber_to_boundary_alignment
+        
+        alignment = compute_fiber_to_boundary_alignment(
+            self.centerline,
+            boundary
+        )
+        
+        # Store for later use
+        self.distance_to_tumor_boundary = alignment['distance']
+        self.angle_to_tumor_boundary = alignment['angle']
+        
+        return alignment
+
 
 @dataclass
-class CollagenFiber(Fiber):
-    """Collagen fiber specialization"""
-    collagen_type: CollagenType = CollagenType.TYPE_I
-    crosslinking_density: float = 0.0
-    birefringence: float = 0.0
-    maturation_state: str = ""  # immature, mature, degraded
+class RegionOrientationMap(TMEObject):
+    """
+    Region-level orientation analysis results.
+    
+    Stores orientation maps and statistics for a specific region
+    (e.g., tumor boundary, tumor core, stroma).
+    """
+    # Inherited from TMEObject
+    # - object_id: str
+    # - parent_id: Optional[str]  (links to TumorRegion or StromaRegion)
+    
+    # Orientation analysis results
+    orientation_result: 'OrientationResult'
+    
+    # Region context
+    region_type: str  # "tumor_boundary", "tumor_core", "stroma", etc.
+    roi: 'ROI'  # The region this orientation map corresponds to
+    
+    # Spatial binning (if computed)
+    spatial_bins: Optional[Dict[str, 'OrientationResult']] = None
     
     def __post_init__(self):
-        """Initialize as collagen fiber"""
-        super().__post_init__()
-        self.fiber_type = FiberType.COLLAGEN
-        self.properties['collagen_type'] = self.collagen_type.value
+        self.object_type = ObjectType.ORIENTATION_MAP
+    
+    def get_dominant_orientation(self) -> float:
+        """Get the dominant orientation angle in this region."""
+        return self.orientation_result.mean_orientation
+    
+    def get_alignment_score(self) -> float:
+        """Get the fiber alignment score in this region."""
+        return self.orientation_result.alignment_score
+
 
 @dataclass
-class FiberNetwork(TMEObject):
-    """Network of interconnected fibers"""
-    fibers: List[Fiber] = field(default_factory=list)
-    adjacency_matrix: Optional[np.ndarray] = None
-    network_density: float = 0.0
-    connectivity: Dict[str, List[str]] = field(default_factory=dict)  # fiber_id: [connected_fiber_ids]
+class FiberPopulation:
+    """
+    Collection of fibers with summary statistics.
     
-    def __post_init__(self):
-        """Initialize fiber network"""
-        super().__post_init__()
-        self.type = TMEType.HIERARCHY
-        
-        # Add fibers as children
-        for fiber in self.fibers:
-            self.add_child(fiber)
-        
-        # Build connectivity if not provided
-        if not self.connectivity:
-            self._build_connectivity()
+    Used to group fibers by region or characteristics.
+    """
+    fiber_ids: List[str]
+    region_id: str
+    region_type: str  # "tumor_boundary", "tumor_core", "stroma"
     
-    def _build_connectivity(self) -> None:
-        """Build connectivity graph based on spatial proximity"""
-        self.connectivity = {}
-        
-        # Simple proximity-based connectivity
-        for i, fiber1 in enumerate(self.fibers):
-            connected = []
-            for j, fiber2 in enumerate(self.fibers):
-                if i != j:
-                    # Check distance between fiber endpoints
-                    distance = np.min([
-                        np.linalg.norm(fiber1.points[0] - fiber2.points[0]),
-                        np.linalg.norm(fiber1.points[0] - fiber2.points[-1]),
-                        np.linalg.norm(fiber1.points[-1] - fiber2.points[0]),
-                        np.linalg.norm(fiber1.points[-1] - fiber2.points[-1])
-                    ])
-                    
-                    if distance < 5.0:  # 5 micron threshold
-                        connected.append(fiber2.id)
-            
-            self.connectivity[fiber1.id] = connected
-        
-        # Calculate network density
-        total_possible = len(self.fibers) * (len(self.fibers) - 1) / 2
-        total_connections = sum(len(conn) for conn in self.connectivity.values()) / 2
-        if total_possible > 0:
-            self.network_density = total_connections / total_possible
+    # Population statistics
+    count: int
+    mean_length: float
+    mean_width: float
+    mean_straightness: float
+    mean_orientation: float
+    alignment_score: float
     
-    def get_network_metrics(self) -> Dict[str, Any]:
-        """Calculate comprehensive network metrics"""
-        metrics = {
-            'num_fibers': len(self.fibers),
-            'total_length': sum(fiber.length for fiber in self.fibers),
-            'average_length': np.mean([fiber.length for fiber in self.fibers]),
-            'network_density': self.network_density,
-            'average_degree': np.mean([len(conn) for conn in self.connectivity.values()]),
-            'degree_distribution': self._calculate_degree_distribution(),
-            'clustering_coefficient': self._calculate_clustering_coefficient()
-        }
-        return metrics
+    # Distribution statistics
+    length_distribution: Optional[np.ndarray] = None
+    orientation_distribution: Optional[np.ndarray] = None
     
-    def _calculate_degree_distribution(self) -> Dict[int, int]:
-        """Calculate degree distribution"""
-        degrees = [len(self.connectivity.get(fiber.id, [])) for fiber in self.fibers]
-        distribution = {}
-        for degree in degrees:
-            distribution[degree] = distribution.get(degree, 0) + 1
-        return distribution
+    # TACS classification (if applicable)
+    tacs_type: Optional[str] = None  # "TACS-1", "TACS-2", "TACS-3"
+    tacs_score: Optional[float] = None
+
+
+# Update ObjectType enum to include fiber-related types
+class ObjectType(Enum):
+    """Types of objects in TME hierarchy."""
+    # Existing types
+    IMAGE = "image"
+    TISSUE = "tissue"
+    TUMOR = "tumor"
+    CELL = "cell"
+    VESSEL = "vessel"
+    STROMA = "stroma"
     
-    def _calculate_clustering_coefficient(self) -> float:
-        """Calculate average clustering coefficient"""
-        coefficients = []
-        for fiber_id, neighbors in self.connectivity.items():
-            k = len(neighbors)
-            if k < 2:
-                coefficients.append(0.0)
-                continue
-            
-            # Count edges between neighbors
-            edges_between = 0
-            for i in range(len(neighbors)):
-                for j in range(i + 1, len(neighbors)):
-                    if neighbors[j] in self.connectivity.get(neighbors[i], []):
-                        edges_between += 1
-            
-            # Clustering coefficient for this node
-            coefficient = (2 * edges_between) / (k * (k - 1))
-            coefficients.append(coefficient)
-        
-        return np.mean(coefficients) if coefficients else 0.0
+    # NEW: Fiber-related types
+    FIBER = "fiber"
+    ORIENTATION_MAP = "orientation_map"
+    FIBER_POPULATION = "fiber_population"

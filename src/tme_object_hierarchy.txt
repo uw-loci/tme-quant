@@ -1,0 +1,24 @@
+TMEProject
+└── ImageEntry (image_001)
+    └── Tissue Region
+        ├── Tumor Region 1
+        │   ├── Tumor Boundary (ROI)
+        │   ├── Tumor Core (ROI)
+        │   ├── Cell Objects
+        │   │   ├── Cancer Cell 1
+        │   │   ├── Cancer Cell 2
+        │   │   └── ...
+        │   └── Fiber Objects  ← NEW: Fiber analysis results here
+        │       ├── Fiber 1 (FiberObject with properties)
+        │       ├── Fiber 2
+        │       └── ...
+        ├── Tumor Region 2
+        │   └── ...
+        ├── Stroma Region
+        │   ├── Collagen Fibers
+        │   ├── Blood Vessels
+        │   └── Immune Cells
+        └── Orientation Maps (Region-level analysis results)
+            ├── Tumor Boundary Orientation
+            ├── Tumor Core Orientation
+            └── Stroma Orientation

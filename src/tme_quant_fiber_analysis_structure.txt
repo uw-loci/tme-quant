@@ -1,0 +1,34 @@
+tme_quant/fiber_analysis/
+├── __init__.py
+├── core/
+│   ├── __init__.py
+│   ├── fiber_analyzer.py              # Main analyzer class
+│   ├── orientation_analyzer.py         # Fiber orientation analysis
+│   ├── extraction_analyzer.py          # Individual fiber extraction
+│   └── results.py                      # Result data classes
+├── methods/
+│   ├── __init__.py
+│   ├── orientation/
+│   │   ├── __init__.py
+│   │   ├── curvealign.py              # CurveAlign curvelet-based orientation
+│   │   ├── orientationj.py            # OrientationJ Fiji plugin interface
+│   │   └── base_orientation.py        # Base class for orientation methods
+│   ├── extraction/
+│   │   ├── __init__.py
+│   │   ├── ctfire.py                  # CT-FIRE curvelet-based extraction
+│   │   ├── ridge_detection.py         # Ridge Detection Fiji plugin interface
+│   │   └── base_extraction.py         # Base class for extraction methods
+│   └── registry.py                    # Method registry for extensibility
+├── config/
+│   ├── __init__.py
+│   ├── orientation_params.py          # Orientation method parameters
+│   └── extraction_params.py           # Extraction method parameters
+├── io/
+│   ├── __init__.py
+│   ├── exporters.py                   # Export to CSV, Excel, JSON, GeoJSON
+│   └── fiji_bridge.py                 # Bridge to Fiji plugins
+└── utils/
+    ├── __init__.py
+    ├── curvelet_utils.py              # Curvelet transform utilities
+    ├── geometry_utils.py              # Fiber geometry calculations
+    └── validation.py                  # Input validation

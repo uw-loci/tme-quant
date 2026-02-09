@@ -1,4 +1,3 @@
-# hierarchy.py (already exists but updated for completeness)
 """
 Hierarchy management for TME objects
 """
