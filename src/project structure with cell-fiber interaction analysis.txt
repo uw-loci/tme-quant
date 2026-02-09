@@ -1,0 +1,257 @@
+tme-analysis-platform/
+├── src/
+│   ├── napari_curvealign/                    # Napari plugin for TME analysis
+│   │   ├── __init__.py
+│   │   ├── pyproject.toml
+│   │   ├── plugin.py                         # Main plugin class
+│   │   ├── viewer_manager.py                 # Manages Napari viewer state
+│   │   ├── layer_manager.py                  # Layer coordination
+│   │   ├── widgets/                          # UI widgets
+│   │   │   ├── __init__.py
+│   │   │   ├── project_widget.py
+│   │   │   ├── roi_manager.py
+│   │   │   ├── analysis_pipeline.py
+│   │   │   ├── cell_analysis.py
+│   │   │   ├── fiber_analysis.py
+│   │   │   ├── tme_analysis.py
+│   │   │   ├── visualization.py
+│   │   │   ├── results_viewer.py
+│   │   │   └── interaction_analysis_widget.py  # NEW: Interaction analysis UI
+│   │   ├── workflows/                        # Workflow implementations
+│   │   │   ├── __init__.py
+│   │   │   ├── automated_cell_analysis.py
+│   │   │   ├── automated_fiber_analysis.py
+│   │   │   ├── combined_cell_fiber_analysis.py  # Updated with interactions
+│   │   │   ├── interaction_analysis_workflow.py # NEW: Dedicated interaction workflow
+│   │   │   └── batch_processing.py
+│   │   ├── image_processing/
+│   │   │   ├── __init__.py
+│   │   │   ├── multichannel_viewer.py
+│   │   │   ├── roi_operations.py
+│   │   │   ├── image_registration.py
+│   │   │   └── preprocessing.py
+│   │   ├── visualization/
+│   │   │   ├── __init__.py
+│   │   │   ├── overlay_manager.py
+│   │   │   ├── color_maps.py
+│   │   │   ├── annotation_tools.py
+│   │   │   └── interaction_visualizer.py    # NEW: Napari-specific interaction vis
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       ├── file_io.py
+│   │       ├── config.py
+│   │       └── napari_utils.py
+│   ├── tme_quant/                            # TME quantification library
+│   │   ├── __init__.py
+│   │   ├── pyproject.toml
+│   │   ├── README.md
+│   │   └── src/
+│   │       └── tme_quant/
+│   │           ├── __init__.py
+│   │           ├── core/
+│   │           │   ├── __init__.py
+│   │           │   ├── enums.py              # Updated with interaction enums
+│   │           │   ├── base_models.py
+│   │           │   ├── tme_models.py
+│   │           │   │   ├── __init__.py
+│   │           │   │   ├── tumor_model.py
+│   │           │   │   ├── cell_model.py
+│   │           │   │   ├── fiber_model.py
+│   │           │   │   ├── vessel_model.py
+│   │           │   │   ├── stroma_model.py
+│   │           │   │   ├── tissue_model.py
+│   │           │   │   └── interaction_models.py  # NEW: Interaction data models
+│   │           │   ├── geometry.py
+│   │           │   ├── image_models.py
+│   │           │   ├── project.py            # Updated with interaction methods
+│   │           │   └── hierarchy.py
+│   │           ├── fiber_analysis/
+│   │           │   ├── __init__.py
+│   │           │   ├── curvelet_transform.py
+│   │           │   ├── fiber_orientation.py
+│   │           │   ├── fiber_extraction.py
+│   │           │   ├── fiber_segmentation_2d.py
+│   │           │   ├── fiber_segmentation_3d.py
+│   │           │   ├── collagen_features.py
+│   │           │   └── fiber_quantification.py
+│   │           ├── cell_analysis/
+│   │           │   ├── __init__.py
+│   │           │   ├── cell_segmentation_2d.py
+│   │           │   ├── cell_segmentation_3d.py
+│   │           │   ├── nucleus_detection.py
+│   │           │   ├── cell_classification.py
+│   │           │   ├── immune_cell_analysis.py
+│   │           │   └── spatial_analysis.py
+│   │           ├── tme_analysis/             # Combined TME analysis
+│   │           │   ├── __init__.py
+│   │           │   ├── tumor_region_generation.py
+│   │           │   ├── cell_fiber_interaction.py       # NEW: Interaction analysis engine
+│   │           │   ├── interaction_network_analysis.py # NEW: Network analysis
+│   │           │   ├── tumor_collagen_features.py      # Updated with interaction features
+│   │           │   ├── microenvironment_zoning.py
+│   │           │   ├── spatial_relationships.py        # Updated with interaction relationships
+│   │           │   └── prognostic_features.py          # Updated with interaction-based prognosis
+│   │           ├── image_registration/
+│   │           │   ├── __init__.py
+│   │           │   ├── multimodal_registration.py
+│   │           │   ├── fiber_cell_registration.py      # Important for interaction analysis
+│   │           │   ├── landmark_based.py
+│   │           │   ├── intensity_based.py
+│   │           │   └── validation.py
+│   │           ├── measurement/              # Measurement engine
+│   │           │   ├── __init__.py
+│   │           │   ├── calculator.py
+│   │           │   ├── intensity_features.py
+│   │           │   ├── morphological_features.py
+│   │           │   ├── texture_features.py
+│   │           │   ├── spatial_features.py
+│   │           │   ├── fiber_features.py
+│   │           │   ├── tme_features.py
+│   │           │   └── interaction_features.py         # NEW: Interaction-specific features
+│   │           ├── io/
+│   │           │   ├── __init__.py
+│   │           │   ├── persistence.py
+│   │           │   ├── qupath_io.py
+│   │           │   ├── image_formats.py
+│   │           │   ├── export_formats.py
+│   │           │   ├── annotation_formats.py
+│   │           │   └── interaction_export.py           # NEW: Export interaction data
+│   │           ├── visualization/            # Visualization tools
+│   │           │   ├── __init__.py
+│   │           │   ├── napari_bridge.py
+│   │           │   ├── fiber_visualization.py
+│   │           │   ├── cell_visualization.py
+│   │           │   ├── tme_visualization.py
+│   │           │   ├── heatmaps.py
+│   │           │   ├── spatial_maps.py
+│   │           │   └── interaction_visualization.py    # NEW: Interaction visualization
+│   │           ├── utils/
+│   │           │   ├── __init__.py
+│   │           │   ├── geometry_utils.py
+│   │           │   ├── image_utils.py
+│   │           │   ├── statistics_utils.py
+│   │           │   ├── parallel_processing.py          # Important for interaction analysis
+│   │           │   └── validation_utils.py
+│   │           └── pipelines/               # Pre-built analysis pipelines
+│   │               ├── __init__.py
+│   │               ├── standard_tme_pipeline.py        # Updated with interactions
+│   │               ├── rapid_screening.py
+│   │               ├── deep_tme_analysis.py            # Updated with interaction analysis
+│   │               ├── interaction_analysis_pipeline.py # NEW: Dedicated interaction pipeline
+│   │               └── batch_processing.py
+│   ├── integration/                         # Integration layer
+│   │   ├── __init__.py
+│   │   ├── adapters.py
+│   │   ├── bridges.py
+│   │   ├── facades.py
+│   │   ├── events.py
+│   │   ├── registry.py
+│   │   └── plugin_integration.py
+│   └── applications/                        # Application modules
+│       ├── __init__.py
+│       ├── napari_curvealign_app/
+│       │   ├── __init__.py
+│       │   ├── main.py
+│       │   ├── plugin_registry.py
+│       │   └── application_manager.py
+│       └── cli_tools/
+│           ├── __init__.py
+│           ├── tme_quant_cli.py
+│           ├── batch_processor.py
+│           ├── export_tools.py
+│           └── interaction_analysis_cli.py   # NEW: CLI for interaction analysis
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── unit/
+│   │   ├── napari_curvealign/
+│   │   │   ├── test_widgets.py
+│   │   │   ├── test_workflows.py
+│   │   │   ├── test_image_processing.py
+│   │   │   └── test_interaction_workflow.py  # NEW: Test interaction workflow
+│   │   ├── tme_quant/
+│   │   │   ├── test_core_models.py
+│   │   │   ├── test_fiber_analysis.py
+│   │   │   ├── test_cell_analysis.py
+│   │   │   ├── test_tme_analysis.py
+│   │   │   ├── test_interaction_models.py    # NEW: Test interaction models
+│   │   │   ├── test_interaction_analysis.py  # NEW: Test interaction analysis
+│   │   │   └── test_interaction_visualization.py  # NEW: Test interaction vis
+│   │   └── integration/
+│   │       ├── test_adapters.py
+│   │       └── test_bridges.py
+│   ├── integration/
+│   │   ├── test_napari_integration.py
+│   │   ├── test_full_pipeline.py
+│   │   ├── test_interaction_pipeline.py      # NEW: Integration test for interactions
+│   │   └── test_performance.py
+│   └── fixtures/
+│       ├── sample_images.py
+│       ├── sample_projects.py
+│       ├── mock_tme_data.py
+│       └── mock_interaction_data.py          # NEW: Mock interaction data
+├── examples/
+│   ├── __init__.py
+│   ├── basic_tme_analysis.py
+│   ├── napari_plugin_usage.py
+│   ├── fiber_analysis_demo.py
+│   ├── cell_analysis_demo.py
+│   ├── combined_analysis.py
+│   ├── interaction_analysis_demo.py          # NEW: Interaction analysis demo
+│   ├── tumor_collagen_features_demo.py       # NEW: Tumor collagen features demo
+│   └── data/
+│       └── sample_tme_images/
+├── notebooks/
+│   ├── 01_tme_quant_basics.ipynb
+│   ├── 02_fiber_analysis_tutorial.ipynb
+│   ├── 03_cell_analysis_tutorial.ipynb
+│   ├── 04_combined_tme_analysis.ipynb
+│   ├── 05_napari_integration.ipynb
+│   ├── 06_advanced_features.ipynb
+│   ├── 07_interaction_analysis.ipynb         # NEW: Interaction analysis notebook
+│   ├── 08_tumor_collagen_signatures.ipynb    # NEW: Tumor collagen signatures
+│   └── 09_prognostic_scoring.ipynb           # NEW: Prognostic scoring with interactions
+├── config/
+│   ├── default.yaml
+│   ├── napari_curvealign.yaml
+│   ├── tme_quant.yaml
+│   └── pipelines/
+│       ├── standard_tme.yaml
+│       ├── rapid_screening.yaml
+│       ├── deep_analysis.yaml
+│       └── interaction_analysis.yaml         # NEW: Interaction analysis config
+├── scripts/
+│   ├── setup_environment.py
+│   ├── batch_process_tme.py
+│   ├── export_results.py
+│   ├── convert_qupath_projects.py
+│   ├── validate_analysis.py
+│   ├── analyze_interactions.py              # NEW: Script for interaction analysis
+│   ├── calculate_tumor_features.py          # NEW: Calculate tumor collagen features
+│   └── generate_prognostic_report.py        # NEW: Generate prognostic report
+├── docs/
+│   ├── index.md
+│   ├── api/
+│   │   ├── napari_curvealign.md
+│   │   ├── tme_quant.md
+│   │   └── integration.md
+│   ├── tutorials/
+│   │   ├── getting_started.md
+│   │   ├── fiber_analysis.md
+│   │   ├── cell_analysis.md
+│   │   ├── napari_plugin.md
+│   │   ├── interaction_analysis.md          # NEW: Interaction analysis tutorial
+│   │   ├── tumor_collagen_features.md       # NEW: Tumor collagen features tutorial
+│   │   └── prognostic_scoring.md            # NEW: Prognostic scoring tutorial
+│   └── developer/
+│       ├── architecture.md
+│       ├── extending_plugins.md
+│       └── contributing.md
+├── .vscode/
+│   ├── settings.json
+│   ├── launch.json
+│   └── tasks.json
+├── pyproject.toml
+├── README.md
+├── LICENSE
+└── .gitignore

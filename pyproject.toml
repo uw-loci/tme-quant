@@ -17,7 +17,22 @@ dependencies = [
   "scikit-image==0.25.0",
   "scikit-learn==1.7.1",
   "scipy==1.15.2",
+  "tifffile>=2021.11.0",
+  "imageio>=2.13.0",
+  "scikit-learn>=1.0.0",
+  # Hierarchy dependencies
+  "pydantic>=2.0.0",
+  "ome-types>=0.3.0",
+  "zarr>=2.13.0",
+  "h5py>=3.7.0",
+
 ]
+# Local package dependencies (path dependencies)
+dependencies += [
+    # Reference the qupath_hierarchy submodule
+    "qupath-hierarchy @ file:///${PROJECT_ROOT}/src/tmequant_hierarchy",
+]
+
 
 [dependency-groups]
 dev = [
@@ -44,5 +59,69 @@ testpaths = [
   "tests",
 ]
 
+# Existing optional deps
+napari = [
+    "napari>=0.4.0",
+    "magicgui>=0.3.0",
+    "qtpy>=2.0.0"
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "flake8>=5.0.0",
+    "mypy>=0.990",
+    "pre-commit>=2.20.0",
+]
+notebooks = [
+    "jupyter>=1.0.0",
+    "ipywidgets>=8.0.0",
+    "jupyterlab>=3.4.0",
+]
+full = [
+    "plotly>=5.13.0",
+    "networkx>=3.0.0",
+    "pyarrow>=10.0.0",
+    "dask>=2023.0.0",
+    "xarray>=2023.0.0",
+]
 
+[project.scripts]
+bioimage-analyze = "apps.cli_tools.hierarchy_tools:main"
+bioimage-view = "apps.cli_tools.viewer:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"bioimage_core" = "src/bioimage_core"
+"qupath_hierarchy" = "src/qupath_hierarchy/src/qupath_hierarchy"
+"integration" = "src/integration"
+"apps" = "src/apps"
+"pipelines" = "src/pipelines"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+namespace_packages = true
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "bioimage_core.*",
+    "qupath_hierarchy.*",
+    "integration.*",
+    "apps.*",
+    "pipelines.*"
+]
+ignore_missing_imports = true
 
