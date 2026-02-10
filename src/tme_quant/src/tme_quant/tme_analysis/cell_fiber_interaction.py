@@ -669,3 +669,172 @@ class InteractionAnalyzer:
         scores['tme_interaction_score'] = overall_score
         
         return scores
+
+    """Enhanced with boundary-relative fiber analysis."""
+    
+    def calculate_tumor_associated_collagen_features(
+        self,
+        network: InteractionNetwork,
+        tumor_region: TumorRegion,
+        use_nearest_point: bool = True,
+        pixel_size: float = 1.0
+    ) -> Dict[str, float]:
+        """
+        Calculate TACS features using boundary-relative metrics.
+        
+        Args:
+            network: Interaction network
+            tumor_region: Tumor region with boundary
+            use_nearest_point: Use nearest-point method for angles
+            pixel_size: Pixel size in microns
+        """
+        features = {}
+        
+        # Get tumor-associated interactions
+        tumor_interactions = [
+            i for i in network.interactions
+            if i.is_tumor_associated()
+        ]
+        
+        if not tumor_interactions:
+            return features
+        
+        # Compute boundary-relative metrics for all fibers if not already done
+        if use_nearest_point:
+            for interaction in tumor_interactions:
+                fiber = interaction.fiber
+                if fiber.nearest_boundary_point is None:
+                    fiber.compute_boundary_relative_metrics(
+                        tumor_region.roi, pixel_size
+                    )
+        
+        # Calculate TACS scores with boundary-relative metrics
+        tacs_scores = self._calculate_tacs_scores_boundary_relative(
+            tumor_interactions, use_nearest_point
+        )
+        features.update(tacs_scores)
+        
+        # Rest of the analysis remains the same...
+        alignment_features = self._calculate_alignment_heterogeneity(
+            tumor_interactions
+        )
+        features.update(alignment_features)
+        
+        contact_features = self._analyze_contact_patterns(tumor_interactions)
+        features.update(contact_features)
+        
+        mechanical_features = self._calculate_mechanical_features(
+            tumor_interactions
+        )
+        features.update(mechanical_features)
+        
+        prognostic_scores = self._calculate_prognostic_scores(features)
+        features.update(prognostic_scores)
+        
+        return features
+    
+    def _calculate_tacs_scores_boundary_relative(
+        self,
+        interactions: List[CellFiberInteraction],
+        use_nearest_point: bool = True
+    ) -> Dict[str, float]:
+        """
+        Calculate TACS scores using boundary-relative angles.
+        
+        NEW: Uses nearest-point method for more accurate classification.
+        """
+        scores = {}
+        
+        if not interactions:
+            return scores
+        
+        # Extract fiber properties
+        fiber_curvatures = []
+        fiber_widths = []
+        fiber_straightnesses = []
+        
+        # Angle metrics depend on method
+        if use_nearest_point:
+            angles_to_normal = []
+            angles_to_tangent = []
+            
+            for interaction in interactions:
+                fiber = interaction.fiber
+                if fiber.relative_angle_to_boundary_normal is not None:
+                    angles_to_normal.append(fiber.relative_angle_to_boundary_normal)
+                if fiber.relative_angle_to_boundary_tangent is not None:
+                    angles_to_tangent.append(fiber.relative_angle_to_boundary_tangent)
+                
+                if fiber.curvature is not None:
+                    fiber_curvatures.append(fiber.curvature)
+                if fiber.width is not None:
+                    fiber_widths.append(fiber.width)
+                if fiber.straightness is not None:
+                    fiber_straightnesses.append(fiber.straightness)
+        else:
+            # Use original method
+            fiber_orientations = []
+            for interaction in interactions:
+                fiber = interaction.fiber
+                if fiber.orientation is not None:
+                    fiber_orientations.append(fiber.orientation)
+                if fiber.curvature is not None:
+                    fiber_curvatures.append(fiber.curvature)
+                if fiber.width is not None:
+                    fiber_widths.append(fiber.width)
+        
+        # TACS-1: Random, curly collagen
+        if fiber_straightnesses:
+            # Low straightness indicates curly fibers
+            mean_straightness = np.mean(fiber_straightnesses)
+            curvature_score = 1 - mean_straightness
+            
+            if use_nearest_point and angles_to_normal:
+                # Add orientation randomness
+                # Random orientation = angles distributed around 45°
+                angle_randomness = np.mean([abs(a - 45) for a in angles_to_normal])
+                randomness_score = 1 - (angle_randomness / 45)
+                scores['tacs1_score'] = 0.6 * curvature_score + 0.4 * randomness_score
+            else:
+                scores['tacs1_score'] = curvature_score
+        
+        # TACS-2: Straightened, parallel fibers
+        if fiber_straightnesses and use_nearest_point and angles_to_tangent:
+            # High straightness + parallel to boundary
+            mean_straightness = np.mean(fiber_straightnesses)
+            mean_parallel_angle = np.mean(angles_to_tangent)
+            
+            # Good TACS-2 = straight + parallel (angle to tangent < 30°)
+            parallel_score = max(0, 1 - mean_parallel_angle / 30)
+            scores['tacs2_score'] = 0.5 * mean_straightness + 0.5 * parallel_score
+        
+        # TACS-3: Perpendicular invasion fibers
+        if use_nearest_point and angles_to_normal:
+            # Low angle to normal = perpendicular to boundary
+            mean_perp_angle = np.mean(angles_to_normal)
+            perp_score = max(0, 1 - mean_perp_angle / 30)
+            
+            # Weight by straightness if available
+            if fiber_straightnesses:
+                mean_straightness = np.mean(fiber_straightnesses)
+                scores['tacs3_score'] = 0.6 * perp_score + 0.4 * mean_straightness
+            else:
+                scores['tacs3_score'] = perp_score
+            
+            # Enhanced score for invasive front
+            invasive_front_interactions = [
+                i for i in interactions if i.at_invasive_front
+            ]
+            if invasive_front_interactions:
+                invasive_angles = [
+                    i.fiber.relative_angle_to_boundary_normal
+                    for i in invasive_front_interactions
+                    if i.fiber.relative_angle_to_boundary_normal is not None
+                ]
+                if invasive_angles:
+                    invasive_perp = np.mean(invasive_angles)
+                    invasive_score = max(0, 1 - invasive_perp / 30)
+                    # Boost TACS-3 score for invasive front
+                    scores['tacs3_score'] = 0.6 * scores['tacs3_score'] + 0.4 * invasive_score
+        
+        return scores

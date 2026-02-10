@@ -1,0 +1,114 @@
+tme_quant/cell_analysis/
+├── __init__.py
+│
+├── core/                                    # Core analyzer classes
+│   ├── __init__.py
+│   ├── cell_analyzer.py                    # Main CellAnalyzer class
+│   ├── segmentation_analyzer.py            # Cell segmentation coordinator
+│   ├── classification_analyzer.py          # Cell classification coordinator
+│   ├── quantification_analyzer.py          # Cell quantification coordinator
+│   └── results.py                          # Result data classes
+│
+├── methods/                                 # Analysis method implementations
+│   ├── __init__.py
+│   ├── registry.py                         # Method registry
+│   │
+│   ├── segmentation/                       # Segmentation methods
+│   │   ├── __init__.py
+│   │   ├── base_segmentation.py           # Abstract base class
+│   │   ├── stardist.py                    # StarDist implementation
+│   │   ├── cellpose.py                    # Cellpose implementation
+│   │   ├── thresholding.py                # Threshold-based segmentation
+│   │   ├── watershed.py                   # Watershed segmentation
+│   │   └── classical_methods.py           # Other classical methods
+│   │
+│   ├── classification/                     # Classification methods
+│   │   ├── __init__.py
+│   │   ├── base_classification.py         # Abstract base class
+│   │   ├── morphology_classifier.py       # Morphology-based
+│   │   ├── marker_classifier.py           # Marker-based (IF)
+│   │   ├── deep_learning_classifier.py    # DL-based
+│   │   └── ensemble_classifier.py         # Ensemble methods
+│   │
+│   └── quantification/                     # Quantification methods
+│       ├── __init__.py
+│       ├── morphological_features.py      # CellProfiler-like morphology
+│       ├── intensity_features.py          # Intensity measurements
+│       ├── texture_features.py            # Texture features
+│       ├── spatial_features.py            # Spatial distributions
+│       └── relationship_features.py       # Cell-cell, cell-fiber relationships
+│
+├── config/                                  # Configuration and parameters
+│   ├── __init__.py
+│   ├── segmentation_params.py             # SegmentationParams dataclass
+│   ├── classification_params.py           # ClassificationParams dataclass
+│   └── quantification_params.py           # QuantificationParams dataclass
+│
+├── io/                                      # Input/Output
+│   ├── __init__.py
+│   ├── exporters.py                       # CellAnalysisExporter
+│   └── model_loaders.py                   # Load StarDist/Cellpose models
+│
+└── utils/                                   # Utilities
+    ├── __init__.py
+    ├── preprocessing.py                   # Image preprocessing
+    ├── postprocessing.py                  # Post-processing (filtering, etc.)
+    ├── validation.py                      # Input validation
+    └── cell_utils.py                      # Cell-specific utilities
+
+
+status:
+tme_quant/cell_analysis/
+├── __init__.py                          ✅ Part 7
+│
+├── core/                                ✅ All Complete
+│   ├── __init__.py                      ✅ Part 7
+│   ├── cell_analyzer.py                 ✅ Part 2 (Main coordinator)
+│   ├── segmentation_analyzer.py         ✅ Part 2 (Segmentation coordinator)
+│   ├── classification_analyzer.py       ✅ Part 2 (Classification coordinator)
+│   ├── quantification_analyzer.py       ✅ Part 2 (Quantification coordinator)
+│   └── results.py                       ✅ Part 1 (Result classes)
+│
+├── methods/                             ✅ All Complete
+│   ├── __init__.py                      ✅ Part 7
+│   ├── registry.py                      ✅ Part 6 (Method registry)
+│   │
+│   ├── segmentation/                    ✅ Complete
+│   │   ├── __init__.py                  ✅ Part 7
+│   │   ├── base_segmentation.py         ✅ Part 4 (Abstract base + utilities)
+│   │   ├── stardist.py                  ✅ Part 4 (StarDist 2D/3D)
+│   │   ├── cellpose.py                  ✅ Part 4 (Cellpose 2D/3D)
+│   │   ├── thresholding.py              ✅ Part 4 (Otsu, adaptive, manual)
+│   │   └── watershed.py                 ✅ Part 4 (Distance transform, markers)
+│   │
+│   ├── classification/                  ✅ Complete
+│   │   ├── __init__.py                  ✅ Part 7
+│   │   ├── base_classification.py       ✅ Part 5 (Abstract base)
+│   │   ├── morphology_classifier.py     ✅ Part 5 (Shape-based rules)
+│   │   └── marker_classifier.py         ✅ Part 5 (IF markers: CD3, CD8, CD68)
+│   │
+│   └── quantification/                  ✅ Complete
+│       ├── __init__.py                  ✅ Part 7
+│       ├── morphological_features.py    ✅ Part 5 (15+ shape features)
+│       ├── intensity_features.py        ✅ Part 5 (Per-channel stats)
+│       ├── texture_features.py          ✅ Part 5 (Haralick/GLCM)
+│       ├── spatial_features.py          ✅ Part 5 (Neighbors, density)
+│       └── relationship_features.py     ✅ Part 5 (Cell-cell, cell-fiber)
+│
+├── config/                              ✅ Complete
+│   ├── __init__.py                      ✅ Part 7
+│   ├── segmentation_params.py           ✅ Part 1 (SegmentationParams)
+│   ├── classification_params.py         ✅ Part 1 (ClassificationParams)
+│   └── quantification_params.py         ✅ Part 1 (QuantificationParams)
+│
+├── io/                                  ✅ Complete
+│   ├── __init__.py                      ✅ Part 7
+│   ├── exporters.py                     ✅ Part 6 (CSV, Excel, JSON, GeoJSON)
+│   └── model_loaders.py                 ✅ Part 6 (StarDist, Cellpose loaders)
+│
+└── utils/                               ✅ Complete
+    ├── __init__.py                      ✅ Part 7
+    ├── preprocessing.py                 ✅ Part 7 (Image preprocessing)
+    ├── postprocessing.py                ✅ Part 7 (Cell filtering)
+    ├── validation.py                    ✅ Part 7 (Input validation)
+    └── cell_utils.py                    ✅ Part 7 (Neighbor, density, merge)
