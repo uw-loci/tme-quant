@@ -3,55 +3,55 @@
     {
       "name": "real1_default_no_boundary",
       "image_params": {
-        "img" : "real1.tif",
+        "img": "real1.tif",
         "img_name": "real1"
       },
       "fiber_params": {
         "keep": 0.05
       },
       "output_params": {
-        "make_map" : true,
+        "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
       },
-      "boundary_params" : null,
-      "advanced_options" : {},
+      "boundary_params": null,
+      "advanced_options": {},
       "matlab_reference_csv": "test_process_image_real1_default_no_boundary.csv"
     },
     {
       "name": "real1_keep0.1_no_boundary",
       "image_params": {
-        "img" : "real1.tif",
+        "img": "real1.tif",
         "img_name": "real1"
       },
       "fiber_params": {
         "keep": 0.1
       },
       "output_params": {
-        "make_map" : true,
+        "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
       },
-      "boundary_params" : null,
-      "advanced_options" : {},
+      "boundary_params": null,
+      "advanced_options": {},
       "matlab_reference_csv": "test_process_image_real1_keep0.1_no_boundary.csv"
     },
     {
       "name": "real1_radius5_no_boundary",
       "image_params": {
-        "img" : "real1.tif",
+        "img": "real1.tif",
         "img_name": "real1"
       },
       "fiber_params": {
         "keep": 0.05
       },
       "output_params": {
-        "make_map" : true,
+        "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
       },
-      "boundary_params" : null,
-      "advanced_options" : {
+      "boundary_params": null,
+      "advanced_options": {
         "curvelets_group_radius": 5.0
       },
       "matlab_reference_csv": "test_process_image_real1_radius5_no_boundary.csv"
@@ -59,7 +59,7 @@
     {
       "name": "real1_default_with_boundary",
       "image_params": {
-        "img" : "real1.tif",
+        "img": "real1.tif",
         "img_name": "real1"
       },
       "fiber_params": {
@@ -67,145 +67,155 @@
       },
       "output_params": {
         "make_associations": true,
-        "make_map" : true,
+        "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
       },
-      "boundary_params" : {
-        "coordinates": {
-          "csv1": "from_file:real1_boundary1_coords.csv",
-          "csv2": "from_file:real1_boundary2_coords.csv",
-          "csv3": "from_file:real1_boundary3_coords.csv"
-        },
-        "tif_boundary": 3,
-        "boundary_img": "from_file:shared_data/real1/boundary_img.csv"
-      },
-      "advanced_options" : {},
-      "matlab_reference_csv": "test_process_image_real1_default_with_boundary.csv"
-    },
-    {
-      "name": "real1_dist50_with_boundary",
-      "image_params": {
-        "img" : "real1.tif",
-        "img_name": "real1"
-      },
-      "fiber_params": {
-        "keep": 0.05
-      },
-      "output_params": {
-        "make_associations": true,
-        "make_map" : true,
-        "make_overlay": true,
-        "make_feature_file": true
-      },
-      "boundary_params" : {
+      "boundary_params": {
         "coordinates": {
           "csv1": "from_file:shared_data/real1/boundary1_coords.csv",
           "csv2": "from_file:shared_data/real1/boundary2_coords.csv",
           "csv3": "from_file:shared_data/real1/boundary3_coords.csv"
         },
         "tif_boundary": 3,
-        "distance_threshold": 50,
         "boundary_img": "from_file:shared_data/real1/boundary_img.csv"
       },
-      "advanced_options" : {},
+      "advanced_options": {},
+      "matlab_reference_csv": "test_process_image_real1_default_with_boundary.csv"
+    },
+    {
+      "name": "real1_dist50_with_boundary",
+      "image_params": {
+        "img": "real1.tif",
+        "img_name": "real1"
+      },
+      "fiber_params": {
+        "keep": 0.05
+      },
+      "output_params": {
+        "make_associations": true,
+        "make_map": true,
+        "make_overlay": true,
+        "make_feature_file": true
+      },
+      "boundary_params": {
+        "tif_boundary": 3,
+        "distance_threshold": 50,
+        "coordinates": {
+          "csv1": "from_file:shared_data/real1/boundary1_coords.csv",
+          "csv2": "from_file:shared_data/real1/boundary2_coords.csv",
+          "csv3": "from_file:shared_data/real1/boundary3_coords.csv"
+        },
+        "boundary_img": "from_file:shared_data/real1/boundary_img.csv"
+      },
+      "advanced_options": {},
       "matlab_reference_csv": "test_process_image_real1_dist50_with_boundary.csv"
     },
     {
       "name": "real2_default_no_boundary",
       "image_params": {
-        "img" : "real2.tif",
+        "img": "real2.tif",
         "img_name": "real2"
       },
       "fiber_params": {
         "keep": 0.05
       },
       "output_params": {
-        "make_map" : true,
+        "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
       },
-      "boundary_params" : null,
-      "advanced_options" : {},
+      "boundary_params": null,
+      "advanced_options": {},
       "matlab_reference_csv": "test_process_image_real2_default_no_boundary.csv"
     },
     {
       "name": "real2_keep0.1_no_boundary",
       "image_params": {
-        "img" : "real2.tif",
+        "img": "real2.tif",
         "img_name": "real2"
       },
       "fiber_params": {
         "keep": 0.1
       },
       "output_params": {
-        "make_map" : true,
+        "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
       },
-      "boundary_params" : null,
-      "advanced_options" : {},
+      "boundary_params": null,
+      "advanced_options": {},
       "matlab_reference_csv": "test_process_image_real2_keep0.1_no_boundary.csv"
     },
     {
       "name": "real2_radius8_no_boundary",
       "image_params": {
-        "img" : "real2.tif",
+        "img": "real2.tif",
         "img_name": "real2"
       },
       "fiber_params": {
         "keep": 0.05
       },
       "output_params": {
-        "make_map" : true,
+        "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
       },
-      "boundary_params" : null,
-      "advanced_options" : {"curvelets_group_radius": 8},
+      "boundary_params": null,
+      "advanced_options": {
+        "curvelets_group_radius": 8
+      },
       "matlab_reference_csv": "test_process_image_real2_radius8_no_boundary.csv"
     },
     {
       "name": "real2_default_with_boundary",
       "image_params": {
-        "img" : "real2.tif",
+        "img": "real2.tif",
         "img_name": "real2"
       },
       "fiber_params": {
         "keep": 0.05
       },
       "output_params": {
-        "make_map" : true,
+        "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
       },
-      "boundary_params" : {
+      "boundary_params": {
+        "coordinates": {
+          "csv1": "from_file:shared_data/real2/boundary1_coords.csv",
+          "csv2": "from_file:shared_data/real2/boundary2_coords.csv"
+        },
         "boundary_img": "from_file:shared_data/real2/boundary_img.csv",
         "tif_boundary": 3
       },
-      "advanced_options" : {},
+      "advanced_options": {},
       "matlab_reference_csv": "test_process_image_real2_default_with_boundary.csv"
     },
     {
       "name": "real2_dist75_with_boundary",
       "image_params": {
-        "img" : "real2.tif",
+        "img": "real2.tif",
         "img_name": "real2"
       },
       "fiber_params": {
         "keep": 0.05
       },
       "output_params": {
-        "make_map" : true,
+        "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
       },
-      "boundary_params" : {
+      "boundary_params": {
         "distance_threshold": 75,
         "tif_boundary": 3,
+        "coordinates": {
+          "csv1": "from_file:shared_data/real2/boundary1_coords.csv",
+          "csv2": "from_file:shared_data/real2/boundary2_coords.csv"
+        },
         "boundary_img": "from_file:shared_data/real2/boundary_img.csv"
       },
-      "advanced_options" : {},
+      "advanced_options": {},
       "matlab_reference_csv": "test_process_image_real2_dist75_with_boundary.csv"
     }
   ]

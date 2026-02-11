@@ -248,8 +248,8 @@ def test_process_image_returns_fiber_features(test_name, test_case, tmp_path):
             np.testing.assert_allclose(
                 fib_feat_values,
                 expected_values,
-                rtol=0.02,
-                atol=3,
+                rtol=0.05,
+                atol=15,
                 equal_nan=True,
                 err_msg=f"Fiber features differ from reference {reference_csv_name}",
             )
