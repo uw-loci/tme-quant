@@ -1,235 +1,173 @@
 # tme-quant Setup Guide
 
-This guide covers installation of the **base Python API** for tme-quant. The package includes both the Python API and an optional Napari plugin.
-
-This guide shows two simple ways to install: native (recommended) and Docker.
+This guide covers installation of tme-quant with the **curvelet backend** (curvelops) and Napari plugin. For one-click installation, use [QUICK_START.md](QUICK_START.md).
 
 ## Quick Start (Recommended)
 
-The easiest way to get started is using our automated setup script:
+Use the automated install script:
 
 ```bash
-# Using the setup script
 cd tme-quant
-bash bin/setup.sh
-
-# Or using make
-make setup
+bash bin/install.sh
 ```
 
 This script will:
-1. Check/install Conda
-2. Create a Python environment
-3. Optionally build FFTW 2.1.5 (10–15 min)
-4. Prompt for CurveLab path (optional)
-5. Install and verify tme-quant
+1. Install Miniforge (if conda/mamba not found)
+2. Download and build FFTW 2.1.5 in `../utils`
+3. Detect CurveLab in `../utils`
+4. Create the `tme-quant` conda environment
+5. Install with curvelops and run verification
+
+**Prerequisites:** Clone this repo and download CurveLab to `../utils`. See below.
 
 ## Manual Installation
 
-### Step 1: Install System Dependencies
+### Step 1: Install conda (or Miniforge with Mamba)
 
-#### macOS
+We recommend **Miniforge** (includes Mamba, faster than conda):
+
 ```bash
-# Install Xcode Command Line Tools (if not already installed)
-xcode-select --install
+# macOS (Apple Silicon)
+curl -L -O https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-*-MacOSX-arm64.sh
+bash Miniforge3-*-MacOSX-arm64.sh
 
-# Install Miniconda (if needed)
-curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
-bash Miniconda3-latest-MacOSX-arm64.sh
+# macOS (Intel)
+curl -L -O https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-*-MacOSX-x86_64.sh
+bash Miniforge3-*-MacOSX-x86_64.sh
+
+# Linux (x86_64)
+curl -L -O https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-*-Linux-x86_64.sh
+bash Miniforge3-*-Linux-x86_64.sh
 ```
 
-#### Linux
-```bash
-# Install build tools
-sudo apt-get update
-sudo apt-get install -y build-essential gcc g++ make wget curl
-
-# Install Miniconda (if needed)
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-```
+Or use Miniconda from https://docs.conda.io/en/latest/miniconda.html
 
 ### Step 2: Create Python Environment
 
 ```bash
-# Create conda environment
 conda create -y -n tme-quant python=3.11
 conda activate tme-quant
 
-# Or use virtualenv
-python -m venv venv
-source venv/bin/activate  # On macOS/Linux
-# or
-venv\Scripts\activate  # On Windows
+# Prefer mamba for faster installs (if available)
+mamba install -y -c conda-forge napari pyqt qtpy
+# or: conda install -y -c conda-forge napari pyqt qtpy
 ```
 
-### Step 3: Install FFTW (Optional, for curvelet backend)
+### Step 3: Install FFTW (for curvelet backend)
 
-FFTW is only needed if you want to use the curvelet backend (curvelops).
+**Best practice:** Place FFTW in `../utils` (parallel to tme-quant) so it matches the install script layout:
 
 ```bash
+# Create utils directory next to tme-quant
+cd /path/to/parent/of/tme-quant
+mkdir -p utils
+cd utils
+
 # Download FFTW
-cd ~/opt
 curl -L -O http://www.fftw.org/fftw-2.1.5.tar.gz
 tar xzf fftw-2.1.5.tar.gz
 cd fftw-2.1.5
 
-# Configure and build
+# Configure and build (PIC required for shared libs used by curvelops)
 ./configure --prefix="$(pwd)" --disable-fortran CFLAGS="-fPIC"
-make -j$(nproc)  # or: make -j$(sysctl -n hw.logicalcpu)
+make -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || 4)
 make install
 
-# Set environment variables
 export FFTW="$(pwd)"
+export CPPFLAGS="-I${FFTW}/include"
+export LDFLAGS="-L${FFTW}/lib"
 ```
 
-**Note**: the `FFTW` environment variable must be set in each session you build
-CurveLab (e.g. in a `~/.bashrc` file)
+**Note:** Set `FFTW` in your shell config (e.g. `~/.bashrc`) if you build CurveLab in a later session.
 
 ### Step 4: Install CurveLab
 
 CurveLab requires a separate download due to licensing:
 1. Visit: https://curvelet.org/download.php
 2. Agree to the license and download CurveLab
-3. Extract it to a location on your system
+3. Extract to `../utils` (e.g. `../utils/CurveLab-2.1.2`)
 
 ```bash
 # Set the CurveLab path (adjust to your version)
-export FDCT="/path/to/CurveLab-2.1.x"
+export FDCT="/path/to/utils/CurveLab-2.1.x"
 
 # Build CurveLab components (if needed)
-cd "$FDCT"
+cd "$FDCT/fdct_wrapping_cpp/src"
+make FFTW_DIR="$FFTW"
+
+cd "$FDCT/fdct/src"
+make FFTW_DIR="$FFTW"
+
+cd "$FDCT/fdct3d/src"
 make FFTW_DIR="$FFTW"
 ```
-
-**Note**: `FFTW_DIR` is hard-coded in CurveLab's `makefile.opt`, which we must
-explicitly override to point to our local FFTW build.
 
 ### Step 5: Install tme-quant
 
 ```bash
 cd tme-quant
 
-# Install without curvelet backend (simplest)
-pip install -e .
-
-# Or install with curvelet backend (requires FFTW and CurveLab)
+# With curvelet backend (requires FFTW and CurveLab)
 pip install -e ".[curvelops]"
 
-# Or install everything
-pip install -e ".[all]"
+# Or install curvelops separately
+pip install "curvelops @ git+https://github.com/PyLops/curvelops@0.23"
+pip install -e .
 ```
 
 ### Step 6: Verify Installation
 
 ```bash
-# Run verification
-python -c "import pycurvelets as pc; print('Installed ✅'); print('HAS_CURVELETS =', pc.HAS_CURVELETS); print('new_curv is', 'available' if hasattr(pc, 'new_curv') else 'missing')"
+python -c "
+import pycurvelets as pc
+print('Installed ✅')
+print('HAS_CURVELETS =', pc.HAS_CURVELETS)
+print('new_curv is', 'available' if hasattr(pc, 'new_curv') else 'missing')
+"
 ```
-
-## Docker Installation (Alternative)
-
-For a consistent, isolated environment, use Docker:
-
-```bash
-# Build the Docker image
-docker build -t tme-quant:latest .
-
-# Run the container
-docker run -it \
-  -v /path/to/curvelab:/app/curvelab \
-  -v /path/to/your/data:/app/data \
-  tme-quant:latest
-
-# Or use docker-compose
-docker-compose up -d
-```
-
-**Note:** 
-- Docker Desktop is available for Mac (both Intel and Apple Silicon)
-- You need to install Docker Desktop from https://www.docker.com/products/docker-desktop/
-- Select the correct version for your Mac (Intel or Apple Silicon/M1)
-- You still need to provide CurveLab separately due to licensing restrictions
-- On Mac, Docker uses a lightweight VM so performance may be slightly slower than native
-
-Alternatively, you can use the native setup script (`make setup`) which works better on Mac without requiring Docker.
 
 ## Package Installation Options
 
-### Basic Installation
+### Basic (no curvelet backend)
 ```bash
 pip install -e .
 ```
-Includes core CurveAlign and CT-FIRE APIs without optional backends.
-
-### With Visualization
-```bash
-pip install -e ".[visualization]"
-```
-Adds matplotlib visualization support.
-
-### With napari Plugin
-```bash
-pip install -e ".[napari]"
-```
-Installs napari for interactive analysis.
-
-**Note:** For automated Napari plugin installation, use `bash bin/install.sh` from the project root, which provides a one-click installation script.
+Core API only; no curvelops. Install curvelops manually if you need it later.
 
 ### With Curvelet Backend
 ```bash
 pip install -e ".[curvelops]"
 ```
-Enables authentic CurveLab FDCT transforms (requires FFTW and CurveLab).
-
-### Full Installation
-```bash
-pip install -e ".[all]"
-```
-Installs all optional dependencies including curvelops, napari, and visualization.
+Requires FFTW and CurveLab as above.
 
 ## Troubleshooting
 
-### Conda Not Found
-If conda is not found, install Miniconda:
-- Download from: https://docs.conda.io/en/latest/miniconda.html
-- Or use the setup script which will install it automatically
+### Conda / Mamba Not Found
+- Install Miniforge: https://github.com/conda-forge/miniforge/releases
+- Or run `bash bin/install.sh` which will install Miniforge automatically
 
 ### FFTW Build Errors
-- On macOS: Ensure Xcode Command Line Tools are installed
-- On Linux: Install `build-essential` and `gfortran`
-- Use `--disable-fortran` flag to avoid Fortran dependency
+- **macOS:** Ensure Xcode Command Line Tools: `xcode-select --install`
+- **Linux:** `sudo apt-get install build-essential`
+- Always use `CFLAGS="-fPIC"` for shared library builds
 
 ### CurveLab Not Found
-- Make sure you've downloaded CurveLab from https://curvelet.org/
-- Set the `FDCT` environment variable to the correct path
-- Verify the directory contains `fdct_wrapping_cpp` and `fdct3d` folders
+- Download from https://curvelet.org/
+- Place in `../utils/` (e.g. `../utils/CurveLab-2.1.2`) for compatibility with install script
+- Set `FDCT` to the CurveLab directory
 
-### Import Errors
+### Environment Already Exists
+The install script fails if `tme-quant` env exists. Remove it first:
 ```bash
-# Make sure you're in the correct environment
-conda activate tme-quant
-
-# Reinstall the package
-pip install -e . --force-reinstall --no-cache-dir
+conda env remove -n tme-quant
 ```
 
-## Getting Help
+## Activation
 
-- Documentation: See `doc/` directory
-- Issues: Open an issue on GitHub
-- Examples: Check `simple_usage.py`
-
-## Activation Script
-
-After installation, use the provided activation script:
-
-```bash
-source bin/activate_env.sh
-```
-
-Or manually activate:
+After installation:
 ```bash
 conda activate tme-quant
+napari
 ```
 
+The CurveAlign widget appears in: **Plugins → napari-curvealign → CurveAlign Widget**

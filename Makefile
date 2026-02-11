@@ -1,31 +1,30 @@
 # Makefile for tme-quant
 # Convenience commands for common tasks
 
-.PHONY: help install install-dev install-all test clean setup check
+.PHONY: help install install-dev test clean setup check
 
 help:
 	@echo "tme-quant Makefile Commands"
 	@echo ""
 	@echo "Setup & Installation:"
-	@echo "  make setup        - Automated setup (recommended for first-time users)"
-	@echo "  make install      - Install tme-quant package"
+	@echo "  make setup        - Automated installation (recommended; uses bin/install.sh)"
+	@echo "  make install      - Install tme-quant package (requires active env)"
 	@echo "  make install-dev  - Install with development dependencies"
-	@echo "  make install-all  - Install with all optional dependencies"
 	@echo ""
 	@echo "Development:"
 	@echo "  make test         - Run test suite"
-	@echo "  make check        - Run linting and type checking"
+	@echo "  make check        - Run linting"
 	@echo "  make clean        - Clean build artifacts"
 	@echo ""
-	@echo "Docker (alternative method):"
+	@echo "Docker (alternative; not validated):"
 	@echo "  make docker-build    - Build Docker image"
 	@echo "  make docker-run      - Run Docker container"
 	@echo "  make docker-stop     - Stop Docker container"
 	@echo ""
 
 setup:
-	@echo "Running automated setup..."
-	bash bin/setup.sh
+	@echo "Running automated installation..."
+	bash bin/install.sh
 
 install:
 	pip install -e .
@@ -33,17 +32,12 @@ install:
 install-dev:
 	pip install -e ".[dev]"
 
-install-all:
-	pip install -e ".[all]"
-
 test:
 	pytest -v
 
 check:
-	pytest -v --cov=curvealign_py --cov=ctfire_py
+	pytest -v
 	ruff check .
-	black --check .
-	isort --check-only .
 
 clean:
 	rm -rf build/ dist/ *.egg-info
