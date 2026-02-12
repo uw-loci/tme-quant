@@ -156,7 +156,6 @@ setup_curvelab() {
   print_success "CurveLab found at: $FDCT"
 
   # Build CurveLab components if needed
-  # /Users/curtis/code/loci/utils/CurveLab-2.1.3/fdct_wrapping_cpp/src/
   if [ -d "$FDCT/fdct_wrapping_cpp/src" ]; then
     print_info "Building CurveLab fdct_wrapping_cpp..."
     (cd "$FDCT/fdct_wrapping_cpp/src" && make FFTW_DIR="${FFTW:-}") || true
