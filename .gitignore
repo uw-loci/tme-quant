@@ -1,10 +1,4 @@
 #################
-## Keep top-level setup scripts
-#################
-!/bin/
-!/bin/*
-
-#################
 ## Eclipse
 #################
 
@@ -103,7 +97,6 @@ DocProject/Help/html
 publish
 
 # Others
-[Bb]in
 [Oo]bj
 sql
 TestResults
