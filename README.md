@@ -14,7 +14,7 @@ This project depends on code that cannot be redistributed here:
 
 Base requirements:
 - macOS, Linux, or Windows (see notes below)
-- Conda (recommended) or Python 3.10–3.13
+- Python 3.11+
 - For napari: a Qt binding (PyQt or PySide)
 
 ### Quick start (without curvelets)
