@@ -32,6 +32,12 @@ print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 print_error()   { echo -e "${RED}[✗]${NC} $1"; }
 print_header()  { echo -e "${CYAN}$1${NC}"; }
 
+cdv() {
+  # Change directory, verbosely.
+  cd "$@" &&
+  print_success "Changed directory to: $@"
+}
+
 nproc_opt() {
   nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4
 }
@@ -175,7 +181,8 @@ setup_fftw() {
     fi
   fi
 
-  cd "$UTILS_DIR"
+  cdv "$UTILS_DIR"
+
   if [ ! -f "fftw-${FFTW_VERSION}.tar.gz" ]; then
     print_info "Downloading FFTW ${FFTW_VERSION}..."
     curl -sL -O "http://www.fftw.org/fftw-${FFTW_VERSION}.tar.gz"
@@ -186,15 +193,14 @@ setup_fftw() {
     tar xzf "fftw-${FFTW_VERSION}.tar.gz"
   fi
 
-  cd "fftw-${FFTW_VERSION}"
+  cdv "fftw-${FFTW_VERSION}"
   print_info "Configuring FFTW (with PIC for shared libs)..."
-  ./configure --prefix="$(pwd)" --disable-fortran CFLAGS="-fPIC"
+  (set -x; ./configure --prefix="$(pwd)" --disable-fortran CFLAGS="-fPIC")
   print_info "Building FFTW (this may take several minutes)..."
-  make -j"$(nproc_opt)"
-  make install
+  (set -x; make -j"$(nproc_opt)" && make install)
   export FFTW="$(pwd)"
   print_success "FFTW built at: $FFTW"
-  cd "$PROJECT_ROOT"
+  cdv "$PROJECT_ROOT"
   echo ""
 }
 
@@ -246,7 +252,7 @@ setup_curvelab() {
     (cd "$FDCT/fdct3d/src" && make FFTW_DIR="${FFTW:-}" 2>/dev/null) || true
   fi
 
-  cd "$PROJECT_ROOT"
+  cdv "$PROJECT_ROOT"
   echo ""
 }
 
