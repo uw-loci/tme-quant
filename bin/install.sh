@@ -194,6 +194,16 @@ setup_fftw() {
   fi
 
   cdv "fftw-${FFTW_VERSION}"
+
+  # Download newest version of config scripts, to avoid configure failure on modern macOS.
+  if [ ! -f config-scripts-downloaded ]; then
+    print_info "Updating config scripts..."
+    curl -fsL -o config.guess 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=HEAD'
+    curl -fsL -o config.sub 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD'
+    chmod +x config.guess config.sub
+    touch config-scripts-downloaded
+  fi
+
   print_info "Configuring FFTW (with PIC for shared libs)..."
   (set -x; ./configure --prefix="$(pwd)" --disable-fortran CFLAGS="-fPIC")
   print_info "Building FFTW (this may take several minutes)..."
