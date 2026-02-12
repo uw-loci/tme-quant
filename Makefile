@@ -1,7 +1,7 @@
 # Makefile for tme-quant
 # Convenience commands for common tasks
 
-.PHONY: help install install-dev test clean setup check
+.PHONY: help setup test check clean
 
 help:
 	@echo "tme-quant Makefile Commands"
@@ -26,18 +26,11 @@ setup:
 	@echo "Running automated installation..."
 	bash bin/install.sh
 
-install:
-	pip install -e .
-
-install-dev:
-	pip install -e ".[dev]"
-
 test:
-	pytest -v
+	uv run pytest -v
 
 check:
-	pytest -v
-	ruff check .
+	uv run ruff check .
 
 clean:
 	rm -rf build/ dist/ *.egg-info
