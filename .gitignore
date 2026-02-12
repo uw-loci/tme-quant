@@ -132,6 +132,9 @@ Desktop.ini
 
 *.py[co]
 
+# uv
+uv.lock
+
 # Packages
 *.egg
 *.egg-info

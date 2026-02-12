@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tme-quant"
-version = "0.1.0"
+version = "0.1.0.dev0"
 description = "Python translation of CurveAlign; curvelet-based quantification and napari plugin"
 authors = [{ name = "Eliceiri Lab" }]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
   "pandas",
   "numpy",
@@ -16,6 +16,15 @@ dependencies = [
   "opencv-python",
   "scikit-image",
   "openpyxl",
+
+  "pybind11",
+  "scikit-build-core",
+  "cmake",
+  "ninja",
+
+  "napari",
+  "pyqt6",
+  "qtpy",
 ]
 
 [dependency-groups]
@@ -27,7 +36,7 @@ dev = [
 
 [project.optional-dependencies]
 curvelops = [
-  "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
+  "curvelops @ git+https://github.com/PyLops/curvelops@0.23.4",
 ]
 
 [tool.setuptools]
@@ -42,6 +51,3 @@ namespaces = false
 testpaths = [
   "tests",
 ]
-
-
-
