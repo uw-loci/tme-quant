@@ -83,7 +83,7 @@ install_miniforge() {
   esac
 
   # Map Darwin arm64 -> MacOSX arm64; Linux aarch64 ok
-  [ "$os" = "MacOSX" ] && [ "$arch" = "aarch64" ] && arch="arm64"
+  [ "$os" = "MacOSX" -a "$arch" = "aarch64" ] && arch="arm64"
 
   # Use a known stable version (avoids API parsing / grep -oP portability)
   local version="26.1.0-0"
@@ -165,7 +165,7 @@ setup_fftw() {
   UTILS_DIR="$(cd "$UTILS_DIR" && pwd)"
   FFTW_PATH="$UTILS_DIR/fftw-${FFTW_VERSION}"
 
-  if [ -d "$FFTW_PATH" ] && [ -f "$FFTW_PATH/include/fftw.h" ]; then
+  if [ -d "$FFTW_PATH" -a -f "$FFTW_PATH/include/fftw.h" ]; then
     print_success "FFTW already built at: $FFTW_PATH"
     export FFTW="$FFTW_PATH"
     return 0
@@ -223,7 +223,7 @@ setup_curvelab() {
     fi
   done
 
-  if [ -z "$FDCT" ] || [ ! -d "$FDCT" ]; then
+  if [ -z "$FDCT" -o ! -d "$FDCT" ]; then
     print_error "CurveLab not found in $UTILS_DIR"
     echo ""
     echo "  CurveLab cannot be redistributed. You must:"
@@ -239,7 +239,7 @@ setup_curvelab() {
   print_success "CurveLab found at: $FDCT"
 
   # Build CurveLab components if needed
-  if [ -d "$FDCT/fdct_wrapping_cpp/src" ] && [ ! -f "$FDCT/fdct_wrapping_cpp/src/fdct_wrapping"* ]; then
+  if [ -d "$FDCT/fdct_wrapping_cpp/src" -a ! -f "$FDCT/fdct_wrapping_cpp/src/fdct_wrapping.cpp" ]; then
     print_info "Building CurveLab fdct_wrapping_cpp..."
     (cd "$FDCT/fdct_wrapping_cpp/src" && make FFTW_DIR="${FFTW:-}" 2>/dev/null) || true
   fi
