@@ -64,17 +64,13 @@ fiji_bridge = [
 ]
 segmentation = [
   "cellpose>=2.0",
-  "stardist",
-  "csbdeep",
-  "tensorflow>=2.6.0",
+  "cellcast",
 ]
 all = [
   "matplotlib>=3.5.0",
   "pyimagej>=1.4.0",
   "cellpose>=2.0",
-  "stardist",
-  "csbdeep",
-  "tensorflow>=2.6.0",
+  "cellcast",
   "napari-imagej",
   "aicsimageio",
 ]

@@ -39,10 +39,10 @@ except ImportError:
     HAS_CELLPOSE = False
 
 try:
-    from stardist.models import StarDist2D
-    HAS_STARDIST = True
+    import cellcast.models as _cellcast_models
+    HAS_CELLCAST = True
 except ImportError:
-    HAS_STARDIST = False
+    HAS_CELLCAST = False
 
 
 class SegmentationMethod(Enum):
@@ -71,11 +71,10 @@ class SegmentationOptions:
     cellpose_flow_threshold: float = 0.4
     cellpose_cellprob_threshold: float = 0.0
     
-    # StarDist options
-    stardist_model: str = "2D_versatile_fluo"  # Model name
+    # StarDist (via cellcast) options
     stardist_prob_thresh: float = 0.5
     stardist_nms_thresh: float = 0.4
-    stardist_python_path: Optional[str] = None  # Path to Python with StarDist (for remote execution)
+    stardist_use_gpu: bool = True  # Use GPU if available (cellcast WebGPU backend)
     
     # Post-processing
     fill_holes: bool = True
@@ -231,7 +230,7 @@ def _segment_cellpose(image: np.ndarray, options: SegmentationOptions) -> np.nda
         image = ((image - image.min()) / (image.max() - image.min()) * 255).astype(np.uint8)
     
     # Run segmentation (Cellpose 4.x API)
-    # Returns: masks, flows, styles
+    # Returns: masks, flows, styles (masks may be list when given list of images)
     masks, flows, styles = model.eval(
         image,
         diameter=options.cellpose_diameter,
@@ -241,11 +240,17 @@ def _segment_cellpose(image: np.ndarray, options: SegmentationOptions) -> np.nda
         normalize=True  # Cellpose 4.x parameter
     )
     
-    # Post-process
-    if options.min_area > 0 and HAS_SKIMAGE:
+    # Cellpose 4.x may return list for batch input; ensure ndarray
+    if isinstance(masks, list):
+        masks = masks[0] if masks else np.zeros(image.shape[:2], dtype=np.int32)
+    masks = np.asarray(masks, dtype=np.int32)
+    
+    # Post-process: remove small objects, but preserve result if filter wipes everything
+    if options.min_area > 0 and HAS_SKIMAGE and np.max(masks) > 0:
         binary = masks > 0
         binary = morphology.remove_small_objects(binary, min_size=options.min_area)
-        masks = measure.label(binary)
+        if np.any(binary):
+            masks = measure.label(binary)
     
     if options.max_area is not None and HAS_SKIMAGE:
         props = measure.regionprops(masks)
@@ -259,49 +264,17 @@ def _segment_cellpose(image: np.ndarray, options: SegmentationOptions) -> np.nda
 
 def _segment_stardist(image: np.ndarray, options: SegmentationOptions) -> np.ndarray:
     """
-    StarDist-based segmentation for nuclei.
+    StarDist-based nuclei segmentation via cellcast.
     
-    Note: StarDist requires Python 3.9-3.12. If you're using Python 3.13+,
-    use the remote environment bridge (set stardist_python_path in options).
+    Uses cellcast (https://github.com/uw-loci/cellcast), a recast of StarDist
+    on the Burn framework with WebGPU backend. Supports 2D versatile fluo model.
     """
-    # Check if using remote environment
-    if hasattr(options, 'stardist_python_path') and options.stardist_python_path:
-        # Use environment bridge for cross-version support
-        from .env_bridge import segment_stardist_remote
-        
-        labels = segment_stardist_remote(
-            image,
-            python_path=options.stardist_python_path,
-            model_name=options.stardist_model,
-            prob_thresh=options.stardist_prob_thresh,
-            nms_thresh=options.stardist_nms_thresh
-        )
-        
-        # Post-process
-        if options.min_area > 0 and HAS_SKIMAGE:
-            binary = labels > 0
-            binary = morphology.remove_small_objects(binary, min_size=options.min_area)
-            labels = measure.label(binary)
-        
-        if options.max_area is not None and HAS_SKIMAGE:
-            props = measure.regionprops(labels)
-            for prop in props:
-                if prop.area > options.max_area:
-                    labels[labels == prop.label] = 0
-            labels = measure.label(labels > 0)
-        
-        return labels
-    
-    # Standard in-process StarDist (requires Python 3.9-3.12)
-    if not HAS_STARDIST:
+    if not HAS_CELLCAST:
         raise ImportError(
-            "StarDist is not installed or incompatible with current Python version.\n\n"
-            "Option 1: Install StarDist (Python 3.9-3.12 only):\n"
-            "  pip install stardist\n\n"
-            "Option 2: Use remote environment (Python 3.13+):\n"
-            "  1. Create Python 3.12 environment with StarDist\n"
-            "  2. Set stardist_python_path in options\n"
-            "  See: napari_curvealign.env_bridge.create_stardist_environment_guide()"
+            "cellcast is not installed. Install with:\n"
+            "  pip install cellcast\n\n"
+            "cellcast provides StarDist 2D versatile fluo segmentation with "
+            "WebGPU backend (Python 3.7+, no TensorFlow required)."
         )
     
     # Convert to grayscale if needed
@@ -310,17 +283,18 @@ def _segment_stardist(image: np.ndarray, options: SegmentationOptions) -> np.nda
     else:
         image_gray = image
     
-    # Normalize to 0-1 range (StarDist expects this)
-    image_gray = (image_gray - image_gray.min()) / (image_gray.max() - image_gray.min() + 1e-10)
+    # Ensure float for cellcast (handles various input types)
+    image_gray = np.asarray(image_gray, dtype=np.float32)
     
-    # Load model
-    model = StarDist2D.from_pretrained(options.stardist_model)
-    
-    # Run prediction
-    labels, details = model.predict_instances(
+    # Run cellcast StarDist 2D versatile fluo prediction
+    # cellcast normalizes internally via pmin/pmax; pass raw intensities
+    labels = _cellcast_models.stardist_2d_versatile_fluo.predict(
         image_gray,
-        prob_thresh=options.stardist_prob_thresh,
-        nms_thresh=options.stardist_nms_thresh
+        pmin=1.0,
+        pmax=99.8,
+        prob_threshold=options.stardist_prob_thresh,
+        nms_threshold=options.stardist_nms_thresh,
+        gpu=getattr(options, 'stardist_use_gpu', True)
     )
     
     # Post-process
@@ -492,7 +466,7 @@ def check_available_methods() -> Dict[str, bool]:
     return {
         'threshold': HAS_SKIMAGE,
         'cellpose': HAS_CELLPOSE,
-        'stardist': HAS_STARDIST,
+        'stardist': HAS_CELLCAST,
         'skimage': HAS_SKIMAGE
     }
 

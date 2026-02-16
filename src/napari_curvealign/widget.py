@@ -1348,6 +1348,9 @@ class CurveAlignWidget(QWidget):
         self.cellpose_cellprob_thresh.setRange(-6, 6)
         self.cellpose_cellprob_thresh.setValue(0.0)
         self.cellpose_cellprob_thresh.setSingleStep(0.1)
+        self.cellpose_cellprob_thresh.setToolTip(
+            "Lower values (e.g. -0.5, -1) find more objects. Use for low-contrast or difficult images."
+        )
         cellpose_layout.addWidget(self.cellpose_cellprob_thresh)
         
         self.cellpose_group.setLayout(cellpose_layout)
@@ -1371,6 +1374,11 @@ class CurveAlignWidget(QWidget):
         self.stardist_nms_thresh.setValue(0.4)
         self.stardist_nms_thresh.setSingleStep(0.05)
         stardist_layout.addWidget(self.stardist_nms_thresh)
+        
+        self.stardist_use_gpu = QCheckBox("Use GPU (WebGPU)")
+        self.stardist_use_gpu.setChecked(True)
+        self.stardist_use_gpu.setToolTip("Use GPU via cellcast WebGPU backend when available")
+        stardist_layout.addWidget(self.stardist_use_gpu)
         
         self.stardist_group.setLayout(stardist_layout)
         self.stardist_group.setVisible(False)  # Hidden by default
@@ -1520,6 +1528,7 @@ class CurveAlignWidget(QWidget):
             cellpose_cellprob_threshold=self.cellpose_cellprob_thresh.value(),
             stardist_prob_thresh=self.stardist_prob_thresh.value(),
             stardist_nms_thresh=self.stardist_nms_thresh.value(),
+            stardist_use_gpu=self.stardist_use_gpu.isChecked(),
             fill_holes=self.seg_fill_holes.isChecked(),
             smooth_contours=self.seg_smooth_contours.isChecked()
         )
