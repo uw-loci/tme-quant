@@ -16,12 +16,6 @@ dependencies = [
   "opencv-python",
   "scikit-image",
   "openpyxl",
-
-  "pybind11",
-  "scikit-build-core",
-  "cmake",
-  "ninja",
-
   "napari",
   "pyqt6",
   "qtpy",
