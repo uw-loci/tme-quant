@@ -31,12 +31,7 @@ print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 print_error()   { echo -e "${RED}[✗]${NC} $1"; }
 print_header()  { echo -e "${CYAN}$1${NC}"; }
 
-cdv() {
-  # Change directory, verbosely.
-  cd "$@" &&
-  print_success "Changed directory to: $@"
-}
-
+# Fancy way to calculate cores for multithread build
 nproc_opt() {
   nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4
 }
@@ -80,15 +75,12 @@ setup_fftw() {
 
   # Install build tools if needed
   if ! command -v gcc &>/dev/null || ! command -v make &>/dev/null; then
-    print_info "Installing build tools..."
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-      xcode-select -p &>/dev/null || { print_info "Installing Xcode Command Line Tools (may prompt)..."; xcode-select --install || true; }
-    elif command -v apt-get &>/dev/null; then
-      sudo apt-get update -qq && sudo apt-get install -y build-essential gcc g++ make curl
-    fi
+    print_warning "No gcc/make detected, your FFTW build might fail."
+    print_warning "On Mac: xcode-select --install"
+    print_warning "On Debian/Ubuntu: sudo apt-get install -y build-essential gcc g++ make curl"
   fi
 
-  cdv "$UTILS_DIR"
+  cd "$UTILS_DIR"
 
   if [ ! -f "fftw-${FFTW_VERSION}.tar.gz" ]; then
     print_info "Downloading FFTW ${FFTW_VERSION}..."
@@ -100,7 +92,7 @@ setup_fftw() {
     tar xzf "fftw-${FFTW_VERSION}.tar.gz"
   fi
 
-  cdv "fftw-${FFTW_VERSION}"
+  cd "fftw-${FFTW_VERSION}"
 
   # Download newest version of config scripts, to avoid configure failure on modern macOS.
   if [ ! -f config-scripts-downloaded ]; then
@@ -111,13 +103,13 @@ setup_fftw() {
     touch config-scripts-downloaded
   fi
 
-  print_info "Configuring FFTW (with PIC for shared libs)..."
+  print_info "Configuring FFTW ..."
   (set -x; ./configure --prefix="$(pwd)" --disable-fortran CFLAGS="-fPIC")
   print_info "Building FFTW (this may take several minutes)..."
   (set -x; make -j"$(nproc_opt)" && make install)
   export FFTW="$(pwd)"
   print_success "FFTW built at: $FFTW"
-  cdv "$PROJECT_ROOT"
+  cd "$PROJECT_ROOT"
   echo ""
 }
 
@@ -147,7 +139,7 @@ setup_curvelab() {
     echo "  1. Visit https://curvelet.org/download.php"
     echo "  2. Agree to the license and download CurveLab"
     echo "  3. Extract it to: $UTILS_DIR/"
-    echo "     (e.g. $UTILS_DIR/CurveLab-2.1.2)"
+    echo "     (e.g. $UTILS_DIR/CurveLab-2.1.3)"
     echo ""
     exit 1
   fi
@@ -169,7 +161,7 @@ setup_curvelab() {
     (cd "$FDCT/fdct3d/src" && make FFTW_DIR="${FFTW:-}") || true
   fi
 
-  cdv "$PROJECT_ROOT"
+  cd "$PROJECT_ROOT"
   echo ""
 }
 
@@ -253,7 +245,7 @@ main() {
   echo "Prerequisites:"
   echo "  1. Clone this repository"
   echo "  2. Install uv (https://docs.astral.sh/uv/)"
-  echo "  2. Download CurveLab to ../utils (see https://curvelet.org/download.php)"
+  echo "  3. Download CurveLab to ../utils (see https://curvelet.org/download.php)"
   echo ""
   echo "This script will:"
   echo "  - Download and build FFTW in ../utils"
