@@ -94,21 +94,12 @@ def load_boundary_data_from_json(boundary_params_dict, img_name):
             if isinstance(value, str) and value.startswith("from_file:"):
                 filename = value.replace("from_file:", "")
                 # Determine base path based on filename format
-                if filename.startswith("shared_data/"):
-                    # New format: from_file:shared_data/real1/boundary1_coords.csv
-                    filepath = os.path.join(
-                        os.path.dirname(__file__),
-                        "test_results",
-                        filename,
-                    )
-                else:
-                    # Legacy format: from_file:real1_boundary1_coords.csv
-                    filepath = os.path.join(
-                        os.path.dirname(__file__),
-                        "test_results",
-                        "get_tif_boundary_test_files",
-                        filename,
-                    )
+                # Example: from_file:shared_data/real1/boundary1_coords.csv
+                filepath = os.path.join(
+                    os.path.dirname(__file__),
+                    "test_results",
+                    filename,
+                )
                 loaded_coords[key] = np.loadtxt(filepath, delimiter=",")
             else:
                 loaded_coords[key] = value
