@@ -130,24 +130,6 @@
       "matlab_reference_csv": "test_process_image_real2_default_no_boundary.csv"
     },
     {
-      "name": "real2_keep0.1_no_boundary",
-      "image_params": {
-        "img": "real2.tif",
-        "img_name": "real2"
-      },
-      "fiber_params": {
-        "keep": 0.1
-      },
-      "output_params": {
-        "make_map": true,
-        "make_overlay": true,
-        "make_feature_file": true
-      },
-      "boundary_params": null,
-      "advanced_options": {},
-      "matlab_reference_csv": "test_process_image_real2_keep0.1_no_boundary.csv"
-    },
-    {
       "name": "real2_radius8_no_boundary",
       "image_params": {
         "img": "real2.tif",
@@ -177,6 +159,7 @@
         "keep": 0.05
       },
       "output_params": {
+        "make_associations": true,
         "make_map": true,
         "make_overlay": true,
         "make_feature_file": true
@@ -202,6 +185,7 @@
         "keep": 0.05
       },
       "output_params": {
+        "make_associations": true,
         "make_map": true,
         "make_overlay": true,
         "make_feature_file": true

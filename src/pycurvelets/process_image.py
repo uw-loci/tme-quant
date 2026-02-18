@@ -671,8 +671,8 @@ def analyze_global_boundary(
             "nearest_boundary_angle",
             "extension_point_distance",
             "extension_point_angle",
-            "boundary_point_row",
             "boundary_point_col",
+            "boundary_point_row",
         ]
     ]
 
@@ -737,8 +737,8 @@ def process_tiff_boundary_rois(
         "fiber_center_col",
         "fiber_angle_list",
         "distance_list",
-        "boundary_point_row",
         "boundary_point_col",
+        "boundary_point_row",
     ]
     roi_measurement_details = pd.DataFrame(columns=roi_measurement_details_cols)
 
@@ -1547,15 +1547,15 @@ if __name__ == "__main__":
         "..",
         "tests",
         "test_results",
-        "get_tif_boundary_test_files",
+        "shared_data",
+        "real2",
     )
 
     files = [
         os.path.join(base_path, f)
         for f in [
-            "real1_boundary1_coords.csv",
-            "real1_boundary2_coords.csv",
-            "real1_boundary3_coords.csv",
+            "boundary1_coords.csv",
+            "boundary2_coords.csv",
         ]
     ]
     coords = {}
@@ -1577,14 +1577,14 @@ if __name__ == "__main__":
     min_dist = []
     obj = {}
 
-    # Load curvelet data as DataFrame
-    obj = pd.read_csv(os.path.join(base_path, "real1_curvelets.csv"))
-    # Convert from MATLAB 1-based to Python 0-based indexing
-    obj["center_1"] = obj["center_1"] - 1
-    obj["center_2"] = obj["center_2"] - 1
+    # # Load curvelet data as DataFrame
+    # obj = pd.read_csv(os.path.join(base_path, "real1_curvelets.csv"))
+    # # Convert from MATLAB 1-based to Python 0-based indexing
+    # obj["center_1"] = obj["center_1"] - 1
+    # obj["center_2"] = obj["center_2"] - 1
 
     boundary_img = np.loadtxt(
-        os.path.join(base_path, "real1_boundary_img.csv"), delimiter=","
+        os.path.join(base_path, "boundary_img.csv"), delimiter=","
     )
 
     # Create parameter objects
@@ -1597,7 +1597,7 @@ if __name__ == "__main__":
 
     fiber_params = FiberAnalysisParameters(
         fiber_mode=0,
-        keep=0.1,
+        keep=0.05,
         fire_directory=os.getcwd(),
     )
 
@@ -1618,7 +1618,7 @@ if __name__ == "__main__":
 
     advanced_options = AdvancedAnalysisOptions(
         exclude_fibers_in_mask=True,
-        curvelets_group_radius=8,
+        curvelets_group_radius=10,
         selected_scale=1,
         heatmap_STD_filter_size=19,
         heatmap_SQUARE_max_filter_size=12,
@@ -1633,6 +1633,6 @@ if __name__ == "__main__":
         image_params=image_params,
         fiber_params=fiber_params,
         output_params=output_params,
-        boundary_params=None,
+        boundary_params=boundary_params,
         advanced_options=advanced_options,
     )

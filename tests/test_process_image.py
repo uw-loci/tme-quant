@@ -258,18 +258,6 @@ def test_process_image_returns_fiber_features(test_name, test_case, tmp_path):
             print(f"⚠ Reference CSV not found: {reference_csv_name}")
 
 
-def test_process_image_empty_fiber_structure():
-    """
-    Test that process_image handles images with minimal fiber content gracefully.
-
-    Note: A completely blank image causes issues with the curvelet transform,
-    so we skip this test. In practice, real images always have some content.
-    """
-    pytest.skip(
-        "Blank images cause curvelet transform errors - not a realistic use case"
-    )
-
-
 if __name__ == "__main__":
     # Run tests with pytest
     pytest.main([__file__, "-v"])
