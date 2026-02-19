@@ -29,7 +29,7 @@ uv run napari
 
 To enable curvelet-powered features and tests you must build FFTW 2.1.5 and CurveLab, then install with curvelops. Use the automated script:
 
-**Prerequisites:** Clone this repo, install [uv](https://docs.astral.sh/uv/), and download CurveLab to `../utils` (see [doc/installation/QUICK_START.md](doc/installation/QUICK_START.md)).
+**Prerequisites:** Clone this repo, install [uv](https://docs.astral.sh/uv/), and download CurveLab to `../utils` (see [doc/INSTALL.md](doc/INSTALL.md)).
 
 macOS/Linux:
 ```bash
@@ -41,7 +41,9 @@ Windows options:
 - Recommended: use WSL2 (Ubuntu). Follow the macOS/Linux steps inside WSL.
 - Native Windows: use MSYS2 (for `gcc`, `make`) or Visual Studio toolchain; build FFTW 2.1.5 and CurveLab from source, set `FFTW` and `FDCT` env vars to their install roots, then use `uv` commands as above.
 
-### Development: running the tests
+### Development
+
+See [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) for plugin setup and troubleshooting. Running tests:
 
 - Headless (no GUI): set Qt to offscreen
   - macOS/Linux: `export QT_QPA_PLATFORM=offscreen`
