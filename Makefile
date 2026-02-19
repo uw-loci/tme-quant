@@ -14,11 +14,6 @@ help:
 	@echo "  make check        - Run linting"
 	@echo "  make clean        - Clean build artifacts"
 	@echo ""
-	@echo "Docker (alternative; not validated):"
-	@echo "  make docker-build    - Build Docker image"
-	@echo "  make docker-run      - Run Docker container"
-	@echo "  make docker-stop     - Stop Docker container"
-	@echo ""
 
 setup:
 	@echo "Running automated installation..."
@@ -35,13 +30,3 @@ clean:
 	find . -type d -name __pycache__ -exec rm -r {} +
 	find . -type f -name "*.pyc" -delete
 	rm -rf .pytest_cache .coverage htmlcov
-
-docker-build:
-	docker build -f docker/Dockerfile -t tme-quant:latest .
-
-docker-run:
-	docker-compose -f docker/docker-compose.yml up -d
-
-docker-stop:
-	docker-compose -f docker/docker-compose.yml down
-
