@@ -15,21 +15,26 @@ This project depends on code that cannot be redistributed here:
 Base requirements:
 - macOS, Linux, or Windows (see notes below)
 - Python 3.11+
-- For napari: a Qt binding (PyQt or PySide)
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- napari uses PyQt6 (included in dependencies)
 
 ### Quick start (without curvelets)
 
 ```bash
+uv sync
 uv run napari
 ```
 
 ### Optional: curvelet backend (curvelops)
 
-To enable curvelet-powered features and tests you must build and install FFTW 2.1.5 and CurveLab:
+To enable curvelet-powered features and tests you must build FFTW 2.1.5 and CurveLab, then install with curvelops. Use the automated script:
 
-macOS/Linux outline:
+**Prerequisites:** Clone this repo, install [uv](https://docs.astral.sh/uv/), and download CurveLab to `../utils` (see [doc/installation/QUICK_START.md](doc/installation/QUICK_START.md)).
+
+macOS/Linux:
 ```bash
-make setup
+bash bin/install.sh
+# or: make setup
 ```
 
 Windows options:
@@ -69,6 +74,6 @@ Testing policy:
   - `QT_QPA_PLATFORM=offscreen` (headless napari import)
 
 ### Troubleshooting
-- Qt error ("No Qt bindings could be found"): install `pyqt` (or `pyside2`) from conda-forge.
+- Qt error ("No Qt bindings could be found"): ensure `uv sync` completed; pyproject includes PyQt6.
 - Segfault on Viewer creation: avoid creating a `napari.Viewer()` in tests; we only import napari and run offscreen.
 - curvelops build errors: ensure `FFTW` and `FDCT` point to your install roots and the 2D/3D libraries were built.
