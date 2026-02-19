@@ -922,8 +922,8 @@ def save_fiber_features(
             "nearest_boundary_angle": "nearest_relative_boundary_angle",
             "extension_point_distance": "extension_point_distance",
             "extension_point_angle": "extension_point_angle",
-            "boundary_point_row": "boundary_point_row",
             "boundary_point_col": "boundary_point_col",
+            "boundary_point_row": "boundary_point_row",
         }
         for src_col, dest_col in boundary_col_mapping.items():
             if src_col in measured_boundary.columns:
@@ -938,8 +938,8 @@ def save_fiber_features(
             "nearest_relative_boundary_angle",
             "extension_point_distance",
             "extension_point_angle",
-            "boundary_point_row",
             "boundary_point_col",
+            "boundary_point_row",
         ]
         for col_name in boundary_cols:
             fib_feat_df[col_name] = np.nan
@@ -1220,7 +1220,7 @@ def generate_overlay(
             # Get included fibers and their boundary points
             in_curvs = fiber_centers[in_curvs_flag]
             in_bndry = measured_boundary[
-                ["boundary_point_col", "boundary_point_row"]
+                ["boundary_point_row", "boundary_point_col"]
             ].values[in_curvs_flag]
 
             # Plot lines connecting each fiber center to its nearest boundary point

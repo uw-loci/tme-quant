@@ -436,14 +436,12 @@ def test_generate_overlay(test_name, test_case, tmp_path, monkeypatch):
     for idx in valid_fibers.index:
         center_row = fiber_structure.at[idx, "center_row"]
         center_col = fiber_structure.at[idx, "center_col"]
-        bp_col = measured_boundary.at[idx, "boundary_point_col"]
         bp_row = measured_boundary.at[idx, "boundary_point_row"]
+        bp_col = measured_boundary.at[idx, "boundary_point_col"]
         expected_lines.append(
             {
-                # x = [center_col, boundary_point_row]  (bndry_pt[1] = row value used as x)
-                "x": [center_col, bp_row],
-                # y = [center_row, boundary_point_col]  (bndry_pt[0] = col value used as y)
-                "y": [center_row, bp_col],
+                "x": [center_col, bp_col],
+                "y": [center_row, bp_row],
                 "fiber_idx": idx,
             }
         )
