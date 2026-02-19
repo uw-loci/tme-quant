@@ -5,7 +5,6 @@
 *.pydevproject
 .project
 .metadata
-bin/
 tmp/
 *.tmp
 *.bak
@@ -98,7 +97,6 @@ DocProject/Help/html
 publish
 
 # Others
-[Bb]in
 [Oo]bj
 sql
 TestResults
@@ -134,6 +132,9 @@ Desktop.ini
 
 *.py[co]
 
+# uv
+uv.lock
+
 # Packages
 *.egg
 *.egg-info
@@ -141,7 +142,6 @@ dist
 build
 eggs
 parts
-bin
 var
 sdist
 develop-eggs
