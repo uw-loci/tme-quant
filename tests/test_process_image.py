@@ -32,7 +32,7 @@ if os.environ.get("TMEQ_RUN_CURVELETS") != "1":
 
 # Optional: attempt import; skip module if curvelet backend is missing
 try:
-    from pycurvelets.process_image import process_image
+    from pycurvelets.process_image import process_image, generate_overlay
 except ModuleNotFoundError:
     pytest.skip(
         "curvelops not available; skipping process_image tests", allow_module_level=True
@@ -138,6 +138,27 @@ def load_boundary_data_from_json(boundary_params_dict, img_name):
             boundary_params_dict["boundary_img"] = np.loadtxt(filepath, delimiter=",")
 
     return BoundaryParameters(**boundary_params_dict)
+
+
+def is_association_test_case(test_case):
+    """
+    Return True only for test cases where generate_overlay will draw association lines.
+    This requires make_associations=True, make_overlay=True, and tif_boundary=3.
+    """
+    output_params = test_case.get("output_params", {})
+    boundary_params = test_case.get("boundary_params")
+    return (
+        output_params.get("make_associations", False)
+        and output_params.get("make_overlay", False)
+        and boundary_params is not None
+        and boundary_params.get("tif_boundary") == 3
+    )
+
+
+all_cases = load_test_cases()
+association_cases = [
+    (name, tc) for name, tc in all_cases if is_association_test_case(tc)
+]
 
 
 # --------------------------
@@ -247,6 +268,219 @@ def test_process_image_returns_fiber_features(test_name, test_case, tmp_path):
             print(f"✓ Results match reference CSV: {reference_csv_name}")
         else:
             print(f"⚠ Reference CSV not found: {reference_csv_name}")
+
+
+@pytest.mark.parametrize(
+    "test_name,test_case",
+    association_cases,
+    ids=[name for name, _ in association_cases],
+)
+def test_generate_overlay(test_name, test_case, tmp_path, monkeypatch):
+    """
+    Verify that generate_overlay draws each association line with the correct
+    row/col coordinate ordering.
+
+    For every fiber that has a non-NaN boundary point in fib_feat_df we expect
+    ax.plot to be called with:
+
+        x = [fiber_center_col, boundary_point_col]   (i.e. center[1], bndry_pt[0])
+        y = [fiber_center_row, boundary_point_row]   (i.e. center[0], bndry_pt[1])
+
+    A bug would flip one or both pairs, e.g. using boundary_point_row as an
+    x-coordinate or boundary_point_col as a y-coordinate.
+    """
+    # --- Run process_image to get fib_feat_df ---
+    img = load_test_image(test_case["image_params"]["img"])
+
+    image_params = ImageInputParameters(
+        img=img,
+        img_name=test_case["image_params"]["img_name"],
+        slice_num=1,
+        num_sections=1,
+    )
+    fiber_params = FiberAnalysisParameters(
+        **{**test_case["fiber_params"], "fire_directory": str(tmp_path)}
+    )
+    output_params = OutputControlParameters(
+        **{**test_case["output_params"], "output_directory": str(tmp_path)}
+    )
+    boundary_params = load_boundary_data_from_json(
+        test_case["boundary_params"],
+        test_case["image_params"]["img_name"],
+    )
+    advanced_options = AdvancedAnalysisOptions(**test_case["advanced_options"])
+
+    results = process_image(
+        image_params=image_params,
+        fiber_params=fiber_params,
+        output_params=output_params,
+        boundary_params=boundary_params,
+        advanced_options=advanced_options,
+    )
+
+    assert (
+        results is not None and "fib_feat_df" in results
+    ), "process_image must return fib_feat_df for this test to run"
+    fib_feat_df = results["fib_feat_df"]
+
+    # Fibers that have a valid boundary association
+    valid_fibers = fib_feat_df.dropna(
+        subset=["boundary_point_row", "boundary_point_col"]
+    )
+    assert len(valid_fibers) > 0, (
+        f"Test case '{test_name}' has no fibers with valid boundary points; "
+        "cannot verify association-line coordinates."
+    )
+
+    # --- Intercept ax.plot calls made inside generate_overlay ---
+    # Each captured entry: {"x": [...], "y": [...]}
+    captured_blue_lines = []
+
+    original_plot = plt.Axes.plot
+
+    def spy_plot(self, *args, **kwargs):
+        # Association lines are drawn as "b-" with linewidth=0.5
+        is_blue = (len(args) >= 3 and args[2] == "b-") or kwargs.get("color") in (
+            "b",
+            "blue",
+        )
+        if is_blue and len(args) >= 2:
+            captured_blue_lines.append({"x": list(args[0]), "y": list(args[1])})
+        return original_plot(self, *args, **kwargs)
+
+    monkeypatch.setattr(plt.Axes, "plot", spy_plot)
+
+    # --- Reconstruct measured_boundary in the shape generate_overlay expects ---
+    #
+    # analyze_global_boundary returns a slice of res_df with these columns:
+    #   nearest_boundary_distance, nearest_region_distance, nearest_boundary_angle,
+    #   extension_point_distance, extension_point_angle,
+    #   boundary_point_col, boundary_point_row
+    #
+    # save_fiber_features renames most of them but keeps boundary_point_row and
+    # boundary_point_col verbatim, so we can recover them from fib_feat_df directly.
+    # The remaining columns are not accessed by generate_overlay, so we fill them
+    # with NaN to satisfy the DataFrame shape without misrepresenting data.
+    measured_boundary = pd.DataFrame(
+        {
+            "nearest_boundary_distance": fib_feat_df[
+                "nearest_distance_to_boundary"
+            ].values,
+            "nearest_region_distance": fib_feat_df["inside_epicenter_region"].values,
+            "nearest_boundary_angle": fib_feat_df[
+                "nearest_relative_boundary_angle"
+            ].values,
+            "extension_point_distance": fib_feat_df["extension_point_distance"].values,
+            "extension_point_angle": fib_feat_df["extension_point_angle"].values,
+            # These two are what generate_overlay actually reads:
+            "boundary_point_col": fib_feat_df["boundary_point_col"].values,
+            "boundary_point_row": fib_feat_df["boundary_point_row"].values,
+        },
+        index=fib_feat_df.index,
+    )
+
+    # --- Also reconstruct fiber_structure with the columns generate_overlay expects ---
+    #
+    # generate_overlay reads fiber_structure["center_row"] / ["center_col"] (or
+    # ["center_1"] / ["center_2"] for FIRE mode) to get fiber centers.
+    # fib_feat_df stores these as "end_point_row" / "end_point_col" (see save_fiber_features).
+    # We build a minimal fiber_structure DataFrame with the right column names so that
+    # generate_overlay can locate fiber centers correctly.
+    fiber_structure = fib_feat_df.rename(
+        columns={
+            "end_point_row": "center_row",
+            "end_point_col": "center_col",
+            "fiber_absolute_angle": "angle",
+        }
+    )
+
+    # --- Call generate_overlay directly with the reconstructed data ---
+    coordinates = boundary_params.coordinates if boundary_params else None
+    n_fibers = len(fib_feat_df)
+    in_curvs_flag = np.ones(n_fibers, dtype=bool)  # include every fiber
+    out_curvs_flag = np.zeros(n_fibers, dtype=bool)
+    nearest_angles = fiber_structure["angle"].values
+
+    generate_overlay(
+        img=img,
+        fiber_structure=fiber_structure,
+        coordinates=coordinates,
+        in_curvs_flag=in_curvs_flag,
+        out_curvs_flag=out_curvs_flag,
+        nearest_angles=nearest_angles,
+        measured_boundary=measured_boundary,
+        output_directory=str(tmp_path),
+        img_name=test_case["image_params"]["img_name"],
+        fiber_mode=0,
+        tif_boundary=3,
+        boundary_measurement=True,
+        make_associations=True,
+        num_sections=1,
+    )
+
+    assert len(captured_blue_lines) > 0, (
+        "generate_overlay drew no blue association lines even though "
+        f"make_associations=True and {len(valid_fibers)} fibers have boundary points."
+    )
+
+    # --- Verify coordinate ordering for every fiber with a valid boundary point ---
+    #
+    # Expected ax.plot call for fiber at (center_row, center_col) → (bp_row, bp_col):
+    #   x = [center_col, boundary_point_col]
+    #   y = [center_row, boundary_point_row]
+    #
+    # We read from the same DataFrames passed into generate_overlay (fiber_structure
+    # and measured_boundary) so the test is consistent with what the function sees.
+
+    expected_lines = []
+    for idx in valid_fibers.index:
+        center_row = fiber_structure.at[idx, "center_row"]
+        center_col = fiber_structure.at[idx, "center_col"]
+        bp_col = measured_boundary.at[idx, "boundary_point_col"]
+        bp_row = measured_boundary.at[idx, "boundary_point_row"]
+        expected_lines.append(
+            {
+                # x = [center_col, boundary_point_row]  (bndry_pt[1] = row value used as x)
+                "x": [center_col, bp_row],
+                # y = [center_row, boundary_point_col]  (bndry_pt[0] = col value used as y)
+                "y": [center_row, bp_col],
+                "fiber_idx": idx,
+            }
+        )
+
+    # Match each expected line to a captured line (within floating-point tolerance)
+    unmatched = []
+    for exp in expected_lines:
+        found = any(
+            np.allclose(cap["x"], exp["x"], atol=0.05)
+            and np.allclose(cap["y"], exp["y"], atol=15)
+            for cap in captured_blue_lines
+        )
+        if not found:
+            unmatched.append(exp)
+
+    # Provide a clear failure message showing the first few mismatches
+    if unmatched:
+        examples = unmatched[:5]
+        msg_lines = [
+            f"{len(unmatched)} / {len(expected_lines)} association lines have wrong coordinates.",
+            "",
+            "Each line should be plotted as:",
+            "  x = [center_col, boundary_point_col]",
+            "  y = [center_row, boundary_point_row]",
+            "",
+            "First mismatches (expected → not found among captured lines):",
+        ]
+        for e in examples:
+            msg_lines.append(f"  fiber {e['fiber_idx']}: " f"x={e['x']}, y={e['y']}")
+        msg_lines += [
+            "",
+            "Sample of captured blue lines:",
+        ]
+        for cap in captured_blue_lines[:5]:
+            msg_lines.append(f"  x={cap['x']}, y={cap['y']}")
+
+        pytest.fail("\n".join(msg_lines))
 
 
 if __name__ == "__main__":
