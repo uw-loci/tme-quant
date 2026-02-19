@@ -94,13 +94,15 @@ setup_fftw() {
 
   cd "fftw-${FFTW_VERSION}"
 
-  # Download newest version of config scripts, to avoid configure failure on modern macOS.
-  if [ ! -f config-scripts-downloaded ]; then
-    print_info "Updating config scripts..."
-    curl -fsL -o config.guess 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=HEAD'
-    curl -fsL -o config.sub 'https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD'
+  # Download config scripts (pinned for reproducible builds; avoids configure failure on modern macOS)
+  # Commit a2287c3 (2025-07-10): https://git.savannah.gnu.org/cgit/config.git
+  CONFIG_COMMIT="a2287c3041a3f2a204eb942e09c015eab00dc7dd"
+  if [ ! -f config-scripts-downloaded ] || [ "$(cat config-scripts-downloaded 2>/dev/null)" != "$CONFIG_COMMIT" ]; then
+    print_info "Downloading config.guess and config.sub (commit $CONFIG_COMMIT)..."
+    curl -fsL -o config.guess "https://git.savannah.gnu.org/cgit/config.git/plain/config.guess?id=$CONFIG_COMMIT"
+    curl -fsL -o config.sub "https://git.savannah.gnu.org/cgit/config.git/plain/config.sub?id=$CONFIG_COMMIT"
     chmod +x config.guess config.sub
-    touch config-scripts-downloaded
+    echo "$CONFIG_COMMIT" > config-scripts-downloaded
   fi
 
   print_info "Configuring FFTW ..."
@@ -204,6 +206,8 @@ try:
     import pycurvelets as pc
     print('  ✓ pycurvelets')
     print(f'    HAS_CURVELETS = {pc.HAS_CURVELETS}')
+    if not pc.HAS_CURVELETS:
+        errors.append('pycurvelets: HAS_CURVELETS is False (curvelet backend not functional; check FFTW/FDCT)')
 except ImportError as e:
     errors.append(f'pycurvelets: {e}')
 try:
@@ -217,7 +221,7 @@ try:
 except ImportError as e:
     errors.append(f'napari_curvealign: {e}')
 if errors:
-    print('\\n✗ Import errors:')
+    print('\\n✗ Validation failed:')
     for e in errors:
         print(f'  - {e}')
     sys.exit(1)
