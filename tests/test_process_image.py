@@ -379,17 +379,10 @@ def test_generate_overlay(test_name, test_case, tmp_path, monkeypatch):
         index=fib_feat_df.index,
     )
 
-    # --- Also reconstruct fiber_structure with the columns generate_overlay expects ---
-    #
-    # generate_overlay reads fiber_structure["center_row"] / ["center_col"] (or
-    # ["center_1"] / ["center_2"] for FIRE mode) to get fiber centers.
-    # fib_feat_df stores these as "end_point_row" / "end_point_col" (see save_fiber_features).
-    # We build a minimal fiber_structure DataFrame with the right column names so that
-    # generate_overlay can locate fiber centers correctly.
+    # Reconstructing fiber_structure to be in a format that generate_overlay
+    # expects: "fiber_absolute_angle" is changed to "angle" (see save_fiber_features)
     fiber_structure = fib_feat_df.rename(
         columns={
-            "end_point_row": "center_row",
-            "end_point_col": "center_col",
             "fiber_absolute_angle": "angle",
         }
     )
@@ -422,15 +415,6 @@ def test_generate_overlay(test_name, test_case, tmp_path, monkeypatch):
         "generate_overlay drew no blue association lines even though "
         f"make_associations=True and {len(valid_fibers)} fibers have boundary points."
     )
-
-    # --- Verify coordinate ordering for every fiber with a valid boundary point ---
-    #
-    # Expected ax.plot call for fiber at (center_row, center_col) → (bp_row, bp_col):
-    #   x = [center_col, boundary_point_col]
-    #   y = [center_row, boundary_point_row]
-    #
-    # We read from the same DataFrames passed into generate_overlay (fiber_structure
-    # and measured_boundary) so the test is consistent with what the function sees.
 
     expected_lines = []
     for idx in valid_fibers.index:
