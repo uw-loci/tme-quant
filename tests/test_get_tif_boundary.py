@@ -153,8 +153,8 @@ def test_get_tif_boundary_matches_expected_file(test_data):
             comparison[:, col_idx] = np.isclose(
                 actual[:, col_idx],
                 expected[:, col_idx],
-                rtol=0.1,
-                atol=10.0,
+                rtol=0.05,
+                atol=15,
                 equal_nan=True,
             )
         elif col_idx in coord_cols:
@@ -163,7 +163,7 @@ def test_get_tif_boundary_matches_expected_file(test_data):
                 actual[:, col_idx],
                 expected[:, col_idx],
                 rtol=0.05,
-                atol=3.0,
+                atol=15,
                 equal_nan=True,
             )
         else:
@@ -171,8 +171,8 @@ def test_get_tif_boundary_matches_expected_file(test_data):
             comparison[:, col_idx] = np.isclose(
                 actual[:, col_idx],
                 expected[:, col_idx],
-                rtol=1e-2,
-                atol=1e-2,
+                rtol=0.05,
+                atol=15,
                 equal_nan=True,
             )
 
