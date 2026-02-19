@@ -162,6 +162,12 @@ Requires FFTW and CurveLab with `FFTW` and `FDCT` (or `CPPFLAGS`/`LDFLAGS`) set.
 - Ensure `FFTW` and `FDCT` (or `CPPFLAGS`/`LDFLAGS`) point to your install roots
 - Verify FFTW 2D/3D libraries were built
 
+### Plugin not showing in napari
+
+- Ensure the package is installed: `uv pip install -e .` (the install script does this)
+- Restart napari after installing
+- Check the plugin is registered: `uv run python -c "from importlib.metadata import entry_points; print([ep.name for ep in entry_points(group='napari.manifest') if 'curvealign' in ep.name])"`
+
 ## Activation
 
 After installation:
@@ -170,4 +176,33 @@ After installation:
 uv run napari
 ```
 
-The CurveAlign widget appears in: **Plugins → napari-curvealign → CurveAlign Widget**
+The CurveAlign widget appears in: **Plugins → napari-curvealign** (or **CurveAlign for Napari**) → **CurveAlignPy**
+
+## Making the napari plugin available (for developers)
+
+The plugin is registered via two pieces:
+
+1. **`src/napari_curvealign/napari.yaml`** – Declares the plugin (commands, widgets, display names).
+2. **`pyproject.toml`** – Entry point that tells napari where to find the manifest:
+   ```toml
+   [project.entry-points."napari.manifest"]
+   napari-curvealign = "napari_curvealign:napari.yaml"
+   ```
+
+To make it available in your environment:
+
+```bash
+# Install the package (editable, so changes take effect immediately)
+uv pip install -e .
+# or: uv sync  (installs the project from pyproject.toml)
+
+# Run napari
+uv run napari
+```
+
+Then open **Plugins** in the napari menu and select the CurveAlign widget.
+
+## Running for testing
+
+- **Interactive:** `uv run napari` → Plugins → napari-curvealign
+- **Headless tests:** `QT_QPA_PLATFORM=offscreen make test` (or `uv run pytest`)

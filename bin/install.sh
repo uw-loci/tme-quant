@@ -274,7 +274,7 @@ main() {
   echo ""
   echo "  uv run napari"
   echo ""
-  echo "Plugins → napari-curvealign → CurveAlign Widget"
+  echo "Plugins → napari-curvealign (or CurveAlign for Napari)"
   echo ""
 }
 

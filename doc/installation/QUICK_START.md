@@ -8,7 +8,7 @@
    cd tme-quant
    ```
 
-2. **Install uv** (https://docs.astral.sh/uv/)
+2. **Install uv** (recommended: https://docs.astral.sh/uv/)
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
@@ -40,7 +40,7 @@ The script will:
 uv run napari
 ```
 
-The CurveAlign widget appears in: **Plugins → napari-curvealign → CurveAlign Widget**
+The CurveAlign widget appears in: **Plugins → napari-curvealign** (or **CurveAlign for Napari**)
 
 ## Directory Layout
 
