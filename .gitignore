@@ -1,10 +1,4 @@
 #################
-## Keep top-level setup scripts
-#################
-!/bin/
-!/bin/*
-
-#################
 ## Eclipse
 #################
 
@@ -103,7 +97,6 @@ DocProject/Help/html
 publish
 
 # Others
-# [Bb]in - REMOVED: We need to track bin/ directory for setup scripts
 [Oo]bj
 sql
 TestResults
@@ -138,6 +131,9 @@ Desktop.ini
 #############
 
 *.py[co]
+
+# uv
+uv.lock
 
 # Packages
 *.egg
@@ -177,57 +173,4 @@ lastPATH_CTF.mat
 *.mat
 *.tif
 
-# --- Python API (curvealign_py, ctfire_py) and general Python ignores ---
-# Virtual environments
-.venv/
-venv/
-.env/
-env/
-.api_env/
-.test_env/
-curvealign_env/
-
-# Byte-compiled / cache
-__pycache__/
-**/__pycache__/
-*.py[cod]
-*$py.class
-
-# Packaging / build
-build/
-dist/
-*.egg-info/
-.eggs/
-*.egg
-
-# Test, coverage, lint
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.nox/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# OS/editor files
-.DS_Store
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# Local outputs and results
-curvealign_output/
-synthetic_results/
-proper_results/
-*_results/
-*_overlay.png
-*_analysis.png
-
-# Development artifacts
-*.log
-*.tmp
-*.temp
+pycurvelets/opt/*.*

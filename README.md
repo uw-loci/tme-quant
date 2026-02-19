@@ -1,42 +1,12 @@
-# tme-quant
+### tme-quant
 
-Modern Python implementation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) for collagen fiber analysis, featuring a comprehensive API and CT-FIRE integration.
+Python translation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) with the goal of unifying cell and collagen analysis, provided as a modern Python `src/` package and a napari plugin.
 
-> **Note**: This branch (`api-curation`) focuses on the Python API. For the napari plugin, see the [`napari-curvealign`](https://github.com/uw-loci/tme-quant/tree/napari-curvealign) branch.
-
-## Python API - Quick Start
-
-The repository provides a complete, modern Python API for fiber analysis:
-
-```python
-import curvealign_py as curvealign
-
-# Basic analysis
-result = curvealign.analyze_image(image)
-print(f"Found {len(result.curvelets)} fiber segments")
-print(f"Mean angle: {result.stats['mean_angle']:.1f}°")
-
-# Create visualizations
-overlay = curvealign.overlay(image, result.curvelets)
-angle_map = curvealign.angle_map(image, result.curvelets)
-
-# CT-FIRE integration
-result_ctfire = curvealign.analyze_image(image, mode="ctfire")
-```
-
-### API Features
-- **Authentic FDCT**: Real CurveLab transforms via Curvelops integration
-- **Unified Interface**: Both curvelet-based and CT-FIRE fiber extraction
-- **Granular Architecture**: Modular design with clean separation of concerns  
-- **Visualization Support**: Built-in support for matplotlib and extensible for other backends
-- **Type Safety**: Comprehensive type definitions and validation
-- **Framework Ready**: Designed for scientific Python workflows
-
-## Repository Structure (high-level)
-- `src/curvealign_py/`: CurveAlign Python API
-- `src/ctfire_py/`: CT-FIRE Python API
-- `bin/`: Automated setup scripts
-- `tests/`: Comprehensive test suite with CI integration
+### About this repo
+- `src/pycurvelets`: Python implementation using the curvelet transform
+- `src/napari_curvealign`: napari plugin surface for interactive use
+- `tests/`: pytest suite (data-driven tests and headless napari smoke test)
+- `.github/workflows/ci.yml`: GitHub Actions workflow (runs core tests only)
 
 ### Licensing and prerequisites
 This project depends on code that cannot be redistributed here:
@@ -44,104 +14,101 @@ This project depends on code that cannot be redistributed here:
 
 Base requirements:
 - macOS, Linux, or Windows (see notes below)
-- Conda (recommended) or Python 3.9–3.13
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- napari uses PyQt6 (included in dependencies)
 
-## Installation
+### Quick start (without curvelets)
 
-### One-Click Installation (Napari Plugin - Recommended)
-
-For the napari plugin with all dependencies including Curvelops:
-
-**Prerequisites:**
-- Python 3.9+ installed
-- FFTW 2.1.5 installed in `../utils/fftw-2.1.5`
-- CurveLab 2.1.2 installed in `../utils/CurveLab-2.1.2`
-
-**Installation:**
 ```bash
-cd tme-quant
+uv sync
+uv run napari
+```
+
+### Optional: curvelet backend (curvelops)
+
+To enable curvelet-powered features and tests you must build FFTW 2.1.5 and CurveLab, then install with curvelops. Use the automated script:
+
+**Prerequisites:** Clone this repo, install [uv](https://docs.astral.sh/uv/), and download CurveLab to `../utils` (see [doc/INSTALL.md](doc/INSTALL.md)).
+
+macOS/Linux:
+```bash
 bash bin/install.sh
+# or: make setup
 ```
 
-**After installation:**
+Windows options:
+- Recommended: use WSL2 (Ubuntu). Follow the macOS/Linux steps inside WSL.
+- Native Windows: use MSYS2 (for `gcc`, `make`) or Visual Studio toolchain; build FFTW 2.1.5 and CurveLab from source, set `FFTW` and `FDCT` env vars to their install roots, then use `uv` commands as above.
+
+### Development
+
+See [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) for plugin setup and troubleshooting. Running tests:
+
+- Headless (no GUI): set Qt to offscreen
+  - macOS/Linux: `export QT_QPA_PLATFORM=offscreen`
+  - Windows/PowerShell: `$env:QT_QPA_PLATFORM = 'offscreen'`
+
+- Core tests (no curvelets):
 ```bash
-# Activate the environment
-source bin/activate.sh
-
-# Launch Napari
-napari
+make test
 ```
 
-The CurveAlign widget will appear in: **Plugins → napari-curvealign → CurveAlign Widget**
+- Full tests with curvelets (after installing `curvelops`): `make test` — curvelet tests run automatically when curvelops is available; otherwise skipped.
 
-### Quick Start (Native - recommended)
+Notes:
+- The napari test is an import-only smoke test (no `Viewer` is created); it runs headless.
 
-Use the automated setup script:
-```bash
-cd tme-quant
-bash bin/setup.sh
-# or using make
-make setup
+Testing policy:
+- Tests must not write files to the repository root. Use a system
+  temporary directory instead (e.g., `tempfile.TemporaryDirectory`).
+- If a deterministic artifact is needed across runs, commit it under
+  `tests/test_resources/` and read from there during tests.
+
+### Continuous integration
+- CI installs the package without `curvelops` to avoid building FFTW/CurveLab on runners.
+- CI environment:
+  - Curvelet tests skipped (curvelops not installed on CI)
+  - `QT_QPA_PLATFORM=offscreen` (headless napari import)
+
+### Working with secrets in GitHub Actions
+This project uses GitHub Actions secrets for tasks that require authentication or access to private resources. Secrets can be configured in the [Settings tab of the repostiory](https://github.com/uw-loci/tme-quant/settings/secrets/actions). For more information about secrets, see:
+- [Secrets as a concept](https://docs.github.com/en/actions/concepts/security/secrets)
+- [Secrets in actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
+
+#### Manual testing workflow
+The `manual-test` workflow allows developers to manually trigger workflows from the GitHub UI without committing changes to `main`. This is useful for testing workflows that require secrets on topic branches.
+
+**How to use it:**
+
+1. Create or edit `.github/workflows/test-action.yml` to define your workflow's structure and declare which secrets it needs via the `secrets:` input in `workflow_call`:
+```yaml
+on:
+  workflow_call:
+    secrets:
+      MY_SECRET_NAME:
+      ANOTHER_SECRET:
+
+jobs:
+  my-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Use a secret
+        run: echo "Secret is ${{ secrets.MY_SECRET_NAME }}"
 ```
 
-For details see:
-- **Napari Plugin**: [doc/installation/NAPARI_PLUGIN_INSTALLATION.md](doc/installation/NAPARI_PLUGIN_INSTALLATION.md) - Complete guide with one-click installation
-- **Base Package**: [doc/installation/SETUP_GUIDE.md](doc/installation/SETUP_GUIDE.md) - Python API installation
-- **Quick Start**: [doc/installation/QUICK_START.md](doc/installation/QUICK_START.md) - Quick reference
+2. The `manual-test` workflow (`.github/workflows/manual-test.yml`) will call `test-action.yml` and pass repository secrets to it via `secrets: inherit`.
 
-Docker users: see [docker/README.md](docker/README.md).
+3. To trigger the workflow:
+   - Push your branch with the updated `test-action.yml` to GitHub.
+   - Go to the **Actions** tab in the repository and select the **[Manual Testing Stub](https://github.com/uwloci/tme-quant/actions/workflows/manual-test.yml)** workflow.
+   - Click **Run workflow** and select your branch.
+   - The workflow will execute with access to all secrets configured for the repository.
 
-### Docker (alternative)
+**NOTE**
+- Never hardcode secrets or access tokens in workflow files; always use the `secrets:` context.
 
-```bash
-make docker-build
-make docker-run
-```
-
-### Verify Installation (either method)
-```python
-import curvealign_py as curvealign
-import ctfire_py as ctfire
-
-# Test basic functionality
-result = curvealign.analyze_image(your_image)
-print(f"Analysis complete: {len(result.curvelets)} features detected")
-```
-
-### Curvelet backend (optional)
-To enable authentic CurveLab FDCT via `curvelops`, you need FFTW 2.1.5 and CurveLab. Use `source bin/setup_curvelops_env.sh` (or set `FFTW`/`FDCT` manually) and install with the `curvelab` extra.
-
-## Testing (optional)
-```bash
-pytest -v
-```
-
-## Usage examples
-See `simple_usage.py`.
-
-## Troubleshooting
-
-### Common Issues
-- **Import errors**: Ensure package is installed: `pip install -e .`
-- **curvelops build errors**: Verify `FFTW` and `FDCT` environment variables point to install roots
-
-### Documentation
-- API documentation: See individual module docstrings
-- Architecture details: Comprehensive type system and modular design
-- Examples: Check `simple_usage.py` for common usage patterns
-
-## Support
-
-### Installation Help
-- **Napari Plugin**: [doc/installation/NAPARI_PLUGIN_INSTALLATION.md](doc/installation/NAPARI_PLUGIN_INSTALLATION.md) - Complete installation guide
-- **Quick Start**: [doc/installation/QUICK_START.md](doc/installation/QUICK_START.md) - Quick reference
-- **Base Package**: [doc/installation/SETUP_GUIDE.md](doc/installation/SETUP_GUIDE.md) - Detailed setup guide
-
-### API Documentation
-- **API Summary**: [doc/curvealign/CURVEALIGN_PYTHON_API_SUMMARY.md](doc/curvealign/CURVEALIGN_PYTHON_API_SUMMARY.md)
-- **Architecture**: [doc/curvealign/ARCHITECTURE.md](doc/curvealign/ARCHITECTURE.md)
-
-### Feature Guides
-- **Testing**: [TESTING_GUIDE.md](doc/napari/TESTING_GUIDE.md)
-- **Segmentation**: [SEGMENTATION_FEATURE.md](doc/napari/SEGMENTATION_FEATURE.md)
-- **Multi-Environment**: [MULTI_ENVIRONMENT_GUIDE.md](doc/napari/MULTI_ENVIRONMENT_GUIDE.md)
+### Troubleshooting
+- Qt error ("No Qt bindings could be found"): ensure `uv sync` completed; pyproject includes PyQt6.
+- Segfault on Viewer creation: avoid creating a `napari.Viewer()` in tests; we only import napari and run offscreen.
+- curvelops build errors: ensure `FFTW` and `FDCT` point to your install roots and the 2D/3D libraries were built.

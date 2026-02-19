@@ -4,105 +4,50 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tme-quant"
-version = "0.1.0"
-description = "Python translation of CurveAlign; curvelet-based quantification API"
+version = "0.1.0.dev0"
+description = "Python translation of CurveAlign; curvelet-based quantification and napari plugin"
 authors = [{ name = "Eliceiri Lab" }]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
-  # Core dependencies from tme-quant (api-curation branch)
   "pandas",
-  "numpy>=1.20.0",
-  "matplotlib>=3.3.0",
-  "scipy>=1.7.0",
+  "numpy",
+  "matplotlib",
+  "scipy",
   "opencv-python",
-  "scikit-image>=0.18.0",
-  "tifffile>=2021.1.1",
+  "scikit-image",
   "openpyxl",
-  # Napari dependencies (mandatory)
-  "napari[all]>=0.4.0",
-  "napari-console>=0.1.0",
-  "napari-plugin-engine>=0.2.0",
-  "napari-plugin-manager>=0.1.0",
-  "napari-svg>=0.2.0",
-  "qtpy>=2.0.0",
-  "roifile>=2024.1.0",
-  "magicgui>=0.10.0",
-  "superqt>=0.7.0",
-  "vispy>=0.15.0",
+  "napari",
+  "pyqt6",
+  "qtpy",
+]
+
+[dependency-groups]
+dev = [
+  "build",
+  "pytest",
+  "ruff",
 ]
 
 [project.optional-dependencies]
-# Optional: authentic CurveLab FDCT via curvelops (requires external FFTW+CurveLab builds).
-curvelab = [
-  "curvelops @ git+https://github.com/PyLops/curvelops@0.23",
+curvelops = [
+  "curvelops @ git+https://github.com/PyLops/curvelops@0.23.4",
 ]
-dev = [
-  "build",
-  "pytest>=6.0",
-  "pytest-cov",
-  "ruff",
-  "black>=22.0.0",
-  "isort>=5.0.0",
-  "flake8>=4.0.0",
-  "mypy",
-  "pre-commit",
-]
-docs = [
-  "sphinx>=4.0",
-  "sphinx-rtd-theme",
-  "numpydoc",
-]
-visualization = [
-  "matplotlib>=3.5.0",
-]
-imagej = [
-  "pyimagej>=1.4.0",
-]
-fiji_bridge = [
-  "napari-imagej",
-  "aicsimageio",
-]
-segmentation = [
-  "cellpose>=2.0",
-  "cellcast",
-]
-all = [
-  "matplotlib>=3.5.0",
-  "pyimagej>=1.4.0",
-  "cellpose>=2.0",
-  "cellcast",
-  "napari-imagej",
-  "aicsimageio",
-]
+
+[project.entry-points."napari.manifest"]
+napari-curvealign = "napari_curvealign:napari.yaml"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-include-package-data = false
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 namespaces = false
 
+[tool.setuptools.package-data]
+napari_curvealign = ["napari.yaml"]
+
 [tool.pytest.ini_options]
 testpaths = [
   "tests",
-  "tests/curvealign_py", 
-  "tests/ctfire_py",
 ]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --cov=curvealign_py --cov=ctfire_py --cov-report=term-missing"
-# Exclude validation tests by default (run with: pytest tests/validation/ to include them)
-norecursedirs = ["tests/validation"]
-
-[tool.black]
-line-length = 88
-target-version = ['py39']
-
-[tool.isort]
-profile = "black"
-line_length = 88
-
-[project.entry-points."napari.manifest"]
-tme-quant = "napari_curvealign:napari.yaml"
