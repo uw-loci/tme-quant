@@ -18,7 +18,7 @@ make test
 
 Headless (no GUI): `QT_QPA_PLATFORM=offscreen make test`
 
-With curvelet tests: `TMEQ_RUN_CURVELETS=1 make test`
+Curvelet tests run automatically when curvelops is installed; otherwise they are skipped.
 
 ## Troubleshooting
 

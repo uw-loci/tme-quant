@@ -54,11 +54,7 @@ See [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) for plugin setup and troubleshootin
 make test
 ```
 
-- Full tests with curvelets (after installing `curvelops`):
-```bash
-export TMEQ_RUN_CURVELETS=1
-make test
-```
+- Full tests with curvelets (after installing `curvelops`): `make test` — curvelet tests run automatically when curvelops is available; otherwise skipped.
 
 Notes:
 - The napari test is an import-only smoke test (no `Viewer` is created); it runs headless.
@@ -72,7 +68,7 @@ Testing policy:
 ### Continuous integration
 - CI installs the package without `curvelops` to avoid building FFTW/CurveLab on runners.
 - CI environment:
-  - `TMEQ_RUN_CURVELETS=0` (curvelet tests skipped)
+  - Curvelet tests skipped (curvelops not installed on CI)
   - `QT_QPA_PLATFORM=offscreen` (headless napari import)
 
 ### Troubleshooting
