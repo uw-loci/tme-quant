@@ -1226,15 +1226,19 @@ def generate_overlay(
             # Plot lines connecting each fiber center to its nearest boundary point
             for center, bndry_pt in zip(in_curvs, in_bndry):
                 if not np.isnan(bndry_pt[0]) and not np.isnan(bndry_pt[1]):
-                    # Plot line from fiber center to boundary point
-                    # MATLAB: plot([center(1,2) bndry(1)], [center(1,1) bndry(2)], 'b')
-                    # bndry_pt is [row, col], center is [row, col]
+                    # center    : [row, col]
+                    # bndry_pt  : [col, row]  (NOTE: boundary points are stored as x, y)
+                    # matplotlib plot expects (x=col, y=row)
+                    # MATLAB equivalent:
+                    # plot([center(1,2) bndry(1)], [center(1,1) bndry(2)], 'b')
+
                     ax.plot(
-                        [center[1], bndry_pt[1]],  # x: col coordinates
-                        [center[0], bndry_pt[0]],  # y: row coordinates
+                        [center[1], bndry_pt[0]],  # x: center col → boundary col
+                        [center[0], bndry_pt[1]],  # y: center row → boundary row
                         "b-",
                         linewidth=0.5,
                     )
+
     elif tif_boundary == 0:  # No boundary - draw all fibers
         # Draw all fibers in green
         draw_curvs(
