@@ -28,10 +28,9 @@ bash bin/install.sh
 The script will:
 - Check for uv (exits if not found)
 - Download FFTW 2.1.5 to `../utils` if not present
-- Build FFTW and CurveLab (installing build tools if needed on macOS/Linux)
 - Detect CurveLab in `../utils` (will exit with instructions if not found)
-- Create and sync the uv environment with curvelops
-- Install tme-quant in editable mode
+- Build FFTW and CurveLab (exits with hints if build tools are not found)
+- Create and sync the uv environment for tme-quant with all dependencies
 - Run verification
 
 ## Usage
