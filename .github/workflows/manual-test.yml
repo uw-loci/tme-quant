@@ -1,0 +1,14 @@
+name: Manual Testing Stub
+
+# This action allows manual testing of other actions from branches, without
+# requiring them to be on main themselves.
+
+on:
+  # Enable manual execution from GitHub UI
+  workflow_dispatch:
+
+jobs:
+  test-run:
+    # Create this file on your branch as the action to test
+    uses: ./.github/workflows/test-action.yml
+    secrets: inherit

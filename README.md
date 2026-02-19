@@ -14,72 +14,47 @@ This project depends on code that cannot be redistributed here:
 
 Base requirements:
 - macOS, Linux, or Windows (see notes below)
-- Conda (recommended) or Python 3.10–3.13
-- For napari: a Qt binding (PyQt or PySide)
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- napari uses PyQt6 (included in dependencies)
 
 ### Quick start (without curvelets)
-Install the package and the napari GUI. This path avoids the native curvelet build.
 
 ```bash
-conda create -y -n napari-env -c conda-forge python=3.11 pip
-conda activate napari-env
-
-# project install (editable)
-pip install -e .
-
-# napari + Qt
-conda install -y -c conda-forge napari pyqt qtpy
+uv sync
+uv run napari
 ```
 
 ### Optional: curvelet backend (curvelops)
-To enable curvelet-powered features and tests you must build and install FFTW 2.1.5 and CurveLab, then install `curvelops`.
 
-macOS/Linux outline:
+To enable curvelet-powered features and tests you must build FFTW 2.1.5 and CurveLab, then install with curvelops. Use the automated script:
+
+**Prerequisites:** Clone this repo, install [uv](https://docs.astral.sh/uv/), and download CurveLab to `../utils` (see [doc/INSTALL.md](doc/INSTALL.md)).
+
+macOS/Linux:
 ```bash
-# 1) Build FFTW 2.1.5 (C only)
-curl -L -O http://www.fftw.org/fftw-2.1.5.tar.gz
- tar xzf fftw-2.1.5.tar.gz
- cd fftw-2.1.5
- # If configure fails on macOS due to outdated config.{sub,guess}, update them from your system
- ./configure --prefix="$HOME/opt/fftw-2.1.5" --disable-fortran
- make -j$(sysctl -n hw.logicalcpu 2>/dev/null || nproc)
- make install
- export FFTW="$HOME/opt/fftw-2.1.5"
-
-# 2) Build CurveLab 2.1.x
-export FDCT="/path/to/CurveLab-2.1.x"
- cd "$FDCT/fdct_wrapping_cpp/src" && make
- cd "$FDCT/fdct/src" && make
- cd "$FDCT/fdct3d/src" && make
-
-# 3) Install build tooling and curvelops
-conda activate napari-env
- python -m pip install -U pip
- pip install pybind11 scikit-build-core cmake ninja
- export FFTW="$HOME/opt/fftw-2.1.5"
- export FDCT="/path/to/CurveLab-2.1.x"
- pip install -v "curvelops @ git+https://github.com/PyLops/curvelops@0.23"
+bash bin/install.sh
+# or: make setup
 ```
 
 Windows options:
 - Recommended: use WSL2 (Ubuntu). Follow the macOS/Linux steps inside WSL.
-- Native Windows: use MSYS2 (for `gcc`, `make`) or Visual Studio toolchain; build FFTW 2.1.5 and CurveLab from source, set `FFTW` and `FDCT` env vars to their install roots, then install `curvelops` as above. Supervisors can validate these steps on a Windows host.
+- Native Windows: use MSYS2 (for `gcc`, `make`) or Visual Studio toolchain; build FFTW 2.1.5 and CurveLab from source, set `FFTW` and `FDCT` env vars to their install roots, then use `uv` commands as above.
 
-### Development: running the tests
+### Development
+
+See [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) for plugin setup and troubleshooting. Running tests:
+
 - Headless (no GUI): set Qt to offscreen
   - macOS/Linux: `export QT_QPA_PLATFORM=offscreen`
   - Windows/PowerShell: `$env:QT_QPA_PLATFORM = 'offscreen'`
 
 - Core tests (no curvelets):
 ```bash
-pytest -q
+make test
 ```
 
-- Full tests with curvelets (after installing `curvelops`):
-```bash
-export TMEQ_RUN_CURVELETS=1
-pytest -q
-```
+- Full tests with curvelets (after installing `curvelops`): `make test` — curvelet tests run automatically when curvelops is available; otherwise skipped.
 
 Notes:
 - The napari test is an import-only smoke test (no `Viewer` is created); it runs headless.
@@ -93,10 +68,47 @@ Testing policy:
 ### Continuous integration
 - CI installs the package without `curvelops` to avoid building FFTW/CurveLab on runners.
 - CI environment:
-  - `TMEQ_RUN_CURVELETS=0` (curvelet tests skipped)
+  - Curvelet tests skipped (curvelops not installed on CI)
   - `QT_QPA_PLATFORM=offscreen` (headless napari import)
 
+### Working with secrets in GitHub Actions
+This project uses GitHub Actions secrets for tasks that require authentication or access to private resources. Secrets can be configured in the [Settings tab of the repostiory](https://github.com/uw-loci/tme-quant/settings/secrets/actions). For more information about secrets, see:
+- [Secrets as a concept](https://docs.github.com/en/actions/concepts/security/secrets)
+- [Secrets in actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
+
+#### Manual testing workflow
+The `manual-test` workflow allows developers to manually trigger workflows from the GitHub UI without committing changes to `main`. This is useful for testing workflows that require secrets on topic branches.
+
+**How to use it:**
+
+1. Create or edit `.github/workflows/test-action.yml` to define your workflow's structure and declare which secrets it needs via the `secrets:` input in `workflow_call`:
+```yaml
+on:
+  workflow_call:
+    secrets:
+      MY_SECRET_NAME:
+      ANOTHER_SECRET:
+
+jobs:
+  my-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Use a secret
+        run: echo "Secret is ${{ secrets.MY_SECRET_NAME }}"
+```
+
+2. The `manual-test` workflow (`.github/workflows/manual-test.yml`) will call `test-action.yml` and pass repository secrets to it via `secrets: inherit`.
+
+3. To trigger the workflow:
+   - Push your branch with the updated `test-action.yml` to GitHub.
+   - Go to the **Actions** tab in the repository and select the **[Manual Testing Stub](https://github.com/uwloci/tme-quant/actions/workflows/manual-test.yml)** workflow.
+   - Click **Run workflow** and select your branch.
+   - The workflow will execute with access to all secrets configured for the repository.
+
+**NOTE**
+- Never hardcode secrets or access tokens in workflow files; always use the `secrets:` context.
+
 ### Troubleshooting
-- Qt error ("No Qt bindings could be found"): install `pyqt` (or `pyside2`) from conda-forge.
+- Qt error ("No Qt bindings could be found"): ensure `uv sync` completed; pyproject includes PyQt6.
 - Segfault on Viewer creation: avoid creating a `napari.Viewer()` in tests; we only import napari and run offscreen.
 - curvelops build errors: ensure `FFTW` and `FDCT` point to your install roots and the 2D/3D libraries were built.
