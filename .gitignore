@@ -14,6 +14,7 @@ local.properties
 .classpath
 .settings/
 .loadpath
+*.idea
 
 # External tool builders
 .externalToolBuilders/
@@ -59,6 +60,7 @@ local.properties
 *.tli
 *.tlh
 *.tmp
+*.xlsx
 *.vspscc
 .builds
 *.dotCover
@@ -174,3 +176,9 @@ lastPATH_CTF.mat
 *.tif
 
 pycurvelets/opt/*.*
+
+# test tmp folder
+tests/test_images/CA_Out/
+
+# referenced MATLAB files
+*.m

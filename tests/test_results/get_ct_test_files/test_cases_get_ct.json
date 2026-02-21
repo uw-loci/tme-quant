@@ -1,0 +1,16 @@
+{
+  "test_cases": [
+    {
+      "name": "real1_standard",
+      "image": "real1.tif",
+      "keep": 0.05,
+      "scale": 1,
+      "radius": 10,
+      "minimum_nearest_fibers": 2,
+      "minimum_box_size": 32,
+      "fiber_midpoint_estimate": 1,
+      "expected_density_csv": "density_df.csv",
+      "expected_alignment_csv": "alignment_df.csv"
+    }
+  ]
+}

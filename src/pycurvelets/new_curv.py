@@ -1,19 +1,18 @@
-from curvelops import FDCT2D, curveshow, fdct2d_wrapper
 import math
-import matplotlib.pyplot as plt
+
 import numpy as np
 import pandas as pd
-import os
-from scipy.io import loadmat
+
+from curvelops import fdct2d_wrapper
+
+from pycurvelets.models import CurveletControlParameters
+from pycurvelets.utils.math import round_mlab
 
 
-def new_curv(img, curve_cp):
+def new_curv(img, curve_cp: CurveletControlParameters):
     """
     Python implementation of newCurv.m
     SAME IMPLEMENTATION WHEN USING CPP WRAPPER -- NOT MATLAB.
-    The equivalent input to newCurv.m curveCP's:
-    keep = 0.01, scale = 1, radius = 3 is the same as:
-    keep = 0.01, scale = 1, radius = 3 in this function, so it takes in the same parameters.
 
     This function applies the Fast Discrete Curvelet Transform to an image, then extracts
     the curvelet coefficients at a given scale with magnitude above a given threshold.
@@ -23,24 +22,30 @@ def new_curv(img, curve_cp):
     -----------
     img : ndarray
         Input image
-    curve_cp : dict
-        Control parameters for curvelets application with fields:
-        - keep: fraction of the curvelets to be kept
-        - scale: scale to be analyzed
-        - radius: radius to group the adjacent curvelets
+    curve_cp : CurveletControlParameters
+        Dataclass containing curvelet control parameters:
+            - keep : float
+                Fraction of the curvelets to be kept.
+            - scale : float
+                Scale to be analyzed.
+            - radius : float
+                Radius to group adjacent curvelets.
 
     Returns:
     --------
-    in_curves : list of dict
-        List of dictionaries containing the orientation angle and center point of each curvelet
-    ct : list of lists
+    in_curves : pandas.DataFrame
+        DataFrame containing one row per curvelet, with columns:
+        - ``angle``: orientation angle in degrees
+        - ``center_row``: row coordinate of the curvelet center
+        - ``center_col``: column coordinate of the curvelet center
+    curvelet_coefficients : list of lists
         A nested list containing the thresholded curvelet coefficients
     inc : float
         Angle increment used
     """
-    keep = curve_cp["keep"]
-    s_scale = curve_cp["scale"]
-    radius = curve_cp["radius"]
+    keep = curve_cp.keep
+    s_scale = curve_cp.scale
+    radius = curve_cp.radius
 
     # Apply the FDCT to the image
     # Note: Python implementation uses different parameter ordering from MATLAB
@@ -59,7 +64,7 @@ def new_curv(img, curve_cp):
     #     print(f"Debug: scale {i}: {len(scale)} wedges")
 
     # Create an empty structure of the same dimensions
-    ct = [
+    curvelet_coefficients = [
         [np.zeros_like(c[cc][dd]) for dd in range(len(c[cc]))] for cc in range(len(c))
     ]
 
@@ -96,7 +101,7 @@ def new_curv(img, curve_cp):
     # Threshold coefficients — keep values >= max_val, zero otherwise
     for dd in range(len(c[s])):
         mask = np.abs(c[s][dd]) >= max_val
-        ct[s][dd] = c[s][dd] * mask
+        curvelet_coefficients[s][dd] = c[s][dd] * mask
 
     # Debug: print threshold info
     # print(f"Debug: scale s={s}, len(c)={len(c)}, s_scale={s_scale}")
@@ -142,10 +147,12 @@ def new_curv(img, curve_cp):
     for w in range(long):
         # Find non-zero coefficients
         # MATLAB: test = find(Ct{s}{w});
-        test = np.flatnonzero(ct[s][w])
+        test = np.flatnonzero(curvelet_coefficients[s][w])
 
         if len(test) > 0:
-            test_idx_y, test_idx_x = np.unravel_index(test, ct[s][w].shape)
+            test_idx_y, test_idx_x = np.unravel_index(
+                test, curvelet_coefficients[s][w].shape
+            )
             angle = np.zeros(len(test))
             for bb in range(2):
                 # print(len(test))
@@ -169,8 +176,8 @@ def new_curv(img, curve_cp):
             col[w] = np.zeros(len(test), dtype=int)
 
             angs[w] = np.array(angle)
-            row[w] = np.round(SX[s][w].ravel(order="F")[test])
-            col[w] = np.round(SY[s][w].ravel(order="F")[test])
+            row[w] = round_mlab(SX[s][w].ravel(order="F")[test])
+            col[w] = round_mlab(SY[s][w].ravel(order="F")[test])
 
             angle = []
         else:
@@ -185,7 +192,7 @@ def new_curv(img, curve_cp):
 
     if len(bb) == 0:  # No curvelets found
         print("Error; no curvelets found")
-        return [], ct, inc
+        return [], curvelet_coefficients, inc
 
     # Concatenate non-empty arrays
     col_flat = np.concatenate([col[i] for i in bb])
@@ -230,6 +237,7 @@ def new_curv(img, curve_cp):
     not_empty = [len(g) > 0 for g in groups]
     comb_nh = [g for g in groups if len(g) > 0]
     n_hoods = [curves[g] for g in comb_nh]
+
     # print(f"Debug: curvelets after grouping: {len(n_hoods)}")
 
     # Helper function for fixing angles
@@ -269,7 +277,7 @@ def new_curv(img, curve_cp):
 
     angles = [fix_angle(nh[:, 2], inc) for nh in n_hoods]
     centers = [
-        np.array([round(np.median(nh[:, 0])), round(np.median(nh[:, 1]))])
+        np.array([round_mlab(np.median(nh[:, 0])), round_mlab(np.median(nh[:, 1]))])
         for nh in n_hoods
     ]
 
@@ -300,6 +308,16 @@ def new_curv(img, curve_cp):
         & (cen_col > edge_buf)
     )[0]
 
-    in_curves = [objects[i] for i in in_idx]
+    in_curves = pd.DataFrame(
+        [
+            {
+                "center_row": obj["center"][0],
+                "center_col": obj["center"][1],
+                "angle": obj["angle"],
+            }
+            for i, obj in enumerate(objects)
+            if i in in_idx
+        ]
+    ).reset_index(drop=True)
 
-    return in_curves, ct, inc
+    return in_curves, curvelet_coefficients, inc
