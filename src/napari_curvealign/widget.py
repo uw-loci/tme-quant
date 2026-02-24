@@ -1143,16 +1143,6 @@ class CurveAlignWidget(QWidget):
             target_viewer = napari.Viewer(title=f"CurveAlign Results - {image_name}")
             self.results_viewer = target_viewer
         
-        # Try to use CurveAlign napari backend for better visualization
-        try:
-            from curvealign_py.visualization.backends.napari_backend import (
-                display_analysis_result
-            )
-            # If we have the actual analysis result, use it
-            # For now, use the overlay and heatmap approach
-        except ImportError:
-            pass
-        
         # Add overlay image
         overlay_layer = target_viewer.add_image(
             overlay_img,

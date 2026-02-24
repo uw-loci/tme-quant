@@ -7,20 +7,15 @@ import random
 from enum import Enum
 from typing import Tuple
 
-# Import the new CurveAlign API
+# Use pycurvelets (manually converted API from branch 22)
 try:
-    import curvealign_py as curvealign
-    HAS_CURVEALIGN = True
+    from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
+    from pycurvelets.get_ct import get_ct
+    from pycurvelets.utils.visualization.draw_map import draw_map
+    HAS_PYCURVELETS = True
 except ImportError:
-    HAS_CURVEALIGN = False
-    print("Warning: curvealign_py not available. Using mock analysis.")
-
-# Legacy curvelops import for backward compatibility
-try:
-    from curvelops import FDCT2D, curveshow, fdct2d_wrapper  # type: ignore
-    HAS_CURVELETS = True
-except Exception:
-    HAS_CURVELETS = False
+    HAS_PYCURVELETS = False
+    print("Warning: pycurvelets not available. Using mock analysis.")
 
 def _convert_features_to_dataframe(features: dict, stats: dict) -> pd.DataFrame:
     """Convert CurveAlign features and stats to a DataFrame for display."""
@@ -143,7 +138,7 @@ def _convert_features_to_dataframe_full(
     return pd.DataFrame(measurements)
 
 
-def _generate_histograms(result, image_name: str):
+def _generate_histograms(fiber_structure, features: dict, image_name: str):
     """
     Generate histogram visualizations matching MATLAB CurveAlign output.
     
@@ -156,12 +151,11 @@ def _generate_histograms(result, image_name: str):
         import matplotlib.pyplot as plt
         from pathlib import Path
         
-        if not result.curvelets:
+        if fiber_structure is None or len(fiber_structure) == 0:
             return
         
-        # Extract data
-        angles = np.array([c.angle_deg for c in result.curvelets])
-        weights = np.array([c.weight or 1.0 for c in result.curvelets])
+        angles = fiber_structure["angle"].values
+        weights = np.ones(len(angles))
         
         # Create output directory
         output_dir = Path("curvealign_output")
@@ -186,8 +180,8 @@ def _generate_histograms(result, image_name: str):
             axes[1].grid(True, alpha=0.3)
         
         # Density histogram (if available)
-        if 'density_nn' in result.features:
-            density = result.features['density_nn']
+        if features and 'density_nn' in features:
+            density = features['density_nn']
             density = density[density > 0]  # Remove zeros
             if len(density) > 0:
                 axes[2].hist(density, bins=50, edgecolor='black', alpha=0.7)
@@ -241,56 +235,69 @@ def run_analysis(
     if image_data.ndim > 2 and image_data.shape[0] > 1:
         image_data = image_data[0]
     
-    # Use real CurveAlign analysis if available
-    if HAS_CURVEALIGN:
+    # Use pycurvelets analysis if available
+    if HAS_PYCURVELETS:
         try:
-            # Create CurveAlign options from parameters
-            options = curvealign.CurveAlignOptions(
+            curve_cp = CurveletControlParameters(
                 keep=curve_threshold,
-                dist_thresh=distance_boundary,
+                scale=1.0,
+                radius=10.0,
             )
-            
-            # Handle boundary if specified
-            boundary = None
-            if boundary_type.value != "No boundary":
-                # TODO: Load boundary from file if TIFF boundary
-                # For now, boundary analysis will be skipped
-                pass
-            
-            # Determine analysis mode
-            mode = analysis_mode
-            if mode == "both":
-                # For "both", run curvelets mode first
-                # Note: Full "both" mode would require running both analyses and combining results
-                # For now, we default to curvelets as it's the primary mode
-                print("Note: 'Both' mode not fully implemented. Using curvelets mode.")
-                mode = "curvelets"
-            
-            # Run CurveAlign analysis with specified mode
-            result = curvealign.analyze_image(
-                image_data, 
-                boundary=boundary,
-                mode=mode,
-                options=options
+            feature_cp = FeatureControlParameters(
+                minimum_nearest_fibers=2,
+                minimum_box_size=32,
+                fiber_midpoint_estimate=1,
             )
-            
-            # Create overlay visualization
-            overlay_img = curvealign.overlay(image_data, result.curvelets)
-            
-            # Create angle map visualization
-            angle_map_raw, angle_map_processed = curvealign.angle_map(image_data, result.curvelets)
-            
-            # Generate histograms if requested
+            fiber_structure, density_df, alignment_df, _ = get_ct(
+                image_data, curve_cp, feature_cp
+            )
+
+            if len(fiber_structure) == 0:
+                raise ValueError("No curvelets extracted")
+
+            angles = fiber_structure["angle"].values
+            boundary_measurement = boundary_type.value != "No boundary"
+            map_params = {
+                "STDfilter_size": 24,
+                "SQUAREmaxfilter_size": 12,
+                "GAUSSIANdiscfilter_sigma": 4.0,
+            }
+            _, angle_map_processed = draw_map(
+                fiber_structure, angles, image_data,
+                boundary_measurement, map_params,
+            )
+
+            # Simple overlay: green at curvelet centers
+            rgb_image = gray2rgb(image_data) if image_data.ndim == 2 else image_data.copy()
+            centers = fiber_structure[["center_row", "center_col"]].values.astype(int)
+            for r, c in centers:
+                if 0 <= r < rgb_image.shape[0] and 0 <= c < rgb_image.shape[1]:
+                    rgb_image[r, c, 1] = np.minimum(255, rgb_image[r, c, 1].astype(float) + 150)
+            overlay_img = np.clip(rgb_image, 0, 255).astype(np.uint8)
+
+            stats = {
+                "mean_angle": float(np.mean(angles)),
+                "alignment": float(alignment_df["alignment_mean"].mean()) if len(alignment_df) > 0 else 0.0,
+                "density": float(density_df["density_mean"].mean()) if len(density_df) > 0 else 0.0,
+            }
+            features = {
+                "angle": angles,
+                "center_row": fiber_structure["center_row"].values,
+                "center_col": fiber_structure["center_col"].values,
+            }
+            curvelets = [
+                type("C", (), {"angle_deg": float(a), "weight": 1.0})()
+                for a in angles
+            ]
+
             if output_options.get("histograms", False):
-                _generate_histograms(result, image_name)
-            
-            # Convert features to measurements DataFrame with full feature set
-            measurements = _convert_features_to_dataframe_full(result.features, result.stats, result.curvelets)
-            
+                _generate_histograms(fiber_structure, features, image_name)
+
+            measurements = _convert_features_to_dataframe_full(features, stats, curvelets)
             return overlay_img, angle_map_processed, measurements
-            
+
         except Exception as e:
-            print(f"CurveAlign analysis failed: {e}")
+            print(f"pycurvelets analysis failed: {e}")
             import traceback
             traceback.print_exc()
             print("Falling back to mock analysis...")

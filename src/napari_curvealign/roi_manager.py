@@ -8,6 +8,7 @@ Provides full ROI management functionality matching MATLAB CurveAlign ROI Manage
 - ROI table display with analysis results
 - Export/Import: Text (CSV), Mask (TIFF)
 """
+from __future__ import annotations
 
 import os
 import json
@@ -27,6 +28,8 @@ try:
     HAS_NAPARI = True
 except ImportError:
     HAS_NAPARI = False
+    Shapes = None  # type: ignore
+    LayerDataTuple = None  # type: ignore
 
 try:
     from skimage import io
@@ -52,12 +55,23 @@ except ImportError:
     binary_erosion = None
     disk = None
 
+# Local Boundary type for pycurvelets compatibility (coordinates dict format)
+from typing import NamedTuple, Literal, Union, Any
+_BoundaryData = Union[np.ndarray, Any]
+
+class Boundary(NamedTuple):
+    """Boundary definition for relative angle measurements (pycurvelets-compatible)."""
+    kind: Literal["mask", "polygon", "polygons"]
+    data: _BoundaryData
+    spacing_xy: Optional[Tuple[float, float]] = None
+
 try:
-    import curvealign_py as curvealign
-    from curvealign_py.types import Boundary
-    HAS_CURVEALIGN = True
+    from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
+    from pycurvelets.get_ct import get_ct
+    from pycurvelets.get_tif_boundary import get_tif_boundary
+    HAS_PYCURVELETS = True
 except ImportError:
-    HAS_CURVEALIGN = False
+    HAS_PYCURVELETS = False
 
 try:
     import roifile
@@ -101,8 +115,8 @@ class ROI:
 
     def to_boundary(self, image_shape: Tuple[int, int]) -> Boundary:
         """Convert ROI to CurveAlign Boundary object."""
-        if not HAS_CURVEALIGN:
-            raise ImportError("curvealign_py is required")
+        if not HAS_PYCURVELETS:
+            raise ImportError("pycurvelets is required")
 
         # Create mask from ROI
         mask = self.to_mask(image_shape)
@@ -244,7 +258,7 @@ class ROIManager:
         
         # Look for existing shapes layer
         for layer in self.viewer.layers:
-            if isinstance(layer, Shapes) and layer.name == "ROIs":
+            if HAS_NAPARI and Shapes is not None and isinstance(layer, Shapes) and layer.name == "ROIs":
                 self.shapes_layer = layer
                 return layer
         
@@ -725,7 +739,7 @@ class ROIManager:
             return self.object_layer
 
         for layer in self.viewer.layers:
-            if isinstance(layer, Shapes) and layer.name == "Objects":
+            if HAS_NAPARI and Shapes is not None and isinstance(layer, Shapes) and layer.name == "Objects":
                 self.object_layer = layer
                 self.object_layer.interactive = False
                 self.object_layer.visible = False
@@ -943,7 +957,11 @@ class ROIManager:
         dict, optional
             Analysis results
         """
-        if not HAS_CURVEALIGN:
+        if not HAS_PYCURVELETS:
+            return None
+
+        if method != ROIAnalysisMethod.CURVELETS:
+            # CTFIRE and POST_ANALYSIS require api-curation; only CURVELETS supported
             return None
         
         roi = self.get_roi(roi_id)
@@ -974,69 +992,100 @@ class ROIManager:
         else:
             cropped_image = image
 
-        # Run analysis
-        if options is None:
-            options = {}
-        
-        ca_options = curvealign.CurveAlignOptions(**options)
-        
-        opts = options or {}
-        # Sanitize options to valid CurveAlignOptions fields and add MATLAB-like defaults
+        opts = (options or {}).copy()
         base_defaults = {
             "keep": 0.001,
-            "scale": 1,  # MATLAB default selected scale
-            "group_radius": 10.0,  # MATLAB curvelets_group_radius
-            "dist_thresh": 150.0,  # MATLAB distVal
-            "exclude_inside_mask": False,
+            "scale": 1,
+            "group_radius": 10.0,
+            "dist_thresh": 150.0,
+            "min_dist": [],
             "minimum_nearest_fibers": 2,
             "minimum_box_size": 32,
-            "map_std_window": 28,
         }
-        allowed_keys = {
-            "keep",
-            "scale",
-            "group_radius",
-            "dist_thresh",
-            "min_dist",
-            "exclude_inside_mask",
-            "minimum_nearest_fibers",
-            "minimum_box_size",
-            "map_std_window",
-        }
-        merged = {**base_defaults, **{k: v for k, v in opts.items() if k in allowed_keys}}
-        if method == ROIAnalysisMethod.CURVELETS:
-            result = curvealign.analyze_image(
-                cropped_image,
-                boundary=boundary if not use_crop else None,
-                mode="curvelets",
-                options=curvealign.CurveAlignOptions(**merged)
+        merged = {**base_defaults, **{k: v for k, v in opts.items() if k in base_defaults}}
+
+        curve_cp = CurveletControlParameters(
+            keep=merged["keep"],
+            scale=float(merged["scale"]),
+            radius=merged["group_radius"],
+        )
+        feature_cp = FeatureControlParameters(
+            minimum_nearest_fibers=merged["minimum_nearest_fibers"],
+            minimum_box_size=merged["minimum_box_size"],
+            fiber_midpoint_estimate=1,
+        )
+
+        try:
+            fiber_structure, density_df, alignment_df, _ = get_ct(
+                cropped_image, curve_cp, feature_cp
             )
-        elif method == ROIAnalysisMethod.CTFIRE:
-            result = curvealign.analyze_image(
-                cropped_image,
-                boundary=boundary if not use_crop else None,
-                mode="ctfire",
-                options=curvealign.CurveAlignOptions(**merged)
-            )
-        else:
-            # Post-analysis - would need previously computed features
+        except Exception as e:
+            print(f"get_ct failed: {e}")
             return None
-        
-        # Store results
+
+        if len(fiber_structure) == 0:
+            roi.analysis_result = {
+                "n_curvelets": 0,
+                "mean_angle": 0.0,
+                "alignment": 0.0,
+                "density": 0.0,
+                "stats": {},
+                "features": {},
+            }
+            roi.analysis_method = method
+            return roi.analysis_result
+
+        # Boundary analysis if boundary provided and not cropped
+        nearest_angles = fiber_structure["angle"].values
+        if not use_crop and boundary.kind == "polygon" and isinstance(boundary.data, np.ndarray):
+            coords = boundary.data  # (row, col)
+            coordinates = {0: coords}
+            boundary_img = base_mask.astype(np.float64)
+            min_dist = merged["min_dist"]
+            if not isinstance(min_dist, (list, np.ndarray)):
+                min_dist = [min_dist] if min_dist else []
+            try:
+                _, _, _, res_df = get_tif_boundary(
+                    coordinates, boundary_img, fiber_structure,
+                    merged["dist_thresh"], min_dist,
+                )
+                nearest_angles = res_df["nearest_boundary_angle"].values
+            except Exception as e:
+                print(f"get_tif_boundary failed: {e}")
+
+        # Build result compatible with widget expectations
+        n_curvelets = len(fiber_structure)
+        mean_angle = float(np.mean(nearest_angles))
+        alignment = float(alignment_df["alignment_mean"].mean()) if len(alignment_df) > 0 else 0.0
+        density = float(density_df["density_mean"].mean()) if len(density_df) > 0 else 0.0
+        stats = {
+            "mean_angle": mean_angle,
+            "alignment": alignment,
+            "density": density,
+        }
+        # Simple curvelet-like objects for features (angle_deg, weight)
+        curvelets = [
+            type("Curvelet", (), {"angle_deg": float(row["angle"]), "weight": 1.0})()
+            for _, row in fiber_structure.iterrows()
+        ]
+        features = {
+            "angle": fiber_structure["angle"].values,
+            "center_row": fiber_structure["center_row"].values,
+            "center_col": fiber_structure["center_col"].values,
+        }
+
         roi.analysis_result = {
-            "n_curvelets": len(result.curvelets),
-            "mean_angle": result.stats.get("mean_angle", 0.0),
-            "alignment": result.stats.get("alignment", 0.0),
-            "density": result.stats.get("density", 0.0),
-            "stats": result.stats,
-            "features": result.features
+            "n_curvelets": n_curvelets,
+            "mean_angle": mean_angle,
+            "alignment": alignment,
+            "density": density,
+            "stats": stats,
+            "features": features,
         }
         roi.analysis_method = method
 
-        # Attempt to expose curvelet features as fiber objects for annotation workflow
         try:
-            if hasattr(result, "features") and result.features is not None:
-                self.register_fiber_objects(result.features, replace_existing=False)
+            self.register_fiber_objects(fiber_structure, replace_existing=False)
         except Exception as exc:
             print(f"Fiber registration skipped: {exc}")
         
