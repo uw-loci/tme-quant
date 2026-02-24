@@ -1,0 +1,63 @@
+tme_quant/tme_analysis/
+├── __init__.py
+│
+├── core/                                    # Core analysis engines
+│   ├── __init__.py
+│   ├── tme_analyzer.py                     # Main TMEAnalyzer class
+│   ├── interaction_detector.py             # Find interaction pairs/regions
+│   ├── region_manager.py                   # ROI management
+│   └── measurement_engine.py               # Coordinate measurements
+│
+├── roi_generation/                          # Region of Interest generation
+│   ├── __init__.py
+│   ├── tumor_detection.py                  # Auto tumor boundary detection
+│   ├── cell_clustering.py                  # Density/clustering based
+│   ├── manual_annotation.py                # User-defined ROIs
+│   ├── deep_learning_segmentation.py       # DL-based tumor segmentation
+│   └── zone_generation.py                  # Invasive margin, stroma zones
+│
+├── interaction/                             # Interaction analysis
+│   ├── __init__.py
+│   ├── cell_fiber_interaction.py           ✅ Already complete
+│   ├── cell_cell_interaction.py            # Cell-cell spatial analysis
+│   ├── fiber_fiber_interaction.py          # Fiber-fiber alignment
+│   ├── cell_tumor_interaction.py           # Cell distance to tumor
+│   └── fiber_tumor_interaction.py          # TACS analysis
+│
+├── measurements/                            # Feature calculations
+│   ├── __init__.py
+│   ├── tacs_features.py                    # TACS-1/2/3 scoring
+│   ├── morphological_features.py           # Shape/size in ROIs
+│   ├── spatial_features.py                 # Distance maps, distributions
+│   ├── orientation_features.py             # Relative angles
+│   ├── density_features.py                 # Component densities
+│   └── texture_features.py                 # Spatial patterns
+│
+├── prognostic/                              # Prognostic feature extraction
+│   ├── __init__.py
+│   ├── tacs_prognostic.py                  # TACS-based prognosis
+│   ├── spatial_prognostic.py               # Spatial arrangement scores
+│   ├── combined_prognostic.py              # Multi-modal integration
+│   └── survival_correlation.py             # Clinical outcome predictors
+│
+├── visualization/                           # Analysis visualization
+│   ├── __init__.py
+│   ├── distance_maps.py                    # Heatmaps
+│   ├── interaction_networks.py             # Graph visualization
+│   └── tacs_overlay.py                     # TACS color-coding
+│
+├── config/                                  # Configuration
+│   ├── __init__.py
+│   ├── analysis_params.py                  # TMEAnalysisParams
+│   ├── interaction_params.py               # InteractionParams
+│   └── measurement_params.py               # MeasurementParams
+│
+├── io/                                      # Input/Output
+│   ├── __init__.py
+│   └── exporters.py                        # TMEAnalysisExporter
+│
+└── utils/                                   # Utilities
+    ├── __init__.py
+    ├── distance_utils.py                   # Distance calculations
+    ├── geometry_utils.py                   # Spatial geometry
+    └── statistical_utils.py                # Statistical tests
