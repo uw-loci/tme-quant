@@ -875,12 +875,12 @@ def save_fiber_features(
     # Build fiber features DataFrame with descriptive column names
     fib_feat_data = {
         "fiber_key": fiber_key if fiber_key else list(range(len(fiber_structure))),
-        "end_point_row": (
+        "center_row": (
             fiber_structure["center_row"]
             if "center_row" in fiber_structure.columns
             else fiber_structure["center_1"]
         ),
-        "end_point_col": (
+        "center_col": (
             fiber_structure["center_col"]
             if "center_col" in fiber_structure.columns
             else fiber_structure["center_2"]
@@ -922,8 +922,8 @@ def save_fiber_features(
             "nearest_boundary_angle": "nearest_relative_boundary_angle",
             "extension_point_distance": "extension_point_distance",
             "extension_point_angle": "extension_point_angle",
-            "boundary_point_row": "boundary_point_row",
             "boundary_point_col": "boundary_point_col",
+            "boundary_point_row": "boundary_point_row",
         }
         for src_col, dest_col in boundary_col_mapping.items():
             if src_col in measured_boundary.columns:
@@ -938,8 +938,8 @@ def save_fiber_features(
             "nearest_relative_boundary_angle",
             "extension_point_distance",
             "extension_point_angle",
-            "boundary_point_row",
             "boundary_point_col",
+            "boundary_point_row",
         ]
         for col_name in boundary_cols:
             fib_feat_df[col_name] = np.nan
@@ -1226,15 +1226,10 @@ def generate_overlay(
             # Plot lines connecting each fiber center to its nearest boundary point
             for center, bndry_pt in zip(in_curvs, in_bndry):
                 if not np.isnan(bndry_pt[0]) and not np.isnan(bndry_pt[1]):
-                    # center    : [row, col]
-                    # bndry_pt  : [col, row]  (NOTE: boundary points are stored as x, y)
-                    # matplotlib plot expects (x=col, y=row)
-                    # MATLAB equivalent:
-                    # plot([center(1,2) bndry(1)], [center(1,1) bndry(2)], 'b')
-
+                    # center    : [col, row], bndry_pt: [col, row]
                     ax.plot(
-                        [center[1], bndry_pt[0]],  # x: center col → boundary col
-                        [center[0], bndry_pt[1]],  # y: center row → boundary row
+                        [center[1], bndry_pt[1]],  # x: center col → boundary col
+                        [center[0], bndry_pt[0]],  # y: center row → boundary row
                         "b-",
                         linewidth=0.5,
                     )
