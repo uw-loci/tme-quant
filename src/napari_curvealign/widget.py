@@ -825,6 +825,10 @@ class CurveAlignWidget(QWidget):
         self.roi_manager.shapes_layer = None
         layer = self.roi_manager.create_shapes_layer()
         self._connect_shapes_events(layer)
+        # Ensure active-image scoping is current before repopulating shapes.
+        active_shape = self.current_image_shape
+        if active_shape:
+            self.roi_manager.set_active_image(self._active_image_label(), active_shape)
         self.roi_manager._update_shapes_layer()
         return layer
 
@@ -934,8 +938,20 @@ class CurveAlignWidget(QWidget):
                 finally:
                     self._syncing_shapes = False
             elif count_diff < 0:
-                # Shape deleted - just update count
+                # Shape deleted (or layer switched) - keep counts in sync.
                 layer._curvealign_last_shape_count = current_count
+                # If the canvas now has fewer shapes than the ROI model for this image,
+                # restore from canonical ROI state to prevent visual disappearance.
+                expected_count = len(self.roi_manager.get_rois_for_active_image())
+                if current_count < expected_count:
+                    try:
+                        self._syncing_shapes = True
+                        self.roi_manager._update_shapes_layer()
+                        layer._curvealign_last_shape_count = len(layer.data)
+                    except Exception as exc:
+                        print(f"Warning: failed to resync ROI shapes after mode switch: {exc}")
+                    finally:
+                        self._syncing_shapes = False
         
         layer.events.data.connect(on_data_change)
         layer._curvealign_events_connected = True
