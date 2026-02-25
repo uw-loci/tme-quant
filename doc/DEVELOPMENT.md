@@ -10,6 +10,12 @@ The plugin is registered via:
 
 After `uv pip install -e .`, run `uv run napari` and open **Plugins → napari-curvealign**.
 
+If you only need plugin segmentation features (Cellpose/StarDist) without curvelets:
+
+```bash
+uv sync --extra segmentation
+```
+
 ## Running tests
 
 ```bash

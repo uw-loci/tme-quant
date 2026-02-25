@@ -1,13 +1,15 @@
 from functools import partial
 import math
+import os
+import matplotlib
+if os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen":
+    matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import pandas as pd
 from PIL import Image
 from skimage.draw import polygon, polygon2mask
 from skimage.measure import regionprops, label, find_contours
-import tkinter as tk
 import time
 from multiprocessing import Pool
 from typing import Optional

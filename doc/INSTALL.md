@@ -23,7 +23,7 @@
 bash bin/install.sh
 ```
 
-The script checks for uv, downloads FFTW, detects CurveLab in `../utils`, builds both, syncs the env, and verifies.
+The script checks for uv, downloads FFTW, detects CurveLab in `../utils`, builds both, syncs the env with `curvelops` and segmentation extras, and verifies.
 
 ## Run
 
@@ -48,8 +48,8 @@ parent/
 To run napari without the curvelet backend (no FFTW/CurveLab required):
 
 ```bash
-uv sync
+uv sync --extra segmentation
 uv run napari
 ```
 
-**Note:** The napari plugin will load, but curvelet-based analysis (e.g. fiber orientation) will not run. You get the UI with mock/placeholder results. For real curvelet analysis, use the full install above.
+**Note:** The napari plugin will load, but curvelet-based analysis (e.g. fiber orientation) will not run. For real curvelet analysis, use the full install above.

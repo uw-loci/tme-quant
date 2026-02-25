@@ -34,6 +34,10 @@ dev = [
 curvelops = [
   "curvelops @ git+https://github.com/PyLops/curvelops@0.23.4",
 ]
+segmentation = [
+  "cellcast",
+  "cellpose",
+]
 
 [project.entry-points."napari.manifest"]
 napari-curvealign = "napari_curvealign:napari.yaml"

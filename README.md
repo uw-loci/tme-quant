@@ -49,15 +49,25 @@ See [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) for plugin setup and troubleshootin
   - macOS/Linux: `export QT_QPA_PLATFORM=offscreen`
   - Windows/PowerShell: `$env:QT_QPA_PLATFORM = 'offscreen'`
 
-- Core tests (no curvelets):
+- Default test suite:
 ```bash
 make test
 ```
 
-- Full tests with curvelets (after installing `curvelops`): `make test` — curvelet tests run automatically when curvelops is available; otherwise skipped.
+- Enable curvelet-dependent tests:
+```bash
+export TMEQ_RUN_CURVELETS=1
+QT_QPA_PLATFORM=offscreen uv run pytest -q tests/test_get_ct.py tests/test_new_curv.py tests/test_process_image.py -rs
+```
+
+- Enable strict MATLAB-reference parity assertions:
+```bash
+export TMEQ_VALIDATE_MATLAB=1
+```
 
 Notes:
 - The napari test is an import-only smoke test (no `Viewer` is created); it runs headless.
+- MATLAB parity tests are opt-in because they validate exact numerical agreement with historical MATLAB reference artifacts.
 
 Testing policy:
 - Tests must not write files to the repository root. Use a system
@@ -66,47 +76,17 @@ Testing policy:
   `tests/test_resources/` and read from there during tests.
 
 ### Continuous integration
-- CI installs the package without `curvelops` to avoid building FFTW/CurveLab on runners.
-- CI environment:
-  - Curvelet tests skipped (curvelops not installed on CI)
-  - `QT_QPA_PLATFORM=offscreen` (headless napari import)
+- CI has two lanes in `.github/workflows/ci.yml`:
+  - `test-basic`: default Python matrix without CurveLab secret requirements.
+  - `test-curvelab`: secure lane that fetches/builds CurveLab + FFTW and runs curvelet-enabled tests.
+- Both lanes run with `QT_QPA_PLATFORM=offscreen`.
 
 ### Working with secrets in GitHub Actions
 This project uses GitHub Actions secrets for tasks that require authentication or access to private resources. Secrets can be configured in the [Settings tab of the repostiory](https://github.com/uw-loci/tme-quant/settings/secrets/actions). For more information about secrets, see:
 - [Secrets as a concept](https://docs.github.com/en/actions/concepts/security/secrets)
 - [Secrets in actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
 
-#### Manual testing workflow
-The `manual-test` workflow allows developers to manually trigger workflows from the GitHub UI without committing changes to `main`. This is useful for testing workflows that require secrets on topic branches.
-
-**How to use it:**
-
-1. Create or edit `.github/workflows/test-action.yml` to define your workflow's structure and declare which secrets it needs via the `secrets:` input in `workflow_call`:
-```yaml
-on:
-  workflow_call:
-    secrets:
-      MY_SECRET_NAME:
-      ANOTHER_SECRET:
-
-jobs:
-  my-job:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Use a secret
-        run: echo "Secret is ${{ secrets.MY_SECRET_NAME }}"
-```
-
-2. The `manual-test` workflow (`.github/workflows/manual-test.yml`) will call `test-action.yml` and pass repository secrets to it via `secrets: inherit`.
-
-3. To trigger the workflow:
-   - Push your branch with the updated `test-action.yml` to GitHub.
-   - Go to the **Actions** tab in the repository and select the **[Manual Testing Stub](https://github.com/uwloci/tme-quant/actions/workflows/manual-test.yml)** workflow.
-   - Click **Run workflow** and select your branch.
-   - The workflow will execute with access to all secrets configured for the repository.
-
-**NOTE**
-- Never hardcode secrets or access tokens in workflow files; always use the `secrets:` context.
+Never hardcode secrets or access tokens in workflow files; always use the `secrets:` context.
 
 ### Troubleshooting
 - Qt error ("No Qt bindings could be found"): ensure `uv sync` completed; pyproject includes PyQt6.
