@@ -1,5 +1,5 @@
 """
-Tests for ROI format support (Cellpose, QuPath, StarDist) in napari_curvealign.
+Tests for ROI format support (label image, QuPath, StarDist) in napari_curvealign.
 """
 import json
 import os
@@ -52,15 +52,15 @@ def sample_rois(roi_manager):
     return [roi1, roi2, roi3]
 
 
-class TestCellposeFormat:
-    """Tests for Cellpose .npy format support."""
+class TestLabelImageFormat:
+    """Tests for generic label-image (`.npy`) format support."""
     
-    def test_save_cellpose_format(self, roi_manager, sample_rois, tmp_path):
-        """Test saving ROIs in Cellpose format."""
-        output_path = tmp_path / "cellpose_test.npy"
+    def test_save_label_image_format(self, roi_manager, sample_rois, tmp_path):
+        """Test saving ROIs to generic label-image format."""
+        output_path = tmp_path / "label_image_test.npy"
         
         # Save all ROIs
-        roi_manager.save_rois_cellpose(str(output_path))
+        roi_manager.save_rois_label_image(str(output_path))
         
         # Check that files were created
         assert output_path.exists()
@@ -83,17 +83,17 @@ class TestCellposeFormat:
         assert "rois" in metadata
         assert len(metadata["rois"]) == 3
     
-    def test_load_cellpose_format(self, roi_manager, sample_rois, tmp_path):
-        """Test loading ROIs from Cellpose format."""
-        output_path = tmp_path / "cellpose_test.npy"
+    def test_load_label_image_format(self, roi_manager, sample_rois, tmp_path):
+        """Test loading ROIs from generic label-image format."""
+        output_path = tmp_path / "label_image_test.npy"
         
         # Save ROIs
-        roi_manager.save_rois_cellpose(str(output_path))
+        roi_manager.save_rois_label_image(str(output_path))
         
         # Create new manager and load
         new_manager = ROIManager()
         new_manager.current_image_shape = (100, 100)
-        loaded_rois = new_manager.load_rois_cellpose(str(output_path))
+        loaded_rois = new_manager.load_rois_label_image(str(output_path))
         
         # Check that ROIs were loaded
         assert len(loaded_rois) == 3
@@ -106,13 +106,13 @@ class TestCellposeFormat:
         annotation_types = {roi.annotation_type for roi in loaded_rois}
         assert len(annotation_types) >= 1  # At least one annotation type
     
-    def test_save_selected_rois_cellpose(self, roi_manager, sample_rois, tmp_path):
-        """Test saving only selected ROIs in Cellpose format."""
-        output_path = tmp_path / "cellpose_selected.npy"
+    def test_save_selected_rois_label_image(self, roi_manager, sample_rois, tmp_path):
+        """Test saving only selected ROIs in label-image format."""
+        output_path = tmp_path / "label_image_selected.npy"
         
         # Save only first two ROIs
         roi_ids = [sample_rois[0].id, sample_rois[1].id]
-        roi_manager.save_rois_cellpose(str(output_path), roi_ids=roi_ids)
+        roi_manager.save_rois_label_image(str(output_path), roi_ids=roi_ids)
         
         # Check metadata
         metadata_path = output_path.with_suffix(".json")
@@ -183,6 +183,24 @@ class TestQuPathFormat:
             geojson_data = json.load(f)
         
         assert len(geojson_data["features"]) == 1
+
+    def test_save_freehand_qupath_format(self, roi_manager, tmp_path):
+        """Test freehand ROI export in QuPath format."""
+        output_path = tmp_path / "qupath_freehand.geojson"
+        roi_manager.add_roi(
+            coordinates=np.array(
+                [[20.0, 20.0], [30.0, 25.0], [28.0, 35.0], [18.0, 32.0]],
+                dtype=float,
+            ),
+            shape=ROIShape.FREEHAND,
+            name="freehand_qupath",
+            annotation_type="region",
+        )
+        roi_manager.save_rois_qupath(str(output_path))
+        with open(output_path, "r") as f:
+            geojson_data = json.load(f)
+        assert len(geojson_data["features"]) == 1
+        assert geojson_data["features"][0]["geometry"]["type"] == "Polygon"
 
 
 class TestStarDistFormat:
@@ -268,16 +286,16 @@ class TestAutoDetectFormat:
 class TestRoundTrip:
     """Tests for round-trip conversion (save and load should preserve data)."""
     
-    def test_cellpose_roundtrip(self, roi_manager, sample_rois, tmp_path):
-        """Test that saving and loading Cellpose format preserves ROI count."""
+    def test_label_image_roundtrip(self, roi_manager, sample_rois, tmp_path):
+        """Test that saving/loading label-image format preserves ROI count."""
         output_path = tmp_path / "roundtrip.npy"
         
         original_count = len(roi_manager.rois)
-        roi_manager.save_rois_cellpose(str(output_path))
+        roi_manager.save_rois_label_image(str(output_path))
         
         new_manager = ROIManager()
         new_manager.current_image_shape = (100, 100)
-        new_manager.load_rois_cellpose(str(output_path))
+        new_manager.load_rois_label_image(str(output_path))
         
         # Should have same number of ROIs (or close, due to conversion)
         assert len(new_manager.rois) >= original_count - 1

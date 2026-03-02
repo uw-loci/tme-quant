@@ -2329,7 +2329,11 @@ class CurveAlignWidget(QWidget):
                      pass 
         
     def _get_roi_save_dir(self) -> str:
-        """Get or create the ROI management directory for the current image."""
+        """Get a suggested ROI save directory for the current image.
+
+        This method does not create directories. We only create paths after the
+        user confirms a save destination.
+        """
         if not self.image_paths or not self.current_image_label:
             return os.path.expanduser("~")
             
@@ -2347,18 +2351,18 @@ class CurveAlignWidget(QWidget):
         parent_dir = os.path.dirname(current_path)
         image_name = os.path.splitext(self.current_image_label)[0]
         roi_man_dir = os.path.join(parent_dir, "ROI_management", image_name)
-        
-        try:
-            os.makedirs(roi_man_dir, exist_ok=True)
+
+        # If we cannot write near the image, suggest a writable fallback.
+        if os.access(parent_dir, os.W_OK):
             return roi_man_dir
-        except OSError:
-            # Fallback to a folder in the user's home directory if we can't write to the image location
-            fallback_dir = os.path.join(os.path.expanduser("~"), "ROI_management_Fallback", image_name)
-            try:
-                os.makedirs(fallback_dir, exist_ok=True)
-                return fallback_dir
-            except OSError:
-                return os.path.dirname(current_path)
+        return os.path.join(os.path.expanduser("~"), "ROI_management_Fallback", image_name)
+
+    @staticmethod
+    def _ensure_parent_dir(file_path: str) -> None:
+        """Create the destination parent directory for a save path."""
+        parent = os.path.dirname(file_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
 
     def _save_roi(self):
         """Save selected ROI(s) in multiple formats."""
@@ -2386,7 +2390,7 @@ class CurveAlignWidget(QWidget):
             "JSON files (*.json);;"
             "Fiji/ImageJ ROI (*.roi *.zip);;"
             "StarDist ROI (*.roi *.zip);;"
-            "Cellpose mask (*.npy);;"
+            "Label image mask (*.npy);;"
             "QuPath annotations (*.geojson);;"
             "CSV files (*.csv);;"
             "TIFF mask (*.tif);;"
@@ -2399,6 +2403,7 @@ class CurveAlignWidget(QWidget):
         try:
             # Use stored UserRole data instead of parsing text (which has colons)
             roi_ids = [item.data(Qt.UserRole) for item in selected]
+            self._ensure_parent_dir(file_path)
             
             # Determine format from filter or extension
             if "JSON" in selected_filter or file_path.endswith('.json'):
@@ -2410,9 +2415,9 @@ class CurveAlignWidget(QWidget):
             elif "StarDist" in selected_filter:
                 self.roi_manager.save_rois(file_path, roi_ids, format='stardist')
                 format_name = "StarDist"
-            elif "Cellpose" in selected_filter or file_path.endswith('.npy'):
-                self.roi_manager.save_rois(file_path, roi_ids, format='cellpose')
-                format_name = "Cellpose"
+            elif "Label image" in selected_filter or "Cellpose" in selected_filter or file_path.endswith('.npy'):
+                self.roi_manager.save_rois(file_path, roi_ids, format='label_image')
+                format_name = "Label image"
             elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
                 self.roi_manager.save_rois(file_path, roi_ids, format='qupath')
                 format_name = "QuPath"
@@ -2465,7 +2470,7 @@ class CurveAlignWidget(QWidget):
             "JSON files (*.json);;"
             "Fiji/ImageJ ROI (*.roi *.zip);;"
             "StarDist ROI (*.roi *.zip);;"
-            "Cellpose mask (*.npy);;"
+            "Label image mask (*.npy);;"
             "QuPath annotations (*.geojson);;"
             "CSV files (*.csv);;"
             "TIFF mask (*.tif);;"
@@ -2476,6 +2481,7 @@ class CurveAlignWidget(QWidget):
             return
         
         try:
+            self._ensure_parent_dir(file_path)
             # Determine format from filter or extension
             if "JSON" in selected_filter or file_path.endswith('.json'):
                 self.roi_manager.save_rois(file_path, all_roi_ids, format='json')
@@ -2486,9 +2492,9 @@ class CurveAlignWidget(QWidget):
             elif "StarDist" in selected_filter:
                 self.roi_manager.save_rois(file_path, all_roi_ids, format='stardist')
                 format_name = "StarDist"
-            elif "Cellpose" in selected_filter or file_path.endswith('.npy'):
-                self.roi_manager.save_rois(file_path, all_roi_ids, format='cellpose')
-                format_name = "Cellpose"
+            elif "Label image" in selected_filter or "Cellpose" in selected_filter or file_path.endswith('.npy'):
+                self.roi_manager.save_rois(file_path, all_roi_ids, format='label_image')
+                format_name = "Label image"
             elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
                 self.roi_manager.save_rois(file_path, all_roi_ids, format='qupath')
                 format_name = "QuPath"
@@ -2575,7 +2581,7 @@ class CurveAlignWidget(QWidget):
             "JSON files (*.json);;"
             "Fiji/ImageJ ROI (*.roi *.zip);;"
             "StarDist ROI (*.roi *.zip);;"
-            "Cellpose mask (*.npy);;"
+            "Label image mask (*.npy);;"
             "QuPath annotations (*.geojson);;"
             "CSV files (*.csv);;"
             "TIFF mask (*.tif);;"
@@ -2629,9 +2635,9 @@ class CurveAlignWidget(QWidget):
                 elif "StarDist" in selected_filter:
                     loaded_rois = self.roi_manager.load_rois(file_path, format='stardist')
                     format_name = "StarDist"
-                elif "Cellpose" in selected_filter or file_path.endswith('.npy'):
-                    loaded_rois = self.roi_manager.load_rois(file_path, format='cellpose')
-                    format_name = "Cellpose"
+                elif "Label image" in selected_filter or "Cellpose" in selected_filter or file_path.endswith('.npy'):
+                    loaded_rois = self.roi_manager.load_rois(file_path, format='label_image')
+                    format_name = "Label image"
                 elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
                     loaded_rois = self.roi_manager.load_rois(file_path, format='qupath')
                     format_name = "QuPath"

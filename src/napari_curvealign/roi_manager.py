@@ -97,12 +97,18 @@ class ROIAnalysisMethod(Enum):
 
 @dataclass
 class ROI:
-    """Represents a single ROI with metadata."""
+    """Represents a single 2D ROI with metadata.
+
+    Notes
+    -----
+    The current ROI geometry model is 2D (`x`, `y`) only. For z-stacks, the
+    same 2D ROI may be applied across slices by higher-level workflows.
+    """
     id: int
     name: str
     shape: ROIShape
-    coordinates: np.ndarray  # Shape-specific coordinates
-    center: Tuple[float, float] = (0.0, 0.0)
+    coordinates: np.ndarray  # 2D shape-specific coordinates in (x, y) order
+    center: Tuple[float, float] = (0.0, 0.0)  # (x, y) centroid
     area: float = 0.0
     analysis_result: Optional[Dict] = None
     analysis_method: Optional[ROIAnalysisMethod] = None
@@ -115,9 +121,6 @@ class ROI:
 
     def to_boundary(self, image_shape: Tuple[int, int]) -> Boundary:
         """Convert ROI to CurveAlign Boundary object."""
-        if not HAS_PYCURVELETS:
-            raise ImportError("pycurvelets is required")
-
         # Create mask from ROI
         mask = self.to_mask(image_shape)
 
@@ -1739,12 +1742,13 @@ class ROIManager:
         
         return loaded_rois
     
-    def save_rois_cellpose(self, file_path: str, roi_ids: Optional[List[int]] = None):
+    def save_rois_label_image(self, file_path: str, roi_ids: Optional[List[int]] = None):
         """
-        Save ROIs to Cellpose format (instance segmentation mask).
+        Save ROIs as an instance label image (`.npy`) plus metadata JSON.
         
-        Cellpose expects a .npy file with integer labels where each unique
-        integer > 0 represents a different object/ROI.
+        Each unique integer label (> 0) represents a different ROI/object.
+        This is a generic label-image representation used by many tools,
+        including Cellpose and StarDist.
         
         Parameters
         ----------
@@ -1754,7 +1758,7 @@ class ROIManager:
             IDs of ROIs to save (default: all)
         """
         if not self.current_image_shape:
-            raise ValueError("Image shape must be set before saving to Cellpose format")
+            raise ValueError("Image shape must be set before saving label images")
         
         if roi_ids is None:
             roi_ids = [roi.id for roi in self.rois]
@@ -1776,7 +1780,7 @@ class ROIManager:
         metadata_path = base_path + ".json"
         
         metadata = {
-            "format": "cellpose",
+            "format": "label_image",
             "image_shape": list(self.current_image_shape),
             "rois": []
         }
@@ -1794,9 +1798,13 @@ class ROIManager:
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
     
-    def load_rois_cellpose(self, file_path: str) -> List[ROI]:
+    def save_rois_cellpose(self, file_path: str, roi_ids: Optional[List[int]] = None):
+        """Backward-compatible alias for `save_rois_label_image`."""
+        self.save_rois_label_image(file_path, roi_ids=roi_ids)
+
+    def load_rois_label_image(self, file_path: str) -> List[ROI]:
         """
-        Load ROIs from Cellpose format (instance segmentation mask).
+        Load ROIs from an instance label image (`.npy`).
         
         Loads from .npy file containing integer labels. Optionally loads
         metadata from accompanying JSON file if available.
@@ -1857,8 +1865,8 @@ class ROIManager:
                 coords = np.column_stack((contour[:, 1], contour[:, 0]))
                 
                 # Get metadata for this label
-                roi_name = f"cellpose_{label_id}"
-                annotation_type = "cellpose_cell"
+                roi_name = f"label_{label_id}"
+                annotation_type = "labeled_object"
                 
                 if metadata.get("rois"):
                     for roi_meta in metadata["rois"]:
@@ -1873,7 +1881,7 @@ class ROIManager:
                     ROIShape.POLYGON,
                     roi_name,
                     annotation_type=annotation_type,
-                    metadata={"source": "cellpose", "label_id": int(label_id)}
+                    metadata={"source": "label_image", "label_id": int(label_id)}
                 )
                 
                 if self.active_image_label and "image_label" not in roi.metadata:
@@ -1882,6 +1890,10 @@ class ROIManager:
                 loaded_rois.append(roi)
         
         return loaded_rois
+
+    def load_rois_cellpose(self, file_path: str) -> List[ROI]:
+        """Backward-compatible alias for `load_rois_label_image`."""
+        return self.load_rois_label_image(file_path)
     
     def save_rois_qupath(self, file_path: str, roi_ids: Optional[List[int]] = None):
         """
@@ -2195,7 +2207,9 @@ class ROIManager:
         roi_ids : List[int], optional
             IDs of ROIs to save (default: all)
         format : str
-            Format to use: 'json', 'fiji', 'stardist', 'csv', 'mask', 'cellpose', 'qupath', or 'auto' (detect from extension)
+            Format to use: 'json', 'fiji', 'stardist', 'csv', 'mask',
+            'label_image' (alias: 'cellpose'), 'qupath', or 'auto'
+            (detect from extension)
         """
         if format == 'auto':
             ext = os.path.splitext(file_path)[1].lower()
@@ -2208,7 +2222,7 @@ class ROIManager:
             elif ext in ['.tif', '.tiff']:
                 format = 'mask'
             elif ext == '.npy':
-                format = 'cellpose'
+                format = 'label_image'
             elif ext == '.geojson':
                 format = 'qupath'
             else:
@@ -2222,8 +2236,8 @@ class ROIManager:
             self.save_rois_stardist(file_path, roi_ids)
         elif format == 'csv':
             self.save_rois_csv(file_path, roi_ids)
-        elif format == 'cellpose':
-            self.save_rois_cellpose(file_path, roi_ids)
+        elif format in ('label_image', 'cellpose'):
+            self.save_rois_label_image(file_path, roi_ids)
         elif format == 'qupath':
             self.save_rois_qupath(file_path, roi_ids)
         elif format == 'mask':
@@ -2244,7 +2258,8 @@ class ROIManager:
         file_path : str
             Input file path
         format : str
-            Format: 'json', 'fiji', 'stardist', 'csv', 'mask', 'cellpose', 'qupath', or 'auto'
+            Format: 'json', 'fiji', 'stardist', 'csv', 'mask',
+            'label_image' (alias: 'cellpose'), 'qupath', or 'auto'
         
         Returns
         -------
@@ -2262,7 +2277,7 @@ class ROIManager:
             elif ext in ['.tif', '.tiff']:
                 format = 'mask'
             elif ext == '.npy':
-                format = 'cellpose'
+                format = 'label_image'
             elif ext == '.geojson':
                 format = 'qupath'
             else:
@@ -2276,8 +2291,8 @@ class ROIManager:
             return self.load_rois_stardist(file_path)
         elif format == 'csv':
             return self.load_rois_csv(file_path)
-        elif format == 'cellpose':
-            return self.load_rois_cellpose(file_path)
+        elif format in ('label_image', 'cellpose'):
+            return self.load_rois_label_image(file_path)
         elif format == 'qupath':
             return self.load_rois_qupath(file_path)
         elif format == 'mask':

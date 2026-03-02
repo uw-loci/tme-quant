@@ -6,6 +6,12 @@ Provides integration with Fiji/ImageJ via napari-imagej for:
 - Fiji plugin access (Tubeness, Frangi, etc.)
 - ROI Manager integration
 - TrackMate integration
+
+Design note
+-----------
+This wrapper centralizes napari-imagej/pyimagej calls behind a small API used
+by the widget, so Fiji integration logic stays isolated from UI code. It can be
+replaced later if the project adopts a different bridge approach.
 """
 
 import numpy as np

@@ -93,21 +93,17 @@ def compute_tacs(
         # Angle of tangent vector
         boundary_angle = np.degrees(np.arctan2(dy, dx))
         
-        # Calculate relative angle using MATLAB-compatible circ_r logic
-        # MATLAB formula from getRelativeangles.m:
-        # tempAng = circ_r([fibAng*2*pi/180; boundaryAngle*2*pi/180]);
-        # relative_angle = 180*asin(tempAng)/pi;
-        
-        # Convert to radians and double angles (for axial symmetry)
+        # MATLAB-compatible `circ_r` flow:
+        # - convert to radians
+        # - double angles to account for axial (180-deg periodic) orientation
+        # - compute resultant vector length r = |mean(exp(i * theta))|
+        # - map via asin back to relative angle in degrees
         fib_rad = np.deg2rad(fiber_angle) * 2
         bound_rad = np.deg2rad(boundary_angle) * 2
-        
-        # circ_r: Mean resultant vector length
-        # r = abs(mean(exp(1j * angles)))
-        complex_angles = np.exp(1j * np.array([fib_rad, bound_rad]))
-        mean_resultant = np.mean(complex_angles)
-        r = np.abs(mean_resultant)
-        
+
+        complex_angles = np.exp(1j * np.array([fib_rad, bound_rad], dtype=float))
+        r = float(np.abs(np.mean(complex_angles)))
+
         # Final relative angle
         # Note: MATLAB's asin returns real part, we clip to valid range [-1, 1]
         rel_angle = np.degrees(np.arcsin(np.clip(r, -1.0, 1.0)))

@@ -12,12 +12,17 @@ import numpy as np
 from typing import Optional, Tuple, Literal
 from enum import Enum
 
-try:
-    from skimage import filters, io
-    from skimage.filters import frangi, meijering, threshold_otsu, threshold_triangle, threshold_isodata
-    HAS_SKIMAGE = True
-except ImportError:
-    HAS_SKIMAGE = False
+from skimage import filters, io
+from skimage.filters import (
+    frangi,
+    meijering,
+    threshold_isodata,
+    threshold_li,
+    threshold_minimum,
+    threshold_otsu,
+    threshold_triangle,
+    threshold_yen,
+)
 
 try:
     import aicsimageio
@@ -38,6 +43,9 @@ class ThresholdMethod(Enum):
     TRIANGLE = "Triangle"
     ISODATA = "Isodata"
     MEAN = "Mean"
+    MINIMUM = "Minimum"
+    LI = "Li"
+    YEN = "Yen"
     MANUAL = "Manual"
 
 
@@ -143,9 +151,6 @@ def apply_tubeness(image: np.ndarray, sigma: float = 1.0) -> np.ndarray:
     np.ndarray
         Filtered image
     """
-    if not HAS_SKIMAGE:
-        raise ImportError("scikit-image is required for Tubeness filter")
-    
     if image.ndim != 2:
         raise ValueError("Tubeness filter requires 2D grayscale image")
     
@@ -178,9 +183,6 @@ def apply_frangi(
     np.ndarray
         Filtered image
     """
-    if not HAS_SKIMAGE:
-        raise ImportError("scikit-image is required for Frangi filter")
-    
     if image.ndim != 2:
         raise ValueError("Frangi filter requires 2D grayscale image")
     
@@ -215,9 +217,6 @@ def apply_threshold(
     Tuple[np.ndarray, float]
         Binary thresholded image and threshold value used
     """
-    if not HAS_SKIMAGE:
-        raise ImportError("scikit-image is required for thresholding")
-    
     if image.ndim != 2:
         raise ValueError("Thresholding requires 2D grayscale image")
     
@@ -233,6 +232,12 @@ def apply_threshold(
         thresh = threshold_isodata(image)
     elif method == ThresholdMethod.MEAN:
         thresh = np.mean(image)
+    elif method == ThresholdMethod.MINIMUM:
+        thresh = threshold_minimum(image)
+    elif method == ThresholdMethod.LI:
+        thresh = threshold_li(image)
+    elif method == ThresholdMethod.YEN:
+        thresh = threshold_yen(image)
     else:
         raise ValueError(f"Unknown threshold method: {method}")
     
@@ -277,11 +282,7 @@ def preprocess_image(
     
     # Apply Gaussian smoothing if requested
     if options.apply_gaussian:
-        if HAS_SKIMAGE:
-            result = filters.gaussian(result, sigma=options.gaussian_sigma)
-        else:
-            from scipy.ndimage import gaussian_filter
-            result = gaussian_filter(result, sigma=options.gaussian_sigma)
+        result = filters.gaussian(result, sigma=options.gaussian_sigma)
     
     # Apply Tubeness filter
     if options.apply_tubeness:

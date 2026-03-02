@@ -3,7 +3,7 @@
 Simple usage examples for pycurvelets (manually converted API from MATLAB CurveAlign).
 
 Requires: curvelops (for curvelet transform), pycurvelets (this package).
-Run from repo root: python simple_usage.py
+Run from repo root: python examples/simple_usage.py
 """
 import numpy as np
 
@@ -12,10 +12,8 @@ try:
         CurveletControlParameters,
         FeatureControlParameters,
         ImageInputParameters,
-        BoundaryParameters,
         FiberAnalysisParameters,
         OutputControlParameters,
-        AdvancedAnalysisOptions,
     )
     from pycurvelets.get_ct import get_ct
     from pycurvelets.new_curv import new_curv
@@ -30,7 +28,6 @@ def example_get_ct():
     """Extract curvelets from an image using get_ct."""
     if not HAS_PYCURVELETS:
         return
-    # Create a simple test image (e.g. 128x128)
     img = np.random.rand(128, 128).astype(np.float64) * 255
     curve_cp = CurveletControlParameters(keep=0.05, scale=1.0, radius=10.0)
     feature_cp = FeatureControlParameters(
@@ -59,7 +56,7 @@ def example_process_image():
     if not HAS_PYCURVELETS:
         return
     import tempfile
-    import os
+
     img = np.random.rand(128, 128).astype(np.float64) * 255
     with tempfile.TemporaryDirectory() as tmp:
         image_params = ImageInputParameters(img=img, img_name="test")

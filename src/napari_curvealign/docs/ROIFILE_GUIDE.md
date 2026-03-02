@@ -1,4 +1,4 @@
-# roifile 2025.x API Reference for CurveAlign
+# roifile 2025.x Guide for CurveAlign ROI I/O
 
 ## Correct API Usage (As Implemented)
 
@@ -54,7 +54,7 @@ try:
     for i, roi in enumerate(rois):
         fiji_roi = create_fiji_roi(roi)  # Your conversion function
         fiji_roi.tofile(f"{temp_dir}/{roi.name}.roi")
-    
+
     with zipfile.ZipFile("RoiSet.zip", 'w') as zipf:
         for filename in os.listdir(temp_dir):
             zipf.write(os.path.join(temp_dir, filename), filename)
@@ -86,7 +86,7 @@ def convert_fiji_to_roi(fiji_roi):
     """Convert Fiji ROI to our ROI format."""
     # Get type
     roi_type = fiji_roi.roitype
-    
+
     # For RECT and OVAL, read bbox
     if roi_type == rf.ROI_TYPE.RECT:
         left = fiji_roi.left
@@ -95,7 +95,7 @@ def convert_fiji_to_roi(fiji_roi):
         height = fiji_roi.height
         coords = np.array([[left, top], [left + width, top + height]], dtype=float)
         shape = ROIShape.RECTANGLE
-        
+
     elif roi_type == rf.ROI_TYPE.OVAL:
         left = fiji_roi.left
         top = fiji_roi.top
@@ -103,53 +103,53 @@ def convert_fiji_to_roi(fiji_roi):
         height = fiji_roi.height
         coords = np.array([[left, top], [left + width, top + height]], dtype=float)
         shape = ROIShape.ELLIPSE
-        
+
     # For POLYGON and FREEHAND, use coordinates()
     elif roi_type == rf.ROI_TYPE.POLYGON:
         coords = np.asarray(fiji_roi.coordinates(), dtype=float)
         shape = ROIShape.POLYGON
-        
+
     elif roi_type == rf.ROI_TYPE.FREEHAND:
         coords = np.asarray(fiji_roi.coordinates(), dtype=float)
         shape = ROIShape.FREEHAND
-        
+
     return coords, shape
 ```
 
 ## Common Mistakes to Avoid
 
-### ❌ WRONG: Using non-existent constructors
+### WRONG: Using non-existent constructors
 ```python
 # These don't exist in roifile 2025.x!
-fiji_roi = rf.ImagejRoi.rect(left, top, width, height)  # ❌
-fiji_roi = rf.ImagejRoi.oval(left, top, width, height)  # ❌
-fiji_roi = rf.ImagejRoi.polygon(x_points, y_points)     # ❌
+fiji_roi = rf.ImagejRoi.rect(left, top, width, height)
+fiji_roi = rf.ImagejRoi.oval(left, top, width, height)
+fiji_roi = rf.ImagejRoi.polygon(x_points, y_points)
 ```
 
-### ❌ WRONG: Passing roitype to frompoints
+### WRONG: Passing roitype to frompoints
 ```python
 # frompoints() doesn't accept roitype parameter
-fiji_roi = rf.ImagejRoi.frompoints(points, roitype=rf.ROI_TYPE.RECT)  # ❌
+fiji_roi = rf.ImagejRoi.frompoints(points, roitype=rf.ROI_TYPE.RECT)
 ```
 
-### ❌ WRONG: Using fromfile on ZipExtFile
+### WRONG: Using fromfile on ZipExtFile
 ```python
 with zipfile.ZipFile("RoiSet.zip", 'r') as zipf:
     with zipf.open("roi.roi") as f:
-        fiji_roi = rf.ImagejRoi.fromfile(f)  # ❌ TypeError
+        fiji_roi = rf.ImagejRoi.fromfile(f)  # TypeError
 ```
 
-### ✅ CORRECT: Set roitype after creation
+### CORRECT: Set roitype after creation
 ```python
 fiji_roi = rf.ImagejRoi.frompoints(points, name="ROI")
-fiji_roi.roitype = rf.ROI_TYPE.RECT  # ✅
+fiji_roi.roitype = rf.ROI_TYPE.RECT
 ```
 
-### ✅ CORRECT: Use frombytes for ZIP files
+### CORRECT: Use frombytes for ZIP files
 ```python
 with zipfile.ZipFile("RoiSet.zip", 'r') as zipf:
     roi_bytes = zipf.read("roi.roi")
-    fiji_roi = rf.ImagejRoi.frombytes(roi_bytes)  # ✅
+    fiji_roi = rf.ImagejRoi.frombytes(roi_bytes)
 ```
 
 ## API Signature Reference
@@ -224,4 +224,3 @@ fiji_roi.stroke_color     # Stroke color
 
 - roifile GitHub: https://github.com/cgohlke/roifile
 - ImageJ ROI format spec: https://imagej.net/ij/developer/source/ij/io/RoiDecoder.java.html
-

@@ -1,8 +1,15 @@
 """
 Environment Bridge for Cross-Python-Version Segmentation.
 
-This module enables running segmentation models (like StarDist) in different
-Python environments, similar to Appose framework approach.
+This module enables running segmentation models in different Python
+environments using subprocess isolation and file-based I/O.
+
+Design note
+-----------
+This lightweight bridge exists to keep optional cross-environment execution
+available without introducing an additional runtime dependency stack. Appose
+is a more full-featured option and can replace this in the future if/when the
+project standardizes on it.
 
 Inspired by: https://github.com/apposed/appose-python
 """
