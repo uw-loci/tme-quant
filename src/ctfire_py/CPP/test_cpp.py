@@ -3,13 +3,16 @@ import fiber_backend
 
 
 def test_find_local_max():
-    print("Testing fiber_backend.findlocmax_native...")
+    print("Testing fiber_backend.find_local_max...")
 
     # 1. Setup Dummy Input Data
     # For a 2D image: sizex=1, sizey=100, sizez=100
+    # The C++ code expects: sizex (depth), sizey (height), sizez (width)
+    # For 2D: sizex=1, and the image is (sizey x sizez)
     sizex, sizey, sizez = 1, 100, 100
 
     # Create a blank image and plant a clear "local max" at coordinate (50, 50)
+    # Image shape should be (sizey, sizez) = (100, 100)
     image = np.zeros((sizey, sizez), dtype=np.float32)
     image[50, 50] = 10.0
 
@@ -17,12 +20,10 @@ def test_find_local_max():
     dmin = 1.0
 
     # 2. Run the C++ Backend
-    # Make sure to flatten/ensure C-contiguous array as defined in our Pybind11 wrapper
-    image_c_style = np.ascontiguousarray(image)
+    # Flatten the image to 1D array as expected by the C++ code
+    image_flat = image.flatten()
 
-    pts = fiber_backend.findlocmax_native(
-        sizex, sizey, sizez, image_c_style, radius, dmin
-    )
+    pts = fiber_backend.find_local_max(sizex, sizey, sizez, image_flat, radius, dmin)
 
     print(f"C++ Output Shape: {pts.shape}")
     print(f"C++ Output Data:\n{pts}")

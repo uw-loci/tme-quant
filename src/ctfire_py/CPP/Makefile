@@ -9,7 +9,9 @@ CXXFLAGS = -O3 -Wall -shared -std=c++14 -fPIC -undefined dynamic_lookup
 
 # Python and Pybind11 Flags
 PY_INCLUDES = $(shell python3 -m pybind11 --includes)
-PY_LDFLAGS = $(shell python3-config --ldflags --embed)
+# CRITICAL: Do NOT use --embed flag on macOS as it causes segfaults during module import
+# The -undefined dynamic_lookup flag handles Python symbol resolution correctly
+PY_LDFLAGS =
 
 # OpenMP Configuration (Pulls directly from your active Conda environment)
 OMP_FLAGS = -Xpreprocessor -fopenmp
@@ -17,7 +19,6 @@ OMP_INCLUDES = -I$(CONDA_PREFIX)/include
 OMP_LIBS = -L$(CONDA_PREFIX)/lib -lomp
 
 # Source files 
-# (If you decide to merge find_local_max_py.cpp into this later, just add it here with a space)
 SRCS = extend_xlink_native.cpp fiberproc_native.cpp findlocmax_native.cpp fire_utils.cpp
 
 # --- Build Rules ---
