@@ -1,3 +1,99 @@
+# ROI File Guide
+
+This guide explains how ROI import/export works in `napari-curvealign`, when to
+use each format, and the practical `roifile` behaviors that matter for users and
+maintainers.
+
+## Who this is for
+
+- **Plugin users** who want to exchange ROIs with Fiji/ImageJ, QuPath, or label-image tools.
+- **Maintainers** who need to understand how `roifile` behaves in version 2025.x.
+
+## Supported ROI formats in the plugin
+
+The ROI Manager supports several save/load targets:
+
+- **JSON (`.json`)**: best for full-fidelity plugin round trips.
+- **Fiji/ImageJ (`.roi`, `.zip`)**: for interoperability with Fiji ROI Manager.
+- **StarDist (`.roi`, `.zip`)**: same container as Fiji ROI sets.
+- **Label image (`.npy`)**: instance-labeled mask export/import.
+- **QuPath (`.geojson`)**: annotation exchange with QuPath.
+- **CSV (`.csv`)** and **mask (`.tif`)**: lightweight utility exports.
+
+If your goal is lossless save/load inside this plugin, prefer **JSON**.
+
+## Common workflows
+
+### Export ROIs to Fiji/ImageJ
+
+1. In ROI Manager, choose **Save**.
+2. Select **Fiji/ImageJ ROI (`.roi` or `.zip`)**.
+3. For multiple ROIs, use `.zip` (RoiSet).
+
+### Import ROIs from Fiji/ImageJ
+
+1. In ROI Manager, choose **Load**.
+2. Select a `.roi` or `.zip`.
+3. The plugin maps ROI types into plugin shapes:
+   - Rectangle -> Rectangle
+   - Oval -> Ellipse
+   - Polygon -> Polygon
+   - Freehand -> Freehand
+
+### Exchange StarDist-style ROI sets
+
+- Use the **StarDist ROI** filter in Save/Load dialogs.
+- Internally this uses the same ImageJ ROI container format (`.roi/.zip`).
+
+## Practical `roifile` notes (2025.x)
+
+The plugin implementation follows the `roifile` 2025.x API pattern:
+
+1. Construct with `ImagejRoi.frompoints(...)`
+2. Set `roi.roitype` afterward
+
+Example:
+
+```python
+import roifile as rf
+import numpy as np
+
+points = np.array([[10, 10], [50, 50]], dtype=float)
+roi = rf.ImagejRoi.frompoints(points, name="Example")
+roi.roitype = rf.ROI_TYPE.RECT
+roi.tofile("example.roi")
+```
+
+## ZIP loading gotcha
+
+When reading ROI files from a zip archive, use bytes from the zip entry:
+
+```python
+import roifile as rf
+import zipfile
+
+with zipfile.ZipFile("RoiSet.zip", "r") as zf:
+    roi_bytes = zf.read("roi_1.roi")
+    roi = rf.ImagejRoi.frombytes(roi_bytes)
+```
+
+Do **not** call `ImagejRoi.fromfile()` on a `ZipExtFile` handle.
+
+## Troubleshooting
+
+- **ROIs load with unexpected shape**
+  - Check source ROI type and whether source data was rectangle/oval bbox vs polygon points.
+- **ZIP imports fail**
+  - Ensure each entry ends with `.roi` and is parsed via `frombytes`.
+- **Round-trip mismatch between tools**
+  - Use plugin JSON for internal fidelity; external tools may normalize/approximate geometry.
+
+## Maintainer notes
+
+- Version assumption for this guide: `roifile` 2025.x.
+- Keep conversions explicit for rectangle/oval bounding boxes.
+- Prefer clear shape mapping over implicit fallback behavior for unsupported ROI types.
+
 # roifile 2025.x Guide for CurveAlign ROI I/O
 
 ## Correct API Usage (As Implemented)
