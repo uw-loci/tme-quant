@@ -48,8 +48,19 @@ def sample_rois(roi_manager):
         name="test_ellipse",
         annotation_type="organelle"
     )
-    
-    return [roi1, roi2, roi3]
+
+    # Freehand ROI
+    roi4 = roi_manager.add_roi(
+        coordinates=np.array(
+            [[20.0, 20.0], [30.0, 25.0], [28.0, 35.0], [18.0, 32.0]],
+            dtype=float,
+        ),
+        shape=ROIShape.FREEHAND,
+        name="test_freehand",
+        annotation_type="region",
+    )
+
+    return [roi1, roi2, roi3, roi4]
 
 
 class TestLabelImageFormat:
@@ -72,16 +83,16 @@ class TestLabelImageFormat:
         assert masks.shape == (100, 100)
         assert masks.dtype in [np.int32, np.int64, np.uint16]
         
-        # Check that we have 3 distinct regions (plus background)
+        # Check that we have 4 distinct regions (plus background)
         unique_labels = np.unique(masks)
         assert len(unique_labels) >= 2  # At least background and one ROI
-        assert len(unique_labels) <= 4  # At most background + 3 ROIs
+        assert len(unique_labels) <= 5  # At most background + 4 ROIs
         
         # Check metadata
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
         assert "rois" in metadata
-        assert len(metadata["rois"]) == 3
+        assert len(metadata["rois"]) == 4
     
     def test_load_label_image_format(self, roi_manager, sample_rois, tmp_path):
         """Test loading ROIs from generic label-image format."""
@@ -96,11 +107,11 @@ class TestLabelImageFormat:
         loaded_rois = new_manager.load_rois_label_image(str(output_path))
         
         # Check that ROIs were loaded
-        assert len(loaded_rois) == 3
+        assert len(loaded_rois) == 4
         
         # Verify ROI properties are preserved
         roi_names = {roi.name for roi in loaded_rois}
-        assert "test_rect" in roi_names or len(loaded_rois) == 3
+        assert "test_rect" in roi_names or len(loaded_rois) == 4
         
         # Verify annotation types
         annotation_types = {roi.annotation_type for roi in loaded_rois}
@@ -141,7 +152,7 @@ class TestQuPathFormat:
         
         assert geojson_data["type"] == "FeatureCollection"
         assert "features" in geojson_data
-        assert len(geojson_data["features"]) == 3
+        assert len(geojson_data["features"]) == 4
         
         # Check feature properties
         for feature in geojson_data["features"]:
@@ -164,7 +175,7 @@ class TestQuPathFormat:
         loaded_rois = new_manager.load_rois_qupath(str(output_path))
         
         # Check that ROIs were loaded
-        assert len(loaded_rois) == 3
+        assert len(loaded_rois) == 4
         
         # Verify shapes are preserved
         loaded_shapes = {roi.shape for roi in loaded_rois}
@@ -184,23 +195,18 @@ class TestQuPathFormat:
         
         assert len(geojson_data["features"]) == 1
 
-    def test_save_freehand_qupath_format(self, roi_manager, tmp_path):
-        """Test freehand ROI export in QuPath format."""
+    def test_save_freehand_qupath_format(self, roi_manager, sample_rois, tmp_path):
+        """Test freehand ROI from fixture export in QuPath format."""
         output_path = tmp_path / "qupath_freehand.geojson"
-        roi_manager.add_roi(
-            coordinates=np.array(
-                [[20.0, 20.0], [30.0, 25.0], [28.0, 35.0], [18.0, 32.0]],
-                dtype=float,
-            ),
-            shape=ROIShape.FREEHAND,
-            name="freehand_qupath",
-            annotation_type="region",
-        )
         roi_manager.save_rois_qupath(str(output_path))
         with open(output_path, "r") as f:
             geojson_data = json.load(f)
-        assert len(geojson_data["features"]) == 1
-        assert geojson_data["features"][0]["geometry"]["type"] == "Polygon"
+        feature_names = {f.get("properties", {}).get("name") for f in geojson_data["features"]}
+        assert "test_freehand" in feature_names
+        freehand_feature = next(
+            f for f in geojson_data["features"] if f.get("properties", {}).get("name") == "test_freehand"
+        )
+        assert freehand_feature["geometry"]["type"] == "Polygon"
 
 
 class TestStarDistFormat:
