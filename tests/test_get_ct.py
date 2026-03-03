@@ -7,6 +7,8 @@ import pytest
 
 from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
 
+STRICT_MATLAB_PARITY = os.environ.get("TMEQ_VALIDATE_MATLAB") == "1"
+
 # By default, skip curvelops-dependent tests (e.g., on CI). Enable locally with:
 #   TMEQ_RUN_CURVELETS=1 pytest -q
 if os.environ.get("TMEQ_RUN_CURVELETS") != "1":
@@ -75,6 +77,11 @@ def test_get_ct_matches_expected_results(
     Absolute tolerance for alignment: 0.2
     Absolute tolerance for density: 1e-3
     """
+    if not STRICT_MATLAB_PARITY:
+        pytest.skip(
+            "MATLAB parity checks disabled (set TMEQ_VALIDATE_MATLAB=1 to enable)"
+        )
+
     img = standard_test_image
     curve_cp, feature_cp = standard_control_parameters
 

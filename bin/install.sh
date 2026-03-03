@@ -180,7 +180,7 @@ create_env_and_install() {
   export LDFLAGS="-L${FFTW}/lib"
 
   print_info "Syncing uv environment..."
-  uv sync --extra curvelops &&
+  uv sync --extra curvelops --extra segmentation &&
   print_success "Environment configured."
 
   print_info "Installing tme-quant..."

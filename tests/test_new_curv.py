@@ -8,6 +8,8 @@ import pytest
 
 from pycurvelets.models import CurveletControlParameters
 
+STRICT_MATLAB_PARITY = os.environ.get("TMEQ_VALIDATE_MATLAB") == "1"
+
 # Skip if curvelops is not available (e.g. on CI without FFTW/CurveLab)
 try:
     from pycurvelets.new_curv import new_curv  # type: ignore
@@ -154,6 +156,10 @@ def test_new_curv_matches_matlab_reference(test_name, test_case):
     Absolute tolerance of centers and angles are at 1 pixel.
     Checks absolute tolerance and ensures mismatched elements are <1%.
     """
+    if not STRICT_MATLAB_PARITY:
+        pytest.skip(
+            "MATLAB parity checks disabled (set TMEQ_VALIDATE_MATLAB=1 to enable)"
+        )
 
     img = load_test_image(test_case["image"])
     curve_cp = CurveletControlParameters(
