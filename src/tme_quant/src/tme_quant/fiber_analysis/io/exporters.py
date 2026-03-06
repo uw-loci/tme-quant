@@ -188,8 +188,12 @@ class FiberAnalysisExporter:
         """Convert list of fibers to pandas DataFrame."""
         data = []
         for fiber in fibers:
+            center = fiber.center_coordinates
             data.append({
                 'fiber_id': fiber.fiber_id,
+                'center_x': float(center[0]) if len(center) > 0 else np.nan,
+                'center_y': float(center[1]) if len(center) > 1 else np.nan,
+                'center_z': float(center[2]) if len(center) > 2 else np.nan,
                 'length': fiber.length,
                 'width': fiber.width,
                 'straightness': fiber.straightness,
@@ -201,8 +205,13 @@ class FiberAnalysisExporter:
     
     def _fiber_to_dict(self, fiber: FiberProperties) -> Dict[str, Any]:
         """Convert FiberProperties to dictionary."""
+        center = fiber.center_coordinates
         return {
             'fiber_id': fiber.fiber_id,
+            'center': center.tolist() if len(center) > 0 else None,
+            'center_x': float(center[0]) if len(center) > 0 else None,
+            'center_y': float(center[1]) if len(center) > 1 else None,
+            'center_z': float(center[2]) if len(center) > 2 else None,
             'length': fiber.length,
             'width': fiber.width,
             'straightness': fiber.straightness,

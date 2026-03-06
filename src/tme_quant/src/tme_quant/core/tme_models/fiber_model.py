@@ -205,10 +205,22 @@ class FiberProperties:
     # Metadata
     confidence: Optional[float] = None
     
+    @property
+    def center_coordinates(self) -> np.ndarray:
+        """Get center coordinates of the fiber from centerline midpoint."""
+        if self.centerline is None or len(self.centerline) == 0:
+            return np.array([])
+        mid_idx = len(self.centerline) // 2
+        return self.centerline[mid_idx]
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
+        center = self.center_coordinates
         return {
             'fiber_id': self.fiber_id,
+            'center_x': float(center[0]) if len(center) > 0 else None,
+            'center_y': float(center[1]) if len(center) > 1 else None,
+            'center_z': float(center[2]) if len(center) > 2 else None,
             'length': self.length,
             'width': self.width,
             'straightness': self.straightness,
@@ -413,11 +425,18 @@ class FiberObject(TMEObject):
     
     @property
     def midpoint(self) -> Point:
-        """Get fiber midpoint."""
+        """Get fiber midpoint as Shapely Point."""
         if len(self.centerline) == 0:
             raise ValueError("Fiber has no points")
         mid_idx = len(self.centerline) // 2
         return Point(self.centerline[mid_idx])
+    
+    def get_center_coordinates(self) -> np.ndarray:
+        """Get center coordinates as numpy array [x, y] or [x, y, z]."""
+        if len(self.centerline) == 0:
+            raise ValueError("Fiber has no points")
+        mid_idx = len(self.centerline) // 2
+        return self.centerline[mid_idx]
     
     def get_bounding_box(self) -> BoundingBox:
         """Get bounding box of fiber."""
@@ -641,9 +660,13 @@ class FiberObject(TMEObject):
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for export."""
+        center = self.get_center_coordinates() if len(self.centerline) > 0 else np.array([])
         return {
             'object_id': self.object_id,
             'parent_id': self.parent_id,
+            'center_x': float(center[0]) if len(center) > 0 else None,
+            'center_y': float(center[1]) if len(center) > 1 else None,
+            'center_z': float(center[2]) if len(center) > 2 else None,
             'length': self.length,
             'width': self.width,
             'angle': self.angle,
