@@ -93,6 +93,6 @@ def get_fire(
     fiber_number = len(fiber_structure_mat["Fai"][0, 0])
     X = fiber_structure["Xai"]
 
-    # Now process segments:
+    # TODO: process segments that are outputted from CT-Fire
 
     return fiber_structure, density_df, alignment_df

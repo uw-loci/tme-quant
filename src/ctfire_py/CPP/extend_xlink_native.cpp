@@ -429,17 +429,21 @@ py::tuple extend_xlink_native(int sizex, int sizey, int sizez,
     std::vector<float> R;
     std::vector<std::vector<int>> F, Xfe, Xf, Xvall, Ff;
 
+    // Extract parameters while holding GIL
+    int thresh_LMPdist = p["thresh_LMPdist"].cast<int>();
+    float thresh_LMP = p["thresh_LMP"].cast<float>();
+    float thresh_ext = p["thresh_ext"].cast<float>();
+    float lam_dirdecay = p["lam_dirdecay"].cast<float>();
+    float thresh_linkd = p["thresh_linkd"].cast<float>();
+    float thresh_linka = p["thresh_linka"].cast<float>();
+    int s_fiberdir = std::max(2, p["s_fiberdir"].cast<int>());
+
     {
         py::gil_scoped_release release;
         // Note: For 2D (sizex==1), pass sizey and sizez as dimensions
         ExtendXLink<float, 2> engine(sizey, sizez, img_ptr, pts,
-                                    p["thresh_LMPdist"].cast<int>(), 
-                                    p["thresh_LMP"].cast<float>(),
-                                    p["thresh_ext"].cast<float>(), 
-                                    p["lam_dirdecay"].cast<float>(),
-                                    p["thresh_linkd"].cast<float>(), 
-                                    p["thresh_linka"].cast<float>(),
-                                    std::max(2, p["s_fiberdir"].cast<int>()),
+                                    thresh_LMPdist, thresh_LMP, thresh_ext, 
+                                    lam_dirdecay, thresh_linkd, thresh_linka, s_fiberdir,
                                     X, R, F, Xfe, Xf, Xvall, Ff);
     }
 
