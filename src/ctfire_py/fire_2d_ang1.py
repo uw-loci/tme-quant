@@ -15,7 +15,7 @@ Returns:
 
 import numpy as np
 import time
-from scipy.ndimage import distance_transform_edt, gaussian_filter
+from scipy.ndimage import distance_transform_edt, convolve
 from typing import Dict, Any, Optional
 import sys
 
@@ -28,11 +28,62 @@ except ImportError:
     fiber_backend = None
 
 
-def smooth(image: np.ndarray, sigma: float) -> np.ndarray:
-    """Smooth image using Gaussian filter"""
-    if sigma > 0:
-        return gaussian_filter(image.astype(float), sigma=sigma)
-    return image.astype(float)
+def smooth(v, sigma):
+    """
+    Smooths v by convolving with a Gaussian box of radius r.
+    Equivalent to the MATLAB 'smooth' function provided.
+    """
+    v = np.asanyarray(v, dtype=float)
+    ndims = v.ndim
+
+    # Handle sigma inputs
+    if np.all(sigma == 0):
+        return v
+
+    if np.isscalar(sigma):
+        s = np.full(ndims, sigma)
+    elif len(sigma) == ndims:
+        s = np.array(sigma)
+    else:
+        raise ValueError("Improper input for sigma")
+
+    # Calculate Radius (R)
+    R = np.ceil(2 * s).astype(int)
+
+    # --- Generate 1D Kernels ---
+
+    # Kernel for Axis 0 (Vertical/Rows)
+    x1 = np.arange(-R[0], R[0] + 1)
+    gx1 = np.exp(-(x1**2) / (2 * s[0] ** 2))
+    gx1 /= gx1.sum()
+    # Reshape to (N, 1, 1) or (N, 1) depending on ndims
+    shape1 = [1] * ndims
+    shape1[0] = len(x1)
+    gx1 = gx1.reshape(shape1)
+
+    # Kernel for Axis 1 (Horizontal/Cols)
+    x2 = np.arange(-R[1], R[1] + 1)
+    gx2 = np.exp(-(x2**2) / (2 * s[1] ** 2))
+    gx2 /= gx2.sum()
+    shape2 = [1] * ndims
+    shape2[1] = len(x2)
+    gx2 = gx2.reshape(shape2)
+
+    # Apply first two filters
+    v = convolve(v, gx1, mode="constant", cval=0.0)
+    v = convolve(v, gx2, mode="constant", cval=0.0)
+
+    # Kernel for Axis 2 (Depth/Slices) if 3D
+    if ndims == 3:
+        x3 = np.arange(-R[2], R[2] + 1)
+        gx3 = np.exp(-(x3**2) / (2 * s[2] ** 2))
+        gx3 /= gx3.sum()
+        shape3 = [1, 1, len(x3)]
+        gx3 = gx3.reshape(shape3)
+
+        v = convolve(v, gx3, mode="constant", cval=0.0)
+
+    return v
 
 
 def flatten(image: np.ndarray) -> np.ndarray:
@@ -100,7 +151,7 @@ def fire_2d_ang1(
 
     # Step 1: Smooth image
     print("  Smoothing original image")
-    ims = np.round(smooth(im, p.get("sigma_im", 2.0))).astype(im.dtype)
+    ims = np.round(smooth(im, p.get("sigma_im")))
 
     if plotflag == 1:
         print(f"  Smoothed image shape: {ims.shape}")
@@ -363,3 +414,5 @@ if __name__ == "__main__":
     im3 = np.zeros((1, height, width), dtype=img.dtype)
 
     im3[0, :, :] = img
+
+    fire_2d_ang1(p, im3, 0)
