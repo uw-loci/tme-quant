@@ -42,43 +42,45 @@ def _to_params(
     return SHGHERegistrationParameters(**params)
 
 
-def _normalize_for_registration(image: np.ndarray) -> np.ndarray:
-    arr = np.asarray(image, dtype=np.float32)
-    arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
-    min_v = float(arr.min())
-    max_v = float(arr.max())
-    if max_v <= min_v:
-        return np.zeros_like(arr, dtype=np.float32)
-    return (arr - min_v) / (max_v - min_v)
-
-
-def _shift_rgb(image: np.ndarray, shift_rc: np.ndarray) -> np.ndarray:
-    shifted = np.zeros_like(image, dtype=np.float64)
-    for ch in range(image.shape[2]):
+def _shift_channels(
+    image: np.ndarray,
+    shift_rc: np.ndarray,
+    channel_axis: int = -1,
+) -> np.ndarray:
+    image_ch_last = np.moveaxis(image, channel_axis, -1)
+    shifted = np.zeros_like(image_ch_last, dtype=np.float64)
+    for ch in range(image_ch_last.shape[-1]):
         shifted[:, :, ch] = ndimage.shift(
-            image[:, :, ch],
+            image_ch_last[:, :, ch],
             shift=shift_rc,
             order=1,
             mode="constant",
             cval=1.0,
             prefilter=False,
         )
-    return shifted
+    return np.moveaxis(shifted, -1, channel_axis)
 
 
-def _warp_rgb_affine(image: np.ndarray, warp_matrix: np.ndarray, out_shape: tuple[int, int]) -> np.ndarray:
+def _warp_channels_affine(
+    image: np.ndarray,
+    warp_matrix: np.ndarray,
+    out_shape: tuple[int, int],
+    channel_axis: int = -1,
+) -> np.ndarray:
+    image_ch_last = np.moveaxis(image, channel_axis, -1)
     h, w = out_shape
-    warped = np.zeros((h, w, image.shape[2]), dtype=np.float64)
-    for ch in range(image.shape[2]):
+    warped = np.zeros((h, w, image_ch_last.shape[-1]), dtype=np.float64)
+    for ch in range(image_ch_last.shape[-1]):
         warped[:, :, ch] = cv2.warpAffine(
-            image[:, :, ch].astype(np.float32),
+            image_ch_last[:, :, ch].astype(np.float32),
             warp_matrix,
             dsize=(w, h),
             flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP,
             borderMode=cv2.BORDER_CONSTANT,
             borderValue=1.0,
         )
-    return np.clip(warped, 0.0, 1.0)
+    warped = np.clip(warped, 0.0, 1.0)
+    return np.moveaxis(warped, -1, channel_axis)
 
 
 def _estimate_affine_refinement(
@@ -90,11 +92,15 @@ def _estimate_affine_refinement(
     1) Phase cross correlation for coarse translational alignment.
     2) ECC affine refinement to mimic MATLAB multimodal registration strategy.
     """
-    moving_n = _normalize_for_registration(moving)
-    fixed_n = _normalize_for_registration(fixed)
+    moving_n = np.nan_to_num(moving, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+    fixed_n = np.nan_to_num(fixed, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
 
-    if np.allclose(moving_n, 0.0) or np.allclose(fixed_n, 0.0):
-        return np.zeros(2, dtype=np.float64), np.eye(2, 3, dtype=np.float32)
+    if moving_n.size == 0 or fixed_n.size == 0:
+        raise ValueError("Registration input image is empty.")
+    if np.ptp(moving_n) <= 1e-12:
+        raise ValueError("Moving registration image is too homogeneous for alignment.")
+    if np.ptp(fixed_n) <= 1e-12:
+        raise ValueError("Fixed registration image is too homogeneous for alignment.")
 
     shift_rc, _, _ = phase_cross_correlation(
         fixed_n,
@@ -140,6 +146,7 @@ def shg_he_registration(
     params: SHGHERegistrationParameters | dict[str, Any],
     save_output: bool = True,
     return_debug: bool = False,
+    include_debug_images: bool = True,
 ) -> np.ndarray | tuple[np.ndarray, dict[str, np.ndarray]]:
     """
     Python conversion of MATLAB BDcreation_reg2.m.
@@ -196,11 +203,12 @@ def shg_he_registration(
         fixed=fixed_shg.astype(np.float64),
     )
 
-    he_shifted = _shift_rgb(he_scaled, shift_rc=shift_rc)
-    registered_on_fixed = _warp_rgb_affine(
+    he_shifted = _shift_channels(he_scaled, shift_rc=shift_rc, channel_axis=-1)
+    registered_on_fixed = _warp_channels_affine(
         he_shifted,
         warp_matrix=affine_warp,
         out_shape=fixed_shg.shape[:2],
+        channel_axis=-1,
     )
 
     registered_img = resize_like(registered_on_fixed, original_shg_shape)
@@ -214,13 +222,18 @@ def shg_he_registration(
     if not return_debug:
         return registered_img
 
-    debug = {
-        "he_adjusted": he_adjusted,
-        "he_collagen_exclude": he_collagen_exclude.astype(np.uint8),
-        "fixed_shg": fixed_shg,
+    debug: dict[str, np.ndarray] = {
         "shift_rc": shift_rc,
         "affine_warp": affine_warp,
     }
+    if include_debug_images:
+        debug.update(
+            {
+                "he_adjusted": he_adjusted,
+                "he_collagen_exclude": he_collagen_exclude.astype(np.uint8),
+                "fixed_shg": fixed_shg,
+            }
+        )
     return registered_img, debug
 
 
