@@ -88,11 +88,6 @@ def test_shg_he_registration_improves_alignment_and_saves(tmp_path):
     assert registered.shape == (144, 144, 3)
     assert "he_collagen_exclude" in debug
 
-    pre_corr = _normalized_cross_correlation(he_image[:, :, 0], shg_image)
-    post_corr = _normalized_cross_correlation(registered[:, :, 0], shg_image)
-    assert np.isfinite(pre_corr)
-    assert np.isfinite(post_corr)
-
     # Coarse translation should approximately recover the known synthetic shift.
     shift_rc = np.asarray(debug["shift_rc"], dtype=np.float64)
     np.testing.assert_allclose(shift_rc, np.array([-7.0, 6.0]), atol=2.0)
@@ -120,8 +115,18 @@ def test_shg_he_registration_deterministic_and_ppm_rescale(tmp_path):
         "SHGfilepath": str(shg_dir),
     }
 
-    out1 = shg_he_registration(params, save_output=False, return_debug=False)
-    out2 = shg_he_registration(params, save_output=False, return_debug=False)
+    out1, debug1 = shg_he_registration(params, save_output=False, return_debug=True)
+
+    params_dc = SHGHERegistrationParameters(**params)
+    out2, debug2 = shg_he_registration(params_dc, save_output=False, return_debug=True)
 
     assert out1.shape == (128, 128, 3)
+    # pixelpermicron > 2 branch rescales to 2/ppm prior to registration.
+    assert debug1["fixed_shg"].shape == (80, 80)
     np.testing.assert_allclose(out1, out2, rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(debug1["shift_rc"], debug2["shift_rc"], rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(
+        np.asarray(debug1["shift_rc"], dtype=np.float64),
+        np.array([-3.0, 2.0]),
+        atol=2.0,
+    )
