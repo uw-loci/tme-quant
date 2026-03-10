@@ -1,5 +1,5 @@
 """
-FIRE 2D Angle 1 - Main fiber extraction algorithm using C++ backend
+FIRE 2D Angle - Main fiber extraction algorithm using C++ backend
 
 This is the main entry point for the FIRE (Fiber Extraction) algorithm.
 It processes 2D images to extract fiber networks.
@@ -93,7 +93,7 @@ def flatten(image: np.ndarray) -> np.ndarray:
     return image
 
 
-def fire_2d_ang1(
+def fire_2d_angle(
     p: Dict[str, Any], im: np.ndarray, plotflag: int = 1
 ) -> Dict[str, Any]:
     """
@@ -343,24 +343,6 @@ def fire_2d_ang1(
 
 
 if __name__ == "__main__":
-    # Example usage
-    print("FIRE 2D Angle 1 - Fiber Extraction")
-    print("This module requires a compiled C++ backend (fiber_backend)")
-    print("\nExample usage:")
-    print("  from fire_2d_ang1 import fire_2d_ang1, create_default_params")
-    print("  import numpy as np")
-    print("  ")
-    print("  # Load your image")
-    print("  im = np.load('your_image.npy')")
-    print("  ")
-    print("  # Create parameters")
-    print("  p = create_default_params()")
-    print("  ")
-    print("  # Run FIRE")
-    print("  data = fire_2d_ang1(p, im, plotflag=1)")
-    print("  ")
-    print("  # Access results")
-    print("  print(f'Extracted {len(data[\"Fa\"])} fibers')")
 
     # same values as when when using real1.tif's fiber image
     # TODO: make p's keys much more descriptive
@@ -415,4 +397,4 @@ if __name__ == "__main__":
 
     im3[0, :, :] = img
 
-    fire_2d_ang1(p, im3, 0)
+    fire_2d_angle(p, im3, 0)

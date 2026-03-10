@@ -1,6 +1,10 @@
+import cv2
 import os
 import numpy as np
 from typing import Dict, Any, Tuple, Optional
+
+from ctfire_py.ct_reconstruction import ct_reconstruction
+from ctfire_py.fire_2d_angle import fire_2d_angle
 
 
 def ct_fire(
@@ -31,6 +35,7 @@ def ct_fire(
         - ``coefficient_percentile``: float, fraction of coefficients to keep
         - ``num_scales``: int, number of finest scales for reconstruction
         - ``fiber_threshold``: float, threshold for fiber detection
+        #TODO: add more details to ctfire_params (the p stuff)
 
     Returns
     -------
@@ -48,6 +53,47 @@ def ct_fire(
     # 2. Apply curvelet transform reconstruction (ct_rec)
     # 3. Extract fiber features from both original and reconstructed images
     # 4. Save results to save_path/ctFIREout/
+
+    # Placeholder for loaded image (replace with actual image loading)
+    img = cv2.imread(f"{image_path}/{image_name}")
+
+    # TODO: if cP.RO ~= 2 --> then p2.thresh_im2 = 0?? right now we have it as 5
+    # Not sure why there's a discrepancy between thresh_im2 of p2 and ctfire_params
+
+    # Convert RGB to grayscale if needed
+    if img.ndim == 3 and img.shape[2] == 3:
+        # OpenCV loads as BGR, convert to grayscale
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Create 3D array to store image
+    height, width = img.shape
+    im3 = np.zeros((1, height, width), dtype=img.dtype)
+    im3[0, :, :] = img
+
+    # Flip image vertically (associated with 'axis xy' in MATLAB)
+    img_flipped = np.flipud(img)
+
+    # Create binary mask based on threshold
+    mask_ori = img > ctfire_params["value"]["thresh_im2"]
+
+    reconstructed_ct = ct_reconstruction(
+        img=img,
+        output_filename="2B_D9_ROI1.tif",
+        coefficient_percentile=ctfire_params["coefficient_percentile"],
+        specific_scales=ctfire_params["num_scales"],
+        plot_flag=control_params["show_plots"],
+    )
+
+    # Apply mask to reconstructed image (element-wise multiplication)
+    reconstructed_ct = reconstructed_ct * mask_ori
+
+    im3 = np.zeros(
+        (1, reconstructed_ct.shape[0], reconstructed_ct.shape[1]),
+        dtype=reconstructed_ct.dtype,
+    )
+    im3[0, :, :] = reconstructed_ct
+
+    fire_2d_angle(p=ctfire_params["value"], im=im3, plotflag=0)
 
     fiber_output = {}
     ctfire_output = {}
@@ -70,6 +116,35 @@ if __name__ == "__main__":
         "coefficient_percentile": 0.2,
         "num_scales": 4,
         "fiber_threshold": 0.5,
+        "value": {
+            "sigma_im": 0,
+            "sigma_d": 0.3,
+            "dtype": "cityblock",
+            "thresh_im": [],
+            "thresh_im2": 5,
+            "thresh_Dxlink": 1.5,
+            "s_xlinkbox": 8,
+            "thresh_LMP": 0.2,
+            "thresh_LMPdist": 2,
+            "thresh_ext": 0.342,
+            "lam_dirdecay": 0.5,
+            "s_minstep": 2,
+            "s_maxstep": 6,
+            "thresh_dang_aextend": 0.9848,
+            "thresh_dang_L": 15,
+            "thresh_short_L": 15,
+            "s_fiberdir": 4,
+            "thresh_linkd": 15,
+            "thresh_linka": -0.866,
+            "thresh_flen": 15,
+            "thresh_numv": 3,
+            "scale": [1.0, 1.0, 1.0],
+            "s_boundthick": 10,
+            "blist": 1,
+            "s_maxspace": 5,
+            "lambda": 0.01,
+            "ang_interval": 3,
+        },
     }
 
     fiber_out, ctfire_out = ct_fire(
