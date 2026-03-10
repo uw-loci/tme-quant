@@ -16,6 +16,40 @@ COLLAGEN_HUE_MAX = 0.066  # wrapped hue range (>= min OR <= max)
 NUCLEI_MIN_AREA = 150
 COLLAGEN_MIN_AREA = 100
 
+def normalize_array_to_unit_interval(
+    image: np.ndarray,
+    normalization_epsilon: float = 1e-12,
+    raise_on_homogeneous: bool = False,
+) -> np.ndarray:
+    """
+    Normalize an in-memory numeric array to [0, 1] after NaN/Inf cleanup.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        Input array.
+    normalization_epsilon : float, default 1e-12
+        Lower bound for denominator stability.
+    raise_on_homogeneous : bool, default False
+        If True, raise for arrays with no dynamic range.
+    """
+    arr = np.asarray(image, dtype=np.float32)
+    arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+
+    if arr.size == 0:
+        raise ValueError("Cannot normalize an empty array.")
+
+    arr_min = float(arr.min())
+    arr_max = float(arr.max())
+    dynamic = arr_max - arr_min
+    if dynamic <= float(normalization_epsilon):
+        if raise_on_homogeneous:
+            raise ValueError("Cannot normalize homogeneous array.")
+        return np.zeros_like(arr, dtype=np.float32)
+
+    return (arr - arr_min) / max(dynamic, float(normalization_epsilon))
+
+
 def load_and_normalize_image(
     path: str | Path,
     normalization_epsilon: float = 1e-12,
