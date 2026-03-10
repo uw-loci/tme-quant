@@ -93,7 +93,7 @@ def ct_rec_1(img, fctr, pct, SS, plot_flag=False):
 
 if __name__ == "__main__":
     plot_flag = 1
-    SS = 3
+    SS = 4
     pct = 0.2
     import os
     import matplotlib.pyplot as plt
