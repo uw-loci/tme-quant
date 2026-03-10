@@ -23,6 +23,15 @@ from ._he_bdc_common import (
     to_grayscale,
 )
 
+# Morphology/filter constants copied from MATLAB BDcreationHE2 heuristics.
+EPITH_BINARY_THRESHOLD = 0.001
+EPITH_DILATION_RADIUS_MULTIPLIER = 5.0
+BACKGROUND_HOLE_MIN_AREA_MULTIPLIER = 60.0
+TUMOR_MASK_MIN_AREA_MULTIPLIER = 35.0
+FINAL_MASK_DILATION_RADIUS_MULTIPLIER = 4.0
+FINAL_MASK_GAUSSIAN_SIGMA = 25.0
+FINAL_MASK_GAUSSIAN_KERNEL_SIZE = 101
+
 
 @dataclass
 class TumorAnnotationFromHEParameters:
@@ -78,17 +87,33 @@ def tumor_annotation_from_he(
     )
 
     epith_cell_bw = (
-        (to_grayscale(masked_nuclei_image) > 0.001)
+        (to_grayscale(masked_nuclei_image) > EPITH_BINARY_THRESHOLD)
         & (~bw_collagen1)
         & bw_no_background
     )
-    epith_cell_bw_open = morphology.dilation(epith_cell_bw, disk_se(np.round(5.0 * pix_per_mic)))
+    epith_cell_bw_open = morphology.dilation(
+        epith_cell_bw,
+        disk_se(np.round(EPITH_DILATION_RADIUS_MULTIPLIER * pix_per_mic)),
+    )
     bwx = ndimage.binary_fill_holes(epith_cell_bw_open)
-    bwy = matlab_area_open(~bwx, int(np.round((60.0 * pix_per_mic) ** 2)))
-    mask_image = matlab_area_open(~bwy, int(np.round((35.0 * pix_per_mic) ** 2)))
-    mask_image1 = morphology.dilation(mask_image, disk_se(np.round(4.0 * pix_per_mic))) & (~bw_collagen1)
+    bwy = matlab_area_open(
+        ~bwx,
+        int(np.round((BACKGROUND_HOLE_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2)),
+    )
+    mask_image = matlab_area_open(
+        ~bwy,
+        int(np.round((TUMOR_MASK_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2)),
+    )
+    mask_image1 = morphology.dilation(
+        mask_image,
+        disk_se(np.round(FINAL_MASK_DILATION_RADIUS_MULTIPLIER * pix_per_mic)),
+    ) & (~bw_collagen1)
 
-    smoothed = gaussian_filter_matlab_like(mask_image1.astype(np.float64), sigma=25.0, kernel_size=101)
+    smoothed = gaussian_filter_matlab_like(
+        mask_image1.astype(np.float64),
+        sigma=FINAL_MASK_GAUSSIAN_SIGMA,
+        kernel_size=FINAL_MASK_GAUSSIAN_KERNEL_SIZE,
+    )
     mask_temp = resize_like(smoothed, orig_shape)
     mask_thresh = safe_otsu(mask_temp)
     bd_mask = mask_temp > mask_thresh
