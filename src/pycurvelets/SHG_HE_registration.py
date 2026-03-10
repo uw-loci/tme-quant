@@ -18,6 +18,7 @@ from ._he_bdc_common import (
     make_collagen_mask,
     make_nuclei_mask,
     matlab_area_open,
+    normalize_array_to_unit_interval,
     prepare_he_image,
     resize_like,
     save_image_uint8,
@@ -92,15 +93,19 @@ def _estimate_affine_refinement(
     1) Phase cross correlation for coarse translational alignment.
     2) ECC affine refinement to mimic MATLAB multimodal registration strategy.
     """
-    moving_n = np.nan_to_num(moving, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
-    fixed_n = np.nan_to_num(fixed, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+    moving_n = normalize_array_to_unit_interval(
+        moving,
+        normalization_epsilon=1e-12,
+        raise_on_homogeneous=True,
+    )
+    fixed_n = normalize_array_to_unit_interval(
+        fixed,
+        normalization_epsilon=1e-12,
+        raise_on_homogeneous=True,
+    )
 
     if moving_n.size == 0 or fixed_n.size == 0:
         raise ValueError("Registration input image is empty.")
-    if np.ptp(moving_n) <= 1e-12:
-        raise ValueError("Moving registration image is too homogeneous for alignment.")
-    if np.ptp(fixed_n) <= 1e-12:
-        raise ValueError("Fixed registration image is too homogeneous for alignment.")
 
     shift_rc, _, _ = phase_cross_correlation(
         fixed_n,
