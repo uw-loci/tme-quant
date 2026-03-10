@@ -6,10 +6,22 @@ import numpy as np
 from scipy import ndimage
 from skimage import color, filters, io, morphology, transform
 
+# MATLAB-derived HSV threshold defaults from:
+# - CurveAlign_CT-FIRE/BDcreation_reg2.m
+# - CurveAlign_CT-FIRE/BDcreationHE2.m
+NUCLEI_HUE_MIN = 0.500
+NUCLEI_HUE_MAX = 0.790
+COLLAGEN_HUE_MIN = 0.837
+COLLAGEN_HUE_MAX = 0.066  # wrapped hue range (>= min OR <= max)
+NUCLEI_MIN_AREA = 150
+COLLAGEN_MIN_AREA = 100
 
-def load_image_as_float(path: str | Path) -> np.ndarray:
-    """Load image and normalize intensity to [0, 1]."""
-    image = np.asarray(io.imread(str(path)))
+def load_and_normalize_image(
+    path: str | Path,
+    normalization_epsilon: float = 1e-12,
+) -> np.ndarray:
+    """Load image from disk and normalize intensities to [0, 1]."""
+    image = io.imread(str(path))
     original_dtype = image.dtype
 
     if image.dtype == np.bool_:
@@ -17,7 +29,7 @@ def load_image_as_float(path: str | Path) -> np.ndarray:
 
     image = image.astype(np.float64)
     if image.size == 0:
-        return image
+        raise ValueError(f"Opened image at {path} but it is empty.")
 
     max_val = float(np.nanmax(image))
     min_val = float(np.nanmin(image))
@@ -26,15 +38,15 @@ def load_image_as_float(path: str | Path) -> np.ndarray:
             dtype_max = np.iinfo(original_dtype).max
             image = image / float(dtype_max)
         else:
-            dynamic = max(max_val - min_val, 1e-12)
+            dynamic = max(max_val - min_val, float(normalization_epsilon))
             image = (image - min_val) / dynamic
 
     return np.clip(image, 0.0, 1.0)
 
 
-def save_image_uint8(path: str | Path, image: np.ndarray) -> None:
-    """Save image as uint8, preserving logical masks and RGB images."""
-    arr = np.asarray(image)
+def save_as_uint8_image(path: str | Path, image: np.ndarray) -> None:
+    """Save image to disk as uint8, normalizing/clipping numeric arrays to [0, 1]."""
+    arr = image
 
     if arr.dtype == np.bool_:
         out = arr.astype(np.uint8) * 255
@@ -50,24 +62,28 @@ def save_image_uint8(path: str | Path, image: np.ndarray) -> None:
     io.imsave(str(path), out, check_contrast=False)
 
 
-def ensure_rgb(image: np.ndarray) -> np.ndarray:
-    """Ensure image is RGB in float [0, 1]."""
-    arr = np.asarray(image)
+def ensure_rgb(image: np.ndarray, axis: int = 2) -> np.ndarray:
+    """Ensure image is RGB with channel-last layout and float64 dtype."""
+    arr = image
     if arr.ndim == 2:
         return np.dstack([arr, arr, arr]).astype(np.float64)
-    if arr.ndim == 3 and arr.shape[2] >= 3:
-        return arr[:, :, :3].astype(np.float64)
-    raise ValueError("Expected 2D grayscale or RGB image.")
+    if arr.ndim == 3:
+        arr_ch_last = np.moveaxis(arr, axis, -1)
+        if arr_ch_last.shape[-1] >= 3:
+            return arr_ch_last[..., :3].astype(np.float64)
+    raise ValueError(f"Expected 2D grayscale or RGB image, but got {arr.shape}.")
 
 
-def to_grayscale(image: np.ndarray) -> np.ndarray:
-    """Convert image to grayscale float [0, 1]."""
-    arr = np.asarray(image)
+def ensure_grayscale(image: np.ndarray, axis: int = 2) -> np.ndarray:
+    """Return a grayscale float64 image; RGB input is converted, 2D input is cast."""
+    arr = image
     if arr.ndim == 2:
         return arr.astype(np.float64)
-    if arr.ndim == 3 and arr.shape[2] >= 3:
-        return color.rgb2gray(arr[:, :, :3])
-    raise ValueError("Expected 2D grayscale or RGB image.")
+    if arr.ndim == 3:
+        arr_ch_last = np.moveaxis(arr, axis, -1)
+        if arr_ch_last.shape[-1] >= 3:
+            return color.rgb2gray(arr_ch_last[..., :3])
+    raise ValueError(f"Expected 2D grayscale or RGB image, but got {arr.shape}.")
 
 
 def resize_like(image: np.ndarray, out_shape: tuple[int, int]) -> np.ndarray:
@@ -95,25 +111,29 @@ def prepare_he_image(he: np.ndarray, pixel_per_micron: float) -> tuple[np.ndarra
     return he_rgb, pix
 
 
-def adjust_rgb_mean_std(rgb: np.ndarray) -> np.ndarray:
+def adjust_rgb_mean_std(rgb: np.ndarray, axis: int = 2) -> np.ndarray:
     """
     Reproduce MATLAB imadjust with per-channel high input at mean + 2*std.
     Equivalent to imadjust(RGB,[0;high],[0;1]) channel-wise.
     """
-    out = np.zeros_like(rgb, dtype=np.float64)
+    rgb_arr = np.moveaxis(rgb, axis, -1).astype(np.float64)
+    if rgb_arr.ndim != 3 or rgb_arr.shape[-1] < 3:
+        raise ValueError(f"Expected RGB image with at least 3 channels, got {rgb.shape}.")
+
+    out = np.zeros_like(rgb_arr, dtype=np.float64)
     for ch in range(3):
-        channel = rgb[:, :, ch]
+        channel = rgb_arr[..., ch]
         high = float(np.mean(channel) + 2.0 * np.std(channel))
         high = min(max(high, 1e-8), 1.0)
-        out[:, :, ch] = np.clip(channel / high, 0.0, 1.0)
+        out[..., ch] = np.clip(channel / high, 0.0, 1.0)
     return out
 
 
-def matlab_area_open(mask: np.ndarray, min_size: int) -> np.ndarray:
-    """MATLAB bwareaopen-like operation using 8-connectivity in 2D."""
+def remove_small_components(mask: np.ndarray, min_size: int) -> np.ndarray:
+    """Remove connected components smaller than min_size using 8-connectivity."""
     min_size = max(int(min_size), 1)
     if mask.size == 0:
-        return mask.astype(bool)
+        raise ValueError("Mask is empty; cannot remove small components.")
     labels, _ = ndimage.label(mask.astype(bool), structure=np.ones((3, 3), dtype=int))
     areas = np.bincount(labels.ravel())
     keep = areas >= min_size
@@ -129,27 +149,35 @@ def disk_se(radius: float) -> np.ndarray:
     return morphology.disk(r)
 
 
-def safe_otsu(image: np.ndarray) -> float:
-    """Otsu threshold with constant-image fallback."""
-    arr = np.asarray(image, dtype=np.float64)
+def compute_otsu_threshold(image: np.ndarray) -> float:
+    """Compute Otsu threshold and raise if input is empty or homogeneous."""
+    arr = image.astype(np.float64)
     if arr.size == 0:
-        return 0.0
+        raise ValueError("Cannot compute Otsu threshold for empty image.")
     if np.allclose(arr, arr.flat[0]):
-        return float(arr.flat[0])
+        raise ValueError(
+            "Cannot compute Otsu threshold for homogeneous image "
+            f"(single value={arr.flat[0]})."
+        )
     return float(filters.threshold_otsu(arr))
 
 
-def make_nuclei_mask(he_rgb_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.ndarray, np.ndarray]:
+def make_nuclei_mask(
+    he_rgb_adjusted: np.ndarray,
+    pix_per_mic: float,
+    saturation_channel: int = 1,
+) -> tuple[np.ndarray, np.ndarray]:
     """Generate nuclei mask and masked nuclei RGB image from adjusted HE."""
     hsv = color.rgb2hsv(he_rgb_adjusted)
-    sat_thresh = safe_otsu(hsv[:, :, 1])
+    sat_thresh = compute_otsu_threshold(hsv[..., saturation_channel])
 
     nuclei_raw = (
-        (hsv[:, :, 0] >= 0.500)
-        & (hsv[:, :, 0] <= 0.790)
-        & (hsv[:, :, 1] >= sat_thresh)
+        (hsv[..., 0] >= NUCLEI_HUE_MIN)
+        & (hsv[..., 0] <= NUCLEI_HUE_MAX)
+        & (hsv[..., saturation_channel] >= sat_thresh)
     )
-    nuclei_raw = matlab_area_open(nuclei_raw, 150)
+    # 150 px minimum area is copied from the original MATLAB scripts.
+    nuclei_raw = remove_small_components(nuclei_raw, NUCLEI_MIN_AREA)
     nuclei_opened = morphology.opening(nuclei_raw, disk_se(np.ceil(pix_per_mic / 2.0)))
 
     masked = he_rgb_adjusted.copy()
@@ -161,30 +189,33 @@ def make_collagen_mask(
     he_rgb_adjusted: np.ndarray,
     pix_per_mic: float,
     enhanced_postprocessing: bool = False,
+    saturation_channel: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Generate collagen mask and non-background mask from adjusted HE."""
     hsv = color.rgb2hsv(he_rgb_adjusted)
-    sat_thresh = safe_otsu(hsv[:, :, 1])
+    sat_thresh = compute_otsu_threshold(hsv[..., saturation_channel])
 
     collagen = (
-        ((hsv[:, :, 0] >= 0.837) | (hsv[:, :, 0] <= 0.066))
-        & (hsv[:, :, 1] >= sat_thresh)
+        ((hsv[..., 0] >= COLLAGEN_HUE_MIN) | (hsv[..., 0] <= COLLAGEN_HUE_MAX))
+        & (hsv[..., saturation_channel] >= sat_thresh)
     )
-    collagen = matlab_area_open(collagen, 100)
+    # 100 px minimum area and the wrapped hue band come from MATLAB defaults.
+    collagen = remove_small_components(collagen, COLLAGEN_MIN_AREA)
 
     if enhanced_postprocessing:
+        # Morphology radii are MATLAB-derived heuristics in units of pixel/micron.
         collagen = morphology.dilation(collagen, disk_se(np.ceil(pix_per_mic)))
         collagen = morphology.closing(collagen, disk_se(np.round(3.0 * pix_per_mic)))
 
-    no_background = hsv[:, :, 1] >= sat_thresh
+    no_background = hsv[..., saturation_channel] >= sat_thresh
     return collagen.astype(bool), no_background.astype(bool), sat_thresh
 
 
-def gaussian_filter_matlab_like(
+def gaussian_filter_with_size_hint(
     image: np.ndarray, sigma: float, kernel_size: int | None = None
 ) -> np.ndarray:
     """
-    Approximate MATLAB fspecial('gaussian', size, sigma) + imfilter(...,'replicate','corr').
+    Gaussian filter with optional kernel-size hint to constrain effective radius.
     """
     truncate = 4.0
     if kernel_size is not None and sigma > 0:
@@ -196,3 +227,12 @@ def gaussian_filter_matlab_like(
         mode="nearest",
         truncate=truncate,
     )
+
+
+# Backward-compatible aliases for current call sites.
+load_image_as_float = load_and_normalize_image
+save_image_uint8 = save_as_uint8_image
+to_grayscale = ensure_grayscale
+matlab_area_open = remove_small_components
+safe_otsu = compute_otsu_threshold
+gaussian_filter_matlab_like = gaussian_filter_with_size_hint
