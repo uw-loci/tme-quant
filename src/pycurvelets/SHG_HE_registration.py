@@ -25,6 +25,23 @@ from ._he_bdc_common import (
     to_grayscale,
 )
 
+# Registration constants derived from MATLAB BDcreation_reg2 defaults/behavior.
+REG_NORMALIZATION_EPSILON = 1e-12
+PHASE_XCORR_UPSAMPLE = 10
+ECC_MAX_ITERATIONS = 700
+ECC_EPSILON = 1e-7
+ECC_GAUSSIAN_FILTER_SIZE = 5
+
+# Segmentation/morphology constants derived from MATLAB script thresholds.
+NUCLEI_FILTER_SIGMA = 0.5
+NUCLEI_BINARY_THRESHOLD = 0.001
+NUCLEI_MIN_AREA_MULTIPLIER = 50.0
+COLLAGEN_MIN_AREA_MULTIPLIER = 1.0
+
+# Fill values chosen to match MATLAB-style bright background handling.
+SHIFT_FILL_VALUE = 1.0
+WARP_BORDER_VALUE = 1.0
+
 
 @dataclass
 class SHGHERegistrationParameters:
@@ -56,7 +73,7 @@ def _shift_channels(
             shift=shift_rc,
             order=1,
             mode="constant",
-            cval=1.0,
+            cval=SHIFT_FILL_VALUE,
             prefilter=False,
         )
     return np.moveaxis(shifted, -1, channel_axis)
@@ -78,7 +95,7 @@ def _warp_channels_affine(
             dsize=(w, h),
             flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP,
             borderMode=cv2.BORDER_CONSTANT,
-            borderValue=1.0,
+            borderValue=WARP_BORDER_VALUE,
         )
     warped = np.clip(warped, 0.0, 1.0)
     return np.moveaxis(warped, -1, channel_axis)
@@ -95,12 +112,12 @@ def _estimate_affine_refinement(
     """
     moving_n = normalize_array_to_unit_interval(
         moving,
-        normalization_epsilon=1e-12,
+        normalization_epsilon=REG_NORMALIZATION_EPSILON,
         raise_on_homogeneous=True,
     )
     fixed_n = normalize_array_to_unit_interval(
         fixed,
-        normalization_epsilon=1e-12,
+        normalization_epsilon=REG_NORMALIZATION_EPSILON,
         raise_on_homogeneous=True,
     )
 
@@ -110,7 +127,7 @@ def _estimate_affine_refinement(
     shift_rc, _, _ = phase_cross_correlation(
         fixed_n,
         moving_n,
-        upsample_factor=10,
+        upsample_factor=PHASE_XCORR_UPSAMPLE,
         normalization=None,
     )
 
@@ -126,8 +143,8 @@ def _estimate_affine_refinement(
     warp_matrix = np.eye(2, 3, dtype=np.float32)
     criteria = (
         cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-        700,
-        1e-7,
+        ECC_MAX_ITERATIONS,
+        ECC_EPSILON,
     )
 
     try:
@@ -138,7 +155,7 @@ def _estimate_affine_refinement(
             cv2.MOTION_AFFINE,
             criteria,
             None,
-            5,
+            ECC_GAUSSIAN_FILTER_SIZE,
         )
     except cv2.error:
         # Keep identity affine when ECC does not converge on low-information images.
@@ -189,18 +206,24 @@ def shg_he_registration(
     gray_nuclei = to_grayscale(masked_nuclei_image)
     nuclei_filtered = gaussian_filter_matlab_like(
         gray_nuclei,
-        sigma=0.5,
+        sigma=NUCLEI_FILTER_SIGMA,
         kernel_size=max(int(np.floor(pix_per_mic)), 1),
     )
-    bw_nuclei = nuclei_filtered > 0.001
-    bw_nuclei_discard = matlab_area_open(bw_nuclei, int(np.ceil(50.0 * pix_per_mic**2)))
+    bw_nuclei = nuclei_filtered > NUCLEI_BINARY_THRESHOLD
+    bw_nuclei_discard = matlab_area_open(
+        bw_nuclei,
+        int(np.ceil(NUCLEI_MIN_AREA_MULTIPLIER * pix_per_mic**2)),
+    )
     bw_nuclei_dilated = morphology.dilation(
         bw_nuclei_discard, disk_se(np.floor(pix_per_mic))
     )
     bw_nuclei_filled = ndimage.binary_fill_holes(bw_nuclei_dilated)
 
     he_collagen_bw = bw_collagen & (~bw_nuclei_filled)
-    bw_discard = matlab_area_open(he_collagen_bw, int(np.ceil(max(pix_per_mic**2, 1.0))))
+    bw_discard = matlab_area_open(
+        he_collagen_bw,
+        int(np.ceil(max(COLLAGEN_MIN_AREA_MULTIPLIER * pix_per_mic**2, 1.0))),
+    )
     he_collagen_exclude = he_collagen_bw & bw_discard
 
     shift_rc, affine_warp = _estimate_affine_refinement(
