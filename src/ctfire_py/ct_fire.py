@@ -3,8 +3,7 @@ import os
 import numpy as np
 from typing import Dict, Any, Tuple, Optional
 
-from ctfire_py.ct_reconstruction import ct_reconstruction
-from ctfire_py.fire_2d_angle import fire_2d_angle
+from ctfire_py import ct_reconstruction, fire_2d_angle
 
 
 def ct_fire(

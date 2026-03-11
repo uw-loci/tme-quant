@@ -19,6 +19,10 @@ from scipy.ndimage import distance_transform_edt, convolve
 from typing import Dict, Any, Optional
 import sys
 
+
+from pycurvelets.utils.math import round_mlab
+from ctfire_py import ct_reconstruction
+
 # Import C++ backend
 try:
     sys.path.insert(0, "src/ctfire_py/CPP")
@@ -151,16 +155,16 @@ def fire_2d_angle(
 
     # Step 1: Smooth image
     print("  Smoothing original image")
-    ims = np.round(smooth(im, p.get("sigma_im")))
+    ims = round_mlab(smooth(im, p.get("sigma_im")))
 
     if plotflag == 1:
         print(f"  Smoothed image shape: {ims.shape}")
 
     # Step 2: Threshold image
-    if p.get("thresh_im") is not None:
+    if len(p.get("thresh_im")) != 0:
         imt = ims > p["thresh_im"] * np.max(ims)
     else:
-        imt = ims > p.get("thresh_im2", 0)
+        imt = ims > p.get("thresh_im2")
 
     if plotflag == 1:
         print(f"  Thresholded pixels: {np.sum(imt)}")
@@ -392,9 +396,59 @@ if __name__ == "__main__":
         ),
         format="TIF",
     )
-    height, width = img.shape
-    im3 = np.zeros((1, height, width), dtype=img.dtype)
 
-    im3[0, :, :] = img
+    ctfire_params = {
+        "coefficient_percentile": 0.2,
+        "num_scales": 4,
+        "fiber_threshold": 0.5,
+        "value": {
+            "sigma_im": 0,
+            "sigma_d": 0.3,
+            "dtype": "cityblock",
+            "thresh_im": [],
+            "thresh_im2": 0,
+            "thresh_Dxlink": 1.5,
+            "s_xlinkbox": 8,
+            "thresh_LMP": 0.2,
+            "thresh_LMPdist": 2,
+            "thresh_ext": 0.342,
+            "lam_dirdecay": 0.5,
+            "s_minstep": 2,
+            "s_maxstep": 6,
+            "thresh_dang_aextend": 0.9848,
+            "thresh_dang_L": 15,
+            "thresh_short_L": 15,
+            "s_fiberdir": 4,
+            "thresh_linkd": 15,
+            "thresh_linka": -0.866,
+            "thresh_flen": 15,
+            "thresh_numv": 3,
+            "scale": [1.0, 1.0, 1.0],
+            "s_boundthick": 10,
+            "blist": 1,
+            "s_maxspace": 5,
+            "lambda": 0.01,
+            "ang_interval": 3,
+        },
+    }
 
-    fire_2d_angle(p, im3, 0)
+    mask_ori = img > ctfire_params["value"]["thresh_im2"]
+
+    reconstructed_ct = ct_reconstruction(
+        img=img,
+        output_filename="2B_D9_ROI1.tif",
+        coefficient_percentile=ctfire_params["coefficient_percentile"],
+        specific_scales=ctfire_params["num_scales"],
+        plot_flag=False,
+    )
+
+    # Apply mask to reconstructed image (element-wise multiplication)
+    reconstructed_ct = reconstructed_ct * mask_ori
+
+    im3 = np.zeros(
+        (1, reconstructed_ct.shape[0], reconstructed_ct.shape[1]),
+        dtype=reconstructed_ct.dtype,
+    )
+    im3[0, :, :] = reconstructed_ct
+
+    fire_2d_angle(p=ctfire_params["value"], im=im3, plotflag=0)
