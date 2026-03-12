@@ -1,4 +1,15 @@
-### Location: `tme_quant/tme_analysis/measurements/spatial_features.py`
+"""Spatial relationship feature extraction for prognostic TME analysis."""
+
+from __future__ import annotations
+
+import importlib
+from typing import Dict, List, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ...tme_analysis.config.analysis_params import InteractionPair
+
+np = importlib.import_module("numpy")
+
 
 class SpatialRelationshipExtractor:
     """
