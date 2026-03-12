@@ -3,12 +3,16 @@ Measurement engine for computing TME features from interaction pairs.
 """
 
 from collections import Counter
+import importlib
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-from scipy.spatial.distance import cdist
-from scipy.stats import entropy
-from shapely.geometry import Point, Polygon
+
+cdist = importlib.import_module("scipy.spatial.distance").cdist
+entropy = importlib.import_module("scipy.stats").entropy
+shapely_geometry = importlib.import_module("shapely.geometry")
+Point = shapely_geometry.Point
+Polygon = shapely_geometry.Polygon
 
 from ..config.analysis_params import InteractionPair
 from ...core.tme_models.cell_model import CellObject
@@ -146,7 +150,9 @@ class MeasurementEngine:
                 )
 
         if fibers:
-            interacting_fibers = [f for f in fibers if f.object_id in interacting_fiber_ids]
+            interacting_fibers = [
+                f for f in fibers if self._fiber_id(f) in interacting_fiber_ids
+            ]
             if interacting_fibers:
                 lengths = [f.length for f in interacting_fibers if hasattr(f, "length")]
                 straightnesses = [f.straightness for f in interacting_fibers if hasattr(f, "straightness")]
@@ -218,7 +224,9 @@ class MeasurementEngine:
         if not pairs_with_angles:
             return features
 
-        angles = [p.relative_angle for p in pairs_with_angles]
+        angles = [float(p.relative_angle) for p in pairs_with_angles if p.relative_angle is not None]
+        if not angles:
+            return features
         features.update(
             {
                 "mean_relative_angle": float(np.mean(angles)),
@@ -382,3 +390,9 @@ class MeasurementEngine:
                 distance_maps["tumor_boundary_distance"] = np.array(min_tumor_distances).reshape(grid_size)
 
         return distance_maps
+
+    def _fiber_id(self, fiber: FiberObject) -> str:
+        object_id = getattr(fiber, "object_id", None)
+        if object_id is not None:
+            return str(object_id)
+        return str(getattr(fiber, "id", "fiber"))

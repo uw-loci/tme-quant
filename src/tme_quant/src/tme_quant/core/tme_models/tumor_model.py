@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 import numpy as np
 from enum import Enum
-from ..base_models import TMEObject, Geometry, Classification, Measurement
+from ..base_models import TMEObject, Geometry, Classification, Measurement, TMEType, GeometryType
 
 class TumorGrade(Enum):
     """Tumor grading classifications"""
@@ -16,7 +16,7 @@ class TumorGrade(Enum):
     G4 = "Undifferentiated"
     GX = "Cannot be assessed"
 
-@dataclass
+@dataclass(kw_only=True)
 class TumorRegion(TMEObject):
     """Represents a tumor region with spatial characteristics"""
     geometry: Geometry
@@ -60,7 +60,7 @@ class TumorRegion(TMEObject):
                 for i in range(len(coords)):
                     j = (i + 1) % len(coords)
                     perimeter += np.linalg.norm(coords[j] - coords[i])
-                return perimeter
+                return float(perimeter)
         return 0.0
     
     def _calculate_circularity(self) -> float:
@@ -76,7 +76,7 @@ class TumorRegion(TMEObject):
         # Implementation would require convex hull calculation
         return 1.0  # Placeholder
 
-@dataclass
+@dataclass(kw_only=True)
 class Tumor(TMEObject):
     """Comprehensive tumor representation"""
     regions: List[TumorRegion] = field(default_factory=list)

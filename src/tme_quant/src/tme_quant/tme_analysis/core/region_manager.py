@@ -2,291 +2,205 @@
 Manage regions of interest and automated tumor detection.
 """
 
-import numpy as np
-from typing import List, Optional, Dict, Any
-from sklearn.cluster import DBSCAN
-from scipy.ndimage import gaussian_filter
-from shapely.geometry import MultiPoint, Point
-from shapely.ops import unary_union
+from typing import Any, Dict, List, Optional
+import importlib
 
-from ..config.analysis_params import TumorDetectionParams, TumorDetectionMethod
-from ...core.tme_models.cell_model import CellObject, CellType
+import numpy as np
+
+shapely_geometry = importlib.import_module("shapely.geometry")
+MultiPoint = shapely_geometry.MultiPoint
+Point = shapely_geometry.Point
+Polygon = shapely_geometry.Polygon
+DBSCAN = importlib.import_module("sklearn.cluster").DBSCAN
+
+from ..config.analysis_params import TumorDetectionMethod, TumorDetectionParams
+from ...core.base_models import Geometry, GeometryType
+from ...core.tme_models.cell_model import CellObject
 from ...core.tme_models.tumor_model import TumorRegion
-from ...core.geometry import ROI
 
 
 class RegionManager:
-    """
-    Manage ROIs and automated tumor region detection.
-    """
-    
+    """Manage ROIs and automated tumor region detection."""
+
     def __init__(self, verbose: bool = False):
-        """Initialize region manager."""
         self.verbose = verbose
-    
-    # ============================================================
-    # TUMOR REGION DETECTION
-    # ============================================================
-    
+
     def detect_tumor_regions(
         self,
         cells: List[CellObject],
-        params: TumorDetectionParams
+        params: TumorDetectionParams,
     ) -> List[TumorRegion]:
-        """
-        Automatically detect tumor regions from cell data.
-        
-        Args:
-            cells: List of cells
-            params: Detection parameters
-            
-        Returns:
-            List of TumorRegion objects
-        """
         if params.method == TumorDetectionMethod.CLUSTERING:
             return self._detect_by_clustering(cells, params)
-        
-        elif params.method == TumorDetectionMethod.DENSITY:
+        if params.method == TumorDetectionMethod.DENSITY:
             return self._detect_by_density(cells, params)
-        
-        elif params.method == TumorDetectionMethod.CELL_TYPE:
+        if params.method == TumorDetectionMethod.CELL_TYPE:
             return self._detect_by_cell_type(cells, params)
-        
-        elif params.method == TumorDetectionMethod.DEEP_LEARNING:
+        if params.method == TumorDetectionMethod.DEEP_LEARNING:
             return self._detect_by_deep_learning(cells, params)
-        
-        elif params.method == TumorDetectionMethod.MANUAL:
-            # User must provide annotations separately
+        if params.method == TumorDetectionMethod.MANUAL:
             return []
-        
-        else:
-            raise ValueError(f"Unknown detection method: {params.method}")
-    
+        raise ValueError(f"Unknown detection method: {params.method}")
+
     def _detect_by_clustering(
         self,
         cells: List[CellObject],
-        params: TumorDetectionParams
+        params: TumorDetectionParams,
     ) -> List[TumorRegion]:
-        """Detect tumor regions using DBSCAN clustering."""
         if len(cells) < params.dbscan_min_samples:
             return []
-        
-        # Get cell centroids
+
         centroids = np.array([c.centroid for c in cells])
-        
-        # Run DBSCAN
-        clustering = DBSCAN(
-            eps=params.dbscan_eps,
-            min_samples=params.dbscan_min_samples
-        ).fit(centroids)
-        
+        clustering = DBSCAN(eps=params.dbscan_eps, min_samples=params.dbscan_min_samples).fit(centroids)
         labels = clustering.labels_
+
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        
         if self.verbose:
             print(f"DBSCAN found {n_clusters} clusters")
-        
-        # Create tumor regions from clusters
-        tumor_regions = []
-        
+
+        tumor_regions: List[TumorRegion] = []
         for cluster_id in set(labels):
-            if cluster_id == -1:  # Skip noise
+            if cluster_id == -1:
                 continue
-            
-            # Get cells in this cluster
+
             cluster_mask = labels == cluster_id
             cluster_centroids = centroids[cluster_mask]
-            
-            # Create convex hull as boundary
+
             points = MultiPoint(cluster_centroids)
-            boundary_polygon = points.convex_hull.buffer(50)  # 50 micron buffer
-            
-            # Check minimum area
+            boundary_polygon = points.convex_hull.buffer(50)
             area = boundary_polygon.area
             if area < params.min_tumor_area:
                 continue
-            
-            # Smooth boundary if requested
+
             if params.smooth_boundary:
-                # Simplify polygon
-                boundary_polygon = boundary_polygon.simplify(
-                    tolerance=params.smoothing_sigma
-                )
-            
-            # Create TumorRegion
-            tumor_region = TumorRegion(
-                geometry=boundary_polygon,
-                metadata={
-                    'detection_method': 'clustering',
-                    'n_cells': int(np.sum(cluster_mask)),
-                    'area': float(area),
-                    'cluster_id': cluster_id
-                }
+                boundary_polygon = boundary_polygon.simplify(tolerance=params.smoothing_sigma)
+
+            geometry = Geometry(
+                type=GeometryType.POLYGON,
+                coordinates=np.array(
+                    boundary_polygon.exterior.coords
+                    if hasattr(boundary_polygon, "exterior")
+                    else boundary_polygon.coords
+                ),
             )
-            
+
+            tumor_region = TumorRegion(
+                id=f"tumor_cluster_{cluster_id}",
+                name=f"tumor_cluster_{cluster_id}",
+                geometry=geometry,
+                metadata={
+                    "detection_method": "clustering",
+                    "n_cells": int(np.sum(cluster_mask)),
+                    "area": float(area),
+                },
+            )
             tumor_regions.append(tumor_region)
-        
+
         return tumor_regions
-    
+
     def _detect_by_cell_type(
         self,
         cells: List[CellObject],
-        params: TumorDetectionParams
+        params: TumorDetectionParams,
     ) -> List[TumorRegion]:
-        """Detect tumor regions based on classified tumor cells."""
-        # Filter for tumor cells
         tumor_cells = [
-            c for c in cells
+            c
+            for c in cells
             if c.cell_type and c.cell_type.value in params.tumor_cell_types
         ]
-        
+
         if not tumor_cells:
             if self.verbose:
                 print("No tumor cells found for region detection")
             return []
-        
-        # Use clustering on tumor cells
+
         return self._detect_by_clustering(tumor_cells, params)
-    
+
     def _detect_by_density(
         self,
         cells: List[CellObject],
-        params: TumorDetectionParams
+        params: TumorDetectionParams,
     ) -> List[TumorRegion]:
-        """Detect tumor regions using kernel density estimation."""
-        from scipy.stats import gaussian_kde
-        
-        # Get centroids
+        gaussian_kde = importlib.import_module("scipy.stats").gaussian_kde
+
         centroids = np.array([c.centroid for c in cells])
-        
-        # Compute KDE
         kde = gaussian_kde(centroids.T, bw_method=params.density_bandwidth)
-        
-        # Create grid for evaluation
+
         x_min, y_min = centroids.min(axis=0) - 100
         x_max, y_max = centroids.max(axis=0) + 100
-        
-        xx, yy = np.meshgrid(
-            np.linspace(x_min, x_max, 100),
-            np.linspace(y_min, y_max, 100)
-        )
-        
+
+        xx, yy = np.meshgrid(np.linspace(x_min, x_max, 100), np.linspace(y_min, y_max, 100))
         positions = np.vstack([xx.ravel(), yy.ravel()])
-        density = np.reshape(kde(positions), xx.shape)
-        
-        # Threshold to get tumor regions
-        tumor_mask = density > params.density_threshold
-        
-        # Convert to contours/polygons
-        # ... (implementation using skimage.measure.find_contours)
-        
-        # Create TumorRegion objects
-        # ... (implementation)
-        
-        return []  # Placeholder
-    
+        _density = np.reshape(kde(positions), xx.shape)
+
+        return []
+
     def _detect_by_deep_learning(
         self,
         cells: List[CellObject],
-        params: TumorDetectionParams
+        params: TumorDetectionParams,
     ) -> List[TumorRegion]:
-        """Detect tumor regions using deep learning model."""
-        # Load model
+        del cells
         if params.dl_model_path is None:
             raise ValueError("Deep learning model path required")
-        
-        # Run inference
-        # ... (implementation depends on specific DL framework)
-        
-        return []  # Placeholder
-    
-    # ============================================================
-    # ZONE GENERATION
-    # ============================================================
-    
+        return []
+
     def generate_tumor_zones(
         self,
         tumor_regions: List[TumorRegion],
         invasive_margin_width: float = 50.0,
-        stroma_width: float = 200.0
-    ) -> Dict[str, List[ROI]]:
-        """
-        Generate zones around tumor regions.
-        
-        Zones:
-            - Invasive margin: 0-50 microns from boundary
-            - Peri-tumor stroma: 50-250 microns from boundary
-            - Tumor core: Inside tumor
-        
-        Args:
-            tumor_regions: List of tumor regions
-            invasive_margin_width: Width of invasive margin zone
-            stroma_width: Width of stroma zone
-            
-        Returns:
-            Dictionary of zone_type -> List[ROI]
-        """
-        zones = {
-            'tumor_core': [],
-            'invasive_margin': [],
-            'stroma': []
+        stroma_width: float = 200.0,
+    ) -> Dict[str, List[Any]]:
+        zones: Dict[str, List[Any]] = {
+            "tumor_core": [],
+            "invasive_margin": [],
+            "stroma": [],
         }
-        
+
         for tumor in tumor_regions:
-            # Tumor core (original region)
-            zones['tumor_core'].append(tumor.roi)
-            
-            # Invasive margin (buffer zone)
-            boundary = tumor.roi.polygon.boundary
+            polygon = self._to_polygon(tumor)
+            zones["tumor_core"].append(polygon)
+
+            boundary = polygon.boundary
             invasive_zone = boundary.buffer(invasive_margin_width)
-            zones['invasive_margin'].append(ROI.from_shapely(invasive_zone))
-            
-            # Stroma zone (further buffer)
+            zones["invasive_margin"].append(invasive_zone)
+
             stroma_zone = boundary.buffer(invasive_margin_width + stroma_width)
-            # Subtract invasive margin to get ring
             stroma_ring = stroma_zone.difference(invasive_zone)
-            zones['stroma'].append(ROI.from_shapely(stroma_ring))
-        
+            zones["stroma"].append(stroma_ring)
+
         return zones
-    
-    # ============================================================
-    # ROI FILTERING
-    # ============================================================
-    
-    def filter_cells_by_roi(
-        self,
-        cells: Optional[List[CellObject]],
-        roi: ROI
-    ) -> List[CellObject]:
-        """Filter cells that fall within ROI."""
+
+    def filter_cells_by_roi(self, cells: Optional[List[CellObject]], roi: Any) -> List[CellObject]:
         if not cells:
             return []
-        
-        filtered = []
-        roi_polygon = roi.polygon
-        
+
+        roi_polygon = self._get_roi_polygon(roi)
+        filtered: List[CellObject] = []
         for cell in cells:
-            cell_point = Point(cell.centroid)
-            if roi_polygon.contains(cell_point):
+            if roi_polygon.contains(Point(cell.centroid)):
                 filtered.append(cell)
-        
         return filtered
-    
-    def filter_fibers_by_roi(
-        self,
-        fibers: Optional[List],
-        roi: ROI
-    ) -> List:
-        """Filter fibers that intersect ROI."""
+
+    def filter_fibers_by_roi(self, fibers: Optional[List], roi: Any) -> List:
         if not fibers:
             return []
-        
-        filtered = []
-        roi_polygon = roi.polygon
-        
+
+        roi_polygon = self._get_roi_polygon(roi)
+        filtered: List[Any] = []
         for fiber in fibers:
-            fiber_geom = fiber.geometry
-            if roi_polygon.intersects(fiber_geom):
+            if roi_polygon.intersects(fiber.geometry):
                 filtered.append(fiber)
-        
         return filtered
+
+    def _to_polygon(self, tumor: TumorRegion) -> Polygon:
+        return Polygon(np.asarray(tumor.geometry.coordinates))
+
+    def _get_roi_polygon(self, roi: Any) -> Polygon:
+        if isinstance(roi, Polygon):
+            return roi
+        if hasattr(roi, "polygon"):
+            return roi.polygon
+        if hasattr(roi, "geometry") and hasattr(roi.geometry, "coordinates"):
+            return Polygon(np.asarray(roi.geometry.coordinates))
+        raise ValueError(f"Unsupported ROI type: {type(roi)}")

@@ -95,6 +95,26 @@ class TMEAnalyzer:
         """
         if params is None:
             params = TMEAnalysisParams()
+
+        cells = cells or []
+        fibers = fibers or []
+        tumor_regions = tumor_regions or []
+        custom_rois = custom_rois or []
+
+        if params.mode == AnalysisMode.CELL_BASED and not cells:
+            raise ValueError("Cell-based analysis requires non-empty 'cells'")
+
+        if params.mode == AnalysisMode.TUMOR_BASED:
+            if not fibers:
+                raise ValueError("Tumor-based analysis requires non-empty 'fibers'")
+            if not tumor_regions:
+                raise ValueError("Tumor-based analysis requires non-empty 'tumor_regions'")
+
+        if params.mode == AnalysisMode.FIBER_BASED and not fibers:
+            raise ValueError("Fiber-based analysis requires non-empty 'fibers'")
+
+        if params.mode == AnalysisMode.ROI_BASED and not custom_rois:
+            raise ValueError("ROI-based analysis requires non-empty 'custom_rois'")
         
         start_time = time.time()
         
@@ -240,7 +260,10 @@ class TMEAnalyzer:
         result = TMEAnalysisResult(
             analysis_id=analysis_id,
             mode=AnalysisMode.TUMOR_BASED,
-            tumor_regions=[t.object_id for t in tumor_regions]
+            tumor_regions=[
+                str(getattr(t, 'object_id', getattr(t, 'id', 'tumor')))
+                for t in tumor_regions
+            ]
         )
         
         # Generate zones if requested
@@ -468,6 +491,9 @@ class TMEAnalyzer:
             Dictionary mapping format to file path
         """
         from ..io.exporters import TMEAnalysisExporter
+
+        if self.results is None:
+            raise ValueError("No analysis results available. Run analyze() before export.")
         
         exporter = TMEAnalysisExporter()
         return exporter.export(
