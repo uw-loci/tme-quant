@@ -662,3 +662,150 @@ tme_quant/tme_analysis/
 
 All core TME analysis functionality is implemented and ready for scientific research.
 Future enhancements (visualization, advanced features) are optional additions.
+
+03/09/2026
+tme_quant/
+├── __init__.py                                      # Root package
+├── setup.py                                         # Package installation
+├── README.md                                        # Documentation
+├── requirements.txt                                 # Dependencies
+│
+├── core/                                            # Core data models
+│   ├── __init__.py
+│   ├── project.py                                   # TMEProject
+│   └── tme_models/
+│       ├── __init__.py
+│       ├── base_models.py                           # TMEObject
+│       ├── cell_model.py                            # CellObject
+│       ├── fiber_model.py                           # FiberObject
+│       ├── tumor_model.py                           # TumorRegion
+│       └── interaction_models.py                    # InteractionPair
+│
+├── fiber_analysis/                                  # ✅ 100% COMPLETE
+│   ├── __init__.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── fiber_analyzer.py
+│   │   ├── orientation_analyzer.py
+│   │   └── extraction_analyzer.py
+│   ├── methods/
+│   │   ├── __init__.py
+│   │   ├── orientation/
+│   │   │   ├── __init__.py
+│   │   │   ├── curvealign.py
+│   │   │   └── orientationj.py
+│   │   └── extraction/
+│   │       ├── __init__.py
+│   │       ├── ctfire.py
+│   │       └── ridge_detection.py
+│   ├── config/
+│   │   ├── __init__.py
+│   │   ├── orientation_params.py
+│   │   └── extraction_params.py
+│   ├── io/
+│   │   ├── __init__.py
+│   │   └── exporters.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── curvelet_utils.py
+│       └── geometry_utils.py
+│
+├── cell_analysis/                                   # ✅ 100% COMPLETE
+│   ├── __init__.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── cell_analyzer.py
+│   │   ├── segmentation_analyzer.py
+│   │   ├── classification_analyzer.py
+│   │   └── quantification_analyzer.py
+│   ├── methods/
+│   │   ├── __init__.py
+│   │   ├── segmentation/
+│   │   │   ├── __init__.py
+│   │   │   ├── stardist.py
+│   │   │   ├── cellpose.py
+│   │   │   ├── thresholding.py
+│   │   │   └── watershed.py
+│   │   ├── classification/
+│   │   │   ├── __init__.py
+│   │   │   ├── morphology_classifier.py
+│   │   │   └── marker_classifier.py
+│   │   └── quantification/
+│   │       ├── __init__.py
+│   │       ├── morphological_features.py
+│   │       ├── intensity_features.py
+│   │       └── texture_features.py
+│   ├── config/
+│   │   ├── __init__.py
+│   │   ├── segmentation_params.py
+│   │   ├── classification_params.py
+│   │   └── quantification_params.py
+│   ├── io/
+│   │   ├── __init__.py
+│   │   └── exporters.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── preprocessing.py
+│       └── postprocessing.py
+│
+├── tme_analysis/                                    # ✅ 100% COMPLETE
+│   ├── __init__.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── tme_analyzer.py
+│   │   ├── interaction_detector.py
+│   │   ├── region_manager.py
+│   │   └── measurement_engine.py
+│   ├── config/
+│   │   ├── __init__.py
+│   │   └── analysis_params.py
+│   ├── io/
+│   │   ├── __init__.py
+│   │   └── exporters.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── distance_utils.py
+│       ├── statistical_utils.py
+│       └── geometry_utils.py
+│
+└── image_registration/                              # ✅ Core Complete
+    ├── __init__.py
+    ├── core/
+    │   ├── __init__.py
+    │   ├── registration_manager.py
+    │   └── transform_handler.py
+    ├── methods/
+    │   ├── __init__.py
+    │   ├── base_registration.py
+    │   ├── intensity_based/
+    │   │   ├── __init__.py
+    │   │   └── mutual_information.py
+    │   ├── feature_based/
+    │   │   ├── __init__.py
+    │   │   ├── sift_registration.py
+    │   │   └── orb_registration.py
+    │   ├── landmark_based/
+    │   │   ├── __init__.py
+    │   │   └── manual_landmarks.py
+    │   └── specialized/
+    │       ├── __init__.py
+    │       └── he_shg_registration.py              # ✅ COMPLETE
+    ├── config/
+    │   ├── __init__.py
+    │   └── registration_params.py
+    ├── preprocessing/
+    │   ├── __init__.py
+    │   ├── intensity_normalization.py               # ✅ COMPLETE
+    │   ├── modality_conversion.py                   # ✅ COMPLETE
+    │   └── resolution_matching.py                   # ✅ COMPLETE
+    ├── visualization/
+    │   ├── __init__.py
+    │   ├── checkerboard.py                          # ✅ COMPLETE
+    │   ├── overlay.py                               # ✅ COMPLETE
+    │   └── difference_map.py                        # ✅ COMPLETE
+    ├── io/
+    │   ├── __init__.py
+    │   └── transform_io.py
+    └── utils/
+        ├── __init__.py
+        └── image_utils.py
