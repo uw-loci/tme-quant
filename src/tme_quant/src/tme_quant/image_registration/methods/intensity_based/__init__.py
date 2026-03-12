@@ -9,10 +9,10 @@ Methods that use pixel intensity values directly for registration:
 
 from .mutual_information import MutualInformationRegistration
 from .cross_correlation import CrossCorrelationRegistration
-from .he_shg_registration import HESHGRegistration  # ← ADDED
+from .he_shg_registration_python import HESHGRegistration
 
 __all__ = [
     'MutualInformationRegistration',
     'CrossCorrelationRegistration',
-    'HESHGRegistration',  # ← ADDED
+    'HESHGRegistration',
 ]

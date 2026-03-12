@@ -2,27 +2,35 @@
 Configuration and parameters for cell analysis.
 """
 
-from .segmentation_params import SegmentationParams
-from .classification_params import ClassificationParams
-from .quantification_params import QuantificationParams
+__all__ = []
 
 # Re-export enums from cell_model for convenience
-from ...core.tme_models.cell_model import (
-    SegmentationMode,
-    ImageModality,
-    CellType,
-    ClassificationMode
-)
+try:
+    from ...core.tme_models.cell_model import (
+        SegmentationMode,
+        ImageModality,
+        CellType,
+        ClassificationMode,
+    )
+    __all__ += ['SegmentationMode', 'ImageModality', 'CellType', 'ClassificationMode']
+except ImportError:
+    pass
 
-__all__ = [
-    # Parameters
-    'SegmentationParams',
-    'ClassificationParams',
-    'QuantificationParams',
-    
-    # Enums
-    'SegmentationMode',
-    'ImageModality',
-    'CellType',
-    'ClassificationMode',
-]
+# Parameter classes (modules not yet created)
+try:
+    from .segmentation_params import SegmentationParams
+    __all__.append('SegmentationParams')
+except ImportError:
+    pass
+
+try:
+    from .classification_params import ClassificationParams
+    __all__.append('ClassificationParams')
+except ImportError:
+    pass
+
+try:
+    from .quantification_params import QuantificationParams
+    __all__.append('QuantificationParams')
+except ImportError:
+    pass
