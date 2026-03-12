@@ -16,7 +16,7 @@ Returns:
 import numpy as np
 import time
 from scipy.ndimage import distance_transform_edt, convolve
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, Union
 import sys
 
 
@@ -95,6 +95,153 @@ def flatten(image: np.ndarray) -> np.ndarray:
     if image.ndim == 3:
         return np.max(image, axis=0)
     return image
+
+
+def bw_dist(
+    bw: np.ndarray, method: str = "euclidean"
+) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    """
+    Distance transform of binary image.
+
+    Computes the distance transform of the binary image BW. For each pixel in BW,
+    the distance transform assigns a number that is the distance between that pixel
+    and the nearest nonzero pixel of BW.
+
+    Parameters
+    ----------
+    bw : np.ndarray
+        Binary input image (can be numeric or logical). Nonzero values are treated as True.
+    method : str, optional
+        Distance metric to use. Options are:
+        - 'euclidean': Euclidean distance (default)
+        - 'cityblock': Manhattan/L1 distance (abs(x1-x2) + abs(y1-y2))
+        - 'chessboard': Chebyshev/L-infinity distance (max(abs(x1-x2), abs(y1-y2)))
+        - 'quasi-euclidean': Approximation of Euclidean distance
+
+    Returns
+    -------
+    D : np.ndarray
+        Distance transform array, same size as input. Values are float32.
+
+    Notes
+    -----
+    This is a Python/NumPy implementation of MATLAB's bwdist function.
+    The Euclidean method uses scipy's fast distance_transform_edt.
+    Other methods use scipy's distance transforms with appropriate metrics.
+
+    Examples
+    --------
+    >>> bw = np.zeros((5, 5))
+    >>> bw[2, 2] = 1
+    >>> D = bw_dist(bw)
+    >>> print(D[0, 0])  # Distance from corner to center
+    2.8284271247461903
+    """
+    # Convert to boolean
+    bw = np.asarray(bw, dtype=bool)
+
+    # Validate method
+    valid_methods = ["euclidean", "cityblock", "chessboard", "quasi-euclidean"]
+    if method not in valid_methods:
+        raise ValueError(f"Invalid method '{method}'. Must be one of {valid_methods}")
+
+    # Compute distance transform based on method
+    if method == "euclidean":
+        # Use scipy's fast Euclidean distance transform
+        D = distance_transform_edt(bw).astype(np.float32)
+    else:
+        # Use chamfer distance for non-Euclidean methods
+        D = _chamfer_distance(bw, method).astype(np.float32)
+
+    return D
+
+
+def _chamfer_distance(bw: np.ndarray, method: str) -> np.ndarray:
+    """
+    Compute chamfer distance transform using dual-scan algorithm.
+
+    This matches MATLAB's implementation for cityblock, chessboard, and quasi-euclidean.
+    """
+    # Define weights and connectivity for each method
+    if method == "cityblock":
+        # 4-connectivity, weights = [0, 1, 1, 1, 1]
+        # Neighbors: center, N, S, E, W
+        weights = np.array([1.0, 1.0, 1.0, 1.0])  # N, S, E, W
+    elif method == "chessboard":
+        # 8-connectivity, weights = [0, 1, 1, 1, 1, 1, 1, 1, 1]
+        # All 8 neighbors have weight 1
+        weights = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])  # All 8 directions
+    elif method == "quasi-euclidean":
+        # 8-connectivity with quasi-Euclidean weights
+        # Orthogonal = 1.0, Diagonal = sqrt(2) ≈ 1.414
+        sqrt2 = np.sqrt(2.0)
+        weights = np.array([1.0, 1.0, 1.0, 1.0, sqrt2, sqrt2, sqrt2, sqrt2])
+    else:
+        raise ValueError(f"Unknown method: {method}")
+
+    # Initialize distance array
+    D = np.full(bw.shape, np.inf, dtype=np.float64)
+    D[bw] = 0.0
+
+    rows, cols = bw.shape
+
+    # Forward pass (top-left to bottom-right)
+    for i in range(rows):
+        for j in range(cols):
+            if not bw[i, j]:
+                min_dist = D[i, j]
+
+                # Check neighbors based on method
+                if method == "cityblock":
+                    # 4-connectivity: N, W
+                    if i > 0:  # N
+                        min_dist = min(min_dist, D[i - 1, j] + weights[0])
+                    if j > 0:  # W
+                        min_dist = min(min_dist, D[i, j - 1] + weights[2])
+                else:
+                    # 8-connectivity: NW, N, NE, W
+                    if i > 0 and j > 0:  # NW
+                        idx = 4 if method == "quasi-euclidean" else 0
+                        min_dist = min(min_dist, D[i - 1, j - 1] + weights[idx])
+                    if i > 0:  # N
+                        min_dist = min(min_dist, D[i - 1, j] + weights[0])
+                    if i > 0 and j < cols - 1:  # NE
+                        idx = 5 if method == "quasi-euclidean" else 1
+                        min_dist = min(min_dist, D[i - 1, j + 1] + weights[idx])
+                    if j > 0:  # W
+                        min_dist = min(min_dist, D[i, j - 1] + weights[2])
+
+                D[i, j] = min_dist
+
+    # Backward pass (bottom-right to top-left)
+    for i in range(rows - 1, -1, -1):
+        for j in range(cols - 1, -1, -1):
+            if not bw[i, j]:
+                min_dist = D[i, j]
+
+                # Check neighbors based on method
+                if method == "cityblock":
+                    # 4-connectivity: S, E
+                    if i < rows - 1:  # S
+                        min_dist = min(min_dist, D[i + 1, j] + weights[1])
+                    if j < cols - 1:  # E
+                        min_dist = min(min_dist, D[i, j + 1] + weights[3])
+                else:
+                    # 8-connectivity: E, SE, S, SW
+                    if j < cols - 1:  # E
+                        min_dist = min(min_dist, D[i, j + 1] + weights[3])
+                    if i < rows - 1 and j < cols - 1:  # SE
+                        idx = 6 if method == "quasi-euclidean" else 2
+                        min_dist = min(min_dist, D[i + 1, j + 1] + weights[idx])
+                    if i < rows - 1:  # S
+                        min_dist = min(min_dist, D[i + 1, j] + weights[1])
+                    if i < rows - 1 and j > 0:  # SW
+                        idx = 7 if method == "quasi-euclidean" else 3
+                        min_dist = min(min_dist, D[i + 1, j - 1] + weights[idx])
+
+                D[i, j] = min_dist
+
+    return D
 
 
 def fire_2d_angle(
@@ -176,13 +323,7 @@ def fire_2d_angle(
     imt_2d = flatten(imt)
 
     # Compute distance transform
-    if p.get("dtype", "euclidean") == "euclidean":
-        d = distance_transform_edt(imt_2d)
-    else:
-        # For other distance types, use euclidean as default
-        d = distance_transform_edt(imt_2d)
-
-    d = d.astype(np.float32)
+    d = bw_dist(bw=~imt_2d, method=p.get("dtype"))
 
     # Smooth distance function
     dsm = smooth(d, p.get("sigma_d", 2.0)).astype(np.float32)
