@@ -212,3 +212,113 @@ def compute_fiber_to_boundary_alignment(
         'angle_to_tangent': relative_angles['angle_to_tangent'],
         'alignment_score': alignment_score
     }
+
+def compute_angle_to_boundary_normal(
+    fiber_orientation: float,
+    boundary_point1: Tuple[float, float],
+    boundary_point2: Tuple[float, float]
+) -> float:
+    """
+    Compute angle between fiber orientation and tumor boundary normal.
+    
+    The boundary normal is perpendicular to the local boundary tangent.
+    This is used for TACS (Tumor-Associated Collagen Signatures) classification.
+    
+    Args:
+        fiber_orientation: Fiber orientation angle in degrees (0-180°)
+        boundary_point1: First point on boundary near fiber (x, y)
+        boundary_point2: Second point on boundary near fiber (x, y)
+        
+    Returns:
+        Angle between fiber and boundary normal in degrees (0-90°)
+        
+    Notes:
+        - Boundary tangent is computed from the two boundary points
+        - Boundary normal is perpendicular (90°) to the tangent
+        - Returns the acute angle (0-90°) to match TACS classification ranges
+        
+    Example:
+        >>> # Horizontal boundary (tangent = 0°), vertical fiber (90°)
+        >>> # Boundary normal is vertical (90°), so angle diff = 0° (parallel to normal)
+        >>> angle = compute_angle_to_boundary_normal(90, (0, 0), (10, 0))
+        >>> print(angle)  # ~0° (fiber parallel to boundary normal)
+        
+        >>> # Horizontal boundary, horizontal fiber (0°)
+        >>> # Boundary normal is vertical (90°), so angle diff = 90° (perpendicular to normal)
+        >>> angle = compute_angle_to_boundary_normal(0, (0, 0), (10, 0))
+        >>> print(angle)  # ~90° (fiber perpendicular to boundary normal)
+    """
+    import numpy as np
+    
+    # Compute boundary tangent vector
+    dx = boundary_point2[0] - boundary_point1[0]
+    dy = boundary_point2[1] - boundary_point1[1]
+    
+    # Avoid division by zero
+    if np.abs(dx) < 1e-10 and np.abs(dy) < 1e-10:
+        # Points are too close, return NaN
+        return np.nan
+    
+    # Boundary tangent angle (angle of the vector from point1 to point2)
+    boundary_tangent = np.arctan2(dy, dx) * 180 / np.pi
+    
+    # Normalize to [0, 180) range
+    if boundary_tangent < 0:
+        boundary_tangent += 180
+    
+    # Boundary normal is perpendicular to tangent
+    boundary_normal = (boundary_tangent + 90) % 180
+    
+    # Compute angular difference between fiber and boundary normal
+    angle_diff = np.abs(fiber_orientation - boundary_normal)
+    
+    # Normalize to [0, 90] (we want the acute angle)
+    # Because orientations are in [0, 180), the difference can be up to 180
+    if angle_diff > 90:
+        angle_diff = 180 - angle_diff
+    
+    return angle_diff
+
+
+def compute_angle_to_boundary_normal_simplified(
+    fiber_orientation: float,
+    boundary_tangent_angle: float
+) -> float:
+    """
+    Simplified version when boundary tangent angle is already known.
+    
+    Args:
+        fiber_orientation: Fiber orientation angle (0-180°)
+        boundary_tangent_angle: Pre-computed boundary tangent angle (0-180°)
+        
+    Returns:
+        Angle to boundary normal (0-90°)
+        
+    Example:
+        >>> # Horizontal boundary (tangent = 0°), vertical fiber (90°)
+        >>> angle = compute_angle_to_boundary_normal_simplified(90, 0)
+        >>> print(angle)  # 0° (parallel to normal)
+    """
+    import numpy as np
+    
+    # Boundary normal is perpendicular to tangent
+    boundary_normal = (boundary_tangent_angle + 90) % 180
+    
+    # Angular difference
+    angle_diff = np.abs(fiber_orientation - boundary_normal)
+    
+    # Normalize to [0, 90]
+    if angle_diff > 90:
+        angle_diff = 180 - angle_diff
+    
+    return angle_diff
+
+# In fiber_analysis/utils/geometry_utils.py
+__all__ = [
+    'find_nearest_boundary_point',
+    'compute_boundary_normal',
+    'compute_relative_angles',
+    'compute_fiber_to_boundary_alignment',
+    'compute_angle_to_boundary_normal',
+    'compute_angle_to_boundary_normal_simplified',
+]
