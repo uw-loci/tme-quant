@@ -88,6 +88,12 @@ class MeasurementEngine:
         ]
         mean_angle_to_normal = float(np.mean(angles_to_normal)) if angles_to_normal else 0.0
 
+        angles_to_tangent = [
+            p.angle_to_boundary_tangent for p in fiber_tumor_pairs
+            if getattr(p, 'angle_to_boundary_tangent', None) is not None
+        ]
+        mean_angle_to_tangent = float(np.mean(angles_to_tangent)) if angles_to_tangent else 0.0
+
         features = {
             "tacs1_count": tacs1_count,
             "tacs2_count": tacs2_count,
@@ -102,6 +108,7 @@ class MeasurementEngine:
             "mean_distance_to_boundary": mean_distance,
             "std_distance_to_boundary": std_distance,
             "mean_angle_to_normal": mean_angle_to_normal,
+            "mean_angle_to_tangent": mean_angle_to_tangent,
             "tacs1_score": tacs1_ratio * 1.0,
             "tacs2_score": tacs2_ratio * 2.0,
             "tacs3_score": tacs3_ratio * 3.0,
@@ -235,8 +242,10 @@ class MeasurementEngine:
             }
         )
 
-        perpendicular_count = sum(1 for a in angles if a < 30)
-        parallel_count = sum(1 for a in angles if a > 60)
+        # Tangent angle convention: 0-30deg = parallel (TACS-2),
+        # 60-90deg = perpendicular (TACS-3).
+        perpendicular_count = sum(1 for a in angles if a >= 60)
+        parallel_count = sum(1 for a in angles if a < 30)
         oblique_count = len(angles) - perpendicular_count - parallel_count
         total = len(angles)
         features.update(
@@ -396,3 +405,243 @@ class MeasurementEngine:
         if object_id is not None:
             return str(object_id)
         return str(getattr(fiber, "id", "fiber"))
+
+    # ------------------------------------------------------------------
+    # Methods migrated from legacy cell_fiber_interaction.py
+    # ------------------------------------------------------------------
+
+    def compute_mechanical_features(
+        self,
+        interaction_pairs: List[InteractionPair],
+        fibers: Optional[List[FiberObject]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Aggregate mechanical microenvironment features from interaction pairs.
+
+        Migrated from InteractionAnalyzer._calculate_mechanical_features() in
+        the retired cell_fiber_interaction.py.
+
+        Computes:
+          - avg/max invasive potential score
+          - avg migration guidance score
+          - avg mechanical coupling score
+          - avg fiber stiffness proxy (width * straightness)
+          - mechanical heterogeneity (std of invasive potential)
+
+        Parameters
+        ----------
+        interaction_pairs:
+            List of InteractionPair objects (fiber-cell or fiber-tumor).
+        fibers:
+            Optional list of FiberObject instances for stiffness proxy.
+            If None, the proxy is computed from fibers referenced in pairs.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Feature dict with keys prefixed ``mechanical_``.
+        """
+        features: Dict[str, Any] = {}
+
+        if not interaction_pairs:
+            return features
+
+        invasive_scores = [
+            p.invasive_potential_score
+            for p in interaction_pairs
+            if getattr(p, 'invasive_potential_score', None) is not None
+        ]
+        guidance_scores = [
+            p.migration_guidance_score
+            for p in interaction_pairs
+            if getattr(p, 'migration_guidance_score', None) is not None
+        ]
+        coupling_scores = [
+            p.mechanical_coupling_score
+            for p in interaction_pairs
+            if getattr(p, 'mechanical_coupling_score', None) is not None
+        ]
+
+        if invasive_scores:
+            features['avg_invasive_potential']  = float(np.mean(invasive_scores))
+            features['max_invasive_potential']  = float(np.max(invasive_scores))
+            if len(invasive_scores) > 1:
+                features['mechanical_heterogeneity'] = float(np.std(invasive_scores))
+
+        if guidance_scores:
+            features['avg_migration_guidance'] = float(np.mean(guidance_scores))
+
+        if coupling_scores:
+            features['avg_mechanical_coupling'] = float(np.mean(coupling_scores))
+
+        # Fiber stiffness proxy: width * straightness
+        fiber_list = fibers or []
+        stiffness_proxies = [
+            f.width * f.straightness
+            for f in fiber_list
+            if getattr(f, 'width', None) is not None
+            and getattr(f, 'straightness', None) is not None
+        ]
+        if stiffness_proxies:
+            features['avg_fiber_stiffness_proxy'] = float(np.mean(stiffness_proxies))
+
+        return features
+
+    def compute_contact_pattern_features(
+        self,
+        interaction_pairs: List[InteractionPair],
+        region_area: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Analyse spatial patterns of cell-fiber contacts.
+
+        Migrated from InteractionAnalyzer._analyze_contact_patterns() in
+        the retired cell_fiber_interaction.py.
+
+        Computes:
+          - avg/CV contact length and area
+          - avg contact percentage
+          - ratio of each interaction type
+          - spatial_clustering_index (Clark-Evans nearest-neighbour test)
+
+        Parameters
+        ----------
+        interaction_pairs:
+            List of InteractionPair objects.
+        region_area:
+            Optional bounding area (µm²) for the Clark-Evans test.
+            When None, a bounding box over all pair source positions is used.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Feature dict.
+        """
+        features: Dict[str, Any] = {}
+
+        if not interaction_pairs:
+            return features
+
+        # --- contact geometry aggregates ---
+        contact_lengths = [
+            p.contact_length
+            for p in interaction_pairs
+            if getattr(p, 'contact_length', None) is not None
+        ]
+        contact_areas = [
+            p.contact_area
+            for p in interaction_pairs
+            if getattr(p, 'contact_area', None) is not None
+        ]
+        contact_percentages = [
+            p.contact_percentage
+            for p in interaction_pairs
+            if getattr(p, 'contact_percentage', None) is not None
+        ]
+
+        if contact_lengths:
+            mean_cl = float(np.mean(contact_lengths))
+            features['avg_contact_length'] = mean_cl
+            features['contact_length_cv'] = (
+                float(np.std(contact_lengths) / mean_cl)
+                if mean_cl > 0 else 0.0
+            )
+
+        if contact_areas:
+            features['avg_contact_area'] = float(np.mean(contact_areas))
+
+        if contact_percentages:
+            features['avg_contact_percentage'] = float(np.mean(contact_percentages))
+
+        # --- interaction type distribution ---
+        type_counts: Dict[str, int] = {}
+        for p in interaction_pairs:
+            itype = str(getattr(p, 'interaction_type', 'unknown') or 'unknown')
+            type_counts[itype] = type_counts.get(itype, 0) + 1
+
+        total = len(interaction_pairs)
+        for itype, count in type_counts.items():
+            features[f'ratio_{itype}'] = count / total if total > 0 else 0.0
+
+        # --- spatial clustering (Clark-Evans) ---
+        # Use source positions (cell centroids or fiber midpoints) from pairs
+        source_positions = [
+            p.nearest_boundary_point
+            for p in interaction_pairs
+            if getattr(p, 'nearest_boundary_point', None) is not None
+        ]
+
+        if len(source_positions) > 2:
+            from scipy.spatial import cKDTree as _CKDTree
+            pos_array = np.array(source_positions)
+            tree = _CKDTree(pos_array)
+            dists, _ = tree.query(pos_array, k=2)
+            nn_distances = dists[:, 1]   # exclude self (index 0)
+
+            if region_area is None:
+                span = pos_array.max(axis=0) - pos_array.min(axis=0)
+                region_area = float(np.prod(span)) if np.all(span > 0) else 1.0
+
+            density = len(source_positions) / region_area
+            expected_nn = 1.0 / (2.0 * np.sqrt(density)) if density > 0 else 0.0
+            observed_nn = float(np.mean(nn_distances))
+            features['spatial_clustering_index'] = (
+                observed_nn / expected_nn if expected_nn > 0 else 0.0
+            )
+
+        return features
+
+    def compute_composite_prognostic_scores(
+        self,
+        features: Dict[str, Any],
+    ) -> Dict[str, float]:
+        """
+        Derive composite prognostic scores from a merged feature dict.
+
+        Migrated from InteractionAnalyzer._calculate_prognostic_scores() in
+        the retired cell_fiber_interaction.py, extended with the score logic
+        already present in compute_prognostic_scores().
+
+        Input dict is expected to contain some subset of the keys produced by
+        compute_tacs_features(), compute_mechanical_features(),
+        compute_contact_pattern_features(), and compute_spatial_features().
+
+        Returns
+        -------
+        Dict[str, float]
+            collagen_prognostic_score, interaction_complexity_score,
+            mechanical_risk_score, tme_interaction_score.
+        """
+        scores: Dict[str, float] = {}
+
+        # --- Collagen Prognostic Score (CPS) ---
+        tacs1 = float(features.get('tacs1_score', 0.5))
+        tacs2 = float(features.get('tacs2_score', 0.5))
+        tacs3 = float(features.get('tacs3_score', 0.5))
+        # TACS-3 (perpendicular at boundary) is most prognostic
+        cps = 0.2 * tacs1 + 0.3 * tacs2 + 0.5 * tacs3
+        scores['collagen_prognostic_score'] = float(cps)
+
+        # --- Interaction Complexity Score (entropy of contact type ratios) ---
+        type_diversity = 0.0
+        for key, val in features.items():
+            if key.startswith('ratio_') and val > 0:
+                type_diversity -= val * np.log2(val)
+        scores['interaction_complexity_score'] = float(type_diversity)
+
+        # --- Mechanical Risk Score ---
+        invasive_potential = float(features.get('avg_invasive_potential', 0.5))
+        coupling          = float(features.get('avg_mechanical_coupling',  0.5))
+        scores['mechanical_risk_score'] = float(0.6 * invasive_potential + 0.4 * coupling)
+
+        # --- Overall TME Interaction Score ---
+        alignment_het = float(features.get('alignment_heterogeneity_index', 0.5))
+        overall = (
+            0.3 * cps
+            + 0.2 * scores['interaction_complexity_score']
+            + 0.3 * scores['mechanical_risk_score']
+            + 0.2 * (1.0 - alignment_het)
+        )
+        scores['tme_interaction_score'] = float(overall)
+
+        return scores
