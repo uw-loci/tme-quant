@@ -7,6 +7,7 @@ from .tme_models.fiber_model import (
     OrientationResult, ExtractionResult
 )
 from .hierarchy import TMEHierarchy
+from .image_entry import ImageEntry
 from ..fiber_analysis import FiberAnalyzer
 from ..fiber_analysis.config.orientation_params import OrientationParams
 from ..fiber_analysis.config.extraction_params import ExtractionParams
