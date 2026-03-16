@@ -1,14 +1,19 @@
 # tissue_model.py
 """
-Comprehensive tissue sample and region models
+Comprehensive tissue sample and region models.
 """
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any, Tuple
 import numpy as np
-from ..base_models import TMEObject, Geometry, TMEMetadata, Measurement
+from enum import Enum
+
+from ..base_models import (
+    TMEObject, TMEType, ObjectType, Geometry, GeometryType, TMEMetadata, Measurement,
+)
+
 
 class TissueZone(Enum):
-    """Tissue microenvironment zones"""
+    """Tissue microenvironment zones."""
     TUMOR_CORE = "tumor_core"
     TUMOR_INVASIVE_FRONT = "tumor_invasive_front"
     PERITUMORAL_STROMA = "peritumoral_stroma"
@@ -17,223 +22,237 @@ class TissueZone(Enum):
     NECROTIC_REGION = "necrotic_region"
     HYPOXIC_REGION = "hypoxic_region"
 
-@dataclass
-class TissueRegion(TMEObject):
-    """Annotated tissue region with zone classification"""
-    geometry: Geometry
-    zone_type: TissueZone = TissueZone.NORMAL_TISSUE
-    tissue_type: str = ""  # epithelium, connective, muscle, nervous
-    annotations: List[str] = field(default_factory=list)  # Text annotations
-    
-    # Spatial relationships
-    adjacent_regions: List['TissueRegion'] = field(default_factory=list)
-    distance_to_tumor: float = float('inf')
-    
-    def __post_init__(self):
-        """Initialize tissue region"""
-        super().__post_init__()
-        self.type = TMEType.REGION
 
-@dataclass
+class TissueRegion(TMEObject):
+    """Annotated tissue region with zone classification."""
+
+    def __init__(
+        self,
+        object_id: str = "",
+        name: str = "",
+        roi: Optional[Any] = None,
+        parent: Optional[TMEObject] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        geometry: Optional[Geometry] = None,
+        zone_type: TissueZone = TissueZone.NORMAL_TISSUE,
+        tissue_type: str = "",
+        annotations: Optional[List[str]] = None,
+        adjacent_regions: Optional[List["TissueRegion"]] = None,
+        distance_to_tumor: float = float("inf"),
+    ) -> None:
+        super().__init__(
+            object_id=object_id,
+            name=name,
+            tme_type=TMEType.REGION,
+            object_type=ObjectType.REGION,
+            roi=roi,
+            parent=parent,
+            metadata=metadata,
+        )
+        self.geometry: Optional[Geometry] = geometry
+        self.zone_type: TissueZone = zone_type
+        self.tissue_type: str = tissue_type
+        self.annotations: List[str] = annotations if annotations is not None else []
+        self.adjacent_regions: List["TissueRegion"] = (
+            adjacent_regions if adjacent_regions is not None else []
+        )
+        self.distance_to_tumor: float = distance_to_tumor
+
+
 class TissueSample(TMEObject):
-    """Comprehensive tissue sample representation with QuPath-like hierarchy"""
-    metadata: TMEMetadata = field(default_factory=TMEMetadata)
-    image_data: Optional[np.ndarray] = None
-    mask_data: Optional[np.ndarray] = None
-    
-    # Hierarchical components
-    annotations: List[TissueRegion] = field(default_factory=list)
-    tumor: Optional['Tumor'] = None
-    stroma: Optional['Stroma'] = None
-    cells: List['Cell'] = field(default_factory=list)
-    fibers: List['Fiber'] = field(default_factory=list)
-    vessels: List['Vessel'] = field(default_factory=list)
-    
-    # Derived properties
-    tissue_area: float = 0.0
-    tumor_stroma_ratio: float = 0.0
-    
-    def __post_init__(self):
-        """Initialize tissue sample with hierarchy"""
-        super().__post_init__()
-        self.type = TMEType.SAMPLE
-        
-        # Build hierarchy
+    """Comprehensive tissue sample — top-level container with QuPath-like hierarchy."""
+
+    def __init__(
+        self,
+        object_id: str = "",
+        name: str = "",
+        roi: Optional[Any] = None,
+        parent: Optional[TMEObject] = None,
+        tme_metadata: Optional[TMEMetadata] = None,
+        image_data: Optional[np.ndarray] = None,
+        mask_data: Optional[np.ndarray] = None,
+        annotations: Optional[List[TissueRegion]] = None,
+        tumor: Optional[Any] = None,    # Tumor (avoid circular import)
+        stroma: Optional[Any] = None,   # Stroma
+        cells: Optional[list] = None,
+        fibers: Optional[list] = None,
+        vessels: Optional[list] = None,
+        tissue_area: float = 0.0,
+        tumor_stroma_ratio: float = 0.0,
+    ) -> None:
+        super().__init__(
+            object_id=object_id,
+            name=name,
+            tme_type=TMEType.SAMPLE,
+            object_type=ObjectType.REGION,
+            roi=roi,
+            parent=parent,
+        )
+        self.tme_metadata: Optional[TMEMetadata] = tme_metadata
+        self.image_data: Optional[np.ndarray] = image_data
+        self.mask_data: Optional[np.ndarray] = mask_data
+        self.annotations: List[TissueRegion] = (
+            annotations if annotations is not None else []
+        )
+        self.tumor = tumor
+        self.stroma = stroma
+        self.cells: list = cells if cells is not None else []
+        self.fibers: list = fibers if fibers is not None else []
+        self.vessels: list = vessels if vessels is not None else []
+        self.tissue_area: float = tissue_area
+        self.tumor_stroma_ratio: float = tumor_stroma_ratio
+
+        # Wire all components into the hierarchy tree
         if self.tumor:
             self.add_child(self.tumor)
-        
         if self.stroma:
             self.add_child(self.stroma)
-        
-        # Add annotations
-        for annotation in self.annotations:
-            self.add_child(annotation)
-        
-        # Add cells, fibers, vessels
+        for ann in self.annotations:
+            self.add_child(ann)
         for cell in self.cells:
             self.add_child(cell)
-        
         for fiber in self.fibers:
             self.add_child(fiber)
-        
         for vessel in self.vessels:
             self.add_child(vessel)
-    
+
+    # ------------------------------------------------------------------
+    # TME metrics
+    # ------------------------------------------------------------------
+
     def calculate_tme_metrics(self) -> Dict[str, Any]:
-        """Calculate comprehensive TME metrics"""
-        metrics = {
-            'sample_id': self.metadata.sample_id,
-            'tissue_area': self.tissue_area,
-            'tumor_stroma_ratio': self.tumor_stroma_ratio,
-            'cell_density': self._calculate_cell_density(),
-            'fiber_density': self._calculate_fiber_density(),
-            'vessel_density': self._calculate_vessel_density(),
-            'spatial_heterogeneity': self._calculate_spatial_heterogeneity()
+        """Calculate comprehensive TME metrics."""
+        metrics: Dict[str, Any] = {
+            "tissue_area": self.tissue_area,
+            "tumor_stroma_ratio": self.tumor_stroma_ratio,
+            "cell_density": self._calculate_cell_density(),
+            "fiber_density": self._calculate_fiber_density(),
+            "vessel_density": self._calculate_vessel_density(),
+            "spatial_heterogeneity": self._calculate_spatial_heterogeneity(),
         }
-        
-        # Add tumor-specific metrics if available
+        if self.tme_metadata:
+            metrics["sample_id"] = self.tme_metadata.sample_id
         if self.tumor:
-            tumor_metrics = {
-                'tumor_area': self.tumor.get_total_area(),
-                'tumor_grade': self.tumor.dominant_grade.value,
-                'necrosis_percentage': self._calculate_necrosis_percentage(),
-                'invasion_front_length': self._calculate_invasion_front_length()
-            }
-            metrics.update(tumor_metrics)
-        
+            metrics.update({
+                "tumor_area": self.tumor.get_total_area(),
+                "tumor_grade": self.tumor.dominant_grade.value,
+                "necrosis_percentage": self._calculate_necrosis_percentage(),
+                "invasion_front_length": self._calculate_invasion_front_length(),
+            })
         return metrics
-    
+
     def _calculate_cell_density(self) -> float:
-        """Calculate cell density per tissue area"""
         if self.tissue_area == 0:
             return 0.0
         return len(self.cells) / self.tissue_area
-    
+
     def _calculate_fiber_density(self) -> float:
-        """Calculate fiber density"""
         if self.tissue_area == 0 or not self.fibers:
             return 0.0
-        
-        total_fiber_length = sum(fiber.length for fiber in self.fibers)
+        total_fiber_length = sum(
+            getattr(f, "length", 0.0) for f in self.fibers
+        )
         return total_fiber_length / self.tissue_area
-    
+
     def _calculate_vessel_density(self) -> float:
-        """Calculate vessel density"""
         if self.tissue_area == 0 or not self.vessels:
             return 0.0
-        
-        total_vessel_area = sum(vessel.lumen_area for vessel in self.vessels)
+        total_vessel_area = sum(
+            getattr(v, "lumen_area", 0.0) for v in self.vessels
+        )
         return total_vessel_area / self.tissue_area
-    
+
     def _calculate_spatial_heterogeneity(self) -> float:
-        """Calculate spatial heterogeneity index"""
-        # Calculate coefficient of variation for cell densities in quadrants
+        """Coefficient of variation of cell density across quadrants."""
         if not self.cells:
             return 0.0
-        
-        # Divide tissue into quadrants
         quadrants = self._divide_into_quadrants()
-        quadrant_densities = []
-        
-        for quadrant in quadrants:
-            cells_in_quadrant = self._count_cells_in_region(quadrant)
-            density = cells_in_quadrant / quadrant.geometry.area() if quadrant.geometry.area() > 0 else 0
-            quadrant_densities.append(density)
-        
-        if np.mean(quadrant_densities) > 0:
-            return np.std(quadrant_densities) / np.mean(quadrant_densities)
-        
+        densities = []
+        for q in quadrants:
+            if q.geometry is not None and q.geometry.area() > 0:
+                count = self._count_cells_in_region(q)
+                densities.append(count / q.geometry.area())
+        if densities and np.mean(densities) > 0:
+            return float(np.std(densities) / np.mean(densities))
         return 0.0
-    
+
     def _divide_into_quadrants(self) -> List[TissueRegion]:
-        """Divide tissue sample into quadrants"""
-        # Implementation for spatial partitioning
-        quadrants = []
         bounds = self._get_tissue_bounds()
-        
         if bounds is None:
-            return quadrants
-        
+            return []
         x_min, y_min, x_max, y_max = bounds
         x_mid = (x_min + x_max) / 2
         y_mid = (y_min + y_max) / 2
-        
-        # Create 4 quadrants
-        quadrants_coords = [
-            ([x_min, y_min], [x_mid, y_mid]),  # Bottom-left
-            ([x_mid, y_min], [x_max, y_mid]),  # Bottom-right
-            ([x_min, y_mid], [x_mid, y_max]),  # Top-left
-            ([x_mid, y_mid], [x_max, y_max])   # Top-right
+        quadrant_coords = [
+            ([x_min, y_min], [x_mid, y_mid]),
+            ([x_mid, y_min], [x_max, y_mid]),
+            ([x_min, y_mid], [x_mid, y_max]),
+            ([x_mid, y_mid], [x_max, y_max]),
         ]
-        
-        for i, (min_coord, max_coord) in enumerate(quadrants_coords):
+        quadrants = []
+        for i, (lo, hi) in enumerate(quadrant_coords):
             quadrants.append(TissueRegion(
-                name=f"Quadrant_{i+1}",
+                name=f"Quadrant_{i + 1}",
                 geometry=Geometry(
                     type=GeometryType.RECTANGLE,
-                    coordinates=np.array([min_coord, max_coord])
-                )
+                    coordinates=np.array([lo, hi]),
+                ),
             ))
-        
         return quadrants
-    
+
     def _count_cells_in_region(self, region: TissueRegion) -> int:
-        """Count cells within a region"""
+        if region.geometry is None or region.geometry.bounds is None:
+            return 0
+        b = region.geometry.bounds
         count = 0
-        region_bounds = region.geometry.bounds
-        
         for cell in self.cells:
-            cell_centroid = cell.centroid
-            if (region_bounds[0] <= cell_centroid[0] <= region_bounds[3] and
-                region_bounds[1] <= cell_centroid[1] <= region_bounds[4]):
+            cx, cy = getattr(cell, "centroid", (None, None))
+            if cx is not None and b[0] <= cx <= b[3] and b[1] <= cy <= b[4]:
                 count += 1
-        
         return count
-    
-    def _get_tissue_bounds(self) -> Optional[Tuple[float, float, float, float]]:
-        """Get tissue bounding box"""
+
+    def _get_tissue_bounds(
+        self,
+    ) -> Optional[Tuple[float, float, float, float]]:
         if self.mask_data is not None:
-            # Use mask to determine bounds
-            y_coords, x_coords = np.where(self.mask_data > 0)
-            if len(x_coords) > 0 and len(y_coords) > 0:
-                return (x_coords.min(), y_coords.min(), 
-                       x_coords.max(), y_coords.max())
-        
-        # Fallback to annotation bounds
+            ys, xs = np.where(self.mask_data > 0)
+            if len(xs) > 0:
+                return float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())
         if self.annotations:
-            all_bounds = [ann.geometry.bounds for ann in self.annotations]
-            x_min = min(b[0] for b in all_bounds)
-            y_min = min(b[1] for b in all_bounds)
-            x_max = max(b[3] for b in all_bounds)
-            y_max = max(b[4] for b in all_bounds)
-            return (x_min, y_min, x_max, y_max)
-        
+            all_b = [
+                a.geometry.bounds
+                for a in self.annotations
+                if a.geometry is not None and a.geometry.bounds is not None
+            ]
+            if all_b:
+                return (
+                    float(min(b[0] for b in all_b)),
+                    float(min(b[1] for b in all_b)),
+                    float(max(b[3] for b in all_b)),
+                    float(max(b[4] for b in all_b)),
+                )
         return None
-    
+
     def _calculate_necrosis_percentage(self) -> float:
-        """Calculate necrosis percentage in tumor"""
         if not self.tumor:
             return 0.0
-        
-        total_tumor_area = self.tumor.get_total_area()
-        if total_tumor_area == 0:
+        total = self.tumor.get_total_area()
+        if total == 0:
             return 0.0
-        
-        necrotic_area = 0
-        for region in self.tumor.regions:
-            necrotic_area += region.geometry.area() * (region.necrosis_percentage / 100)
-        
-        return (necrotic_area / total_tumor_area) * 100
-    
+        necrotic = sum(
+            r.geometry.area() * (r.necrosis_percentage / 100)
+            for r in self.tumor.regions
+            if r.geometry is not None
+        )
+        return (necrotic / total) * 100
+
     def _calculate_invasion_front_length(self) -> float:
-        """Calculate total length of tumor invasion front"""
         if not self.tumor:
             return 0.0
-        
-        invasion_front_regions = self.tumor.get_invasion_front_regions()
-        total_length = 0
-        
-        for region in invasion_front_regions:
-            total_length += region._calculate_perimeter()
-        
-        return total_length
+        return sum(
+            r._calculate_perimeter()
+            for r in self.tumor.get_invasion_front_regions()
+        )
+
+
+__all__ = ["TissueZone", "TissueRegion", "TissueSample"]

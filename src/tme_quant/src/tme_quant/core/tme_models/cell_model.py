@@ -15,7 +15,7 @@ from enum import Enum
 import numpy as np
 from shapely.geometry import Point, Polygon
 
-from .base_models import TMEObject, ObjectType
+from .base_models import TMEObject, ObjectType, TMEType
 from ..geometry import BoundingBox, ROI
 
 
@@ -397,82 +397,119 @@ class CellAnalysisResult:
 # CELL OBJECT FOR HIERARCHY INTEGRATION
 # ============================================================
 
-@dataclass
 class CellObject(TMEObject):
     """
     Individual cell object in the TME hierarchy.
-    
+
     Integrates segmentation, classification, and quantification results
     into the TME project hierarchy.
     """
-    # Inherited from TMEObject:
-    # - object_id: str
-    # - object_type: ObjectType (will be set to CELL)
-    # - parent_id: Optional[str]
-    # - roi: Optional[ROI]
-    # - metadata: Dict[str, Any]
-    
-    # ============================================================
-    # GEOMETRIC PROPERTIES (from segmentation)
-    # ============================================================
-    centroid: Tuple[float, float] = (0.0, 0.0)
-    area: float = 0.0  # square microns
-    perimeter: float = 0.0  # microns
-    boundary: np.ndarray = field(default_factory=lambda: np.array([]))
-    
-    # Shape properties
-    circularity: float = 0.0  # 0-1
-    eccentricity: float = 0.0  # 0-1
-    solidity: float = 0.0  # 0-1
-    extent: float = 0.0  # 0-1
-    major_axis_length: float = 0.0
-    minor_axis_length: float = 0.0
-    orientation: float = 0.0  # degrees
-    
-    # ============================================================
-    # CLASSIFICATION
-    # ============================================================
-    cell_type: Optional[CellType] = None
-    cell_type_confidence: Optional[float] = None
-    
-    # Marker expression (for IF images)
-    marker_expression: Dict[str, float] = field(default_factory=dict)
-    
-    # ============================================================
-    # INTENSITY MEASUREMENTS
-    # ============================================================
-    mean_intensity: Dict[str, float] = field(default_factory=dict)  # channel -> value
-    integrated_intensity: Dict[str, float] = field(default_factory=dict)
-    std_intensity: Dict[str, float] = field(default_factory=dict)
-    
-    # ============================================================
-    # SPATIAL CONTEXT
-    # ============================================================
-    # Tumor context
-    in_tumor_region: Optional[bool] = None
-    distance_to_tumor_boundary: Optional[float] = None
-    in_invasive_margin: Optional[bool] = None
-    
-    # Neighbors
-    neighbor_cell_ids: List[str] = field(default_factory=list)
-    neighbor_distances: List[float] = field(default_factory=list)
-    nearest_neighbor_distance: Optional[float] = None
-    
-    # Fiber interactions
-    interacting_fiber_ids: List[str] = field(default_factory=list)
-    fiber_distances: List[float] = field(default_factory=list)
-    
-    # ============================================================
-    # ANALYSIS METADATA
-    # ============================================================
-    segmentation_mode: Optional[str] = None
-    segmentation_confidence: Optional[float] = None
-    
-    def __post_init__(self):
-        """Initialize derived properties and set object type."""
-        # Set object type
-        if hasattr(self, 'object_type'):
-            self.object_type = ObjectType.CELL
+
+    def __init__(
+        self,
+        object_id: str = "",
+        name: str = "",
+        roi: Optional[Any] = None,
+        parent: Optional["TMEObject"] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        # Geometric properties (from segmentation)
+        centroid: Tuple[float, float] = (0.0, 0.0),
+        area: float = 0.0,
+        perimeter: float = 0.0,
+        boundary: Optional[np.ndarray] = None,
+        # Shape properties
+        circularity: float = 0.0,
+        eccentricity: float = 0.0,
+        solidity: float = 0.0,
+        extent: float = 0.0,
+        major_axis_length: float = 0.0,
+        minor_axis_length: float = 0.0,
+        orientation: float = 0.0,
+        # Classification
+        cell_type: Optional[CellType] = None,
+        cell_type_confidence: Optional[float] = None,
+        marker_expression: Optional[Dict[str, float]] = None,
+        # Intensity measurements (channel -> value)
+        mean_intensity: Optional[Dict[str, float]] = None,
+        integrated_intensity: Optional[Dict[str, float]] = None,
+        std_intensity: Optional[Dict[str, float]] = None,
+        # Spatial context
+        in_tumor_region: Optional[bool] = None,
+        distance_to_tumor_boundary: Optional[float] = None,
+        in_invasive_margin: Optional[bool] = None,
+        neighbor_cell_ids: Optional[List[str]] = None,
+        neighbor_distances: Optional[List[float]] = None,
+        nearest_neighbor_distance: Optional[float] = None,
+        interacting_fiber_ids: Optional[List[str]] = None,
+        fiber_distances: Optional[List[float]] = None,
+        # Analysis metadata
+        segmentation_mode: Optional[str] = None,
+        segmentation_confidence: Optional[float] = None,
+    ) -> None:
+        super().__init__(
+            object_id=object_id,
+            name=name,
+            tme_type=TMEType.CELL,
+            object_type=ObjectType.CELL,
+            roi=roi,
+            parent=parent,
+            metadata=metadata,
+        )
+        # Geometric
+        self.centroid: Tuple[float, float] = centroid
+        self.area: float = area
+        self.perimeter: float = perimeter
+        self.boundary: np.ndarray = (
+            boundary if boundary is not None else np.array([])
+        )
+        # Shape
+        self.circularity: float = circularity
+        self.eccentricity: float = eccentricity
+        self.solidity: float = solidity
+        self.extent: float = extent
+        self.major_axis_length: float = major_axis_length
+        self.minor_axis_length: float = minor_axis_length
+        self.orientation: float = orientation
+        # Classification
+        self.cell_type: Optional[CellType] = cell_type
+        self.cell_type_confidence: Optional[float] = cell_type_confidence
+        self.marker_expression: Dict[str, float] = (
+            marker_expression if marker_expression is not None else {}
+        )
+        # Intensity
+        self.mean_intensity: Dict[str, float] = (
+            mean_intensity if mean_intensity is not None else {}
+        )
+        self.integrated_intensity: Dict[str, float] = (
+            integrated_intensity if integrated_intensity is not None else {}
+        )
+        self.std_intensity: Dict[str, float] = (
+            std_intensity if std_intensity is not None else {}
+        )
+        # Spatial context
+        self.in_tumor_region: Optional[bool] = in_tumor_region
+        self.distance_to_tumor_boundary: Optional[float] = (
+            distance_to_tumor_boundary
+        )
+        self.in_invasive_margin: Optional[bool] = in_invasive_margin
+        self.neighbor_cell_ids: List[str] = (
+            neighbor_cell_ids if neighbor_cell_ids is not None else []
+        )
+        self.neighbor_distances: List[float] = (
+            neighbor_distances if neighbor_distances is not None else []
+        )
+        self.nearest_neighbor_distance: Optional[float] = (
+            nearest_neighbor_distance
+        )
+        self.interacting_fiber_ids: List[str] = (
+            interacting_fiber_ids if interacting_fiber_ids is not None else []
+        )
+        self.fiber_distances: List[float] = (
+            fiber_distances if fiber_distances is not None else []
+        )
+        # Analysis metadata
+        self.segmentation_mode: Optional[str] = segmentation_mode
+        self.segmentation_confidence: Optional[float] = segmentation_confidence
     
     # ============================================================
     # GEOMETRY PROPERTIES

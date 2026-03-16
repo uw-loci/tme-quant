@@ -15,13 +15,13 @@ from enum import Enum
 import numpy as np
 from shapely.geometry import LineString, Point, Polygon
 
-# Import base models (assumes these exist in your project)
+# Import base models
 try:
-    from .base_models import TMEObject, ObjectType
+    from .base_models import TMEObject, ObjectType, TMEType
     from ..geometry import BoundingBox
 except ImportError:
     # Fallback for standalone testing
-    class TMEObject:
+    class TMEObject:  # type: ignore
         pass
     class ObjectType(Enum):
         FIBER = "fiber"
@@ -309,94 +309,117 @@ class FiberAnalysisResult:
 # FIBER OBJECT FOR HIERARCHY INTEGRATION
 # ============================================================
 
-@dataclass
 class FiberObject(TMEObject):
     """
     Individual fiber object in the TME hierarchy.
-    
-    This is the main fiber class that integrates into the TME project hierarchy.
-    It combines geometric properties from fiber extraction with spatial context
-    and tumor boundary-relative metrics.
+
+    Combines geometric properties from fiber extraction with spatial context
+    and tumor boundary-relative metrics for TACS classification.
     """
-    # Inherited from TMEObject:
-    # - object_id: str
-    # - object_type: ObjectType (will be set to FIBER)
-    # - parent_id: Optional[str]
-    # - roi: Optional[ROI]
-    # - metadata: Dict[str, Any]
-    
-    # ============================================================
-    # GEOMETRIC PROPERTIES (from fiber extraction)
-    # ============================================================
-    centerline: np.ndarray = field(default_factory=lambda: np.array([]))  # Nx2 or Nx3 coordinates
-    length: float = 0.0  # microns
-    width: float = 0.0  # microns
-    
-    # Orientation properties
-    angle: float = 0.0  # degrees (-90 to 90)
-    mean_orientation: float = 0.0  # degrees, same as angle for individual fiber
-    orientation: Optional[float] = None  # Alternative field name (degrees)
-    
-    # Shape properties
-    straightness: float = 0.0  # 0-1
-    curvature: float = 0.0  # 1/microns
-    tortuosity: Optional[float] = None
-    aspect_ratio: Optional[float] = None
-    
-    # Fiber boundary (optional)
-    boundary: Optional[np.ndarray] = None
-    
-    # ============================================================
-    # TUMOR BOUNDARY-RELATIVE METRICS (for TACS classification)
-    # ============================================================
-    # Nearest-point method (NEW - more accurate)
-    nearest_boundary_point: Optional[np.ndarray] = None  # [x, y] coordinates
-    nearest_boundary_distance: Optional[float] = None  # microns
-    nearest_boundary_normal_angle: Optional[float] = None  # degrees, normal to boundary
-    
-    # Relative orientation metrics (KEY for TACS)
-    relative_angle_to_boundary_normal: Optional[float] = None  # 0° = perpendicular (TACS-3)
-    relative_angle_to_boundary_tangent: Optional[float] = None  # 0° = parallel (TACS-2)
-    
-    # Global boundary metrics (OLD method - for comparison)
-    distance_to_tumor_boundary: Optional[float] = None
-    angle_to_tumor_boundary: Optional[float] = None  # Global alignment angle
-    
-    # ============================================================
-    # SPATIAL CONTEXT
-    # ============================================================
-    in_tumor_core: Optional[bool] = None
-    in_tumor_boundary: Optional[bool] = None
-    in_stroma: Optional[bool] = None
-    at_invasive_front: Optional[bool] = None
-    
-    # ============================================================
-    # TACS CLASSIFICATION
-    # ============================================================
-    tacs_type: Optional[str] = None  # "TACS-1", "TACS-2", "TACS-3"
-    tacs_score: Optional[float] = None  # 0-1
-    
-    # ============================================================
-    # ANALYSIS METADATA
-    # ============================================================
-    extraction_mode: Optional[str] = None  # "ctfire", "ridge_detection", etc.
-    confidence: Optional[float] = None
-    
-    def __post_init__(self):
-        """Initialize derived properties and set object type."""
-        # Set object type
-        if hasattr(self, 'object_type'):
-            self.object_type = ObjectType.FIBER
-        
-        # Compute aspect ratio if not set
-        if self.aspect_ratio is None and self.width > 0:
-            self.aspect_ratio = self.length / self.width
-        
-        # Sync orientation fields
-        if self.orientation is None and self.angle != 0.0:
-            self.orientation = self.angle
-        elif self.angle == 0.0 and self.orientation is not None:
-            self.angle = self.orientation
+
+    def __init__(
+        self,
+        object_id: str = "",
+        name: str = "",
+        roi: Optional[Any] = None,
+        parent: Optional["TMEObject"] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        # Geometric properties (from fiber extraction)
+        centerline: Optional[np.ndarray] = None,   # Nx2 or Nx3 coordinates
+        length: float = 0.0,                        # microns
+        width: float = 0.0,                         # microns
+        # Orientation
+        angle: float = 0.0,                         # degrees (-90 to 90)
+        mean_orientation: float = 0.0,
+        orientation: Optional[float] = None,        # alternative field name
+        # Shape properties
+        straightness: float = 0.0,                  # 0-1
+        curvature: float = 0.0,                     # 1/microns
+        tortuosity: Optional[float] = None,
+        aspect_ratio: Optional[float] = None,
+        boundary: Optional[np.ndarray] = None,
+        # Tumor boundary-relative metrics (nearest-point method)
+        nearest_boundary_point: Optional[np.ndarray] = None,
+        nearest_boundary_distance: Optional[float] = None,
+        nearest_boundary_normal_angle: Optional[float] = None,
+        # Relative orientation (KEY for TACS)
+        relative_angle_to_boundary_normal: Optional[float] = None,
+        relative_angle_to_boundary_tangent: Optional[float] = None,
+        # Global boundary metrics (legacy comparison method)
+        distance_to_tumor_boundary: Optional[float] = None,
+        angle_to_tumor_boundary: Optional[float] = None,
+        # Spatial context
+        in_tumor_core: Optional[bool] = None,
+        in_tumor_boundary: Optional[bool] = None,
+        in_stroma: Optional[bool] = None,
+        at_invasive_front: Optional[bool] = None,
+        # TACS classification
+        tacs_type: Optional[str] = None,            # "TACS-1", "TACS-2", "TACS-3"
+        tacs_score: Optional[float] = None,         # 0-1
+        # Analysis metadata
+        extraction_mode: Optional[str] = None,
+        confidence: Optional[float] = None,
+    ) -> None:
+        super().__init__(
+            object_id=object_id,
+            name=name,
+            tme_type=TMEType.FIBER,
+            object_type=ObjectType.FIBER,
+            roi=roi,
+            parent=parent,
+            metadata=metadata,
+        )
+        # Geometric
+        self.centerline: np.ndarray = (
+            centerline if centerline is not None else np.array([])
+        )
+        self.length: float = length
+        self.width: float = width
+        # Orientation
+        self.angle: float = angle
+        self.mean_orientation: float = mean_orientation
+        # Sync orientation <-> angle
+        if orientation is None and angle != 0.0:
+            self.orientation: Optional[float] = angle
+        elif angle == 0.0 and orientation is not None:
+            self.angle = orientation
+            self.orientation = orientation
+        else:
+            self.orientation = orientation
+        # Shape
+        self.straightness: float = straightness
+        self.curvature: float = curvature
+        self.tortuosity: Optional[float] = tortuosity
+        self.aspect_ratio: Optional[float] = (
+            aspect_ratio if aspect_ratio is not None
+            else (length / width if width > 0 else None)
+        )
+        self.boundary: Optional[np.ndarray] = boundary
+        # Boundary-relative metrics
+        self.nearest_boundary_point: Optional[np.ndarray] = nearest_boundary_point
+        self.nearest_boundary_distance: Optional[float] = nearest_boundary_distance
+        self.nearest_boundary_normal_angle: Optional[float] = (
+            nearest_boundary_normal_angle
+        )
+        self.relative_angle_to_boundary_normal: Optional[float] = (
+            relative_angle_to_boundary_normal
+        )
+        self.relative_angle_to_boundary_tangent: Optional[float] = (
+            relative_angle_to_boundary_tangent
+        )
+        self.distance_to_tumor_boundary: Optional[float] = distance_to_tumor_boundary
+        self.angle_to_tumor_boundary: Optional[float] = angle_to_tumor_boundary
+        # Spatial context
+        self.in_tumor_core: Optional[bool] = in_tumor_core
+        self.in_tumor_boundary: Optional[bool] = in_tumor_boundary
+        self.in_stroma: Optional[bool] = in_stroma
+        self.at_invasive_front: Optional[bool] = at_invasive_front
+        # TACS
+        self.tacs_type: Optional[str] = tacs_type
+        self.tacs_score: Optional[float] = tacs_score
+        # Analysis metadata
+        self.extraction_mode: Optional[str] = extraction_mode
+        self.confidence: Optional[float] = confidence
     
     # ============================================================
     # GEOMETRY PROPERTIES
@@ -688,32 +711,37 @@ class FiberObject(TMEObject):
 # REGION-LEVEL ORIENTATION MAP
 # ============================================================
 
-@dataclass
 class RegionOrientationMap(TMEObject):
     """
     Region-level orientation analysis results.
-    
+
     Stores orientation maps and statistics for a specific region
     (e.g., tumor boundary, tumor core, stroma).
     """
-    # Inherited from TMEObject
-    # - object_id: str
-    # - parent_id: Optional[str]  (links to TumorRegion or StromaRegion)
-    
-    # Orientation analysis results
-    orientation_result: OrientationResult = None
-    
-    # Region context
-    region_type: str = ""  # "tumor_boundary", "tumor_core", "stroma", etc.
-    roi: Optional['ROI'] = None  # The region this orientation map corresponds to
-    
-    # Spatial binning (if computed)
-    spatial_bins: Optional[Dict[str, OrientationResult]] = None
-    
-    def __post_init__(self):
-        """Set object type."""
-        if hasattr(self, 'object_type'):
-            self.object_type = ObjectType.ORIENTATION_MAP
+
+    def __init__(
+        self,
+        object_id: str = "",
+        name: str = "",
+        roi: Optional[Any] = None,
+        parent: Optional["TMEObject"] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        orientation_result: Optional[OrientationResult] = None,
+        region_type: str = "",
+        spatial_bins: Optional[Dict[str, OrientationResult]] = None,
+    ) -> None:
+        super().__init__(
+            object_id=object_id,
+            name=name,
+            tme_type=TMEType.ORIENTATION_MAP,
+            object_type=ObjectType.ORIENTATION_MAP,
+            roi=roi,
+            parent=parent,
+            metadata=metadata,
+        )
+        self.orientation_result: Optional[OrientationResult] = orientation_result
+        self.region_type: str = region_type
+        self.spatial_bins: Optional[Dict[str, OrientationResult]] = spatial_bins
     
     def get_dominant_orientation(self) -> float:
         """Get the dominant orientation angle in this region."""

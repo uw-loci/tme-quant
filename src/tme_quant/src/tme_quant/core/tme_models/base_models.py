@@ -1,25 +1,32 @@
-"""Compatibility base models for tme_models package."""
+"""
+tme_models/base_models.py — backward-compatibility shim.
 
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, Optional
+All concrete model classes (FiberObject, CellObject, TumorRegion, ...)
+now inherit directly from the unified TMEObject in core/base_models.py.
 
+This file re-exports the symbols that existing code in this package
+imported from the old local base_models, so no import changes are needed
+in cell_model.py, fiber_model.py, or any other tme_models module.
+"""
 
-class ObjectType(Enum):
-    CELL = "cell"
-    FIBER = "fiber"
-    REGION = "region"
-    ORIENTATION_MAP = "orientation_map"
-    FIBER_POPULATION = "fiber_population"
-    UNKNOWN = "unknown"
+from ..base_models import (   # noqa: F401  (re-export)
+    TMEObject,
+    ObjectType,
+    TMEType,
+    GeometryType,
+    Geometry,
+    Measurement,
+    Classification,
+    TMEMetadata,
+)
 
-
-@dataclass
-class TMEObject:
-    """Compatibility object base with object_id-oriented fields."""
-
-    object_id: str = ""
-    object_type: ObjectType = ObjectType.UNKNOWN
-    parent_id: Optional[str] = None
-    roi: Optional[Any] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+__all__ = [
+    "TMEObject",
+    "ObjectType",
+    "TMEType",
+    "GeometryType",
+    "Geometry",
+    "Measurement",
+    "Classification",
+    "TMEMetadata",
+]
