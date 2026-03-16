@@ -11,6 +11,7 @@ from .image_entry import ImageEntry
 from ..fiber_analysis import FiberAnalyzer
 from ..fiber_analysis.config.orientation_params import OrientationParams
 from ..fiber_analysis.config.extraction_params import ExtractionParams
+from ..tme_analysis.core.tacs_classifier import classify_fiber_tacs
 
 
 class TMEProject:
@@ -262,14 +263,17 @@ class TMEProject:
         
         # Compute boundary fiber statistics
         if boundary_fibers:
+            # angle_to_tumor_boundary is measured from the boundary LINE
+            # (tangent), so 0deg = parallel, 90deg = perpendicular — already
+            # uses the tangent convention.
             boundary_angles = [f.angle_to_tumor_boundary for f in boundary_fibers]
             mean_alignment_angle = np.mean(boundary_angles)
             
-            # Parallel fibers (angle close to 0°)
+            # Parallel fibers: tangent angle close to 0deg (TACS-2)
             parallel_count = sum(1 for a in boundary_angles if abs(a) < 30)
             
-            # Perpendicular fibers (angle close to 90°)
-            perp_count = sum(1 for a in boundary_angles if abs(a) > 60)
+            # Perpendicular fibers: tangent angle close to 90deg (TACS-3)
+            perp_count = sum(1 for a in boundary_angles if abs(a) >= 60)
             
             parallel_ratio = parallel_count / len(boundary_fibers)
             perp_ratio = perp_count / len(boundary_fibers)
@@ -531,33 +535,73 @@ class TMEProject:
         perp_ratio: float
     ) -> tuple:
         """
-        Classify Tumor-Associated Collagen Signatures (TACS).
-        
-        TACS-1: Loose, curly collagen (high curvature, low alignment)
-        TACS-2: Straightened, aligned parallel to boundary (high alignment, low angle)
-        TACS-3: Perpendicular alignment (high perpendicular ratio)
+        Classify Tumor-Associated Collagen Signatures for a fiber population.
+
+        Each fiber is classified individually via the canonical
+        classify_fiber_tacs() function, then the population-level TACS type
+        is determined by the dominant per-fiber result.
+
+        TACS angle convention (relative to boundary TANGENT):
+          TACS-3: 60-90deg (perpendicular, INVASIVE) + straight -> HIGH RISK
+          TACS-2:  0-30deg (parallel)                + straight -> medium risk
+          TACS-1: 30-60deg OR curly fibers                      -> low risk
+
+        Returns:
+            (tacs_type: str, tacs_score: float)
         """
-        # Compute metrics
-        mean_straightness = np.mean([f.straightness for f in fibers])
-        alignment_scores = [
-            1 - abs(f.angle_to_tumor_boundary) / 90
-            for f in fibers
-            if f.angle_to_tumor_boundary is not None
-        ]
-        mean_parallel_alignment = np.mean(alignment_scores) if alignment_scores else 0
-        
-        # TACS classification logic
-        if perp_ratio > 0.4:  # More than 40% perpendicular
-            tacs_type = "TACS-3"
-            tacs_score = perp_ratio
-        elif mean_straightness > 0.7 and mean_parallel_alignment > 0.6:
-            tacs_type = "TACS-2"
-            tacs_score = (mean_straightness + mean_parallel_alignment) / 2
-        else:
-            tacs_type = "TACS-1"
-            tacs_score = 1 - mean_straightness
-        
-        return tacs_type, tacs_score
+        from collections import Counter
+
+        per_fiber_types = []
+        per_fiber_scores = []
+
+        for fiber in fibers:
+            # Prefer the nearest-boundary tangent angle (most accurate).
+            # Fall back to the legacy global angle_to_tumor_boundary, converting
+            # to a tangent angle: tangent = 90 - abs(angle_to_tumor_boundary)
+            # because angle_to_tumor_boundary is measured from the boundary line.
+            angle = fiber.relative_angle_to_boundary_tangent
+            if angle is None and fiber.angle_to_tumor_boundary is not None:
+                angle = 90.0 - abs(fiber.angle_to_tumor_boundary)
+            if angle is None:
+                continue
+
+            distance = (
+                fiber.nearest_boundary_distance
+                if fiber.nearest_boundary_distance is not None
+                else 0.0    # treat as inside zone when unknown
+            )
+            straightness = fiber.straightness if fiber.straightness is not None else 0.5
+
+            tacs = classify_fiber_tacs(
+                angle_to_tangent=abs(angle),
+                straightness=straightness,
+                distance_to_boundary=distance,
+            )
+
+            # Store result back on the fiber object so callers can inspect it
+            if tacs is not None:
+                fiber.tacs_type = tacs
+                per_fiber_types.append(tacs)
+
+            # Build a simple 0-1 score
+            if tacs == 'TACS-3':
+                score = perp_ratio          # proxy for how invasive the region is
+            elif tacs == 'TACS-2':
+                score = (straightness + max(0.0, 1 - abs(angle) / 30)) / 2
+            else:
+                score = 1.0 - straightness  # higher for curly / TACS-1 fibers
+            per_fiber_scores.append(score)
+
+        if not per_fiber_types:
+            return 'TACS-1', 1.0 - np.mean([
+                f.straightness for f in fibers if f.straightness is not None
+            ] or [0.5])
+
+        counts = Counter(per_fiber_types)
+        dominant_tacs = counts.most_common(1)[0][0]
+        mean_score = float(np.mean(per_fiber_scores))
+
+        return dominant_tacs, mean_score
     
 
     """Extended with boundary-relative fiber analysis."""
@@ -673,22 +717,25 @@ class TMEProject:
                 if f.relative_angle_to_boundary_tangent is not None
             ]
             
-            if angles_to_normal:
-                # TACS-3: Perpendicular fibers (angle to normal < 30°)
-                perpendicular_count = sum(1 for a in angles_to_normal if a < 30)
-                perpendicular_ratio = perpendicular_count / len(angles_to_normal)
+            if angles_to_tangent:
+                # TACS-3: Perpendicular fibers — tangent angle >= 60deg
+                perpendicular_count = sum(1 for a in angles_to_tangent if a >= 60)
+                perpendicular_ratio = perpendicular_count / len(angles_to_tangent)
                 
-                # TACS-2: Parallel fibers (angle to tangent < 30°)
+                # TACS-2: Parallel fibers — tangent angle < 30deg
                 parallel_count = sum(1 for a in angles_to_tangent if a < 30)
                 parallel_ratio = parallel_count / len(angles_to_tangent)
                 
                 results.update({
-                    'mean_angle_to_normal': np.mean(angles_to_normal),
-                    'std_angle_to_normal': np.std(angles_to_normal),
                     'mean_angle_to_tangent': np.mean(angles_to_tangent),
                     'std_angle_to_tangent': np.std(angles_to_tangent),
                     'perpendicular_ratio': perpendicular_ratio,  # TACS-3
-                    'parallel_ratio': parallel_ratio,  # TACS-2
+                    'parallel_ratio': parallel_ratio,            # TACS-2
+                })
+            if angles_to_normal:
+                results.update({
+                    'mean_angle_to_normal': np.mean(angles_to_normal),
+                    'std_angle_to_normal': np.std(angles_to_normal),
                 })
         else:
             # OLD: Global boundary method
@@ -699,8 +746,9 @@ class TMEProject:
             ]
             
             if angles:
+                # angle_to_tumor_boundary is a tangent angle (0=parallel, 90=perpendicular)
                 parallel_count = sum(1 for a in angles if abs(a) < 30)
-                perpendicular_count = sum(1 for a in angles if abs(a) > 60)
+                perpendicular_count = sum(1 for a in angles if abs(a) >= 60)
                 
                 results.update({
                     'mean_alignment_angle': np.mean(angles),

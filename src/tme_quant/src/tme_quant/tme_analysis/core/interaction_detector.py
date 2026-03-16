@@ -17,7 +17,7 @@ from ..config.analysis_params import InteractionPair, InteractionStrategy
 from ...core.tme_models.cell_model import CellObject
 from ...core.tme_models.fiber_model import FiberObject
 from ...core.tme_models.tumor_model import TumorRegion
-
+from .tacs_classifier import classify_fiber_tacs
 
 class InteractionDetector:
     """Detect spatial interactions between TME components."""
@@ -205,7 +205,7 @@ class InteractionDetector:
                     )
                     angle_to_tangent = 90 - angle_to_normal if angle_to_normal is not None else None
 
-                tacs_type = self._classify_tacs_type(angle_to_normal, angle_to_tangent, fiber)
+                tacs_type = self._classify_tacs_type(angle_to_normal, angle_to_tangent, fiber, distance)
 
                 pairs.append(
                     InteractionPair(
@@ -231,17 +231,27 @@ class InteractionDetector:
         angle_to_normal: Optional[float],
         angle_to_tangent: Optional[float],
         fiber: FiberObject,
+        distance: float = 0.0,
     ) -> Optional[str]:
-        if angle_to_normal is None:
+        """
+        Classify a fiber-tumor interaction as TACS-1/2/3.
+
+        Delegates to the canonical classify_fiber_tacs() using the boundary
+        TANGENT angle:
+          angle_to_tangent = 0-30deg  → TACS-2 (parallel)
+          angle_to_tangent = 60-90deg → TACS-3 (perpendicular, INVASIVE)
+          angle_to_tangent = 30-60deg or curly → TACS-1
+        """
+        if angle_to_tangent is None:
             return None
-
-        straightness = fiber.straightness if hasattr(fiber, "straightness") else 1.0
-
-        if angle_to_normal < 30 and straightness > 0.7:
-            return "TACS-3"
-        if angle_to_tangent is not None and angle_to_tangent < 30 and straightness > 0.7:
-            return "TACS-2"
-        return "TACS-1"
+        straightness = getattr(fiber, 'straightness', None)
+        if straightness is None:
+            straightness = 1.0
+        return classify_fiber_tacs(
+            angle_to_tangent=angle_to_tangent,
+            straightness=straightness,
+            distance_to_boundary=distance,
+        )
 
     def detect_cell_tumor_interactions(
         self,

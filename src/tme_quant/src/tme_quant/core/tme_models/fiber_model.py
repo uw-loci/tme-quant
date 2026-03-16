@@ -309,6 +309,29 @@ class FiberAnalysisResult:
 # FIBER OBJECT FOR HIERARCHY INTEGRATION
 # ============================================================
 
+def _tacs_score(tacs_type, angle, straightness):
+    """
+    Continuous 0-1 confidence score for a TACS classification.
+
+    ``angle`` is the BOUNDARY TANGENT angle (0-90deg):
+      0deg = parallel, 90deg = perpendicular.
+
+    Consistent with tme_analysis.core.tacs_classifier.classify_fiber_tacs():
+      TACS-3: angle 60-90deg -> score = how close to 90deg * straightness
+      TACS-2: angle  0-30deg -> score = how close to  0deg * straightness
+      TACS-1: intermediate/curly -> curvature + randomness blend
+    """
+    if tacs_type is None:
+        return 0.0
+    if tacs_type == 'TACS-3':
+        return ((angle - 60) / 30) * straightness      # 0 at 60deg, 1 at 90deg
+    if tacs_type == 'TACS-2':
+        return (1 - angle / 30) * straightness         # 1 at 0deg,  0 at 30deg
+    curvature_score = 1.0 - straightness
+    randomness_score = 1.0 - abs(angle - 45.0) / 45.0  # peaks at 45deg
+    return 0.6 * curvature_score + 0.4 * randomness_score
+
+
 class FiberObject(TMEObject):
     """
     Individual fiber object in the TME hierarchy.
@@ -589,42 +612,41 @@ class FiberObject(TMEObject):
     def _classify_tacs_from_metrics(self) -> Dict[str, Any]:
         """
         Classify TACS type based on fiber metrics.
-        
-        TACS-1: Random, curly fibers (high curvature, random orientation)
-        TACS-2: Straightened, parallel fibers (low curvature, parallel to boundary)
-        TACS-3: Perpendicular invasion fibers (low curvature, perpendicular to boundary)
-        
+
+        Delegates to the canonical classify_fiber_tacs() in
+        tme_analysis.core.tacs_classifier so that the angle convention,
+        straightness threshold, and zone-width logic are defined in one place.
+
+        TACS angle convention (relative to boundary normal):
+          TACS-3: 60-90deg (perpendicular, INVASIVE) + straight
+          TACS-2:  0-30deg (parallel)                + straight
+          TACS-1: 30-60deg OR curly fibers
+
         Returns:
-            Dictionary with 'type' and 'score'
+            Dict with keys 'type' (str or None) and 'score' (float 0-1).
         """
-        if self.relative_angle_to_boundary_normal is None:
+        from ...tme_analysis.core.tacs_classifier import classify_fiber_tacs
+
+        # Use the tangent angle: 0deg = parallel (TACS-2), 90deg = perpendicular (TACS-3)
+        if self.relative_angle_to_boundary_tangent is None:
             return {'type': None, 'score': 0.0}
-        
-        angle_to_normal = abs(self.relative_angle_to_boundary_normal)
-        straightness = self.straightness if self.straightness is not None else 0.5
-        
-        # TACS-3: Perpendicular to boundary (angle to normal close to 0°)
-        if angle_to_normal < 30 and straightness > 0.7:
-            return {
-                'type': 'TACS-3',
-                'score': (1 - angle_to_normal / 30) * straightness
-            }
-        
-        # TACS-2: Parallel to boundary (angle to normal close to 90°)
-        elif angle_to_normal > 60 and straightness > 0.7:
-            return {
-                'type': 'TACS-2',
-                'score': ((angle_to_normal - 60) / 30) * straightness
-            }
-        
-        # TACS-1: Random orientation or curly
-        else:
-            curvature_score = 1 - straightness  # Higher for curly fibers
-            randomness_score = 1 - abs(angle_to_normal - 45) / 45  # Closer to 45° = more random
-            return {
-                'type': 'TACS-1',
-                'score': 0.6 * curvature_score + 0.4 * randomness_score
-            }
+
+        angle    = abs(self.relative_angle_to_boundary_tangent)
+        straight = self.straightness if self.straightness is not None else 0.5
+        distance = (
+            self.nearest_boundary_distance
+            if self.nearest_boundary_distance is not None
+            else 0.0        # treat as inside zone when distance unknown
+        )
+
+        tacs_type = classify_fiber_tacs(
+            angle_to_tangent=angle,
+            straightness=straight,
+            distance_to_boundary=distance,
+        )
+
+        score = _tacs_score(tacs_type, angle, straight)
+        return {'type': tacs_type, 'score': score}
     
     def is_perpendicular_to_boundary(self, threshold: float = 30.0) -> bool:
         """Check if fiber is perpendicular to boundary (TACS-3)."""
