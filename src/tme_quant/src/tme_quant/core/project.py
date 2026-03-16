@@ -6,7 +6,7 @@ from .tme_models.fiber_model import (
     FiberObject, RegionOrientationMap, FiberPopulation,
     OrientationResult, ExtractionResult
 )
-from .hierarchy import ObjectHierarchy
+from .hierarchy import TMEHierarchy
 from ..fiber_analysis import FiberAnalyzer
 from ..fiber_analysis.config.orientation_params import OrientationParams
 from ..fiber_analysis.config.extraction_params import ExtractionParams
@@ -22,7 +22,7 @@ class TMEProject:
         self.base_path = Path(base_path) if base_path else Path.cwd()
         
         # Hierarchical object storage
-        self.hierarchy = ObjectHierarchy()
+        self.hierarchy = TMEHierarchy()
         
         # Image entries
         self.images: Dict[str, ImageEntry] = {}
