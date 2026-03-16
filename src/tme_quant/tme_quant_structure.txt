@@ -1,0 +1,160 @@
+tme_quant/
+├── __init__.py
+│
+├── core/
+│   ├── base_models.py
+│   ├── geometry.py
+│   ├── hyerarchy.py
+│   ├── project.py
+│   └── tme_models/
+│       ├── __init__.py
+│       ├── base_models.py
+│       ├── cell_model.py
+│       ├── fiber_model.py
+│       ├── interaction_models.py
+│       ├── stroma_model.py
+│       ├── tissue_model.py
+│       └── tumor_model.py
+│
+├── cell_analysis/
+│   ├── __init__.py
+│   ├── config/
+│   │   └── __init__.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── cell_analyzer.py
+│   │   ├── classification_analyzer.py
+│   │   ├── quantification_analyzer.py
+│   │   └── segmentation_analyzer.py
+│   ├── io/
+│   │   ├── __init__.py
+│   │   ├── exporters.py
+│   │   └── model_loaders.py
+│   ├── methods/
+│   │   ├── __init__.py
+│   │   ├── registry.py
+│   │   ├── classification/
+│   │   │   ├── __init__.py
+│   │   │   └── base_classification.py
+│   │   ├── quantification/
+│   │   │   └── __init__.py
+│   │   └── segmentation/
+│   │       ├── __init__.py
+│   │       ├── base_segmentation.py
+│   │       ├── cellpose.py
+│   │       └── stardist.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── cell_utils.py
+│       ├── postprocessing.py
+│       ├── preprocessing.py
+│       └── validation.py
+│
+├── fiber_analysis/
+│   ├── __init__.py
+│   ├── core/
+│   │   ├── extraction_analyzer.py
+│   │   ├── fiber_analyzer.py
+│   │   └── orientation_analyzer.py
+│   ├── io/
+│   │   └── exporters.py
+│   ├── methods/
+│   │   ├── extraction/
+│   │   │   ├── base_extraction.py
+│   │   │   ├── ctfire.py
+│   │   │   └── ridge_detection.py
+│   │   └── orientation/
+│   │       ├── base_orientation.py
+│   │       ├── curvealign.py
+│   │       └── orientationj.py
+│   └── utils/
+│       └── geometry_utils.py
+│
+├── tme_analysis/
+│   ├── __init__.py
+│   ├── cell_fiber_interaction.py
+│   ├── interaction_network_analysis.py
+│   ├── config/
+│   │   ├── __init__.py
+│   │   └── analysis_params.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── interaction_detector.py
+│   │   ├── measurement_engine.py
+│   │   ├── region_manager.py
+│   │   ├── tacs_classifier.py
+│   │   └── tme_analyzer.py
+│   ├── io/
+│   │   ├── __init__.py
+│   │   └── exporters.py
+│   ├── measurements/
+│   │   ├── __init__.py
+│   │   ├── spatial_features.py
+│   │   └── tacs_features.py
+│   ├── roi_generation/
+│   │   └── __init__.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── distance_utils.py
+│       ├── geometry_utils.py
+│       ├── statistical_utils.py
+│       └── validation.py
+│
+├── image_registration/
+│   ├── __init__.py
+│   ├── config/
+│   │   ├── __init__.py
+│   │   └── registration_params.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── registration_manager.py
+│   │   └── transform_handler.py
+│   ├── io/
+│   │   ├── __init__.py
+│   │   ├── landmark_io.py
+│   │   └── transform_io.py
+│   ├── methods/
+│   │   ├── __init__.py
+│   │   ├── base_registration.py
+│   │   ├── deep_learning/
+│   │   │   ├── __init__.py
+│   │   │   ├── comir_registration.py
+│   │   │   └── voxelmorph_registration.py
+│   │   ├── feature_based/
+│   │   │   ├── __init__.py
+│   │   │   ├── orb_registration.py
+│   │   │   └── sift_registration.py
+│   │   ├── intensity_based/
+│   │   │   ├── __init__.py
+│   │   │   ├── cross_correlation.py
+│   │   │   ├── he_shg_registration_python.py
+│   │   │   └── mutual_information.py
+│   │   └── landmark_based/
+│   │       ├── __init__.py
+│   │       ├── manual_landmarks.py
+│   │       └── thin_plate_spline.py
+│   ├── preprocessing/
+│   │   ├── __init__.py
+│   │   ├── intensity_normalization.py
+│   │   ├── modality_conversion.py
+│   │   └── resolution_matching.py
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── image_utils.py
+│   │   └── transform_utils.py
+│   └── visualization/
+│       ├── checkerboard.py
+│       ├── difference_map.py
+│       ├── interactive_viewer.py
+│       └── overlay.py
+│
+├── measurement/
+│   └── interaction_features.py
+│
+├── pipelines/
+│   ├── interaction_analysis_pipeline.py
+│   └── standard_tme_pipeline.py
+│
+└── visualization/
+    ├── __init__.py
+    └── interaction_visualization.py
