@@ -9,7 +9,7 @@ Provides preprocessing options including:
 """
 
 import numpy as np
-from typing import Optional, Tuple, Literal
+from typing import Optional, Tuple
 from enum import Enum
 
 from skimage import filters, io

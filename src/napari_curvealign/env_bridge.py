@@ -18,7 +18,6 @@ import subprocess
 import json
 import tempfile
 import os
-import sys
 from pathlib import Path
 from typing import Optional, Dict, Any
 import numpy as np
@@ -217,7 +216,7 @@ def segment_stardist_remote(
     
     try:
         # Script to run in target environment
-        script = f"""
+        script = """
 from stardist.models import StarDist2D
 import numpy as np
 from PIL import Image
@@ -243,14 +242,14 @@ labels, details = model.predict_instances(
 # Save output
 Image.fromarray(labels.astype(np.uint16)).save(inputs['output_path'])
 
-outputs = {{
+outputs = {
     'n_objects': int(labels.max()),
     'success': True
-}}
+}
 """
         
         # Run segmentation
-        results = bridge.run_script(script, inputs={
+        bridge.run_script(script, inputs={
             'image_path': temp_image_path,
             'output_path': temp_output_path,
             'model_name': model_name,
@@ -294,7 +293,7 @@ def check_remote_environment(python_path: str, package: str) -> bool:
             timeout=10
         )
         return result.returncode == 0 and 'OK' in result.stdout
-    except:
+    except Exception:
         return False
 
 
@@ -414,7 +413,7 @@ def find_stardist_environments() -> list:
                             'version': version,
                             'type': 'conda'
                         })
-    except:
+    except Exception:
         pass
     
     return found

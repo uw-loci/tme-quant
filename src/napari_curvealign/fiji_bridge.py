@@ -15,7 +15,7 @@ replaced later if the project adopts a different bridge approach.
 """
 
 import numpy as np
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Tuple, Dict, Any, List
 import warnings
 
 try:

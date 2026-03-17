@@ -46,14 +46,14 @@ from matplotlib.figure import Figure
 # Import new modules
 from .preprocessing import (
     PreprocessingOptions, ThresholdMethod,
-    load_image_with_bioformats, preprocess_image
+    preprocess_image
 )
 from .roi_manager import ROIManager, ROIShape, ROIAnalysisMethod
 from .fiji_bridge import get_fiji_bridge
 from .segmentation import (
     SegmentationMethod, SegmentationOptions,
     segment_image, masks_to_roi_data,
-    check_available_methods, get_recommended_parameters
+    check_available_methods
 )
 
 if TYPE_CHECKING:
@@ -1056,7 +1056,7 @@ class CurveAlignWidget(QWidget):
         if self.results_viewer:
             try:
                 self.results_viewer.close()
-            except:
+            except Exception:
                 pass
             self.results_viewer = None
         self.results_layers = {}
@@ -1154,7 +1154,7 @@ class CurveAlignWidget(QWidget):
             if self.results_viewer:
                 try:
                     self.results_viewer.close()
-                except:
+                except Exception:
                     pass
             target_viewer = napari.Viewer(title=f"CurveAlign Results - {image_name}")
             self.results_viewer = target_viewer
@@ -1199,7 +1199,7 @@ class CurveAlignWidget(QWidget):
         if self.results_viewer:
             try:
                 self.results_viewer.close()
-            except:
+            except Exception:
                 pass
         
         super().closeEvent(event)
@@ -2281,7 +2281,7 @@ class CurveAlignWidget(QWidget):
              # This mimics a "fake" mouse move to set the state
              try:
                  layer._last_cursor_position = np.array([0, 0])
-             except:
+             except Exception:
                  pass
 
         try:

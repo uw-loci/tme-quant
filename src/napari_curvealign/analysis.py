@@ -7,7 +7,7 @@ and integration with fiber features.
 
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Optional, Tuple, Union, Any
+from typing import List, Dict, Tuple, Union
 from scipy.spatial import KDTree
 
 def compute_tacs(
