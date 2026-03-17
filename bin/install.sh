@@ -67,10 +67,17 @@ setup_fftw() {
   UTILS_DIR="$(cd "$UTILS_DIR" && pwd)"
   FFTW_PATH="$UTILS_DIR/fftw-${FFTW_VERSION}"
 
-  if [ -d "$FFTW_PATH" -a -f "$FFTW_PATH/include/fftw.h" ]; then
-    print_success "FFTW already built at: $FFTW_PATH"
-    export FFTW="$FFTW_PATH"
-    return 0
+  if [ -d "$FFTW_PATH" ] && [ -f "$FFTW_PATH/include/fftw.h" ] && [ -f "$FFTW_PATH/lib/libfftw.a" ]; then
+    # Verify FFTW was built in double precision (not --enable-float).
+    # Double-precision FFTW exports 'fftw_create_plan'; float-precision exports 'sfftw_create_plan'.
+    if nm "$FFTW_PATH/lib/libfftw.a" 2>/dev/null | grep -q '_fftw_create_plan'; then
+      print_success "FFTW already built (double precision) at: $FFTW_PATH"
+      export FFTW="$FFTW_PATH"
+      return 0
+    else
+      print_warning "FFTW at $FFTW_PATH appears to be float-precision (--enable-float). Rebuilding..."
+      rm -rf "$FFTW_PATH"
+    fi
   fi
 
   # Install build tools if needed
@@ -149,18 +156,38 @@ setup_curvelab() {
   export FDCT
   print_success "CurveLab found at: $FDCT"
 
-  # Build CurveLab components if needed
+  # Ensure FFTW directory layout matches what CurveLab's makefile.opt expects:
+  #   ${FFTW_DIR}/fftw/fftw.h  and  ${FFTW_DIR}/fftw/.libs/libfftw.a
+  if [ -n "${FFTW:-}" ]; then
+    mkdir -p "${FFTW}/fftw/.libs"
+    # Headers: makefile.opt uses -I${FFTW_DIR}/fftw
+    if [ -f "${FFTW}/include/fftw.h" ] && [ ! -f "${FFTW}/fftw/fftw.h" ]; then
+      ln -sf "${FFTW}/include/fftw.h" "${FFTW}/fftw/fftw.h"
+      print_info "Symlinked fftw.h → ${FFTW}/fftw/fftw.h"
+    fi
+    # Libs: makefile.opt uses -L${FFTW_DIR}/fftw/.libs
+    for lib in "${FFTW}/lib"/libfftw*; do
+      [ -f "$lib" ] || continue
+      base="$(basename "$lib")"
+      if [ ! -f "${FFTW}/fftw/.libs/${base}" ]; then
+        ln -sf "$lib" "${FFTW}/fftw/.libs/${base}"
+        print_info "Symlinked ${base} → ${FFTW}/fftw/.libs/${base}"
+      fi
+    done
+  fi
+
+  # Clean and rebuild CurveLab components to ensure they link the correct FFTW
   if [ -d "$FDCT/fdct_wrapping_cpp/src" ]; then
-    print_info "Building CurveLab fdct_wrapping_cpp..."
-    (cd "$FDCT/fdct_wrapping_cpp/src" && make FFTW_DIR="${FFTW:-}") || true
+    print_info "Cleaning and building CurveLab fdct_wrapping_cpp..."
+    (cd "$FDCT/fdct_wrapping_cpp/src" && make clean && make FFTW_DIR="${FFTW:-}") || true
   fi
   if [ -d "$FDCT/fdct/src" ]; then
-    print_info "Building CurveLab fdct..."
-    (cd "$FDCT/fdct/src" && make FFTW_DIR="${FFTW:-}") || true
+    print_info "Cleaning and building CurveLab fdct..."
+    (cd "$FDCT/fdct/src" && make clean && make FFTW_DIR="${FFTW:-}") || true
   fi
   if [ -d "$FDCT/fdct3d/src" ]; then
-    print_info "Building CurveLab fdct3d..."
-    (cd "$FDCT/fdct3d/src" && make FFTW_DIR="${FFTW:-}") || true
+    print_info "Cleaning and building CurveLab fdct3d..."
+    (cd "$FDCT/fdct3d/src" && make clean && make FFTW_DIR="${FFTW:-}") || true
   fi
 
   cd "$PROJECT_ROOT"
@@ -178,6 +205,18 @@ create_env_and_install() {
 
   export CPPFLAGS="-I${FFTW}/include"
   export LDFLAGS="-L${FFTW}/lib"
+
+  # Purge stale curvelops artifacts so uv rebuilds from source against the
+  # current FFTW/CurveLab.  setuptools caches .so files in uv's git checkout
+  # build/ dirs and reuses them even when the underlying C libraries change.
+  if [ -d "$PROJECT_ROOT/.venv" ]; then
+    print_info "Removing existing .venv for a clean curvelops rebuild..."
+    rm -rf "$PROJECT_ROOT/.venv"
+  fi
+  uv cache clean curvelops 2>/dev/null || true
+  for bdir in "$HOME"/.cache/uv/git-v0/checkouts/*/*/build; do
+    [ -d "$bdir" ] && rm -rf "$bdir"
+  done
 
   print_info "Syncing uv environment..."
   uv sync --extra curvelops --extra segmentation &&
