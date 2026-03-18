@@ -1,14 +1,15 @@
 # --- Configuration ---
 # The output filename automatically grabs the correct suffix (e.g., .cpython-310-darwin.so)
-TARGET = fiber_backend$(shell python3-config --extension-suffix)
+TARGET = fiber_backend$(shell python -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
 
 # Compiler setup
 CXX = clang++
 # -undefined dynamic_lookup is strictly required on macOS so it doesn't freak out about missing Python symbols during compilation
-CXXFLAGS = -O3 -Wall -shared -std=c++14 -fPIC -undefined dynamic_lookup
+CXXFLAGS = -g -O0 -Wall -shared -std=c++14 -fPIC -undefined dynamic_lookup
 
 # Python and Pybind11 Flags
-PY_INCLUDES = $(shell python3 -m pybind11 --includes)
+# Include both pybind11 and Python development headers
+PY_INCLUDES = $(shell python -m pybind11 --includes) $(shell python -c "import sysconfig; print('-I' + sysconfig.get_path('include'))")
 # CRITICAL: Do NOT use --embed flag on macOS as it causes segfaults during module import
 # The -undefined dynamic_lookup flag handles Python symbol resolution correctly
 PY_LDFLAGS =
