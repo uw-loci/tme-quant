@@ -1571,7 +1571,13 @@ class CurveAlignWidget(QWidget):
         self.segment_btn.clicked.connect(self._run_segmentation)
         button_layout.addWidget(self.segment_btn)
         
-        # Preview action removed (duplicate of Run Segmentation)
+        self.preview_seg_btn = QPushButton("Preview Mask")
+        self.preview_seg_btn.setToolTip(
+            "Show the current mask in the viewer without running segmentation again "
+            "(uses selected Labels layer, or the last mask from Run Segmentation)."
+        )
+        self.preview_seg_btn.clicked.connect(self._preview_segmentation)
+        button_layout.addWidget(self.preview_seg_btn)
         
         self.create_rois_btn = QPushButton("Create ROIs from Mask")
         self.create_rois_btn.clicked.connect(self._create_rois_from_segmentation)
@@ -1649,6 +1655,82 @@ class CurveAlignWidget(QWidget):
             import traceback
             traceback.print_exc()
 
+    def _resolve_segmentation_mask(self) -> tuple[Optional[np.ndarray], Optional[str]]:
+        """Return a label mask and short description, or (None, None).
+
+        Priority matches *Create ROIs from Mask*: active Labels layer, per-image cache,
+        then global last segmentation.
+        """
+        mask = None
+        source_desc = None
+        active_layer = self.viewer.layers.selection.active if self.viewer else None
+        if active_layer is not None and active_layer.__class__.__name__ == "Labels" and hasattr(
+            active_layer, "data"
+        ):
+            mask = np.asarray(active_layer.data)
+            source_desc = f"selected labels layer: {active_layer.name}"
+
+        if mask is None:
+            label_key = self._active_image_label()
+            if label_key and label_key in self._last_segmentation_by_image:
+                mask = self._last_segmentation_by_image[label_key]
+                source_desc = f"cached segmentation for image: {label_key}"
+
+        if mask is None and getattr(self, "_last_segmentation", None) is not None:
+            mask = self._last_segmentation
+            source_desc = "last segmentation (global fallback)"
+
+        return mask, source_desc
+
+    def _preview_segmentation(self):
+        """Overlay an existing segmentation as a Labels layer without calling ``segment_image``."""
+
+        if not self._viewer or len(self._viewer.layers) == 0:
+            QMessageBox.warning(self, "Preview segmentation", "No image loaded.")
+            return
+        image_layer = self._get_active_image_layer()
+        if image_layer is None or not hasattr(image_layer, "data"):
+            QMessageBox.warning(
+                self,
+                "Preview segmentation",
+                "Could not resolve an image layer to attach the preview to.",
+            )
+            return
+
+        self._set_active_image_context(image_layer)
+        mask, source_desc = self._resolve_segmentation_mask()
+        if mask is None:
+            QMessageBox.information(
+                self,
+                "Preview segmentation",
+                "No segmentation mask available. Run “Run Segmentation” first, or select a "
+                "Labels layer in the layer list.",
+            )
+            return
+
+        if self.viewer:
+            try:
+                self.viewer.layers.selection.select_only(image_layer)
+            except Exception:
+                pass
+
+        label_key = self._active_image_label() or image_layer.name
+        layer_name = f"{label_key}/seg/preview"
+        if layer_name in self._viewer.layers:
+            self._viewer.layers.remove(self._viewer.layers[layer_name])
+
+        labels_layer = self._viewer.add_labels(
+            np.asarray(mask),
+            name=layer_name,
+            opacity=0.5,
+            metadata={"curvealign_parent": label_key, "curvealign_preview": True},
+        )
+        if label_key:
+            self._seg_layers_by_image[label_key].append(labels_layer)
+        if self.seg_source_note:
+            self.seg_source_note.setText(f"Preview: {source_desc}")
+        print(f"Preview segmentation from {source_desc}")
+
     def _segment_image_data(self, image: np.ndarray) -> Optional[np.ndarray]:
         """Convert input to 2D grayscale if needed, build :class:`SegmentationOptions`, call :func:`~.segmentation.segment_image`."""
 
@@ -1723,26 +1805,7 @@ class CurveAlignWidget(QWidget):
         """Convert the selected labels layer or last cached mask into polygon ROIs and register cell objects."""
 
         try:
-            # Prefer the currently selected labels layer; fall back to per-image cache, then last global
-            mask = None
-            active_layer = self.viewer.layers.selection.active if self.viewer else None
-            if active_layer is not None and active_layer.__class__.__name__ == "Labels" and hasattr(active_layer, "data"):
-                mask = np.asarray(active_layer.data)
-
-            source_desc = None
-            if mask is not None and active_layer is not None and active_layer.__class__.__name__ == "Labels":
-                source_desc = f"selected labels layer: {active_layer.name}"
-
-            if mask is None:
-                label_key = self._active_image_label()
-                if label_key and label_key in self._last_segmentation_by_image:
-                    mask = self._last_segmentation_by_image[label_key]
-                    source_desc = f"cached segmentation for image: {label_key}"
-
-            if mask is None and hasattr(self, "_last_segmentation"):
-                mask = self._last_segmentation
-                source_desc = "last segmentation (global fallback)"
-
+            mask, source_desc = self._resolve_segmentation_mask()
             if mask is None:
                 print("No segmentation available. Select a labels layer or run segmentation first.")
                 return
@@ -1772,7 +1835,7 @@ class CurveAlignWidget(QWidget):
                 )
 
             # Register cell objects for annotation workflow
-            self.roi_manager.set_image_shape(self._last_segmentation.shape)
+            self.roi_manager.set_image_shape(np.asarray(mask).shape)
             self.roi_manager.register_cell_objects(roi_data_list)
             self._update_object_list()
             
