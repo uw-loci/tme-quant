@@ -1,7 +1,7 @@
 # File: tme_quant/utils/geometry_utils.py
 
 import numpy as np
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 from shapely.geometry import Point, LineString, Polygon
 from shapely.ops import nearest_points
 

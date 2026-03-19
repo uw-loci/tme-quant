@@ -1,10 +1,3 @@
-# Cell Analysis Module - Part 4: Base Classes and Complete Method Implementations
-
-## Base Segmentation Method
-
-### Location: `tme_quant/cell_analysis/methods/segmentation/base_segmentation.py`
-
-```python
 """
 Base class for cell segmentation methods.
 

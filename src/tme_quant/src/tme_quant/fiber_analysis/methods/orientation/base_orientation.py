@@ -1,6 +1,7 @@
 """Base class for fiber orientation methods."""
 
 from abc import ABC, abstractmethod
+from typing import Optional, Dict
 import numpy as np
 from ...config.orientation_params import OrientationParams, OrientationResult
 

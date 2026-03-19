@@ -147,7 +147,8 @@ class TMEHierarchy:
         geometry = getattr(node, "geometry", None)
         bounds = None
         if geometry is not None and hasattr(geometry, "bounds") and geometry.bounds is not None:
-            bounds = geometry.bounds.tolist()
+            raw_bounds = geometry.bounds
+            bounds = raw_bounds.tolist() if hasattr(raw_bounds, "tolist") else list(raw_bounds)
         return {
             "id": node.object_id,
             "name": node.name,

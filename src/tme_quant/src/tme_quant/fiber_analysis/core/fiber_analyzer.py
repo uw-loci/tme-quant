@@ -1,14 +1,14 @@
 """Main fiber analyzer class coordinating orientation and extraction analysis."""
 
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Dict
 import numpy as np
 from pathlib import Path
 
 from .orientation_analyzer import FiberOrientationAnalyzer
 from .extraction_analyzer import FiberExtractionAnalyzer
 from .results import FiberAnalysisResult
-from ..config.orientation_params import OrientationParams
-from ..config.extraction_params import ExtractionParams
+from ..config.orientation_params import OrientationParams, OrientationResult
+from ..config.extraction_params import ExtractionParams, ExtractionResult
 from ..io.exporters import FiberAnalysisExporter
 
 

@@ -708,7 +708,7 @@ class FiberObject(TMEObject):
         center = self.get_center_coordinates() if len(self.centerline) > 0 else np.array([])
         return {
             'object_id': self.object_id,
-            'parent_id': self.parent_id,
+            'parent_id': self.parent.object_id if self.parent is not None else None,
             'center_x': float(center[0]) if len(center) > 0 else None,
             'center_y': float(center[1]) if len(center) > 1 else None,
             'center_z': float(center[2]) if len(center) > 2 else None,
