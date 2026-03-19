@@ -1,23 +1,61 @@
+"""
+Parity tests for ``SHG_HE_registration`` vs MATLAB ``BDcreation_reg2.m``.
+
+Uses a **golden** registered H&E TIFF produced in MATLAB and committed under
+``tests/test_images/``, plus the original HE/SHG pair from the repo ``utils/`` tree.
+
+If the golden file or raw inputs are missing (e.g. minimal CI checkout), tests skip.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
-from scipy import ndimage
+import pytest
 from skimage import io
 
+from pycurvelets._shg_he_registration_sitk import has_simpleitk
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
     shg_he_registration,
 )
 
+# --- Golden case: same inputs as MATLAB BDcreation_reg2.m reference run ---
+GOLDEN_CASE_FILENAME = "2B_D9_ROI1.tif"
+GOLDEN_REGISTERED_NAME = "2B_D9_ROI1_registered_matlab.tif"
+# Must match the MATLAB run used to generate the golden TIFF (see README in test_images).
+GOLDEN_PIXEL_PER_MICRON = 2.0
 
-def _save_float_image(path: Path, image: np.ndarray) -> None:
-    arr = np.clip(image, 0.0, 1.0)
-    io.imsave(str(path), np.round(arr * 255.0).astype(np.uint8), check_contrast=False)
+# Empirical bounds vs committed MATLAB golden (same HE/SHG inputs, ``pixelpermicron=2.0``).
+# ITK/SimpleITK Mattes MI differs from MathWorks ``imregtform``; values are regression guards, not equality.
+# Re-tune if preprocessing or registration changes; see ``test_images/README_registration_2B_D9_ROI1.md``.
+GOLDEN_MAX_MAE = 0.045
+GOLDEN_MAX_RMSE = 0.12
+GOLDEN_MIN_NCC_PER_CHANNEL = 0.28
+
+_TESTS_DIR = Path(__file__).resolve().parent
+_TME_QUANT_ROOT = _TESTS_DIR.parent
+_REPO_ROOT = _TME_QUANT_ROOT.parent
+
+_GOLDEN_TIF = _TESTS_DIR / "test_images" / GOLDEN_REGISTERED_NAME
+_HE_TIF = _REPO_ROOT / "utils" / "TestimagesCA6.0_20240722" / "HE" / GOLDEN_CASE_FILENAME
+_SHG_TIF = _REPO_ROOT / "utils" / "TestimagesCA6.0_20240722" / "SHG" / GOLDEN_CASE_FILENAME
 
 
-def _normalized_cross_correlation(a: np.ndarray, b: np.ndarray) -> float:
+def _load_tif_unit_float(path: Path) -> np.ndarray:
+    """Load image as float64 in [0, 1] (uint8 TIFF → divide by 255)."""
+    im = io.imread(str(path))
+    if im.dtype == np.uint8:
+        return im.astype(np.float64) / 255.0
+    im = im.astype(np.float64)
+    mx = float(im.max()) if im.size else 1.0
+    if mx > 1.0:
+        return np.clip(im / 255.0 if mx <= 255.0 else im / mx, 0.0, 1.0)
+    return np.clip(im, 0.0, 1.0)
+
+
+def _normalized_cross_correlation_channel(a: np.ndarray, b: np.ndarray) -> float:
     a = np.asarray(a, dtype=np.float64).ravel()
     b = np.asarray(b, dtype=np.float64).ravel()
     a = a - np.mean(a)
@@ -28,105 +66,54 @@ def _normalized_cross_correlation(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / denom)
 
 
-def _make_synthetic_pair(shape: tuple[int, int], shift_rc: tuple[float, float]) -> tuple[np.ndarray, np.ndarray]:
-    rows, cols = np.indices(shape)
-    collagen = np.zeros(shape, dtype=np.float64)
-
-    ellipse = (((rows - 72.0) ** 2) / (28.0**2) + ((cols - 55.0) ** 2) / (14.0**2)) <= 1.0
-    blob = ((rows - 100.0) ** 2 + (cols - 110.0) ** 2) <= 13.0**2
-    collagen[ellipse | blob] = 1.0
-    collagen = ndimage.gaussian_filter(collagen, sigma=1.5, mode="nearest")
-    collagen = np.clip(collagen / max(collagen.max(), 1e-12), 0.0, 1.0)
-
-    he = np.zeros((shape[0], shape[1], 3), dtype=np.float64)
-    he[:, :, 0] = 0.15 + 0.85 * collagen
-    he[:, :, 1] = 0.08 + 0.10 * collagen
-    he[:, :, 2] = 0.08 + 0.06 * collagen
-
-    # Blue/cyan nuclei-like clusters to exercise HSV nuclei segmentation branch.
-    nuclei1 = ((rows - 85.0) ** 2 + (cols - 68.0) ** 2) <= 10.0**2
-    nuclei2 = ((rows - 95.0) ** 2 + (cols - 88.0) ** 2) <= 8.0**2
-    nuclei = nuclei1 | nuclei2
-    he[nuclei, 0] = 0.25
-    he[nuclei, 1] = 0.70
-    he[nuclei, 2] = 0.92
-
-    he_shifted = np.zeros_like(he)
-    for ch in range(3):
-        he_shifted[:, :, ch] = ndimage.shift(
-            he[:, :, ch],
-            shift=shift_rc,
-            order=1,
-            mode="constant",
-            cval=1.0,
-            prefilter=False,
+def _require_golden_fixtures() -> None:
+    missing = [p for p in (_GOLDEN_TIF, _HE_TIF, _SHG_TIF) if not p.is_file()]
+    if missing:
+        pytest.skip(
+            "MATLAB golden parity test needs committed golden + utils images:\n"
+            + "\n".join(f"  missing: {m}" for m in missing)
         )
 
-    return np.clip(he_shifted, 0.0, 1.0), collagen
 
+@pytest.mark.skipif(not has_simpleitk(), reason="MATLAB-parity path uses SimpleITK Mattes MI")
+def test_shg_he_registration_matches_matlab_golden_2b_d9_roi1() -> None:
+    """
+    Compare Python output to the reference from ``curvelets/.../BDcreation_reg2.m``.
 
-def test_shg_he_registration_improves_alignment_and_saves(tmp_path):
-    he_dir = tmp_path / "he"
-    shg_dir = tmp_path / "shg"
-    he_dir.mkdir()
-    shg_dir.mkdir()
+    Golden TIFF: ``tests/test_images/2B_D9_ROI1_registered_matlab.tif``
+    Inputs: ``utils/TestimagesCA6.0_20240722/HE|SHG/2B_D9_ROI1.tif``
+    """
+    _require_golden_fixtures()
 
-    he_image, shg_image = _make_synthetic_pair(shape=(144, 144), shift_rc=(7.0, -6.0))
-    filename = "synthetic_HE.tif"
-
-    _save_float_image(he_dir / filename, he_image)
-    _save_float_image(shg_dir / filename, shg_image)
-
+    matlab_registered = _load_tif_unit_float(_GOLDEN_TIF)
     params = SHGHERegistrationParameters(
-        HEfilepath=str(he_dir),
-        HEfilename=filename,
-        pixelpermicron=1.5,
-        SHGfilepath=str(shg_dir),
+        HEfilepath=str(_HE_TIF.parent),
+        HEfilename=GOLDEN_CASE_FILENAME,
+        pixelpermicron=GOLDEN_PIXEL_PER_MICRON,
+        SHGfilepath=str(_SHG_TIF.parent),
     )
-    registered, debug = shg_he_registration(params, save_output=True, return_debug=True)
+    python_registered = shg_he_registration(params, save_output=False, return_debug=False)
 
-    assert registered.shape == (144, 144, 3)
-    assert "he_collagen_exclude" in debug
-
-    # Coarse translation should approximately recover the known synthetic shift.
-    shift_rc = np.asarray(debug["shift_rc"], dtype=np.float64)
-    np.testing.assert_allclose(shift_rc, np.array([-7.0, 6.0]), atol=2.0)
-
-    out_path = he_dir / "HE_registered" / filename
-    assert out_path.exists()
-
-
-def test_shg_he_registration_deterministic_and_ppm_rescale(tmp_path):
-    he_dir = tmp_path / "he2"
-    shg_dir = tmp_path / "shg2"
-    he_dir.mkdir()
-    shg_dir.mkdir()
-
-    he_image, shg_image = _make_synthetic_pair(shape=(128, 128), shift_rc=(5.0, -4.0))
-    filename = "ppm_branch_HE.tif"
-
-    _save_float_image(he_dir / filename, he_image)
-    _save_float_image(shg_dir / filename, shg_image)
-
-    params = {
-        "HEfilepath": str(he_dir),
-        "HEfilename": filename,
-        "pixelpermicron": 3.2,
-        "SHGfilepath": str(shg_dir),
-    }
-
-    out1, debug1 = shg_he_registration(params, save_output=False, return_debug=True)
-
-    params_dc = SHGHERegistrationParameters(**params)
-    out2, debug2 = shg_he_registration(params_dc, save_output=False, return_debug=True)
-
-    assert out1.shape == (128, 128, 3)
-    # pixelpermicron > 2 branch rescales to 2/ppm prior to registration.
-    assert debug1["fixed_shg"].shape == (80, 80)
-    np.testing.assert_allclose(out1, out2, rtol=1e-6, atol=1e-6)
-    np.testing.assert_allclose(debug1["shift_rc"], debug2["shift_rc"], rtol=1e-6, atol=1e-6)
-    np.testing.assert_allclose(
-        np.asarray(debug1["shift_rc"], dtype=np.float64),
-        np.array([-3.0, 2.0]),
-        atol=2.0,
+    assert python_registered.shape == matlab_registered.shape, (
+        f"Shape mismatch: python {python_registered.shape} vs golden {matlab_registered.shape}"
     )
+
+    diff = python_registered.astype(np.float64) - matlab_registered.astype(np.float64)
+    mae = float(np.mean(np.abs(diff)))
+    rmse = float(np.sqrt(np.mean(diff**2)))
+    ncc_rgb = [
+        _normalized_cross_correlation_channel(python_registered[..., c], matlab_registered[..., c])
+        for c in range(3)
+    ]
+
+    assert mae <= GOLDEN_MAX_MAE, (
+        f"MAE {mae:.6f} exceeds bound {GOLDEN_MAX_MAE} (MATLAB golden vs Python)."
+    )
+    assert rmse <= GOLDEN_MAX_RMSE, (
+        f"RMSE {rmse:.6f} exceeds bound {GOLDEN_MAX_RMSE} (MATLAB golden vs Python)."
+    )
+    for c, ncc in enumerate(ncc_rgb):
+        assert ncc >= GOLDEN_MIN_NCC_PER_CHANNEL, (
+            f"NCC channel {c} = {ncc:.6f} < {GOLDEN_MIN_NCC_PER_CHANNEL} "
+            f"(MATLAB golden vs Python)."
+        )

@@ -110,6 +110,7 @@ def ensure_rgb(image: np.ndarray, axis: int = 2) -> np.ndarray:
 
 def ensure_grayscale(image: np.ndarray, axis: int = 2) -> np.ndarray:
     """Return a grayscale float64 image; RGB input is converted, 2D input is cast."""
+    # TODO: remove unnecessary casts
     arr = image
     if arr.ndim == 2:
         return arr.astype(np.float64)
@@ -120,15 +121,32 @@ def ensure_grayscale(image: np.ndarray, axis: int = 2) -> np.ndarray:
     raise ValueError(f"Expected 2D grayscale or RGB image, but got {arr.shape}.")
 
 
-def resize_like(image: np.ndarray, out_shape: tuple[int, int]) -> np.ndarray:
-    """Resize image to target (rows, cols) while preserving range."""
+def resize_like(
+    image: np.ndarray,
+    out_shape: tuple[int, int],
+    *,
+    order: int = 3,
+    anti_aliasing: bool | None = None,
+) -> np.ndarray:
+    """
+    Resize image to target (rows, cols) while preserving range.
+
+    Default ``order=3`` matches MATLAB ``imresize`` bicubic-like behavior more
+    closely than linear interpolation (order=1). When ``anti_aliasing`` is
+    omitted, it is enabled only when downsampling in either dimension, similar
+    to common ``imresize`` usage.
+    """
     if image.shape[:2] == out_shape:
         return image.copy()
+    if anti_aliasing is None:
+        anti_aliasing = any(
+            out_shape[i] < image.shape[i] for i in range(min(2, image.ndim))
+        )
     return transform.resize(
         image,
         output_shape=out_shape if image.ndim == 2 else (*out_shape, image.shape[2]),
-        order=1,
-        anti_aliasing=True,
+        order=order,
+        anti_aliasing=anti_aliasing,
         preserve_range=True,
     ).astype(np.float64)
 
@@ -145,22 +163,87 @@ def prepare_he_image(he: np.ndarray, pixel_per_micron: float) -> tuple[np.ndarra
     return he_rgb, pix
 
 
+def matlab_std_std_2d(channel: np.ndarray) -> float:
+    """
+    MATLAB ``std(std(r))`` for a 2-D channel image.
+
+    In MATLAB, ``std(r)`` for a matrix is the standard deviation along rows
+    (one value per column); the outer ``std`` reduces that vector to a scalar.
+    This differs from ``std(r(:))`` (global standard deviation) and matches
+    ``BDcreation_reg2.m`` / ``BDcreationHE2.m``.
+    """
+    if channel.ndim != 2:
+        raise ValueError(f"Expected 2-D channel, got shape {channel.shape}.")
+    if channel.size == 0:
+        return 0.0
+    # Sample std (ddof=1) matches MATLAB ``std`` for vectors/matrices.
+    col_std = np.std(channel, axis=0, ddof=1)
+    col_std = col_std[~np.isnan(col_std)]
+    if col_std.size <= 1:
+        flat = channel.ravel()
+        return float(np.std(flat, ddof=1)) if flat.size > 1 else 0.0
+    return float(np.std(col_std, ddof=1))
+
+
 def adjust_rgb_mean_std(rgb: np.ndarray, axis: int = 2) -> np.ndarray:
     """
-    Reproduce MATLAB imadjust with per-channel high input at mean + 2*std.
-    Equivalent to imadjust(RGB,[0;high],[0;1]) channel-wise.
+    Reproduce MATLAB ``imadjust`` with per-channel high input at ``mean + 2*std(std(r))``.
+
+    Matches ``imadjust(RGB,[0 0 0; HIGH_IN],[0 0 0; 1 1 1])`` in the CurveAlign
+    scripts (per-channel ``HIGH_IN`` capped at 1.0).
     """
     rgb_arr = np.moveaxis(rgb, axis, -1).astype(np.float64)
     if rgb_arr.ndim != 3 or rgb_arr.shape[-1] < 3:
+        # TODO: check dimension length and num of channel separately
         raise ValueError(f"Expected RGB image with at least 3 channels, got {rgb.shape}.")
 
     out = np.zeros_like(rgb_arr, dtype=np.float64)
     for ch in range(3):
         channel = rgb_arr[..., ch]
-        high = float(np.mean(channel) + 2.0 * np.std(channel))
+        std_std = matlab_std_std_2d(channel)
+        high = float(np.mean(channel) + 2.0 * std_std)
         high = min(max(high, 1e-8), 1.0)
         out[..., ch] = np.clip(channel / high, 0.0, 1.0)
     return out
+
+
+def prepare_registration_pair(
+    he_rgb: np.ndarray,
+    shg_gray: np.ndarray,
+    pixel_per_micron: float,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """
+    Match ``BDcreation_reg2.m`` image sizing (not ``BDcreationHE2.m``).
+
+    MATLAB::
+
+        if ppm > 2: fixedSHG = imresize(SHG, 2/ppm); ppm = 2
+        else: fixedSHG = SHG
+        RGB = imresize(HE, size(fixedSHG))
+
+    The working resolution is therefore **defined by SHG** after the ppm cap,
+    then H&E is forced to that grid. This differs from ``prepare_he_image``,
+    which only resamples HE (tumor pipeline).
+    """
+    pix = float(pixel_per_micron)
+    he_rgb = ensure_rgb(he_rgb)
+    g = np.asarray(shg_gray, dtype=np.float64)
+    if g.ndim == 3:
+        g = ensure_grayscale(g)
+    if g.ndim != 2:
+        raise ValueError(f"Expected 2-D SHG image, got shape {g.shape}.")
+
+    if pix > 2.0:
+        scale = 2.0 / pix
+        new_h = int(round(g.shape[0] * scale))
+        new_w = int(round(g.shape[1] * scale))
+        fixed_shg = resize_like(g, (new_h, new_w))
+        pix = 2.0
+    else:
+        fixed_shg = g
+
+    he_scaled = resize_like(he_rgb, fixed_shg.shape[:2])
+    return he_scaled, fixed_shg, pix
 
 
 def remove_small_components(mask: np.ndarray, min_size: int) -> np.ndarray:
@@ -188,6 +271,7 @@ def compute_otsu_threshold(image: np.ndarray) -> float:
     arr = image.astype(np.float64)
     if arr.size == 0:
         raise ValueError("Cannot compute Otsu threshold for empty image.")
+    # TODO: check tolerance value
     if np.allclose(arr, arr.flat[0]):
         raise ValueError(
             "Cannot compute Otsu threshold for homogeneous image "

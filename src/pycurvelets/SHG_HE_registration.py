@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+"""SHG↔H&E registration (``BDcreation_reg2.m``).
+
+Preprocessing matches the MATLAB script. **Registration** defaults to
+**SimpleITK** Mattes mutual information with a similarity stage plus affine
+refinement (same moving/fixed pair as MATLAB: collagen mask vs SHG), which
+tracks MATLAB ``imregconfig('multimodal')`` / ``imregtform`` much more closely
+than phase correlation + ECC. If SimpleITK is missing or registration fails,
+the code falls back to phase cross-correlation + OpenCV ``findTransformECC``.
+"""
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,10 +29,17 @@ from ._he_bdc_common import (
     make_nuclei_mask,
     matlab_area_open,
     normalize_array_to_unit_interval,
-    prepare_he_image,
+    prepare_registration_pair,
     resize_like,
     save_image_uint8,
     to_grayscale,
+)
+from ._shg_he_registration_sitk import (
+    build_fixed_sitk_image,
+    has_simpleitk,
+    register_collagen_to_shg_sitk,
+    warn_sitk_fallback,
+    warp_rgb_with_sitk_transform,
 )
 
 # Registration constants derived from MATLAB BDcreation_reg2 defaults/behavior.
@@ -187,12 +204,9 @@ def shg_he_registration(
     shg_gray = to_grayscale(shg)
     original_shg_shape = shg_gray.shape[:2]
 
-    he_scaled, pix_per_mic = prepare_he_image(he, p.pixelpermicron)
-    if float(p.pixelpermicron) > 2.0:
-        fixed_shg = resize_like(shg_gray, he_scaled.shape[:2])
-    else:
-        fixed_shg = shg_gray
-        he_scaled = resize_like(he_scaled, fixed_shg.shape[:2])
+    he_scaled, fixed_shg, pix_per_mic = prepare_registration_pair(
+        he, shg_gray, p.pixelpermicron
+    )
 
     he_adjusted = adjust_rgb_mean_std(he_scaled)
 
@@ -226,18 +240,43 @@ def shg_he_registration(
     )
     he_collagen_exclude = he_collagen_bw & bw_discard
 
-    shift_rc, affine_warp = _estimate_affine_refinement(
-        moving=he_collagen_exclude.astype(np.float64),
-        fixed=fixed_shg.astype(np.float64),
-    )
+    moving_f = he_collagen_exclude.astype(np.float64)
+    fixed_f = fixed_shg.astype(np.float64)
 
-    he_shifted = _shift_channels(he_scaled, shift_rc=shift_rc, channel_axis=-1)
-    registered_on_fixed = _warp_channels_affine(
-        he_shifted,
-        warp_matrix=affine_warp,
-        out_shape=fixed_shg.shape[:2],
-        channel_axis=-1,
-    )
+    # Diagnostic-only shift (matches legacy ECC path behavior; useful for tests/debug).
+    shift_rc, affine_warp = _estimate_affine_refinement(moving=moving_f, fixed=fixed_f)
+
+    registration_backend = "opencv_ecc"
+    registered_on_fixed: np.ndarray
+
+    if has_simpleitk():
+        try:
+            sitk_tx = register_collagen_to_shg_sitk(moving_f, fixed_f)
+            fixed_sitk = build_fixed_sitk_image(fixed_shg)
+            registered_on_fixed = warp_rgb_with_sitk_transform(
+                he_scaled.astype(np.float64),
+                fixed_sitk,
+                sitk_tx,
+                fill_value=WARP_BORDER_VALUE,
+            )
+            registration_backend = "simpleitk_mattes"
+        except Exception as exc:
+            warn_sitk_fallback(exc)
+            he_shifted = _shift_channels(he_scaled, shift_rc=shift_rc, channel_axis=-1)
+            registered_on_fixed = _warp_channels_affine(
+                he_shifted,
+                warp_matrix=affine_warp,
+                out_shape=fixed_shg.shape[:2],
+                channel_axis=-1,
+            )
+    else:
+        he_shifted = _shift_channels(he_scaled, shift_rc=shift_rc, channel_axis=-1)
+        registered_on_fixed = _warp_channels_affine(
+            he_shifted,
+            warp_matrix=affine_warp,
+            out_shape=fixed_shg.shape[:2],
+            channel_axis=-1,
+        )
 
     registered_img = resize_like(registered_on_fixed, original_shg_shape)
     registered_img = np.clip(registered_img, 0.0, 1.0)
@@ -250,9 +289,10 @@ def shg_he_registration(
     if not return_debug:
         return registered_img
 
-    debug: dict[str, np.ndarray] = {
+    debug: dict[str, Any] = {
         "shift_rc": shift_rc,
         "affine_warp": affine_warp,
+        "registration_backend": registration_backend,
     }
     if include_debug_images:
         debug.update(

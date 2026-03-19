@@ -21,6 +21,7 @@ dependencies = [
   "scikit-image>=0.25.0",
   "scikit-learn>=1.7.1",
   "scipy>=1.15.2",
+  "SimpleITK>=2.3.0",
 ]
 
 [dependency-groups]
