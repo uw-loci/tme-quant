@@ -58,6 +58,47 @@ from .segmentation import (
 if TYPE_CHECKING:
     import napari.viewer
 
+
+def _rgb_to_grayscale_luma(image: np.ndarray) -> np.ndarray:
+    """Convert last-axis RGB or RGBA to single-channel luma (Rec. 709 coefficients)."""
+    rgb = np.asarray(image[..., :3], dtype=np.float32)
+    return 0.2125 * rgb[..., 0] + 0.7154 * rgb[..., 1] + 0.0721 * rgb[..., 2]
+
+
+_ROI_SAVE_DIALOG_FILTERS = (
+    "JSON files (*.json);;"
+    "Fiji/ImageJ ROI (*.roi *.zip);;"
+    "StarDist ROI (*.roi *.zip);;"
+    "Label image mask (*.npy);;"
+    "QuPath annotations (*.geojson);;"
+    "CSV files (*.csv);;"
+    "TIFF mask (*.tif);;"
+    "All files (*)"
+)
+
+
+def _roi_save_format_kw(file_path: str, selected_filter: str) -> tuple[str, str]:
+    """Infer ``roi_manager.save_rois(..., format=...)`` and a short label from dialog state."""
+    sf = selected_filter or ""
+    if "JSON" in sf or file_path.endswith(".json"):
+        return "json", "JSON"
+    if "Fiji" in sf or (
+        file_path.endswith((".roi", ".zip")) and "StarDist" not in sf
+    ):
+        return "fiji", "Fiji/ImageJ"
+    if "StarDist" in sf:
+        return "stardist", "StarDist"
+    if "Label image" in sf or "Cellpose" in sf or file_path.endswith(".npy"):
+        return "label_image", "Label image"
+    if "QuPath" in sf or file_path.endswith(".geojson"):
+        return "qupath", "QuPath"
+    if "CSV" in sf or file_path.endswith(".csv"):
+        return "csv", "CSV"
+    if "TIFF" in sf or file_path.endswith((".tif", ".tiff")):
+        return "mask", "TIFF mask"
+    return "auto", "auto-detected"
+
+
 class BoundaryType(Enum):
     """How to treat image boundaries when running CurveAlign-style analysis.
 
@@ -595,6 +636,10 @@ class CurveAlignWidget(QWidget):
         except TypeError:
             pass  # If not connected, ignore
 
+    def _seg_method_label(self) -> str:
+        """Segmentation combo text without trailing ✓/✗ availability markers."""
+        return self.seg_method.currentText().split(" ✓")[0].split(" ✗")[0]
+
     def open_images(self):
         """Open a multi-file dialog, load images into napari (RGB helper + grayscale analysis layer), list them, and show the first."""
 
@@ -634,12 +679,7 @@ class CurveAlignWidget(QWidget):
                             print(f"Unable to display RGB layer for {filename}: {exc}")
 
                         # Convert RGB/RGBA to grayscale for analysis
-                        rgb = raw_image[..., :3].astype(np.float32)
-                        image_data = (
-                            0.2125 * rgb[..., 0]
-                            + 0.7154 * rgb[..., 1]
-                            + 0.0721 * rgb[..., 2]
-                        )
+                        image_data = _rgb_to_grayscale_luma(raw_image)
                     elif raw_image.ndim > 2 and raw_image.shape[0] > 1:
                         # Multi-page/stacked TIFF: take first plane
                         image_data = raw_image[0]
@@ -1558,7 +1598,7 @@ class CurveAlignWidget(QWidget):
     def _on_seg_method_changed(self):
         """Show threshold vs Cellpose vs StarDist option groups based on the combo box text."""
 
-        method_text = self.seg_method.currentText().split(" ✓")[0].split(" ✗")[0]
+        method_text = self._seg_method_label()
         
         # Hide all groups
         self.threshold_seg_group.setVisible(False)
@@ -1588,7 +1628,7 @@ class CurveAlignWidget(QWidget):
         
         # Get segmentation method
         try:
-            method_text = self.seg_method.currentText().split(" ✓")[0].split(" ✗")[0]
+            method_text = self._seg_method_label()
             print(f"Running {method_text} segmentation...")
             # Sync ROI context to this image before running
             self._set_active_image_context(image_layer)
@@ -1608,11 +1648,6 @@ class CurveAlignWidget(QWidget):
             print(f"Segmentation failed: {e}")
             import traceback
             traceback.print_exc()
-    
-    def _preview_segmentation(self):
-        """Deprecated alias: preview was merged with run; calls :meth:`_run_segmentation`."""
-
-        self._run_segmentation()
 
     def _segment_image_data(self, image: np.ndarray) -> Optional[np.ndarray]:
         """Convert input to 2D grayscale if needed, build :class:`SegmentationOptions`, call :func:`~.segmentation.segment_image`."""
@@ -1622,16 +1657,11 @@ class CurveAlignWidget(QWidget):
         image = np.asarray(image)
         if image.ndim > 2:
             if image.shape[-1] in (3, 4):
-                rgb = image[..., :3].astype(np.float32)
-                image = (
-                    0.2125 * rgb[..., 0]
-                    + 0.7154 * rgb[..., 1]
-                    + 0.0721 * rgb[..., 2]
-                )
+                image = _rgb_to_grayscale_luma(image)
             else:
                 image = image[0] if image.shape[0] < 10 else image
 
-        method_text = self.seg_method.currentText().split(" ✓")[0].split(" ✗")[0]
+        method_text = self._seg_method_label()
         if "Threshold" in method_text:
             method = SegmentationMethod.THRESHOLD
         elif "Cellpose" in method_text and "Cytoplasm" in method_text:
@@ -1672,7 +1702,7 @@ class CurveAlignWidget(QWidget):
         if labeled_mask is None:
             return None
         if add_labels and self._viewer:
-            method_text = self.seg_method.currentText().split(" ✓")[0].split(" ✗")[0]
+            method_text = self._seg_method_label()
             layer_name = f"{self._active_image_label() or image_layer.name}/seg/{method_text}"
             labels_layer = self._viewer.add_labels(
                 labeled_mask,
@@ -2521,6 +2551,12 @@ class CurveAlignWidget(QWidget):
         if parent:
             os.makedirs(parent, exist_ok=True)
 
+    def _write_rois_file(self, file_path: str, selected_filter: str, roi_ids: List[Any]) -> str:
+        """Call :meth:`roi_manager.save_rois` with inferred format; returns human-readable format name."""
+        fmt_kw, format_name = _roi_save_format_kw(file_path, selected_filter)
+        self.roi_manager.save_rois(file_path, roi_ids, format=fmt_kw)
+        return format_name
+
     def _save_roi(self):
         """Save selected ROIs (prompt to save all if none selected) using extension/filter to pick export format."""
 
@@ -2544,15 +2580,7 @@ class CurveAlignWidget(QWidget):
             return
         
         file_path, selected_filter = QFileDialog.getSaveFileName(
-            self, "Save ROI", self._get_roi_save_dir(), 
-            "JSON files (*.json);;"
-            "Fiji/ImageJ ROI (*.roi *.zip);;"
-            "StarDist ROI (*.roi *.zip);;"
-            "Label image mask (*.npy);;"
-            "QuPath annotations (*.geojson);;"
-            "CSV files (*.csv);;"
-            "TIFF mask (*.tif);;"
-            "All files (*)"
+            self, "Save ROI", self._get_roi_save_dir(), _ROI_SAVE_DIALOG_FILTERS
         )
         
         if not file_path:
@@ -2562,32 +2590,7 @@ class CurveAlignWidget(QWidget):
             # Use stored UserRole data instead of parsing text (which has colons)
             roi_ids = [item.data(Qt.UserRole) for item in selected]
             self._ensure_parent_dir(file_path)
-            
-            # Determine format from filter or extension
-            if "JSON" in selected_filter or file_path.endswith('.json'):
-                self.roi_manager.save_rois(file_path, roi_ids, format='json')
-                format_name = "JSON"
-            elif "Fiji" in selected_filter or (file_path.endswith(('.roi', '.zip')) and "StarDist" not in selected_filter):
-                self.roi_manager.save_rois(file_path, roi_ids, format='fiji')
-                format_name = "Fiji/ImageJ"
-            elif "StarDist" in selected_filter:
-                self.roi_manager.save_rois(file_path, roi_ids, format='stardist')
-                format_name = "StarDist"
-            elif "Label image" in selected_filter or "Cellpose" in selected_filter or file_path.endswith('.npy'):
-                self.roi_manager.save_rois(file_path, roi_ids, format='label_image')
-                format_name = "Label image"
-            elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
-                self.roi_manager.save_rois(file_path, roi_ids, format='qupath')
-                format_name = "QuPath"
-            elif "CSV" in selected_filter or file_path.endswith('.csv'):
-                self.roi_manager.save_rois(file_path, roi_ids, format='csv')
-                format_name = "CSV"
-            elif "TIFF" in selected_filter or file_path.endswith(('.tif', '.tiff')):
-                self.roi_manager.save_rois(file_path, roi_ids, format='mask')
-                format_name = "TIFF mask"
-            else:
-                self.roi_manager.save_rois(file_path, roi_ids, format='auto')
-                format_name = "auto-detected"
+            format_name = self._write_rois_file(file_path, selected_filter, roi_ids)
             
             print(f"Saved {len(roi_ids)} ROI(s) to {file_path} ({format_name} format)")
             QMessageBox.information(
@@ -2626,14 +2629,7 @@ class CurveAlignWidget(QWidget):
             self, 
             "Save All ROIs", 
             default_path,
-            "JSON files (*.json);;"
-            "Fiji/ImageJ ROI (*.roi *.zip);;"
-            "StarDist ROI (*.roi *.zip);;"
-            "Label image mask (*.npy);;"
-            "QuPath annotations (*.geojson);;"
-            "CSV files (*.csv);;"
-            "TIFF mask (*.tif);;"
-            "All files (*)"
+            _ROI_SAVE_DIALOG_FILTERS,
         )
         
         if not file_path:
@@ -2641,31 +2637,7 @@ class CurveAlignWidget(QWidget):
         
         try:
             self._ensure_parent_dir(file_path)
-            # Determine format from filter or extension
-            if "JSON" in selected_filter or file_path.endswith('.json'):
-                self.roi_manager.save_rois(file_path, all_roi_ids, format='json')
-                format_name = "JSON"
-            elif "Fiji" in selected_filter or (file_path.endswith(('.roi', '.zip')) and "StarDist" not in selected_filter):
-                self.roi_manager.save_rois(file_path, all_roi_ids, format='fiji')
-                format_name = "Fiji/ImageJ"
-            elif "StarDist" in selected_filter:
-                self.roi_manager.save_rois(file_path, all_roi_ids, format='stardist')
-                format_name = "StarDist"
-            elif "Label image" in selected_filter or "Cellpose" in selected_filter or file_path.endswith('.npy'):
-                self.roi_manager.save_rois(file_path, all_roi_ids, format='label_image')
-                format_name = "Label image"
-            elif "QuPath" in selected_filter or file_path.endswith('.geojson'):
-                self.roi_manager.save_rois(file_path, all_roi_ids, format='qupath')
-                format_name = "QuPath"
-            elif "CSV" in selected_filter or file_path.endswith('.csv'):
-                self.roi_manager.save_rois(file_path, all_roi_ids, format='csv')
-                format_name = "CSV"
-            elif "TIFF" in selected_filter or file_path.endswith(('.tif', '.tiff')):
-                self.roi_manager.save_rois(file_path, all_roi_ids, format='mask')
-                format_name = "TIFF mask"
-            else:
-                self.roi_manager.save_rois(file_path, all_roi_ids, format='auto')
-                format_name = "auto-detected"
+            format_name = self._write_rois_file(file_path, selected_filter, all_roi_ids)
 
             print(f"Saved {len(all_roi_ids)} ROI(s) to {file_path}")
             QMessageBox.information(
@@ -3012,15 +2984,10 @@ class CurveAlignWidget(QWidget):
                 continue
 
             data = self._prepare_analysis_image(layer.data)
-            mode = self.analysis_mode_combo.currentText()
+            methods = self._roi_analysis_methods_for_main_mode()
             for roi in rois:
-                if mode == "CT-FIRE":
-                    self.roi_manager.analyze_roi(roi.id, data, method=ROIAnalysisMethod.CTFIRE)
-                elif mode == "Both":
-                    self.roi_manager.analyze_roi(roi.id, data, method=ROIAnalysisMethod.CURVELETS)
-                    self.roi_manager.analyze_roi(roi.id, data, method=ROIAnalysisMethod.CTFIRE)
-                else:
-                    self.roi_manager.analyze_roi(roi.id, data, method=ROIAnalysisMethod.CURVELETS)
+                for method in methods:
+                    self.roi_manager.analyze_roi(roi.id, data, method=method)
 
             roi_ids = [roi.id for roi in rois]
             json_path = os.path.join(output_dir, f"{label}_rois.json")
@@ -3045,18 +3012,22 @@ class CurveAlignWidget(QWidget):
             "CurveAlign/CT-FIRE option panel will surface MATLAB-equivalent parameters here."
         )
 
+    def _roi_analysis_methods_for_main_mode(self) -> List[ROIAnalysisMethod]:
+        """Curvelets, CT-FIRE, or both, matching the Main tab analysis mode combo."""
+        mode = self.analysis_mode_combo.currentText()
+        if mode == "CT-FIRE":
+            return [ROIAnalysisMethod.CTFIRE]
+        if mode == "Both":
+            return [ROIAnalysisMethod.CURVELETS, ROIAnalysisMethod.CTFIRE]
+        return [ROIAnalysisMethod.CURVELETS]
+
     def _prepare_analysis_image(self, image: np.ndarray) -> np.ndarray:
         """Convert to 2D float32, RGB→grayscale, and normalize to [0, 1] by max for downstream analysis."""
 
         prepared = np.asarray(image)
         if prepared.ndim > 2:
             if prepared.shape[-1] in (3, 4):
-                rgb = prepared[..., :3].astype(np.float32)
-                prepared = (
-                    0.2125 * rgb[..., 0]
-                    + 0.7154 * rgb[..., 1]
-                    + 0.0721 * rgb[..., 2]
-                )
+                prepared = _rgb_to_grayscale_luma(prepared)
             else:
                 prepared = prepared[0]
         prepared = prepared.astype(np.float32, copy=False)
@@ -3227,8 +3198,7 @@ class CurveAlignWidget(QWidget):
         data = np.asarray(layer.data)
         if grayscale and data.ndim > 2:
             if data.shape[-1] in (3, 4):
-                rgb = data[..., :3].astype(np.float32)
-                data = 0.2125 * rgb[..., 0] + 0.7154 * rgb[..., 1] + 0.0721 * rgb[..., 2]
+                data = _rgb_to_grayscale_luma(data)
             else:
                 data = np.mean(data, axis=0)
         return data
