@@ -55,25 +55,40 @@ from .segmentation import (
     segment_image, masks_to_roi_data,
     check_available_methods, get_recommended_parameters
 )
-
 if TYPE_CHECKING:
     import napari.viewer
 
 class BoundaryType(Enum):
+    """How to treat image boundaries when running CurveAlign-style analysis.
+
+    Mirrors MATLAB-style boundary handling options exposed in the main tab.
+    """
+
     NO_BOUNDARY = "No boundary"
     TIFF_BOUNDARY = "Tiff boundary"
 
 
 class LogTab(Enum):
+    """Reserved tab indices for legacy or future log/output panels (not all may be wired in UI)."""
+
     SUMMARY = 0
     OPTIONS = 1
     LOG = 2
     FIJI = 3
     ROIS = 4
 
+
 class AdvancedParametersDialog(QDialog):
-    """Advanced parameters dialog with getter method"""
+    """Modal dialog for extra numeric parameters passed through to the analysis backend."""
+
     def __init__(self, parent=None):
+        """Build spin boxes for advanced parameters and OK/Cancel actions.
+
+        Parameters
+        ----------
+        parent : QWidget or None
+            Optional parent for window modality and lifetime.
+        """
         super().__init__(parent)
         self.setWindowTitle("Advanced Parameters")
         
@@ -114,10 +129,36 @@ class AdvancedParametersDialog(QDialog):
         
         self.setLayout(layout)
 
+    def get_parameters(self):
+        """Return the current advanced-parameter values as a plain dict.
+
+        Returns
+        -------
+        dict
+            Keys ``advanced_param1``, ``advanced_param2``, and ``iterations`` with
+            numeric values suitable for :attr:`CurveAlignWidget.advanced_params`.
+        """
+        return {
+            "advanced_param1": self.param1.value(),
+            "advanced_param2": self.param2.value(),
+            "iterations": self.param3.value(),
+        }
+
 
 class ROIMetricsDialog(QDialog):
-    """Dialog presenting ROI measurement statistics and histogram."""
+    """Show morphometric and intensity summary metrics for a single ROI, optionally with a histogram."""
+
     def __init__(self, metrics: Dict[str, Any], parent: Optional[QWidget] = None):
+        """Populate a two-column table from ``metrics`` and add an intensity histogram if present.
+
+        Parameters
+        ----------
+        metrics : dict
+            Must include ``roi_id`` for the title; may include ``histogram`` with
+            ``bins`` and ``counts`` for the optional bar plot.
+        parent : QWidget or None
+            Optional parent widget.
+        """
         super().__init__(parent)
         self.setWindowTitle(f"ROI {metrics.get('roi_id')} Measurements")
         self.metrics = metrics
@@ -165,6 +206,7 @@ class ROIMetricsDialog(QDialog):
         layout.addWidget(button_box)
 
     def _export_metrics(self):
+        """Write all scalar metrics (excluding the histogram array data) to a CSV file."""
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Export ROI Metrics",
@@ -176,29 +218,36 @@ class ROIMetricsDialog(QDialog):
         rows = [(k, v) for k, v in self.metrics.items() if k != "histogram"]
         df = pd.DataFrame(rows, columns=["Metric", "Value"])
         df.to_csv(path, index=False)
-    
-    def get_parameters(self):
-        """Return advanced parameters as a dictionary"""
-        return {
-            "advanced_param1": self.param1.value(),
-            "advanced_param2": self.param2.value(),
-            "iterations": self.param3.value()
-        }
+
 
 class ResultsTableModel(QAbstractTableModel):
-    """Table model for displaying measurement results"""
+    """Qt model backing :class:`QTableView` for a rectangular :class:`pandas.DataFrame`."""
+
     def __init__(self, data, parent=None):
+        """Store the dataframe and derive column headers from :attr:`data.columns`.
+
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            Table contents; must not be mutated externally without calling layoutChanged.
+        parent : QObject or None
+            Parent for Qt object ownership.
+        """
         super().__init__(parent)
         self._data = data
         self._headers = list(data.columns) if data is not None else []
     
     def rowCount(self, parent=None):
+        """Return the number of data rows (Qt table model API)."""
         return len(self._data)
     
     def columnCount(self, parent=None):
+        """Return the number of columns from the dataframe header list."""
         return len(self._headers)
     
     def data(self, index, role=Qt.DisplayRole):
+        """Return cell text for ``DisplayRole`` or a light striping color for ``BackgroundRole``."""
+
         if not index.isValid():
             return None
         
@@ -214,6 +263,8 @@ class ResultsTableModel(QAbstractTableModel):
         return None
     
     def headerData(self, section, orientation, role=Qt.DisplayRole):
+        """Return column names for the horizontal header or 1-based row indices for the vertical header."""
+
         if role != Qt.DisplayRole:
             return None
             
@@ -223,8 +274,18 @@ class ResultsTableModel(QAbstractTableModel):
             return str(section + 1)
 
 class ResultsDialog(QDialog):
-    """Dialog to display measurement results in a table"""
+    """Read-only dialog showing a dataframe in a :class:`QTableView` with an OK button."""
+
     def __init__(self, data, parent=None):
+        """Attach a :class:`ResultsTableModel` to a stretched table view.
+
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            Rows and columns to display.
+        parent : QWidget or None
+            Optional parent widget.
+        """
         super().__init__(parent)
         self.setWindowTitle("Analysis Results")
         self.setMinimumSize(600, 400)
@@ -252,9 +313,18 @@ class ResultsDialog(QDialog):
 
 
 class MetricsDialog(QDialog):
-    """Dialog for displaying ROI measurements with export support."""
+    """Tabular ROI measurements with an extra action to export the underlying dataframe to CSV."""
 
     def __init__(self, data: pd.DataFrame, parent=None):
+        """Same layout as :class:`ResultsDialog` but titled for measurements and with CSV export.
+
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            Per-ROI or per-metric table to show and optionally export.
+        parent : QWidget or None
+            Optional parent widget.
+        """
         super().__init__(parent)
         self.setWindowTitle("ROI Measurements")
         self.df = data
@@ -275,13 +345,25 @@ class MetricsDialog(QDialog):
         self.setLayout(layout)
 
     def _export_csv(self):
+        """Save :attr:`df` to a user-chosen path using :meth:`pandas.DataFrame.to_csv`."""
         path, _ = QFileDialog.getSaveFileName(self, "Export Measurements", "", "CSV Files (*.csv)")
         if path:
             self.df.to_csv(path, index=False)
 
 class CurveAlignWidget(QWidget):
-    """Main CurveAlign widget implemented with pure Qt"""
+    """Napari dock widget for CurveAlign: load images, preprocess, segment, manage ROIs, and run analysis."""
+
     def __init__(self, viewer: "napari.viewer.Viewer" = None, parent=None):
+        """Build tabbed UI (Main, Preprocessing, Segmentation, ROI Manager, Post-Processing) and wire signals.
+
+        Parameters
+        ----------
+        viewer : napari.viewer.Viewer or None
+            Viewer instance; if omitted, :attr:`viewer` resolves lazily via :func:`napari.current_viewer`
+            or creates a new viewer.
+        parent : QWidget or None
+            Optional parent widget.
+        """
         super().__init__(parent)
         
         # Apply style to center text in all buttons
@@ -466,7 +548,8 @@ class CurveAlignWidget(QWidget):
     
     @property
     def viewer(self):
-        """Get the current napari viewer instance"""
+        """Lazy napari viewer: use stored ``_viewer``, else current viewer, else create one and connect events."""
+
         if self._viewer is None:
             # Try to get the current viewer
             from napari import current_viewer
@@ -486,7 +569,8 @@ class CurveAlignWidget(QWidget):
     
     @property
     def current_image_shape(self):
-        """Get current image shape from viewer."""
+        """``(height, width)`` of the first layer in the viewer, or ``None`` if unavailable."""
+
         if self.viewer and len(self.viewer.layers) > 0:
             layer = self.viewer.layers[0]
             if hasattr(layer, 'data'):
@@ -494,14 +578,16 @@ class CurveAlignWidget(QWidget):
         return None
     
     def connect_viewer_events(self):
-        """Connect to viewer events for synchronization"""
+        """Subscribe to layer insert/remove and active-layer changes on :attr:`viewer`."""
+
         # Connect to layer events
         self.viewer.layers.events.inserted.connect(self.on_layer_added)
         self.viewer.layers.events.removed.connect(self.on_layer_removed)
         self.viewer.layers.selection.events.active.connect(self.on_active_layer_changed)
     
     def disconnect_viewer_events(self):
-        """Disconnect from viewer events"""
+        """Unsubscribe from viewer layer events; ignores errors if hooks were never connected."""
+
         try:
             self.viewer.layers.events.inserted.disconnect(self.on_layer_added)
             self.viewer.layers.events.removed.disconnect(self.on_layer_removed)
@@ -510,7 +596,8 @@ class CurveAlignWidget(QWidget):
             pass  # If not connected, ignore
 
     def open_images(self):
-        """Open image files and add to list"""
+        """Open a multi-file dialog, load images into napari (RGB helper + grayscale analysis layer), list them, and show the first."""
+
         paths, _ = QFileDialog.getOpenFileNames(
             self,
             "Select images",
@@ -589,7 +676,8 @@ class CurveAlignWidget(QWidget):
                 self._show_selected_image()
 
     def on_image_selected(self):
-        """Handle image selection change in widget"""
+        """When the list widget selection changes, update which image layer is visible (unless ignored)."""
+
         if self.ignore_selection_events:
             return
             
@@ -598,21 +686,24 @@ class CurveAlignWidget(QWidget):
             self._show_selected_image()
 
     def _active_image_label(self) -> Optional[str]:
-        """Return the filename/label for the currently selected image."""
+        """Filename text of the currently selected row in the image list, or ``None``."""
+
         selected_items = self.image_list.selectedItems()
         if not selected_items:
             return None
         return selected_items[0].text()
 
     def _selected_image_layer(self) -> Optional[Any]:
-        """Return the image layer corresponding to the image list selection."""
+        """The napari image layer object for the list selection, if it exists in :attr:`image_layers`."""
+
         label = self._active_image_label()
         if label and label in self.image_layers:
             return self.image_layers[label]
         return None
 
     def _set_active_image_context(self, layer: Optional[Any] = None):
-        """Sync ROI manager with the active image label and shape."""
+        """Tell :attr:`roi_manager` the active filename and 2D shape, then refresh shapes and ROI list UI."""
+
         label = self._active_image_label()
         if layer is None and self.viewer:
             layer = self.viewer.layers.selection.active
@@ -639,7 +730,8 @@ class CurveAlignWidget(QWidget):
         self._update_roi_list()
 
     def _show_selected_image(self):
-        """Display the currently selected image (and linked RGB layer) in the viewer."""
+        """Hide other opened images, show RGB companion if any, select layer, reset view, sync ROI context."""
+
         selected_items = self.image_list.selectedItems()
         if not selected_items or not self.viewer:
             return
@@ -669,7 +761,8 @@ class CurveAlignWidget(QWidget):
             self.ignore_selection_events = False
 
     def _handle_roi_overlay(self, payload: Optional[Dict[str, Any]] = None):
-        """Render a simple overlay layer for analyzed ROIs."""
+        """Callback for :class:`~.roi_manager.ROIManager`: add/replace a semi-transparent mask overlay in the viewer."""
+
         if not payload or not self.viewer:
             return
         roi_id = payload.get("roi_id")
@@ -691,7 +784,8 @@ class CurveAlignWidget(QWidget):
         )
 
     def on_active_layer_changed(self, event):
-        """Handle active layer change in napari viewer"""
+        """If the user selects a CurveAlign image layer, mirror that selection in the image list and sync ROIs."""
+
         if self.ignore_selection_events:
             return
             
@@ -722,7 +816,8 @@ class CurveAlignWidget(QWidget):
                         break
 
     def on_layer_added(self, event):
-        """Handle layer added to viewer"""
+        """Re-hook the ROIs shapes layer if recreated; register new image layers that carry ``curvealign_path`` metadata."""
+
         layer = event.value
         
         # Check if it's our shapes layer being re-added
@@ -748,7 +843,8 @@ class CurveAlignWidget(QWidget):
                 layer.visible = False
 
     def _clip_coords_to_active_image_bounds(self, coords):
-        """Clamp coordinates to the active image bounds."""
+        """Clamp row/col coordinates to ``roi_manager.current_image_shape`` (used when mapping world→data)."""
+
         image_shape = self.roi_manager.current_image_shape
         if not image_shape or coords is None:
             return coords
@@ -773,7 +869,8 @@ class CurveAlignWidget(QWidget):
         return coords
 
     def _ensure_shapes_layer_bounds_clamp(self, layer: napari.layers.Shapes) -> None:
-        """Ensure the shapes layer clamps world->data to image bounds."""
+        """Wrap ``layer.world_to_data`` so coordinates stay inside the active image (once per layer)."""
+
         if layer is None:
             return
         if getattr(layer, "_curvealign_world_to_data_clamped", False):
@@ -781,6 +878,8 @@ class CurveAlignWidget(QWidget):
         original_world_to_data = layer.world_to_data
 
         def clamped_world_to_data(*args, **kwargs):
+            """Forward to the original ``world_to_data`` then apply :meth:`_clip_coords_to_active_image_bounds`."""
+
             coords = original_world_to_data(*args, **kwargs)
             return self._clip_coords_to_active_image_bounds(coords)
 
@@ -789,7 +888,8 @@ class CurveAlignWidget(QWidget):
         layer._curvealign_world_to_data_clamped = True
 
     def _reset_shapes_drawing_state(self, layer: napari.layers.Shapes) -> None:
-        """Stop any in-progress drawing so shape modes can switch cleanly."""
+        """Force-finish drawing and clear napari-internal drag state before switching ROI tools."""
+
         if layer is None:
             return
         try:
@@ -816,7 +916,8 @@ class CurveAlignWidget(QWidget):
             pass
 
     def _recreate_shapes_layer(self) -> Optional[napari.layers.Shapes]:
-        """Recreate the ROI shapes layer to clear stuck modes."""
+        """Remove and rebuild the ``ROIs`` shapes layer; used when freehand mode gets stuck."""
+
         if not self.viewer:
             return None
         old_layer = self.roi_manager.shapes_layer
@@ -834,14 +935,16 @@ class CurveAlignWidget(QWidget):
 
     @staticmethod
     def _normalize_layer_mode(mode_value: Any) -> str:
-        """Return a normalized mode string for comparisons."""
+        """Return a string mode name, whether napari passed an enum or raw string."""
+
         try:
             return mode_value.value
         except Exception:
             return str(mode_value)
 
     def _clip_shapes_to_active_image_bounds(self, layer: napari.layers.Shapes) -> bool:
-        """Clamp shape coordinates to the active image bounds."""
+        """Clamp all 2D path vertices to the image rectangle; returns whether any vertex moved."""
+
         image_shape = self.roi_manager.current_image_shape
         if not image_shape:
             return False
@@ -883,7 +986,8 @@ class CurveAlignWidget(QWidget):
         return True
 
     def _connect_shapes_events(self, layer):
-        """Connect events for a shapes layer."""
+        """Install bounds clamp, freehand cursor guard, and ``data`` callback to sync new shapes into ``roi_manager``."""
+
         # Check attribute existence
         if not hasattr(self, '_clipping_shapes'):
             self._clipping_shapes = False
@@ -895,6 +999,8 @@ class CurveAlignWidget(QWidget):
 
         # Define the callback here to have access to self methods
         def on_data_change(event):
+            """On shapes data edits: clip, detect new polygons, register ROIs, or resync if shapes were deleted."""
+
             # Prevent recursion
             if hasattr(self, '_syncing_shapes') and self._syncing_shapes:
                 return
@@ -959,13 +1065,16 @@ class CurveAlignWidget(QWidget):
         layer._curvealign_last_shape_count = len(layer.data)
 
     def _ensure_freehand_cursor_guard(self, layer: napari.layers.Shapes) -> None:
-        """Ensure freehand modes always have a last cursor position."""
+        """Mitigate napari bug: ensure ``_last_cursor_position`` is set during freehand modes."""
+
         if layer is None:
             return
         if getattr(layer, "_curvealign_freehand_guard", False):
             return
 
         def guard_last_cursor_position(layer, event):
+            """If in path/lasso mode with no cursor position yet, seed it from the mouse event."""
+
             try:
                 mode_value = self._normalize_layer_mode(getattr(layer, "mode", ""))
                 if mode_value in {"add_path", "add_polygon_lasso"} and layer._last_cursor_position is None:
@@ -977,7 +1086,8 @@ class CurveAlignWidget(QWidget):
         layer._curvealign_freehand_guard = True
 
     def _sync_pending_shapes(self, layer: napari.layers.Shapes) -> None:
-        """Sync newly finished shapes that have not been added as ROIs yet."""
+        """Register any shapes added since ``_curvealign_last_shape_count`` (tool-switch safety net)."""
+
         if layer is None:
             return
         last_count = getattr(layer, "_curvealign_last_shape_count", 0)
@@ -1002,7 +1112,8 @@ class CurveAlignWidget(QWidget):
             self._syncing_shapes = False
 
     def on_layer_removed(self, event):
-        """Handle layer removed from viewer"""
+        """Drop removed CurveAlign image layers from :attr:`image_layers` and the list widget."""
+
         layer = event.value
         if 'curvealign_path' in layer.metadata:
             # This is one of our layers
@@ -1021,7 +1132,8 @@ class CurveAlignWidget(QWidget):
                         break
 
     def show_advanced(self):
-        """Show advanced parameters dialog and save parameters"""
+        """Open :class:`AdvancedParametersDialog` and copy values into :attr:`advanced_params` on accept."""
+
         dialog = AdvancedParametersDialog(self)
         # Set current values
         dialog.param1.setValue(self.advanced_params["advanced_param1"])
@@ -1033,7 +1145,8 @@ class CurveAlignWidget(QWidget):
             self.advanced_params = dialog.get_parameters()
 
     def reset_parameters(self):
-        """Reset parameters to default values"""
+        """Restore main-tab defaults, clear the image list, and close any separate results viewer."""
+
         self.analysis_mode_combo.setCurrentText("Curvelets")
         self.boundary_combo.setCurrentText(BoundaryType.NO_BOUNDARY.value)
         self.curve_threshold.setValue(0.001)
@@ -1062,7 +1175,8 @@ class CurveAlignWidget(QWidget):
         self.results_layers = {}
 
     def run_analysis(self):
-        """Run image analysis and display results"""
+        """Run CurveAlign/CT-FIRE on the selected file with preprocessing from the Preprocessing tab."""
+
         if not self.image_paths:
             print("Please select images first!")
             return
@@ -1146,7 +1260,8 @@ class CurveAlignWidget(QWidget):
 
     def display_results(self, overlay_img: np.ndarray, heatmap_img: np.ndarray, 
                        measurements: pd.DataFrame, image_name: str):
-        """Display analysis results using napari backend."""
+        """Add overlay and angle-map layers to the main or a dedicated viewer and show the measurements dialog."""
+
         # Use the main viewer if available, otherwise create new one
         if self.viewer:
             target_viewer = self.viewer
@@ -1186,13 +1301,15 @@ class CurveAlignWidget(QWidget):
             self.show_measurements_table(measurements, image_name)
 
     def show_measurements_table(self, measurements: pd.DataFrame, image_name: str):
-        """Display measurements in a table dialog"""
+        """Display ``measurements`` in a :class:`ResultsDialog` titled for ``image_name``."""
+
         dialog = ResultsDialog(measurements, self)
         dialog.setWindowTitle(f"Measurements - {image_name}")
         dialog.exec_()
     
     def closeEvent(self, event):
-        """Clean up when widget is closed"""
+        """Disconnect napari hooks and close the auxiliary results viewer before delegating to Qt."""
+
         self.disconnect_viewer_events()
         
         # Close results viewer if open
@@ -1205,7 +1322,8 @@ class CurveAlignWidget(QWidget):
         super().closeEvent(event)
 
     def _setup_preprocessing_tab(self):
-        """Setup preprocessing tab with filter options."""
+        """Build optional tubeness/Frangi/threshold controls used when :meth:`run_analysis` loads the image."""
+
         layout = QVBoxLayout()
         
         # Bio-Formats import
@@ -1274,7 +1392,8 @@ class CurveAlignWidget(QWidget):
         self.preprocessing_tab.setLayout(layout)
     
     def _setup_segmentation_tab(self):
-        """Setup automated segmentation tab for ROI generation."""
+        """Build segmentation method UI (threshold, Cellpose, StarDist), run button, and layer-visibility helpers."""
+
         layout = QVBoxLayout()
         
         # Check available methods
@@ -1437,7 +1556,8 @@ class CurveAlignWidget(QWidget):
         self.seg_method.currentIndexChanged.connect(self._on_seg_method_changed)
     
     def _on_seg_method_changed(self):
-        """Show/hide segmentation options based on selected method."""
+        """Show threshold vs Cellpose vs StarDist option groups based on the combo box text."""
+
         method_text = self.seg_method.currentText().split(" ✓")[0].split(" ✗")[0]
         
         # Hide all groups
@@ -1454,7 +1574,8 @@ class CurveAlignWidget(QWidget):
             self.stardist_group.setVisible(True)
     
     def _run_segmentation(self):
-        """Run segmentation on current image."""
+        """Segment the active image layer and add a labels layer; prints object count or errors."""
+
         if not self._viewer or len(self._viewer.layers) == 0:
             print("No image loaded. Please open an image first.")
             return
@@ -1489,11 +1610,13 @@ class CurveAlignWidget(QWidget):
             traceback.print_exc()
     
     def _preview_segmentation(self):
-        """Preview segmentation with current settings (same as run)."""
+        """Deprecated alias: preview was merged with run; calls :meth:`_run_segmentation`."""
+
         self._run_segmentation()
 
     def _segment_image_data(self, image: np.ndarray) -> Optional[np.ndarray]:
-        """Run segmentation on a raw image array and return labeled mask."""
+        """Convert input to 2D grayscale if needed, build :class:`SegmentationOptions`, call :func:`~.segmentation.segment_image`."""
+
         if image is None:
             return None
         image = np.asarray(image)
@@ -1541,7 +1664,8 @@ class CurveAlignWidget(QWidget):
         return segment_image(image, options)
 
     def _run_segmentation_on_layer(self, image_layer, add_labels: bool = True) -> Optional[np.ndarray]:
-        """Run segmentation on a specific image layer."""
+        """Run :meth:`_segment_image_data` on ``image_layer.data``, optionally add labels and cache per-image masks."""
+
         if image_layer is None or not hasattr(image_layer, "data"):
             return None
         labeled_mask = self._segment_image_data(image_layer.data)
@@ -1566,7 +1690,8 @@ class CurveAlignWidget(QWidget):
         return labeled_mask
     
     def _create_rois_from_segmentation(self):
-        """Convert last segmentation mask to ROIs."""
+        """Convert the selected labels layer or last cached mask into polygon ROIs and register cell objects."""
+
         try:
             # Prefer the currently selected labels layer; fall back to per-image cache, then last global
             mask = None
@@ -1633,7 +1758,8 @@ class CurveAlignWidget(QWidget):
             traceback.print_exc()
     
     def _setup_roi_tab(self):
-        """Setup ROI Manager tab."""
+        """Lay out ROI drawing, import/export, analysis buttons, Fiji bridge, annotation/object panels, and post tab."""
+
         layout = QHBoxLayout()
         left_panel = QVBoxLayout()
         
@@ -1816,6 +1942,8 @@ class CurveAlignWidget(QWidget):
         self.pull_fiji_btn.clicked.connect(self._pull_rois_from_fiji)
         
     def _build_annotation_group(self) -> QGroupBox:
+        """Construct the "Region Analysis" panel: tumor/cell/fiber typing, detection, TACS, and wiring."""
+
         group = QGroupBox("Region Analysis (Advanced)")
         group.setToolTip("Advanced feature: Use drawn ROIs as boundary regions (e.g., tumor areas) to detect objects within them")
         layout = QVBoxLayout()
@@ -1906,6 +2034,8 @@ class CurveAlignWidget(QWidget):
         return group
 
     def _build_roi_details_group(self) -> QGroupBox:
+        """Create read-only labels for type, source, area, centroid, status, and analysis summary."""
+
         group = QGroupBox("ROI Details")
         layout = QVBoxLayout()
         self.roi_detail_labels = {}
@@ -1920,6 +2050,8 @@ class CurveAlignWidget(QWidget):
         return group
 
     def _build_object_group(self) -> QGroupBox:
+        """Create the detected-objects list, kind filter combo, and "Set Annotation" action."""
+
         group = QGroupBox("Objects")
         layout = QVBoxLayout()
         
@@ -1949,6 +2081,8 @@ class CurveAlignWidget(QWidget):
         return group
 
     def _on_roi_list_selection(self):
+        """Update ROI detail labels, optional highlight, post tab, and region label when list selection changes."""
+
         selected = self.roi_list.selectedItems()
         if not selected:
             self._update_roi_details(None)
@@ -1970,6 +2104,8 @@ class CurveAlignWidget(QWidget):
         self._sync_region_label()
 
     def _roi_list_context_menu(self, pos):
+        """Show rename/delete/analyze actions for the row under ``pos`` (viewport coordinates)."""
+
         menu = QMenu(self.roi_list)
         rename_action = menu.addAction("Rename ROI")
         delete_action = menu.addAction("Delete ROI")
@@ -1995,6 +2131,8 @@ class CurveAlignWidget(QWidget):
             self._analyze_roi_by_id(roi_id, ctfire=True)
 
     def _rename_roi_dialog(self, roi_id: int):
+        """Prompt for a new ROI name via :class:`QInputDialog` and refresh the list."""
+
         roi = self.roi_manager.get_roi(roi_id)
         if roi is None:
             return
@@ -2004,6 +2142,8 @@ class CurveAlignWidget(QWidget):
             self._update_roi_list()
 
     def _update_roi_details(self, roi_id: Optional[int]):
+        """Fill :attr:`roi_detail_labels` from :meth:`roi_manager.get_roi_summary` or clear to ``'-'``."""
+
         if roi_id is None:
             for label in self.roi_detail_labels.values():
                 label.setText("-")
@@ -2026,7 +2166,8 @@ class CurveAlignWidget(QWidget):
         self.roi_detail_labels["analysis"].setText(analysis_text.strip())
 
     def _ensure_roi_viewer(self):
-        """Make sure ROI manager is connected to the active viewer."""
+        """Validate viewer presence, sync ROI manager shape, flush pending shapes, and reconnect events."""
+
         viewer = self.viewer
         if viewer is None:
             raise RuntimeError("Napari viewer is not available")
@@ -2053,7 +2194,8 @@ class CurveAlignWidget(QWidget):
         return viewer
 
     def _exit_roi_drawing_mode(self):
-        """Exit ROI drawing mode and return to selection."""
+        """Finish any in-progress shape, sync ROIs, and set the shapes layer to ``select`` mode."""
+
         if not self.viewer:
             return
         layer = self.roi_manager.shapes_layer or self.roi_manager.create_shapes_layer()
@@ -2066,7 +2208,8 @@ class CurveAlignWidget(QWidget):
             print(f"Warning: could not exit drawing mode cleanly: {exc}")
 
     def _convert_roi_to_annotation(self):
-        """Convert selected ROIs from main list into analysis regions."""
+        """Assign :attr:`annotation_type_combo` region type to all selected ROIs (tumor/cell/fiber/custom)."""
+
         roi_ids = self._selected_roi_ids()
         
         if not roi_ids:
@@ -2088,7 +2231,8 @@ class CurveAlignWidget(QWidget):
         self._update_roi_list()
 
     def _delete_annotation(self):
-        """Remove the region designation (reset to custom_annotation)."""
+        """Reset selected ROIs' ``annotation_type`` to ``custom_annotation`` after confirmation."""
+
         roi_ids = self._selected_roi_ids()
         if not roi_ids:
             QMessageBox.information(self, "No ROI Selected", "Select ROI(s) from the 'ROI List' to remove region type.")
@@ -2109,7 +2253,8 @@ class CurveAlignWidget(QWidget):
             self._update_roi_list()
 
     def _detect_objects_in_annotation(self):
-        """Detect objects that fall within the selected annotation."""
+        """Run :meth:`roi_manager.detect_objects_in_roi` for the selected boundary ROI and refresh object list."""
+
         roi_id = self._selected_annotation_id()
         if roi_id is None:
             QMessageBox.information(self, "Select Region", "Please select a region from the 'ROI List'.")
@@ -2144,7 +2289,8 @@ class CurveAlignWidget(QWidget):
             print(f"Object detection failed: {exc}")
 
     def _set_objects_as_annotation(self):
-        """Convert selected objects to annotations."""
+        """Promote selected detected objects to ROIs with the current combo annotation type."""
+
         items = self.object_list.selectedItems()
         if not items:
             return
@@ -2155,20 +2301,23 @@ class CurveAlignWidget(QWidget):
         self._update_roi_list()
 
     def _on_annotation_selected(self):
-        """Highlight annotation within napari when selected."""
+        """Reserved callback to highlight a region ROI (not wired; list changes use :meth:`_on_roi_list_selection`)."""
+
         roi_id = self._selected_annotation_id()
         if roi_id is None:
             return
         self.roi_manager.highlight_roi(roi_id)
 
     def _on_object_selected(self):
-        """Highlight selected objects."""
+        """Highlight detected objects when their list selection changes."""
+
         object_ids = [item.data(Qt.UserRole) for item in self.object_list.selectedItems()]
         if object_ids:
             self.roi_manager.highlight_objects(object_ids)
 
     def _show_active_image_layers(self):
-        """Show only layers belonging to the active image (and hide others)."""
+        """Set visibility so only the current image (and its RGB/segmentation children) stay visible."""
+
         label = self._active_image_label()
         if not self.viewer or not label:
             return
@@ -2180,14 +2329,16 @@ class CurveAlignWidget(QWidget):
             lyr.visible = is_parent or is_child
 
     def _show_all_layers(self):
-        """Show all layers again."""
+        """Make every napari layer visible (debugging / comparison)."""
+
         if not self.viewer:
             return
         for lyr in list(self.viewer.layers):
             lyr.visible = True
 
     def _on_object_filter_changed(self):
-        """Update object visibility based on filter dropdown."""
+        """Update ``roi_manager`` object display filter from the combo and refresh the object list."""
+
         types = self._object_filter_types()
         if types:
             self.roi_manager.set_object_display_filter(types)
@@ -2196,7 +2347,8 @@ class CurveAlignWidget(QWidget):
         self._update_object_list()
 
     def _object_filter_types(self) -> List[str]:
-        """Map filter dropdown selection to object type list."""
+        """Map combo box text to canonical object kind strings for the ROI manager."""
+
         mapping = {
             "Cell": ["cell"],
             "Fiber": ["fiber"],
@@ -2207,14 +2359,16 @@ class CurveAlignWidget(QWidget):
         return mapping.get(self.object_filter_combo.currentText(), ["cell", "fiber"])
 
     def _selected_annotation_id(self) -> Optional[int]:
-        """Return currently selected ROI id from the main list."""
+        """ROI id from the first selected ROI list item (used for TACS / region workflows)."""
+
         items = self.roi_list.selectedItems()
         if not items:
             return None
         return self._roi_id_from_item(items[0])
 
     def _update_object_list(self, object_ids: Optional[Sequence[int]] = None):
-        """Refresh object list display."""
+        """Repopulate ``object_list`` from explicit ids or from filtered :meth:`roi_manager.get_objects`."""
+
         if not hasattr(self, "object_list"):
             return
         self.object_list.clear()
@@ -2233,6 +2387,8 @@ class CurveAlignWidget(QWidget):
         self._sync_post_panel(update_plots=self._post_tab_active())
     
     def _roi_id_from_item(self, item: QListWidgetItem) -> Optional[int]:
+        """Read ``Qt.UserRole`` ROI id or parse the leading ``"<id>:"`` prefix from list text."""
+
         roi_id = item.data(Qt.UserRole)
         if roi_id is None:
             try:
@@ -2242,7 +2398,8 @@ class CurveAlignWidget(QWidget):
         return roi_id
 
     def _create_roi(self, shape: ROIShape):
-        """Create ROI of specified shape."""
+        """Put the shapes layer into the napari drawing mode for ``shape`` and ensure event sync is active."""
+
         try:
             self._ensure_roi_viewer()
         except RuntimeError as exc:
@@ -2316,6 +2473,8 @@ class CurveAlignWidget(QWidget):
             # This is a workaround for napari's sticky "add_polygon" mode
             @layer.bind_key('Escape', overwrite=True)
             def finish_drawing(layer):
+                """Commit the current polygon by switching the shapes layer to ``select`` mode."""
+
                 # Finishing the shape will trigger the data event which adds the ROI
                 # We then manually toggle mode to 'select' and back to 'add_polygon' if desired
                 # But our auto-sync logic generally handles the "add to list" part.
@@ -2329,11 +2488,8 @@ class CurveAlignWidget(QWidget):
                      pass 
         
     def _get_roi_save_dir(self) -> str:
-        """Get a suggested ROI save directory for the current image.
+        """Default directory ``.../ROI_management/<stem>/`` next to the current image, or home if unavailable."""
 
-        This method does not create directories. We only create paths after the
-        user confirms a save destination.
-        """
         if not self.image_paths or not self.current_image_label:
             return os.path.expanduser("~")
             
@@ -2359,13 +2515,15 @@ class CurveAlignWidget(QWidget):
 
     @staticmethod
     def _ensure_parent_dir(file_path: str) -> None:
-        """Create the destination parent directory for a save path."""
+        """Create the parent directory of ``file_path`` if needed."""
+
         parent = os.path.dirname(file_path)
         if parent:
             os.makedirs(parent, exist_ok=True)
 
     def _save_roi(self):
-        """Save selected ROI(s) in multiple formats."""
+        """Save selected ROIs (prompt to save all if none selected) using extension/filter to pick export format."""
+
         selected = self.roi_list.selectedItems()
         if not selected:
             # If nothing selected, offer to save all
@@ -2447,7 +2605,8 @@ class CurveAlignWidget(QWidget):
             traceback.print_exc()
     
     def _save_all_rois_quick(self):
-        """Quick save all ROIs to multiple formats."""
+        """Save every ROI id in the manager through the same format dispatch as :meth:`_save_roi`."""
+
         all_roi_ids = self.roi_manager.get_all_roi_ids()
         
         if not all_roi_ids:
@@ -2524,7 +2683,8 @@ class CurveAlignWidget(QWidget):
             traceback.print_exc()
 
     def _push_rois_to_fiji(self):
-        """Export ROIs to Fiji."""
+        """Export ROIs for the active image to Fiji via :attr:`fiji_bridge`."""
+
         if not self.fiji_bridge.is_available():
             # Try initializing
             if not self.fiji_bridge.initialize():
@@ -2544,7 +2704,8 @@ class CurveAlignWidget(QWidget):
             QMessageBox.warning(self, "Error", "Failed to export ROIs to Fiji.")
 
     def _pull_rois_from_fiji(self):
-        """Import ROIs from Fiji."""
+        """Import ROIs from Fiji ROI Manager and append them as ``fiji_import`` annotations."""
+
         if not self.fiji_bridge.is_available():
              if not self.fiji_bridge.initialize():
                 QMessageBox.warning(self, "Fiji Bridge", "Fiji integration is not available. Please install napari-imagej.")
@@ -2574,7 +2735,8 @@ class CurveAlignWidget(QWidget):
         QMessageBox.information(self, "Success", f"Imported {count} ROIs from Fiji.")
     
     def _load_roi(self):
-        """Load ROI(s) from file in multiple formats."""
+        """Load ROIs from disk, optionally clearing existing state, then rebuild shapes and refresh lists."""
+
         file_path, selected_filter = QFileDialog.getOpenFileName(
             self, "Load ROI", "", 
             "All supported formats (*.json *.roi *.zip *.npy *.geojson *.csv *.tif);;"
@@ -2685,7 +2847,8 @@ class CurveAlignWidget(QWidget):
             traceback.print_exc()
     
     def _delete_roi(self):
-        """Delete selected ROI(s) from the main ROI list."""
+        """Remove selected ROIs from the manager after confirmation and resync shape bookkeeping."""
+
         selected = self.roi_list.selectedItems()
         
         if not selected:
@@ -2730,7 +2893,8 @@ class CurveAlignWidget(QWidget):
             print(f"Deleted {len(selected)} ROI(s)")
     
     def _rename_roi(self):
-        """Rename selected ROI."""
+        """Placeholder hook for rename-from-button; list refresh only (use context menu for dialog)."""
+
         selected = self.roi_list.selectedItems()
         if not selected:
             return
@@ -2743,7 +2907,8 @@ class CurveAlignWidget(QWidget):
         self._update_roi_list()
     
     def _combine_rois(self):
-        """Combine selected ROIs."""
+        """Merge the selected ROIs via :meth:`roi_manager.combine_rois` when at least two are selected."""
+
         selected = self.roi_list.selectedItems()
         if len(selected) < 2:
             return
@@ -2753,7 +2918,8 @@ class CurveAlignWidget(QWidget):
         self._update_roi_list()
     
     def _analyze_selected_roi(self, ctfire: bool = False):
-        """Analyze selected ROI."""
+        """Analyze the first selected ROI with curvelets or CT-FIRE depending on ``ctfire``."""
+
         selected = self.roi_list.selectedItems()
         if not selected:
             return
@@ -2764,6 +2930,8 @@ class CurveAlignWidget(QWidget):
         self._analyze_roi_by_id(roi_id, ctfire=ctfire)
 
     def _analyze_roi_by_id(self, roi_id: int, ctfire: bool = False):
+        """Prepare the viewer's image data and call :meth:`roi_manager.analyze_roi` for ``roi_id``."""
+
         if self.viewer and len(self.viewer.layers) > 0:
             image_layer = self.viewer.layers[0]
             if hasattr(image_layer, 'data'):
@@ -2773,7 +2941,8 @@ class CurveAlignWidget(QWidget):
                 self._update_roi_list()
     
     def _analyze_all_rois(self):
-        """Analyze all ROIs."""
+        """Run curvelet analysis for every ROI on the active image using the current viewer image layer."""
+
         if self.viewer and len(self.viewer.layers) > 0:
             image_layer = self.viewer.layers[0]
             if hasattr(image_layer, 'data'):
@@ -2783,7 +2952,8 @@ class CurveAlignWidget(QWidget):
                 self._update_roi_list()
 
     def _batch_analyze_all_images(self):
-        """Analyze ROIs for each loaded image in batch mode."""
+        """Loop all loaded images: set ROI context per image and analyze each ROI that exists for that label."""
+
         if not self.image_layers:
             print("No images loaded for batch analysis.")
             return
@@ -2801,7 +2971,8 @@ class CurveAlignWidget(QWidget):
         self._update_roi_list()
 
     def _batch_pipeline_all_images(self):
-        """Batch pipeline: segmentation (if needed) -> ROI -> analysis -> export."""
+        """For each image: optionally segment→ROIs, run analysis per mode, write per-image JSON/CSV and a combined CSV."""
+
         if not self.image_layers:
             print("No images loaded for batch processing.")
             return
@@ -2866,7 +3037,8 @@ class CurveAlignWidget(QWidget):
         self._update_roi_list()
 
     def _open_curvealign_options(self):
-        """Placeholder to expose CurveAlign/CT-FIRE options (to be expanded)."""
+        """Placeholder message for future MATLAB-equivalent parameter exposure."""
+
         QMessageBox.information(
             self,
             "CurveAlign Options",
@@ -2874,7 +3046,8 @@ class CurveAlignWidget(QWidget):
         )
 
     def _prepare_analysis_image(self, image: np.ndarray) -> np.ndarray:
-        """Ensure analysis image is grayscale 2D."""
+        """Convert to 2D float32, RGB→grayscale, and normalize to [0, 1] by max for downstream analysis."""
+
         prepared = np.asarray(image)
         if prepared.ndim > 2:
             if prepared.shape[-1] in (3, 4):
@@ -2894,7 +3067,8 @@ class CurveAlignWidget(QWidget):
         return prepared
     
     def _show_roi_table(self):
-        """Show ROI analysis table."""
+        """Open a :class:`ResultsDialog` with :meth:`roi_manager.get_analysis_table`."""
+
         df = self.roi_manager.get_analysis_table()
         if not df.empty:
             dialog = ResultsDialog(df, self)
@@ -2902,18 +3076,23 @@ class CurveAlignWidget(QWidget):
             dialog.exec_()
     
     def _post_tab_active(self) -> bool:
-        """Return True when the post-processing tab is active."""
+        """True if the Post-Processing tab is the current tab (controls whether plots auto-refresh)."""
+
         if not hasattr(self, "tab_widget") or not hasattr(self, "post_tab"):
             return False
         return self.tab_widget.currentWidget() == self.post_tab
 
     def _on_tab_changed(self, index: int):
+        """When switching to Post-Processing, refresh plots for the selected ROI."""
+
         if not hasattr(self, "tab_widget"):
             return
         if self.tab_widget.widget(index) == self.post_tab:
             self._sync_post_panel(update_plots=True)
 
     def _get_selected_roi_for_post(self):
+        """Return ``(roi_id, roi)`` for the first selected ROI list item, or ``(None, None)``."""
+
         if not hasattr(self, "roi_list"):
             return None, None
         items = self.roi_list.selectedItems()
@@ -2924,6 +3103,8 @@ class CurveAlignWidget(QWidget):
         return roi_id, roi
 
     def _set_post_selected_label(self, roi):
+        """Update ``post_selected_label`` text from ``roi`` or clear to "None"."""
+
         if not hasattr(self, "post_selected_label"):
             return
         if roi is None:
@@ -2932,7 +3113,8 @@ class CurveAlignWidget(QWidget):
             self.post_selected_label.setText(f"Selected ROI: {roi.id}: {roi.name}")
 
     def _sync_region_label(self):
-        """Sync region label to current ROI selection."""
+        """Update ``selected_region_label`` for TACS/region workflows from the ROI list selection."""
+
         if not hasattr(self, "selected_region_label"):
             return
         roi_id = self._selected_annotation_id()
@@ -2945,6 +3127,8 @@ class CurveAlignWidget(QWidget):
         )
 
     def _clear_post_plots(self, message: str):
+        """Replace the post-tab figure with a single centered status ``message``."""
+
         if not hasattr(self, "post_fig") or not hasattr(self, "post_canvas"):
             return
         self.post_fig.clear()
@@ -2955,7 +3139,8 @@ class CurveAlignWidget(QWidget):
         self.post_canvas.draw_idle()
 
     def _sync_post_panel(self, update_plots: bool = False):
-        """Sync post-processing label/plots to current ROI selection."""
+        """Refresh selected-ROI label and optionally redraw histogram/angle plots."""
+
         roi_id, roi = self._get_selected_roi_for_post()
         self._set_post_selected_label(roi)
         if update_plots:
@@ -2965,7 +3150,8 @@ class CurveAlignWidget(QWidget):
                 self._update_post_plots(roi_id=roi_id)
 
     def _update_post_plots(self, roi_id: Optional[int] = None):
-        """Update histograms/graphs for the selected ROI."""
+        """Draw intensity histogram and curvelet-angle histogram for ``roi_id`` (or current selection)."""
+
         if not hasattr(self, "post_fig"):
             return
         if roi_id is None:
@@ -3022,7 +3208,8 @@ class CurveAlignWidget(QWidget):
         self.post_canvas.draw_idle()
 
     def _selected_roi_ids(self) -> List[int]:
-        """Get IDs of selected ROIs from the list widget."""
+        """ROI ids from ``Qt.UserRole`` for all selected list items (empty if none)."""
+
         items = self.roi_list.selectedItems()
         ids = []
         for item in items:
@@ -3032,6 +3219,8 @@ class CurveAlignWidget(QWidget):
         return ids
 
     def _get_active_image_data(self, grayscale: bool = False) -> Optional[np.ndarray]:
+        """Return array data for :meth:`_get_active_image_layer`, optionally luminosity-RGB or channel mean."""
+
         layer = self._get_active_image_layer()
         if layer is None:
             return None
@@ -3045,7 +3234,8 @@ class CurveAlignWidget(QWidget):
         return data
 
     def _get_active_image_layer(self):
-        """Return the image layer corresponding to the selected item or active layer."""
+        """Resolve the image layer: list selection first, then active layer, parent of labels, or first image-like layer."""
+
         if not self.viewer:
             return None
         # First, honor the image list selection
@@ -3069,6 +3259,8 @@ class CurveAlignWidget(QWidget):
         return None
 
     def _open_measurements(self):
+        """Show a :class:`MetricsDialog` for selected ROIs or all ROIs if nothing selected."""
+
         roi_ids = self._selected_roi_ids()
         if not roi_ids:
             roi_ids = self.roi_manager.get_all_roi_ids()
@@ -3088,7 +3280,8 @@ class CurveAlignWidget(QWidget):
         dialog.exec_()
     
     def _export_summary_statistics(self):
-        """Export summary statistics for selected or all ROIs."""
+        """Write grouped summary stats via :meth:`roi_manager.export_summary_statistics` to a chosen CSV path."""
+
         roi_ids = self._selected_roi_ids()
         if not roi_ids:
             roi_ids = self.roi_manager.get_all_roi_ids()
@@ -3135,7 +3328,8 @@ class CurveAlignWidget(QWidget):
             traceback.print_exc()
     
     def _run_tacs(self):
-        """Run TACS analysis."""
+        """Compute TACS relative-angle histogram for fibers vs the selected tumor-boundary ROI and plot on post tab."""
+
         # Get selected tumor region
         roi_id = self._selected_annotation_id()
         
@@ -3187,7 +3381,8 @@ class CurveAlignWidget(QWidget):
             traceback.print_exc()
 
     def _plot_tacs_results(self, df: pd.DataFrame, roi_name: str):
-        """Plot TACS relative angle histogram."""
+        """Render ``df['relative_angle']`` as a 0–90° histogram with TACS region annotations."""
+
         self.post_fig.clear()
         ax = self.post_fig.add_subplot(111)
         
@@ -3205,7 +3400,8 @@ class CurveAlignWidget(QWidget):
         self.post_canvas.draw_idle()
     
     def _update_roi_list(self):
-        """Update ROI list widget and table."""
+        """Rebuild ROI list and summary table for the active image, preserving selection when possible."""
+
         selected_ids = set()
         for item in self.roi_list.selectedItems():
             roi_id = self._roi_id_from_item(item)
@@ -3241,6 +3437,8 @@ class CurveAlignWidget(QWidget):
         self._sync_region_label()
 
     def _populate_roi_table(self, rows: List[List[str]]):
+        """Fill ``roi_table_view`` with string rows and resize columns."""
+
         if not hasattr(self, "roi_table_view"):
             return
         self.roi_table_view.setRowCount(len(rows))
@@ -3251,13 +3449,22 @@ class CurveAlignWidget(QWidget):
         self.roi_table_view.resizeColumnsToContents()
 
     def sizeHint(self):
-        """
-        Prefer a compact default size so the dock fits in narrower panels.
-        This keeps the full UI visible until roughly 1/3 of a 16\" screen.
-        """
+        """Preferred dock widget size in pixels (width × height)."""
+
         return QtCore.QSize(700, 900)
 
 # Factory function to create the widget
 def create_curve_align_widget(viewer: "napari.viewer.Viewer" = None):
-    """Factory function to create the CurveAlign widget"""
+    """Entry point for napari plugins: construct :class:`CurveAlignWidget` with an optional viewer handle.
+
+    Parameters
+    ----------
+    viewer : napari.viewer.Viewer or None
+        Viewer passed in by napari when the dock widget is created.
+
+    Returns
+    -------
+    CurveAlignWidget
+        The configured widget instance.
+    """
     return CurveAlignWidget(viewer=viewer)
