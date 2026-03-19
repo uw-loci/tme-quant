@@ -109,16 +109,6 @@ class BoundaryType(Enum):
     TIFF_BOUNDARY = "Tiff boundary"
 
 
-class LogTab(Enum):
-    """Reserved tab indices for legacy or future log/output panels (not all may be wired in UI)."""
-
-    SUMMARY = 0
-    OPTIONS = 1
-    LOG = 2
-    FIJI = 3
-    ROIS = 4
-
-
 class AdvancedParametersDialog(QDialog):
     """Modal dialog for extra numeric parameters passed through to the analysis backend."""
 
@@ -184,81 +174,6 @@ class AdvancedParametersDialog(QDialog):
             "advanced_param2": self.param2.value(),
             "iterations": self.param3.value(),
         }
-
-
-class ROIMetricsDialog(QDialog):
-    """Show morphometric and intensity summary metrics for a single ROI, optionally with a histogram."""
-
-    def __init__(self, metrics: Dict[str, Any], parent: Optional[QWidget] = None):
-        """Populate a two-column table from ``metrics`` and add an intensity histogram if present.
-
-        Parameters
-        ----------
-        metrics : dict
-            Must include ``roi_id`` for the title; may include ``histogram`` with
-            ``bins`` and ``counts`` for the optional bar plot.
-        parent : QWidget or None
-            Optional parent widget.
-        """
-        super().__init__(parent)
-        self.setWindowTitle(f"ROI {metrics.get('roi_id')} Measurements")
-        self.metrics = metrics
-        layout = QVBoxLayout(self)
-
-        self.table = QTableWidget()
-        rows = [
-            ("Area (px)", f"{metrics.get('area_px', 0):.2f}"),
-            ("Perimeter (px)", f"{metrics.get('perimeter_px', 0):.2f}"),
-            ("Centroid (x, y)", f"{metrics.get('centroid', [0, 0])}"),
-            ("Bounding Box", f"{metrics.get('bbox')}"),
-            ("Eccentricity", f"{metrics.get('eccentricity', 0):.3f}"),
-            ("Orientation (deg)", f"{metrics.get('orientation_deg', 0):.2f}"),
-            ("Mean Intensity", f"{metrics.get('mean_intensity', 0):.3f}"),
-            ("Median Intensity", f"{metrics.get('median_intensity', 0):.3f}"),
-            ("Std. Dev.", f"{metrics.get('std_intensity', 0):.3f}"),
-        ]
-        self.table.setColumnCount(2)
-        self.table.setRowCount(len(rows))
-        self.table.setHorizontalHeaderLabels(["Metric", "Value"])
-        for r, (name, value) in enumerate(rows):
-            self.table.setItem(r, 0, QTableWidgetItem(str(name)))
-            self.table.setItem(r, 1, QTableWidgetItem(str(value)))
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        layout.addWidget(self.table)
-
-        hist = metrics.get("histogram")
-        if hist:
-            fig = Figure(figsize=(5, 3))
-            ax = fig.add_subplot(111)
-            centers = hist["bins"][:-1]
-            width = centers[1] - centers[0] if len(centers) > 1 else 0.05
-            ax.bar(centers, hist["counts"], width=width, color="#4a90e2")
-            ax.set_title("Intensity Distribution")
-            ax.set_xlabel("Normalized Intensity")
-            ax.set_ylabel("Count")
-            self.canvas = FigureCanvas(fig)
-            layout.addWidget(self.canvas)
-
-        button_box = QDialogButtonBox(QDialogButtonBox.Close)
-        export_btn = QPushButton("Export CSV")
-        button_box.addButton(export_btn, QDialogButtonBox.ActionRole)
-        button_box.rejected.connect(self.reject)
-        export_btn.clicked.connect(self._export_metrics)
-        layout.addWidget(button_box)
-
-    def _export_metrics(self):
-        """Write all scalar metrics (excluding the histogram array data) to a CSV file."""
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export ROI Metrics",
-            "",
-            "CSV Files (*.csv);;All Files (*)"
-        )
-        if not path:
-            return
-        rows = [(k, v) for k, v in self.metrics.items() if k != "histogram"]
-        df = pd.DataFrame(rows, columns=["Metric", "Value"])
-        df.to_csv(path, index=False)
 
 
 class ResultsTableModel(QAbstractTableModel):
@@ -2392,14 +2307,6 @@ class CurveAlignWidget(QWidget):
             obj_id = item.data(Qt.UserRole)
             self.roi_manager.add_annotation_from_object(obj_id, annotation_type=annotation_type)
         self._update_roi_list()
-
-    def _on_annotation_selected(self):
-        """Reserved callback to highlight a region ROI (not wired; list changes use :meth:`_on_roi_list_selection`)."""
-
-        roi_id = self._selected_annotation_id()
-        if roi_id is None:
-            return
-        self.roi_manager.highlight_roi(roi_id)
 
     def _on_object_selected(self):
         """Highlight detected objects when their list selection changes."""
