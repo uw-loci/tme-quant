@@ -5,7 +5,7 @@ Provides statistical tests and summary functions.
 """
 
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from scipy import stats
 
 
