@@ -58,7 +58,7 @@ Biomedical Optics Express, 11(1), 160–173.
 '''
 
 import numpy as np
-from typing import Tuple, Optional
+from typing import List, Tuple, Optional
 from scipy import ndimage
 from scipy.optimize import minimize
 from skimage import transform as tf
