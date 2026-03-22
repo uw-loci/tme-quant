@@ -38,12 +38,16 @@ class CellSegmentationAnalyzer:
         self._register_methods()
     
     def _register_methods(self):
-        """Register all available segmentation methods."""
-        from ..methods.segmentation.stardist import StarDistSegmentation
-        from ..methods.segmentation.cellpose import CellposeSegmentation
-        from ..methods.segmentation.thresholding import ThresholdingSegmentation
-        from ..methods.segmentation.watershed import WatershedSegmentation
-        
+        """Register all available segmentation methods.
+
+        All four method classes live in base_segmentation.py.
+        """
+        from ..methods.segmentation.base_segmentation import (
+            StarDistSegmentation,
+            CellposeSegmentation,
+            ThresholdingSegmentation,
+            WatershedSegmentation,
+        )
         self.registry.register_segmentation_method(
             SegmentationMode.STARDIST, StarDistSegmentation
         )
