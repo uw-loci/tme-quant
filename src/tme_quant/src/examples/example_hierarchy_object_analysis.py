@@ -36,6 +36,9 @@ Topics covered
   2.  Parent/child navigation — .parent, .children, .get_ancestors(), .depth()
   3.  Whole-tree traversal  — get_descendants(), iter_descendants()
   4.  Type-based filtering  — filter_by_type(tme_type=…) and filter_by_class(…)
+                               Note: StromaRegion uses TMEType.REGION internally;
+                               use filter_by_class(StromaRegion) not
+                               filter_by_type(TMEType.STROMA) to find stroma nodes.
   5.  ID-based lookup       — find_by_id() and hierarchy.get_object()
   6.  Scoped subtree queries — "give me all fibers under tumor_A1 only"
   7.  Property queries       — filter on TACS type, cell type, straightness, …
@@ -53,15 +56,6 @@ Topics covered
 
 from __future__ import annotations
 
-import sys
-import os
-
-# Only needed when running this script directly from the examples/ directory
-# without having installed tme_quant via `pip install -e .`.
-# Remove this block if tme_quant is installed in your environment.
-# Add the src directory to the path so tme_quant can be found
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 import random
 import json
 from collections import Counter, defaultdict
@@ -73,7 +67,6 @@ import numpy as np
 from tme_quant.core.base_models import (
     TMEObject, TMEType, ObjectType,
     Geometry, GeometryType,
-    Classification, Measurement, TMEMetadata,
 )
 from tme_quant.core.hierarchy import TMEHierarchy
 from tme_quant.core.image_entry import ImageEntry
@@ -757,9 +750,12 @@ def demo_spatial_context(root: TMEObject) -> None:
     print(f"\n  Cells at invasive front regions: {len(invasive_front_cells)}")
     print(f"  Cell types at invasive front:    {dict(ct)}")
 
-    # Fibers under stroma nodes only
+    # Fibers under stroma nodes only.
+    # StromaRegion.__init__ passes tme_type=TMEType.REGION (not TMEType.STROMA),
+    # so filter_by_type(TMEType.STROMA) returns nothing.
+    # filter_by_class(StromaRegion) is the correct query for StromaRegion nodes.
     stroma_fibers = []
-    for node in root.filter_by_type(tme_type=TMEType.STROMA):
+    for node in root.filter_by_class(StromaRegion):
         stroma_fibers.extend(node.filter_by_class(FiberObject))
     tacs_st = Counter(f.tacs_type for f in stroma_fibers)
     print(f"\n  Fibers in stroma regions:        {len(stroma_fibers)}")
