@@ -1,117 +1,149 @@
 """Fiber orientation analysis coordinator."""
 
-import numpy as np
-from typing import Dict, Type
 import time
+from typing import Dict, Type
+
+import numpy as np
 
 from ..methods.orientation.base_orientation import BaseOrientationMethod
 from ..methods.registry import MethodRegistry
-from ..config.orientation_params import OrientationParams, OrientationResult
+from ..config.orientation_params import (
+    OrientationMode,
+    OrientationParams, CurveAlignParams, OrientationJParams,
+    GradientParams, StructureTensorParams,
+    OrientationResult,
+)
 
 
 class FiberOrientationAnalyzer:
     """
-    Coordinates fiber orientation analysis using different methods.
-    
-    Supports:
-        - CurveAlign (curvelet-based, 2D/3D)
-        - OrientationJ (Fiji plugin, 2D)
-        - Pixel-wise gradient (2D)
-        - Voxel-wise gradient (3D)
-        - Structure tensor (2D/3D)
+    Coordinates fiber orientation analysis across all supported modes.
+
+    Supported modes
+    ---------------
+    - CURVEALIGN      – curvelet-based (2-D / 3-D)
+    - ORIENTATIONJ    – Fiji plugin (2-D only)
+    - GRADIENT        – pixel-wise Sobel/Scharr (2-D)
+    - STRUCTURE_TENSOR – windowed structure tensor (2-D / 3-D)
     """
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         self.registry = MethodRegistry()
         self._register_methods()
-    
-    def _register_methods(self):
-        """Register all available orientation methods."""
+
+    def _register_methods(self) -> None:
+        """Lazily register all available orientation method classes."""
         from ..methods.orientation.curvealign import CurveAlignOrientation
         from ..methods.orientation.orientationj import OrientationJMethod
-        # Additional methods can be registered here
-        
+
         self.registry.register_orientation_method(
-            OrientationMode.CURVEALIGN, CurveAlignOrientation
+            OrientationMode.CURVEALIGN,   CurveAlignOrientation
         )
         self.registry.register_orientation_method(
             OrientationMode.ORIENTATIONJ, OrientationJMethod
         )
-    
+        # GRADIENT and STRUCTURE_TENSOR are registered on first use to
+        # avoid importing scipy at module load time.
+
     def analyze_2d(
         self,
         image: np.ndarray,
-        params: OrientationParams
+        params: OrientationParams,
     ) -> OrientationResult:
         """
-        Analyze fiber orientation in 2D image.
-        
-        Args:
-            image: 2D grayscale image
-            params: Orientation parameters with mode selection
-            
-        Returns:
-            OrientationResult with orientation maps and statistics
+        Analyse fiber orientation in a 2-D image.
+
+        Parameters
+        ----------
+        image : ndarray, shape (H, W)
+            2-D grayscale image.
+        params : OrientationParams subclass
+            Use ``OrientationParams.for_mode()`` or instantiate a subclass
+            directly (``CurveAlignParams``, ``OrientationJParams``, etc.).
+
+        Returns
+        -------
+        OrientationResult subclass matching params.mode
         """
-        # Validate input
         if image.ndim != 2:
-            raise ValueError(f"Expected 2D image, got {image.ndim}D")
-        
-        # Get method
-        method_class = self.registry.get_orientation_method(params.mode)
-        method = method_class()
-        
-        # Run analysis with timing
-        start_time = time.time()
+            raise ValueError(f"Expected 2-D image, got shape {image.shape}")
+
+        method = self._get_method(params.mode)
+
+        start = time.perf_counter()
         result = method.analyze_2d(image, params)
-        processing_time = time.time() - start_time
-        
-        # Add metadata
-        result.dimension = "2D"
-        result.mode = params.mode
-        result.processing_time = processing_time
-        result.parameters = params.__dict__
-        
+        elapsed = time.perf_counter() - start
+
+        # Write provenance metadata (overwrite anything the method set)
+        result.dimension        = "2D"
+        result.mode             = params.mode
+        result.processing_time  = elapsed
+        result.parameters       = params.to_dict()   # JSON-safe dict
+
         return result
-    
+
     def analyze_3d(
         self,
         image: np.ndarray,
-        params: OrientationParams
+        params: OrientationParams,
     ) -> OrientationResult:
         """
-        Analyze fiber orientation in 3D image.
-        
-        Args:
-            image: 3D grayscale image
-            params: Orientation parameters with mode selection
-            
-        Returns:
-            OrientationResult with orientation maps and statistics
+        Analyse fiber orientation in a 3-D image.
+
+        Parameters
+        ----------
+        image : ndarray, shape (Z, H, W)
+        params : OrientationParams subclass
+
+        Returns
+        -------
+        OrientationResult subclass matching params.mode
         """
-        # Validate input
         if image.ndim != 3:
-            raise ValueError(f"Expected 3D image, got {image.ndim}D")
-        
-        # Get method
-        method_class = self.registry.get_orientation_method(params.mode)
-        method = method_class()
-        
-        # Check if method supports 3D
+            raise ValueError(f"Expected 3-D image, got shape {image.shape}")
+
+        method = self._get_method(params.mode)
+
         if not method.supports_3d():
             raise ValueError(
-                f"{params.mode.value} does not support 3D analysis"
+                f"Mode '{params.mode.value}' does not support 3-D analysis"
             )
-        
-        # Run analysis with timing
-        start_time = time.time()
+
+        start = time.perf_counter()
         result = method.analyze_3d(image, params)
-        processing_time = time.time() - start_time
-        
-        # Add metadata
-        result.dimension = "3D"
-        result.mode = params.mode
-        result.processing_time = processing_time
-        result.parameters = params.__dict__
-        
+        elapsed = time.perf_counter() - start
+
+        result.dimension       = "3D"
+        result.mode            = params.mode
+        result.processing_time = elapsed
+        result.parameters      = params.to_dict()
+
         return result
+
+    # ── Private helpers ───────────────────────────────────────────────────────
+
+    def _get_method(self, mode: OrientationMode) -> BaseOrientationMethod:
+        """
+        Return an instantiated orientation method for *mode*.
+
+        Registers GRADIENT and STRUCTURE_TENSOR on first use so that scipy
+        is not imported at module load time.
+        """
+        if mode not in (OrientationMode.CURVEALIGN, OrientationMode.ORIENTATIONJ):
+            self._ensure_extra_methods_registered()
+
+        method_class = self.registry.get_orientation_method(mode)
+        return method_class()
+
+    def _ensure_extra_methods_registered(self) -> None:
+        """Register GRADIENT and STRUCTURE_TENSOR if not already done."""
+        if OrientationMode.GRADIENT not in self.registry._orientation_methods:
+            from ..methods.orientation.gradient import GradientOrientationMethod
+            self.registry.register_orientation_method(
+                OrientationMode.GRADIENT, GradientOrientationMethod
+            )
+        if OrientationMode.STRUCTURE_TENSOR not in self.registry._orientation_methods:
+            from ..methods.orientation.structure_tensor import StructureTensorMethod
+            self.registry.register_orientation_method(
+                OrientationMode.STRUCTURE_TENSOR, StructureTensorMethod
+            )
