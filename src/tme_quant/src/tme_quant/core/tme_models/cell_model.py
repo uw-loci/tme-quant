@@ -642,7 +642,8 @@ class CellObject(TMEObject):
         """Create CellObject from CellProperties."""
         return cls(
             object_id=object_id,
-            parent_id=parent_id,
+            name=object_id,
+            parent=None,
             centroid=props.centroid,
             area=props.area,
             perimeter=props.perimeter,
@@ -666,7 +667,7 @@ class CellObject(TMEObject):
         """Convert to dictionary for export."""
         return {
             'object_id': self.object_id,
-            'parent_id': self.parent_id,
+            'parent_id': self.parent.object_id if self.parent is not None else None,
             'centroid': self.centroid,
             'area': self.area,
             'perimeter': self.perimeter,

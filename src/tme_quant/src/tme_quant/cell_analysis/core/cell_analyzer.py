@@ -91,17 +91,29 @@ class CellAnalyzer:
             print(f"Segmenting cells in {image_id} using {params.mode.value}")
         
         result = self.segmentation_analyzer.segment_2d(image, params)
-        
+
+        # Convert CellProperties → CellObject so that downstream TME analysis
+        # (interaction_detector, tme_analyzer) receives the expected type.
+        from ...core.tme_models.cell_model import CellObject
+        result.cells = [
+            CellObject.from_cell_properties(
+                cp,
+                object_id=f"{image_id}_cell_{cp.cell_id}",
+                parent_id=image_id,
+            ) if not isinstance(cp, CellObject) else cp
+            for cp in result.cells
+        ]
+
         # Store in combined results
         if self.results is None:
             self.results = CellAnalysisResult(image_id=image_id)
         self.results.segmentation_result = result
-        
+
         if self.verbose:
             print(f"Segmented {result.total_cell_count} cells")
-        
+
         return result
-    
+
     def segment_cells_3d(
         self,
         image: np.ndarray,
@@ -123,11 +135,22 @@ class CellAnalyzer:
             print(f"Segmenting cells in 3D image {image_id}")
         
         result = self.segmentation_analyzer.segment_3d(image, params)
-        
+
+        # Convert CellProperties → CellObject for downstream TME analysis
+        from ...core.tme_models.cell_model import CellObject
+        result.cells = [
+            CellObject.from_cell_properties(
+                cp,
+                object_id=f"{image_id}_cell_{cp.cell_id}",
+                parent_id=image_id,
+            ) if not isinstance(cp, CellObject) else cp
+            for cp in result.cells
+        ]
+
         if self.results is None:
             self.results = CellAnalysisResult(image_id=image_id)
         self.results.segmentation_result = result
-        
+
         if self.verbose:
             print(f"Segmented {result.total_cell_count} cells")
         

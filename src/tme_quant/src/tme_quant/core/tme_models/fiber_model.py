@@ -690,7 +690,8 @@ class FiberObject(TMEObject):
         """Create FiberObject from FiberProperties."""
         return cls(
             object_id=object_id,
-            parent_id=parent_id,
+            name=object_id,
+            parent=None,
             centerline=props.centerline,
             length=props.length,
             width=props.width,

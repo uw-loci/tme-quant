@@ -1,19 +1,32 @@
 """Combined fiber analysis result container."""
 
 from dataclasses import dataclass, field
-from typing import Optional, Any
+from typing import Any, Dict, List, Optional
 
-# Re-export FiberProperties so importers can find it here
-from ..config.extraction_params import FiberData as FiberProperties
+from ..config.orientation_params import OrientationResult
+from ..config.extraction_params import ExtractionResult, FiberProperties
 
 
 @dataclass
 class FiberAnalysisResult:
-    """Combined result from orientation and extraction analysis."""
-
+    """Combined result from orientation + extraction analysis."""
     image_id: str = ""
-    orientation_result: Optional[Any] = None   # OrientationResult
-    extraction_result: Optional[Any] = None    # ExtractionResult
 
-    # Combined / derived metrics
-    combined_metrics: dict = field(default_factory=dict)
+    orientation_result: Optional[OrientationResult] = None
+    extraction_result:  Optional[ExtractionResult]  = None
+
+    measurements:  Dict[str, Any] = field(default_factory=dict)
+    export_paths:  Dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {'image_id': self.image_id}
+        if self.orientation_result:
+            d['orientation'] = self.orientation_result.to_dict()
+        if self.extraction_result:
+            d['extraction'] = self.extraction_result.to_dict()
+        d['measurements'] = self.measurements
+        return d
+
+
+# Re-export for importers that do: from ..core.results import FiberProperties
+__all__ = ['FiberAnalysisResult', 'FiberProperties', 'OrientationResult', 'ExtractionResult']

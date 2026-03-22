@@ -296,7 +296,18 @@ class StarDistSegmentation(BaseSegmentationMethod):
             )
         
         from stardist.models import StarDist2D
-        from stardist import normalize
+        try:
+            from csbdeep.utils import normalize       # stardist <=0.8 / csbdeep installed
+        except ImportError:
+            try:
+                from stardist.utils import normalize  # some stardist builds
+            except ImportError:
+                import numpy as _np                   # inline fallback (percentile norm)
+                def normalize(x, pmin=2, pmax=99.8, axis=None, clip=False):
+                    lo = _np.percentile(x, pmin, axis=axis, keepdims=True)
+                    hi = _np.percentile(x, pmax, axis=axis, keepdims=True)
+                    out = (x - lo) / (_np.maximum(hi - lo, 1e-20))
+                    return _np.clip(out, 0, 1) if clip else out
         
         # Load model
         if self.model_2d is None:
@@ -311,11 +322,15 @@ class StarDistSegmentation(BaseSegmentationMethod):
                     print(f"Failed to load {params.stardist_model}, using default")
                 self.model_2d = StarDist2D.from_pretrained('2D_versatile_fluo')
         
-        # Prepare image
-        image_prep = self._prepare_image(image)
-        
-        # Normalize
-        image_norm = normalize(image_prep, 1, 99.8)
+        # Prepare image — H&E models (2D_versatile_he) require all 3 RGB channels;
+        # fluorescence models require a single grayscale channel.
+        he_model = 'he' in params.stardist_model.lower()
+        if he_model and image.ndim == 3 and image.shape[-1] == 3:
+            # Keep full (H, W, 3) for H&E models; normalise per-channel
+            image_norm = normalize(image.astype(np.float32), 1, 99.8, axis=(0, 1))
+        else:
+            image_prep = self._prepare_image(image)
+            image_norm = normalize(image_prep, 1, 99.8)
         
         # Predict
         if self.verbose:
@@ -359,7 +374,18 @@ class StarDistSegmentation(BaseSegmentationMethod):
             raise ImportError("StarDist not installed")
         
         from stardist.models import StarDist3D
-        from stardist import normalize
+        try:
+            from csbdeep.utils import normalize       # stardist <=0.8 / csbdeep installed
+        except ImportError:
+            try:
+                from stardist.utils import normalize  # some stardist builds
+            except ImportError:
+                import numpy as _np                   # inline fallback (percentile norm)
+                def normalize(x, pmin=2, pmax=99.8, axis=None, clip=False):
+                    lo = _np.percentile(x, pmin, axis=axis, keepdims=True)
+                    hi = _np.percentile(x, pmax, axis=axis, keepdims=True)
+                    out = (x - lo) / (_np.maximum(hi - lo, 1e-20))
+                    return _np.clip(out, 0, 1) if clip else out
         
         # Load model
         if self.model_3d is None:
