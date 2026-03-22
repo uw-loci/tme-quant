@@ -1,37 +1,258 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TMEQuant — Tumor Microenvironment Quantification
+# ─────────────────────────────────────────────────────────────────────────────
 [project]
-name = "tmequant-hierarchy"
-version = "0.1.0"
-description = "QuPath-like hierarchical object model for image analysis"
+name = "tme-quant"
+version = "0.2.0"
+description = "Tumor microenvironment quantification: collagen fibers, cells, TACS classification, and TME hierarchy analysis."
 readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "MIT"}
+requires-python = ">=3.10"
+license = { text = "MIT" }
 
 authors = [
-    {name = "UW-LOCI"}
+    { name = "UW-LOCI" },
 ]
 
+keywords = [
+    "tumor microenvironment", "collagen", "TACS", "SHG", "CT-FIRE",
+    "CurveAlign", "fiber analysis", "cell segmentation", "QuPath",
+    "computational pathology", "polarization microscopy",
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+# ── Core dependencies ─────────────────────────────────────────────────────────
+# Everything required to import tme_quant and run both target examples:
+#   src/examples/example_hierarchy_object_analysis.py
+#   src/examples/examples_tmequant_complete_cl_usage_ctfire_curvealign.py
+#
+# Version floors are set to the earliest release known to be compatible with
+# Python 3.10 and the specific APIs we use, not the latest available version.
 dependencies = [
-    "numpy>=1.21.0",
-    "pandas>=1.3.0",
-    "pydantic>=2.0.0",
+    # Numerical core
+    # numpy 2.0 introduced C-API and module layout changes; <3 prevents silent
+    # adoption of a future 3.x break.  Our code is verified numpy-2.x compatible
+    # (fft, argwhere, column_stack, linalg.norm, ndimage delegation all work).
+    "numpy>=1.24.0,<3",
+
+    # scipy.ndimage: gaussian_filter, convolve, distance_transform_edt (all ≥0.9)
+    # scipy.spatial: cKDTree (≥0.8); floor 1.9 for solid Python-3.10 support
+    "scipy>=1.9.0",
+
+    # DataFrame, to_csv, ExcelWriter, fillna, value_counts — all in pandas ≥1.5
+    "pandas>=1.5.0",
+
+    # skimage.morphology.skeletonize 3-D support (Lee algorithm) requires ≥0.19
+    # skimage.filters.apply_hysteresis_threshold requires ≥0.15
+    # skimage.filters.frangi (ridge detection NumPy backend) requires ≥0.11
+    # Floor set to 0.19 for 3-D skeleton; 0.21 is more conservative if needed.
     "scikit-image>=0.19.0",
-    "scipy>=1.7.0",
-    "tifffile>=2021.11.0",
-    "ome-types>=0.3.0",
-    "zarr>=2.13.0",
+
+    # TIFF / OME-TIFF loading in ImageEntry.load and Fiji bridge subprocess backend
+    "tifffile>=2022.2.2",
+
+    # Fallback image loader (PNG, BMP, JPEG) in ImageEntry.load
+    "imageio>=2.22.0",
+
+    # cv2 — registration base, visualisation overlays (addWeighted, polylines, etc.)
+    # 4.6 is the oldest release with the full feature set we use
+    "opencv-python>=4.6.0",
+
+    # Polygon, Point, LineString, nearest_points — used at module top level in
+    # core/tme_models/fiber_model.py, cell_model.py, tme_analysis/core/tacs_classifier.py,
+    # and tme_analysis/utils/geometry_utils.py.
+    # All API calls (.exterior, .boundary, .project, .interpolate, .distance,
+    # .centroid, .coords, nearest_points) are stable in both shapely 1.x and 2.x.
+    "shapely>=1.8.0",
+
+    # Excel export via pandas ExcelWriter(engine='openpyxl')
+    "openpyxl>=3.0.0",
+
+    # Heatmaps, overlays, fiber visualisation
+    "matplotlib>=3.5.0",
 ]
 
+# ── Optional dependency groups ─────────────────────────────────────────────────
 [project.optional-dependencies]
-napari = ["napari>=0.4.0", "magicgui>=0.3.0", "qtpy>=2.0.0"]
-dev = ["pytest>=7.0.0", "black>=22.0.0", "flake8>=5.0.0"]
-full = ["networkx>=3.0.0", "plotly>=5.13.0", "pyarrow>=10.0.0"]
 
+# ── Fiber analysis backends ───────────────────────────────────────────────────
+# Production-quality curvelet transform and Fiji plugin bridge.
+# Install with: pip install "tme-quant[fiber]"
+fiber = [
+    # curvelops: Python wrapper around the C++ fast discrete curvelet transform
+    # (FDCT2D / FDCT3D via the PyLops framework).  Used by curvelet_utils.py
+    # as the preferred production backend for CurveAlign and CT-FIRE.
+    # Latest stable release is 0.23.4; codebase is written against the 0.23 API
+    # (FDCT2D, FDCT3D, .struct(), .unravel(), forward/adjoint operators).
+    # Without this, curvelet_utils.py falls back to the NumPy FFT approximation
+    # and emits a UserWarning on every 3-D transform call.
+    # Source: https://github.com/PyLops/curvelops
+    "curvelops>=0.23.0",
+
+    # pyimagej + scyjava: Python bridge to the Fiji / ImageJ JVM.
+    # Required for the OrientationJ and Ridge Detection Fiji-plugin backends
+    # in fiber_analysis/io/ (FijiBridge._run_pyimagej).
+    # Without these the bridge falls back to subprocess or NumPy automatically.
+    "pyimagej>=1.4.0",
+    "scyjava>=1.9.0",
+]
+
+# ── Cell / fiber segmentation — deep learning ─────────────────────────────────
+# Install with: pip install "tme-quant[dl]"
+#
+# WARNING: image_registration/methods/deep_learning/comir_registration.py and
+# voxelmorph_registration.py import torch at the module top level (not lazily).
+# They will raise ImportError on import if torch is absent.  Install this group
+# before using those registration methods.
+dl = [
+    "torch>=1.13.0",            # 1.13 is the first release fully supporting py3.10
+    "stardist>=0.8.3",          # StarDist nucleus/cell segmentation
+    "cellpose>=2.0.0",          # Cellpose cell/nucleus segmentation
+    # voxelmorph and comir are research packages NOT on PyPI.
+    # Install manually:
+    #   pip install voxelmorph
+    #   pip install git+https://github.com/CVLAB-Unibo/comir
+    # Or uncomment the VCS pins in [tool.uv.sources] below.
+]
+
+# ── napari GUI / plugin integration ───────────────────────────────────────────
+# Install with: pip install "tme-quant[napari]"
+napari = [
+    "napari>=0.4.17",
+    "magicgui>=0.7.0",
+    "qtpy>=2.3.0",
+]
+
+# ── Network / graph analysis (interaction networks) ───────────────────────────
+# Install with: pip install "tme-quant[network]"
+# Required for InteractionNetworkAnalyzer and visualization/interaction_visualization.py.
+# nx.community.greedy_modularity_communities requires networkx >= 2.6.
+# plotly is imported at the top level in visualization/interaction_visualization.py.
+network = [
+    "networkx>=2.6",            # nx.community.greedy_modularity_communities (≥2.6)
+                                # and nx.community.modularity (≥2.6)
+    # Louvain community detection.  PyPI package is 'python-louvain';
+    # imported in code as: import community as community_louvain
+    # Note: if pip install fails try: pip install python-louvain==0.16
+    "python-louvain>=0.16",
+    "plotly>=5.0.0",            # Interactive interaction-network plots;
+                                # imported at top level in interaction_visualization.py
+]
+
+# ── Example workflow dependencies ─────────────────────────────────────────────
+# Everything needed to run both target example scripts end-to-end:
+#   src/examples/example_hierarchy_object_analysis.py
+#   src/examples/examples_tmequant_complete_cl_usage_ctfire_curvealign.py
+#
+# Both examples are covered by core dependencies alone (numpy, scipy, pandas,
+# scikit-image, shapely, matplotlib, opencv, tifffile, imageio, openpyxl).
+# The [fiber] group adds the production curvelet backend (optional but recommended).
+# Install with: pip install "tme-quant[examples]"
+examples = [
+    "tme-quant[fiber,dl,network]",
+    "scikit-learn>=1.1.0",      # Used in some example classification workflows;
+                                # not required by the tme_quant core library
+]
+
+# ── Full install (everything except the napari Qt stack) ──────────────────────
+# Install with: pip install "tme-quant[full]"
+full = [
+    "tme-quant[fiber,dl,network]",
+    "scikit-learn>=1.1.0",      # Added: used in example classification workflows
+]
+
+# ── Development tools ─────────────────────────────────────────────────────────
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+
+# ── Entry points ───────────────────────────────────────────────────────────────
+[project.scripts]
+# placeholder — CLI and napari plugin entry points to be defined
+# tme-quant = "tme_quant.cli:main"
+
+# ── Build system ───────────────────────────────────────────────────────────────
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# ── Package discovery ──────────────────────────────────────────────────────────
 [tool.setuptools.packages.find]
+# Discover tme_quant and all sub-packages from src/
 where = ["src"]
+include = ["tme_quant*"]
 
-[tool.setuptools.package-dir]
-"tmequant_hierarchy" = "src/tmequant_hierarchy"
+# ── uv configuration ───────────────────────────────────────────────────────────
+[tool.uv]
+# Install the project itself in editable mode so that
+#   from tme_quant.core.base_models import TMEObject
+# resolves from src/ in every script, including those in src/examples/,
+# without any sys.path manipulation.
+#
+# To run examples_tmequant_complete_cl_usage_ctfire_curvealign.py, install:
+#   uv pip install -e ".[examples]"
+# which pulls in: fiber (curvelops, pyimagej, scyjava),
+#                 dl (torch, stardist, cellpose),
+#                 network (networkx, python-louvain, plotly),
+#                 scikit-learn
+#
+# For the full stack including napari:
+#   uv pip install -e ".[full,napari]"
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.uv.sources]
+# Pin research packages not on PyPI to their VCS sources.
+# Uncomment and adjust rev/tag as needed:
+#
+# voxelmorph = { git = "https://github.com/voxelmorph/voxelmorph", rev = "dev" }
+# comir = { git = "https://github.com/CVLAB-Unibo/comir" }
+
+# ── pytest ─────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts   = "-ra -q"
+
+# ── Black ──────────────────────────────────────────────────────────────────────
+[tool.black]
+line-length    = 100
+target-version = ["py310", "py311", "py312"]
+
+# ── Ruff ───────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = [
+    "E501",   # line-too-long — black handles this
+    "UP007",  # Use X | Y for union types — keep Optional[] for 3.10 compat
+]
+
+# ── mypy ───────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version         = "3.10"
+warn_return_any        = true
+warn_unused_configs    = true
+ignore_missing_imports = true   # many optional deps have no stubs
