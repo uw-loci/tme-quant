@@ -1,7 +1,7 @@
 # File: tme_quant/utils/geometry_utils.py
 
 import numpy as np
-from typing import Tuple, Optional, List, Dict
+from typing import Dict, List, Optional, Tuple
 from shapely.geometry import Point, LineString, Polygon
 from shapely.ops import nearest_points
 
@@ -313,7 +313,103 @@ def compute_angle_to_boundary_normal_simplified(
     
     return angle_diff
 
-# In fiber_analysis/utils/geometry_utils.py
+
+
+def compute_fiber_properties(
+    centerline: np.ndarray,
+    image: np.ndarray,
+    pixel_size: float = 1.0,
+    width_range: Tuple[float, float] = (0.5, 20.0),
+) -> Dict[str, float]:
+    """
+    Compute geometric properties of a single fiber from its centerline.
+
+    Parameters
+    ----------
+    centerline:
+        Nx2 array of (row, col) coordinates tracing the fiber.
+    image:
+        2-D grayscale image (used to estimate fiber width via intensity profile).
+    pixel_size:
+        Microns per pixel (applied to length, width).
+    width_range:
+        (min, max) acceptable fiber width in microns.
+
+    Returns
+    -------
+    Dict with keys: length, width, straightness, angle, curvature.
+    """
+    if centerline is None or len(centerline) < 2:
+        return {
+            'length': 0.0, 'width': 1.0,
+            'straightness': 0.0, 'angle': 0.0, 'curvature': 0.0,
+        }
+
+    coords = np.asarray(centerline, dtype=np.float64)
+
+    # Arc length along centerline
+    diffs   = np.diff(coords, axis=0)
+    arc_length = float(np.sum(np.linalg.norm(diffs, axis=1))) * pixel_size
+
+    # Straightness (end-to-end / arc length)
+    end_to_end   = float(np.linalg.norm(coords[-1] - coords[0])) * pixel_size
+    straightness = float(np.clip(end_to_end / max(arc_length, 1e-10), 0.0, 1.0))
+
+    # Angle of end-to-end vector (-90 to 90 degrees)
+    vec   = coords[-1] - coords[0]
+    angle = float(np.degrees(np.arctan2(vec[0], vec[1])) % 180)
+    if angle > 90:
+        angle -= 180
+
+    # Curvature (mean turning angle per unit length)
+    if len(diffs) >= 2:
+        seg_angles  = np.degrees(np.arctan2(diffs[:, 0], diffs[:, 1]))
+        turn_angles = np.diff(seg_angles)
+        turn_angles = (turn_angles + 180) % 360 - 180   # wrap to [-180, 180]
+        curvature   = float(np.sum(np.abs(turn_angles))) / max(arc_length, 1e-10)
+    else:
+        curvature = 0.0
+
+    # Width via intensity profile FWHM
+    width = _estimate_fiber_width(coords, image, pixel_size, width_range)
+
+    return {
+        'length':       arc_length,
+        'width':        width,
+        'straightness': straightness,
+        'angle':        angle,
+        'curvature':    curvature,
+    }
+
+
+def _estimate_fiber_width(
+    centerline: np.ndarray,
+    image: np.ndarray,
+    pixel_size: float,
+    width_range: Tuple[float, float],
+) -> float:
+    """Estimate fiber width from perpendicular intensity cross-sections (FWHM)."""
+    h, w_img = image.shape[:2]
+    widths = []
+    sample_idx = np.linspace(1, len(centerline) - 2,
+                             min(5, max(1, len(centerline) - 2)), dtype=int)
+    for idx in sample_idx:
+        r, c = centerline[idx]
+        dr = centerline[min(idx + 1, len(centerline) - 1)][0] - centerline[max(idx - 1, 0)][0]
+        dc = centerline[min(idx + 1, len(centerline) - 1)][1] - centerline[max(idx - 1, 0)][1]
+        norm = np.sqrt(dr**2 + dc**2) + 1e-10
+        perp_r, perp_c = -dc / norm, dr / norm
+        half_px = int(width_range[1] / pixel_size)
+        offsets = np.arange(-half_px, half_px + 1)
+        rows = np.clip(r + offsets * perp_r, 0, h - 1).astype(int)
+        cols = np.clip(c + offsets * perp_c, 0, w_img - 1).astype(int)
+        profile = image[rows, cols].astype(np.float64)
+        if profile.max() > 0:
+            above = (profile / profile.max()) >= 0.5
+            widths.append(float(np.clip(np.sum(above) * pixel_size, *width_range)))
+    return float(np.median(widths)) if widths else float(np.clip(1.0, *width_range))
+
+
 __all__ = [
     'find_nearest_boundary_point',
     'compute_boundary_normal',
