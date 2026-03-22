@@ -134,33 +134,45 @@ napari = [
     "qtpy>=2.3.0",
 ]
 
-# ── Network / graph analysis (interaction networks) ───────────────────────────
-# Install with: pip install "tme-quant[network]"
-# Required for InteractionNetworkAnalyzer and visualization/interaction_visualization.py.
-# nx.community.greedy_modularity_communities requires networkx >= 2.6.
-# plotly is imported at the top level in visualization/interaction_visualization.py.
-network = [
+# ── Network / graph analysis — lightweight (examples only) ───────────────────
+# networkx alone is sufficient for InteractionNetworkAnalyzer used in the
+# example scripts.  python-louvain and plotly are only needed if you use
+# Louvain community detection or the interactive visualization module.
+# Install with: pip install "tme-quant[network-lite]"
+network-lite = [
     "networkx>=2.6",            # nx.community.greedy_modularity_communities (≥2.6)
-                                # and nx.community.modularity (≥2.6)
+]
+
+# ── Network / graph analysis — full (interaction visualization) ───────────────
+# Install with: pip install "tme-quant[network]"
+# Full group adds Louvain community detection and the plotly-based interactive
+# visualization (visualization/interaction_visualization.py imports plotly at
+# the module top level, so plotly must be installed to import that module).
+network = [
+    "networkx>=2.6",
     # Louvain community detection.  PyPI package is 'python-louvain';
     # imported in code as: import community as community_louvain
     # Note: if pip install fails try: pip install python-louvain==0.16
     "python-louvain>=0.16",
-    "plotly>=5.0.0",            # Interactive interaction-network plots;
-                                # imported at top level in interaction_visualization.py
+    "plotly>=5.0.0",            # Required by visualization/interaction_visualization.py
 ]
 
 # ── Example workflow dependencies ─────────────────────────────────────────────
-# Everything needed to run both target example scripts end-to-end:
-#   src/examples/example_hierarchy_object_analysis.py
-#   src/examples/examples_tmequant_complete_cl_usage_ctfire_curvealign.py
+# Verified requirements for the two primary example scripts:
 #
-# Both examples are covered by core dependencies alone (numpy, scipy, pandas,
-# scikit-image, shapely, matplotlib, opencv, tifffile, imageio, openpyxl).
-# The [fiber] group adds the production curvelet backend (optional but recommended).
+#   example_hierarchy_object_analysis.py
+#     → core dependencies only (no dl, no fiber, no network needed)
+#
+#   examples_tmequant_complete_cl_usage_ctfire_curvealign.py
+#     → core + [fiber] (curvelops for CurveAlign/CT-FIRE)
+#     → core + [dl]    (stardist+csbdeep for StarDist cell segmentation)
+#     → core + [network-lite] (networkx for InteractionNetworkAnalyzer in workflow 2)
+#     → plotly is NOT required — visualization module is not imported by the examples
+#
+# [examples] installs everything needed to run both example scripts end-to-end.
 # Install with: pip install "tme-quant[examples]"
 examples = [
-    "tme-quant[fiber,dl,network]",
+    "tme-quant[fiber,dl,network-lite]",
     "scikit-learn>=1.1.0",      # Used in some example classification workflows;
                                 # not required by the tme_quant core library
 ]
@@ -168,8 +180,7 @@ examples = [
 # ── Full install (everything except the napari Qt stack) ──────────────────────
 # Install with: pip install "tme-quant[full]"
 full = [
-    "tme-quant[fiber,dl,network]",
-    "scikit-learn>=1.1.0",      # Added: used in example classification workflows
+    "tme-quant[fiber,dl,network]",   # full network group includes plotly
 ]
 
 # ── Development tools ─────────────────────────────────────────────────────────
@@ -205,15 +216,10 @@ include = ["tme_quant*"]
 # resolves from src/ in every script, including those in src/examples/,
 # without any sys.path manipulation.
 #
-# To run examples_tmequant_complete_cl_usage_ctfire_curvealign.py, install:
-#   uv pip install -e ".[examples]"
-# which pulls in: fiber (curvelops, pyimagej, scyjava),
-#                 dl (torch, stardist, cellpose),
-#                 network (networkx, python-louvain, plotly),
-#                 scikit-learn
-#
-# For the full stack including napari:
-#   uv pip install -e ".[full,napari]"
+# The core dependencies list above is sufficient to run both target examples.
+# For production fiber analysis with the curvelet and Fiji backends, also
+# install the [fiber] group:
+#   uv pip install -e ".[fiber]"
 dev-dependencies = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
