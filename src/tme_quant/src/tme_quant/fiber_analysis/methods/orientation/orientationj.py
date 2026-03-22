@@ -1,75 +1,138 @@
 """OrientationJ Fiji plugin interface."""
 
 import numpy as np
+
 from .base_orientation import BaseOrientationMethod
-from ...config.orientation_params import OrientationParams, OrientationResult
+from ...config.orientation_params import (
+    OrientationParams, OrientationJParams, OrientationJResult,
+)
 from ...io.fiji_bridge import FijiBridge
 
 
 class OrientationJMethod(BaseOrientationMethod):
     """
-    OrientationJ method using Fiji plugin interface.
-    
-    Provides pixel-wise orientation calculation using structure tensor
-    or gradient-based methods through the OrientationJ Fiji plugin.
-    
-    Note: Requires Fiji to be installed and accessible.
+    OrientationJ orientation analysis via the Fiji plugin.
+
+    Computes per-pixel fiber orientation using the structure tensor or
+    a gradient method, by calling Fiji's OrientationJ plugin.  Falls
+    back to the NumPy structure-tensor implementation in FijiBridge when
+    Fiji is unavailable.
+
+    Reference
+    ---------
+    Rezakhaniha et al. (2012) Experimental investigation of collagen
+    waviness and orientation in the arterial adventitia using confocal
+    laser scanning microscopy. Biomech Model Mechanobiol 11:461–473.
     """
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         super().__init__()
         self.fiji_bridge = FijiBridge()
-    
+
     def analyze_2d(
         self,
         image: np.ndarray,
-        params: OrientationParams
-    ) -> OrientationResult:
+        params: OrientationParams,
+    ) -> OrientationJResult:
         """
-        Analyze 2D fiber orientation using OrientationJ.
-        
-        Calls Fiji's OrientationJ plugin for analysis.
+        Analyse 2-D fiber orientation using OrientationJ.
+
+        Parameters
+        ----------
+        image : ndarray, shape (H, W)
+            2-D grayscale image.
+        params : OrientationJParams or OrientationParams
+            Analysis parameters.  If a plain ``OrientationParams`` is
+            passed, OrientationJ defaults are used for mode-specific fields.
+
+        Returns
+        -------
+        OrientationJResult
         """
-        # Check Fiji availability
-        if not self.fiji_bridge.is_fiji_available():
-            raise RuntimeError(
-                "Fiji is not available. Please install Fiji and set FIJI_PATH."
+        # Accept either the base class or the specific subclass
+        p = params if isinstance(params, OrientationJParams) \
+            else OrientationJParams(
+                mode=params.mode,
+                pixel_size=params.pixel_size,
+                compute_statistics=params.compute_statistics,
+                keep_values=params.keep_values,
             )
-        
-        # Prepare OrientationJ parameters
-        orientationj_params = {
-            'gradient': params.gradient_method,
-            'min-coherency': params.coherency_threshold,
-            'min-energy': 0.0
+
+        # Build the plugin parameter dict from the typed params object
+        plugin_params = {
+            'gradient':       p.gradient_method,
+            'min-coherency':  p.coherency_threshold,
+            'min-energy':     p.energy_threshold,
+            'sigma':          p.sigma_tensor,
         }
-        
-        # Call Fiji plugin
-        result_dict = self.fiji_bridge.call_orientationj(
-            image, orientationj_params
+
+        # Call Fiji (or NumPy fallback)
+        raw = self.fiji_bridge.call_orientationj(image, plugin_params)
+
+        orientation_map: np.ndarray = raw['orientation']   # −90..90 degrees
+        coherency_map:   np.ndarray = raw['coherency']     # 0..1
+        energy_map:      np.ndarray = raw['energy']        # 0..1
+
+        # Apply coherency threshold: suppress unreliable pixels
+        if p.coherency_threshold > 0:
+            orientation_map = orientation_map.copy()
+            orientation_map[coherency_map < p.coherency_threshold] = np.nan
+
+        # Compute statistics from valid pixels
+        valid = orientation_map[~np.isnan(orientation_map)]
+        stats = self._compute_statistics(valid, coherency_map)
+
+        mean_coherency = float(
+            np.nanmean(coherency_map[coherency_map >= p.coherency_threshold])
+            if np.any(coherency_map >= p.coherency_threshold) else 0.0
         )
-        
-        # Parse results
-        orientation_map = result_dict['orientation']  # -90 to 90 degrees
-        coherency_map = result_dict['coherency']  # 0 to 1
-        energy_map = result_dict['energy']
-        
-        # Compute statistics
-        stats = self._compute_statistics(orientation_map, coherency_map)
-        
-        # Create result
-        result = OrientationResult(
-            mode=params.mode,
-            dimension="2D",
+        mean_energy = float(
+            np.nanmean(energy_map[energy_map >= p.energy_threshold])
+            if np.any(energy_map >= p.energy_threshold) else 0.0
+        )
+
+        result = OrientationJResult(
+            # Base fields
             orientation_map=orientation_map,
+            alignment_map=coherency_map,
+            mean_orientation=stats['mean_orientation'],
+            alignment_score=stats['alignment_score'],
+            mean_alignment=stats['alignment_score'],
+            std_orientation=stats['std_orientation'],
+            orientation_distribution=stats['orientation_distribution'],
+            pixel_size=p.pixel_size,
+            # OrientationJ-specific fields
             coherency_map=coherency_map,
             energy_map=energy_map,
-            mean_orientation=stats['mean_orientation'],
-            orientation_distribution=stats['orientation_distribution'],
-            alignment_score=stats['alignment_score'],
-            pixel_size=params.pixel_size
+            mean_coherency=mean_coherency,
+            mean_energy=mean_energy,
         )
-        
+
+        # Optional colour survey
+        if p.compute_color_survey and self.fiji_bridge.is_fiji_available():
+            result.color_survey = self._request_color_survey(image, p)
+
+        # Discard arrays not requested by keep_values
+        if 'all' not in p.keep_values:
+            if 'energy' not in p.keep_values:
+                result.energy_map = None
+            if 'alignment' not in p.keep_values:
+                result.alignment_map = None
+                result.coherency_map = None
+
         return result
-    
+
     def supports_3d(self) -> bool:
-        return False  # OrientationJ is 2D only
+        return False   # OrientationJ is 2-D only
+
+    # ── Private helpers ───────────────────────────────────────────────────────
+
+    def _request_color_survey(
+        self,
+        image: np.ndarray,
+        params: OrientationJParams,
+    ) -> np.ndarray | None:
+        """Request OrientationJ's HSB colour survey image (stub)."""
+        # Full implementation: call Fiji with 'colour-survey=true' flag
+        # and retrieve the resulting RGB stack.
+        return None
