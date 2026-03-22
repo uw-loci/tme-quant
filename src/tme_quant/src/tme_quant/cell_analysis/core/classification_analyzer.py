@@ -39,10 +39,14 @@ class CellClassificationAnalyzer:
         self._register_methods()
     
     def _register_methods(self):
-        """Register all available classification methods."""
-        from ..methods.classification.morphology_classifier import MorphologyClassifier
-        from ..methods.classification.marker_classifier import MarkerClassifier
-        
+        """Register all available classification methods.
+
+        Both classifier classes live in base_classification.py.
+        """
+        from ..methods.classification.base_classification import (
+            MorphologyClassifier,
+            MarkerClassifier,
+        )
         self.registry.register_classification_method(
             ClassificationMode.MORPHOLOGY, MorphologyClassifier
         )
