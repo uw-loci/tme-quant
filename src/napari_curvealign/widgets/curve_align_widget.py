@@ -43,7 +43,7 @@ from matplotlib.figure import Figure
 
 from ..preprocessing import PreprocessingOptions, ThresholdMethod, preprocess_image
 from ..roi_manager import ROIManager, ROIShape, ROIAnalysisMethod
-from ..fiji_bridge import get_fiji_bridge
+from ..imagej import get_fiji_bridge
 from ..segmentation import (
     SegmentationMethod,
     SegmentationOptions,
@@ -903,9 +903,9 @@ class CurveAlignWidget(QWidget):
         selected_filename = selected_items[0].text()
         
         try:
-            from .new_curv import run_analysis  # Import analysis function
+            from ..new_curv import run_analysis
         except ImportError:
-            from new_curv import run_analysis
+            from napari_curvealign.new_curv import run_analysis
             
         # Get current boundary type
         boundary_type = self.boundary_combo.currentText()
@@ -3060,7 +3060,7 @@ class CurveAlignWidget(QWidget):
             
         # Compute TACS
         try:
-            from .analysis import compute_tacs
+            from ..analysis import compute_tacs
             # ROI coordinates are (x, y)
             tacs_df = compute_tacs(fiber_data, tumor_roi.coordinates)
             
