@@ -1,6 +1,9 @@
+"""CurveAlign dock widget: napari UI for preprocessing, segmentation, ROIs, and analysis."""
+
+from __future__ import annotations
+
 import os
 from collections import defaultdict
-from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, TYPE_CHECKING
 
 import napari
@@ -19,292 +22,46 @@ from qtpy.QtWidgets import (
     QCheckBox,
     QGroupBox,
     QFileDialog,
-    QDialog,
-    QDialogButtonBox,
     QListWidgetItem,
     QAbstractItemView,
     QMenu,
     QInputDialog,
     QMessageBox,
-    QTableView,
     QTableWidget,
     QTableWidgetItem,
-    QAbstractScrollArea,
-    QHeaderView,
     QTabWidget,
     QScrollArea,
     QFrame,
     QSizePolicy,
 )
 from qtpy import QtCore
-from qtpy.QtCore import Qt, QAbstractTableModel
+from qtpy.QtCore import Qt
 from qtpy.QtGui import QColor
 from skimage.io import imread
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-# Import new modules
-from .preprocessing import (
-    PreprocessingOptions, ThresholdMethod,
-    load_image_with_bioformats, preprocess_image
+from ..preprocessing import PreprocessingOptions, ThresholdMethod, preprocess_image
+from ..roi_manager import ROIManager, ROIShape, ROIAnalysisMethod
+from ..fiji_bridge import get_fiji_bridge
+from ..segmentation import (
+    SegmentationMethod,
+    SegmentationOptions,
+    segment_image,
+    masks_to_roi_data,
+    check_available_methods,
 )
-from .roi_manager import ROIManager, ROIShape, ROIAnalysisMethod
-from .fiji_bridge import get_fiji_bridge
-from .segmentation import (
-    SegmentationMethod, SegmentationOptions,
-    segment_image, masks_to_roi_data,
-    check_available_methods, get_recommended_parameters
+from .dialogs import (
+    AdvancedParametersDialog,
+    BoundaryType,
+    MetricsDialog,
+    ResultsDialog,
 )
+from .widget_utils import ROI_SAVE_DIALOG_FILTERS, rgb_to_grayscale_luma, roi_save_format_kw
+
 if TYPE_CHECKING:
     import napari.viewer
 
-
-def _rgb_to_grayscale_luma(image: np.ndarray) -> np.ndarray:
-    """Convert last-axis RGB or RGBA to single-channel luma (Rec. 709 coefficients)."""
-    rgb = np.asarray(image[..., :3], dtype=np.float32)
-    return 0.2125 * rgb[..., 0] + 0.7154 * rgb[..., 1] + 0.0721 * rgb[..., 2]
-
-
-_ROI_SAVE_DIALOG_FILTERS = (
-    "JSON files (*.json);;"
-    "Fiji/ImageJ ROI (*.roi *.zip);;"
-    "StarDist ROI (*.roi *.zip);;"
-    "Label image mask (*.npy);;"
-    "QuPath annotations (*.geojson);;"
-    "CSV files (*.csv);;"
-    "TIFF mask (*.tif);;"
-    "All files (*)"
-)
-
-
-def _roi_save_format_kw(file_path: str, selected_filter: str) -> tuple[str, str]:
-    """Infer ``roi_manager.save_rois(..., format=...)`` and a short label from dialog state."""
-    sf = selected_filter or ""
-    if "JSON" in sf or file_path.endswith(".json"):
-        return "json", "JSON"
-    if "Fiji" in sf or (
-        file_path.endswith((".roi", ".zip")) and "StarDist" not in sf
-    ):
-        return "fiji", "Fiji/ImageJ"
-    if "StarDist" in sf:
-        return "stardist", "StarDist"
-    if "Label image" in sf or "Cellpose" in sf or file_path.endswith(".npy"):
-        return "label_image", "Label image"
-    if "QuPath" in sf or file_path.endswith(".geojson"):
-        return "qupath", "QuPath"
-    if "CSV" in sf or file_path.endswith(".csv"):
-        return "csv", "CSV"
-    if "TIFF" in sf or file_path.endswith((".tif", ".tiff")):
-        return "mask", "TIFF mask"
-    return "auto", "auto-detected"
-
-
-class BoundaryType(Enum):
-    """How to treat image boundaries when running CurveAlign-style analysis.
-
-    Mirrors MATLAB-style boundary handling options exposed in the main tab.
-    """
-
-    NO_BOUNDARY = "No boundary"
-    TIFF_BOUNDARY = "Tiff boundary"
-
-
-class AdvancedParametersDialog(QDialog):
-    """Modal dialog for extra numeric parameters passed through to the analysis backend."""
-
-    def __init__(self, parent=None):
-        """Build spin boxes for advanced parameters and OK/Cancel actions.
-
-        Parameters
-        ----------
-        parent : QWidget or None
-            Optional parent for window modality and lifetime.
-        """
-        super().__init__(parent)
-        self.setWindowTitle("Advanced Parameters")
-        
-        layout = QVBoxLayout()
-        
-        # Create advanced parameters widgets
-        self.param1 = QDoubleSpinBox()
-        self.param1.setRange(0.0, 1.0)
-        self.param1.setSingleStep(0.01)
-        self.param1.setValue(0.1)
-        param1_layout = QHBoxLayout()
-        param1_layout.addWidget(QLabel("Advanced Param 1:"))
-        param1_layout.addWidget(self.param1)
-        layout.addLayout(param1_layout)
-        
-        self.param2 = QDoubleSpinBox()
-        self.param2.setRange(0.0, 100.0)
-        self.param2.setSingleStep(1.0)
-        self.param2.setValue(5.0)
-        param2_layout = QHBoxLayout()
-        param2_layout.addWidget(QLabel("Advanced Param 2:"))
-        param2_layout.addWidget(self.param2)
-        layout.addLayout(param2_layout)
-        
-        self.param3 = QSpinBox()
-        self.param3.setRange(1, 100)
-        self.param3.setValue(10)
-        param3_layout = QHBoxLayout()
-        param3_layout.addWidget(QLabel("Iterations:"))
-        param3_layout.addWidget(self.param3)
-        layout.addLayout(param3_layout)
-        
-        # Add dialog buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
-        
-        self.setLayout(layout)
-
-    def get_parameters(self):
-        """Return the current advanced-parameter values as a plain dict.
-
-        Returns
-        -------
-        dict
-            Keys ``advanced_param1``, ``advanced_param2``, and ``iterations`` with
-            numeric values suitable for :attr:`CurveAlignWidget.advanced_params`.
-        """
-        return {
-            "advanced_param1": self.param1.value(),
-            "advanced_param2": self.param2.value(),
-            "iterations": self.param3.value(),
-        }
-
-
-class ResultsTableModel(QAbstractTableModel):
-    """Qt model backing :class:`QTableView` for a rectangular :class:`pandas.DataFrame`."""
-
-    def __init__(self, data, parent=None):
-        """Store the dataframe and derive column headers from :attr:`data.columns`.
-
-        Parameters
-        ----------
-        data : pandas.DataFrame
-            Table contents; must not be mutated externally without calling layoutChanged.
-        parent : QObject or None
-            Parent for Qt object ownership.
-        """
-        super().__init__(parent)
-        self._data = data
-        self._headers = list(data.columns) if data is not None else []
-    
-    def rowCount(self, parent=None):
-        """Return the number of data rows (Qt table model API)."""
-        return len(self._data)
-    
-    def columnCount(self, parent=None):
-        """Return the number of columns from the dataframe header list."""
-        return len(self._headers)
-    
-    def data(self, index, role=Qt.DisplayRole):
-        """Return cell text for ``DisplayRole`` or a light striping color for ``BackgroundRole``."""
-
-        if not index.isValid():
-            return None
-        
-        row = index.row()
-        col = index.column()
-        
-        if role == Qt.DisplayRole:
-            return str(self._data.iloc[row, col])
-        
-        if role == Qt.BackgroundRole and row % 2 == 0:
-            return QColor(240, 240, 240)
-            
-        return None
-    
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        """Return column names for the horizontal header or 1-based row indices for the vertical header."""
-
-        if role != Qt.DisplayRole:
-            return None
-            
-        if orientation == Qt.Horizontal:
-            return self._headers[section]
-        else:
-            return str(section + 1)
-
-class ResultsDialog(QDialog):
-    """Read-only dialog showing a dataframe in a :class:`QTableView` with an OK button."""
-
-    def __init__(self, data, parent=None):
-        """Attach a :class:`ResultsTableModel` to a stretched table view.
-
-        Parameters
-        ----------
-        data : pandas.DataFrame
-            Rows and columns to display.
-        parent : QWidget or None
-            Optional parent widget.
-        """
-        super().__init__(parent)
-        self.setWindowTitle("Analysis Results")
-        self.setMinimumSize(600, 400)
-        
-        layout = QVBoxLayout()
-        
-        # Create table view
-        self.table_view = QTableView()
-        self.table_view.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
-        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        
-        # Create model
-        self.model = ResultsTableModel(data)
-        self.table_view.setModel(self.model)
-        
-        # Add close button
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
-        button_box.accepted.connect(self.accept)
-        
-        # Add to layout
-        layout.addWidget(self.table_view)
-        layout.addWidget(button_box)
-        
-        self.setLayout(layout)
-
-
-class MetricsDialog(QDialog):
-    """Tabular ROI measurements with an extra action to export the underlying dataframe to CSV."""
-
-    def __init__(self, data: pd.DataFrame, parent=None):
-        """Same layout as :class:`ResultsDialog` but titled for measurements and with CSV export.
-
-        Parameters
-        ----------
-        data : pandas.DataFrame
-            Per-ROI or per-metric table to show and optionally export.
-        parent : QWidget or None
-            Optional parent widget.
-        """
-        super().__init__(parent)
-        self.setWindowTitle("ROI Measurements")
-        self.df = data
-
-        layout = QVBoxLayout()
-        self.table_view = QTableView()
-        self.table_view.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
-        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.model = ResultsTableModel(data)
-        self.table_view.setModel(self.model)
-        layout.addWidget(self.table_view)
-
-        button_box = QDialogButtonBox(QDialogButtonBox.Close)
-        export_btn = button_box.addButton("Export CSV", QDialogButtonBox.ActionCommandRole)
-        button_box.rejected.connect(self.reject)
-        export_btn.clicked.connect(self._export_csv)
-        layout.addWidget(button_box)
-        self.setLayout(layout)
-
-    def _export_csv(self):
-        """Save :attr:`df` to a user-chosen path using :meth:`pandas.DataFrame.to_csv`."""
-        path, _ = QFileDialog.getSaveFileName(self, "Export Measurements", "", "CSV Files (*.csv)")
-        if path:
-            self.df.to_csv(path, index=False)
 
 class CurveAlignWidget(QWidget):
     """Napari dock widget for CurveAlign: load images, preprocess, segment, manage ROIs, and run analysis."""
@@ -594,7 +351,7 @@ class CurveAlignWidget(QWidget):
                             print(f"Unable to display RGB layer for {filename}: {exc}")
 
                         # Convert RGB/RGBA to grayscale for analysis
-                        image_data = _rgb_to_grayscale_luma(raw_image)
+                        image_data = rgb_to_grayscale_luma(raw_image)
                     elif raw_image.ndim > 2 and raw_image.shape[0] > 1:
                         # Multi-page/stacked TIFF: take first plane
                         image_data = raw_image[0]
@@ -1124,7 +881,7 @@ class CurveAlignWidget(QWidget):
         if self.results_viewer:
             try:
                 self.results_viewer.close()
-            except:
+            except Exception:
                 pass
             self.results_viewer = None
         self.results_layers = {}
@@ -1224,7 +981,7 @@ class CurveAlignWidget(QWidget):
             if self.results_viewer:
                 try:
                     self.results_viewer.close()
-                except:
+                except Exception:
                     pass
             target_viewer = napari.Viewer(title=f"CurveAlign Results - {image_name}")
             self.results_viewer = target_viewer
@@ -1271,7 +1028,7 @@ class CurveAlignWidget(QWidget):
         if self.results_viewer:
             try:
                 self.results_viewer.close()
-            except:
+            except Exception:
                 pass
         
         super().closeEvent(event)
@@ -1654,7 +1411,7 @@ class CurveAlignWidget(QWidget):
         image = np.asarray(image)
         if image.ndim > 2:
             if image.shape[-1] in (3, 4):
-                image = _rgb_to_grayscale_luma(image)
+                image = rgb_to_grayscale_luma(image)
             else:
                 image = image[0] if image.shape[0] < 10 else image
 
@@ -2438,7 +2195,7 @@ class CurveAlignWidget(QWidget):
              # This mimics a "fake" mouse move to set the state
              try:
                  layer._last_cursor_position = np.array([0, 0])
-             except:
+             except Exception:
                  pass
 
         try:
@@ -2523,7 +2280,7 @@ class CurveAlignWidget(QWidget):
 
     def _write_rois_file(self, file_path: str, selected_filter: str, roi_ids: List[Any]) -> str:
         """Call :meth:`roi_manager.save_rois` with inferred format; returns human-readable format name."""
-        fmt_kw, format_name = _roi_save_format_kw(file_path, selected_filter)
+        fmt_kw, format_name = roi_save_format_kw(file_path, selected_filter)
         self.roi_manager.save_rois(file_path, roi_ids, format=fmt_kw)
         return format_name
 
@@ -2550,7 +2307,7 @@ class CurveAlignWidget(QWidget):
             return
         
         file_path, selected_filter = QFileDialog.getSaveFileName(
-            self, "Save ROI", self._get_roi_save_dir(), _ROI_SAVE_DIALOG_FILTERS
+            self, "Save ROI", self._get_roi_save_dir(), ROI_SAVE_DIALOG_FILTERS
         )
         
         if not file_path:
@@ -2599,7 +2356,7 @@ class CurveAlignWidget(QWidget):
             self, 
             "Save All ROIs", 
             default_path,
-            _ROI_SAVE_DIALOG_FILTERS,
+            ROI_SAVE_DIALOG_FILTERS,
         )
         
         if not file_path:
@@ -2997,7 +2754,7 @@ class CurveAlignWidget(QWidget):
         prepared = np.asarray(image)
         if prepared.ndim > 2:
             if prepared.shape[-1] in (3, 4):
-                prepared = _rgb_to_grayscale_luma(prepared)
+                prepared = rgb_to_grayscale_luma(prepared)
             else:
                 prepared = prepared[0]
         prepared = prepared.astype(np.float32, copy=False)
@@ -3168,7 +2925,7 @@ class CurveAlignWidget(QWidget):
         data = np.asarray(layer.data)
         if grayscale and data.ndim > 2:
             if data.shape[-1] in (3, 4):
-                data = _rgb_to_grayscale_luma(data)
+                data = rgb_to_grayscale_luma(data)
             else:
                 data = np.mean(data, axis=0)
         return data
