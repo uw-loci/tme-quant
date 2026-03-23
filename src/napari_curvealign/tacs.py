@@ -1,8 +1,9 @@
 """
-Analysis module for CurveAlign Napari plugin.
+TACS (Tumor-Associated Collagen Signatures) and related boundary–fiber metrics.
 
-Provides advanced analysis functions including TACS (Tumor-Associated Collagen Signatures)
-and integration with fiber features.
+This module is separate from :mod:`napari_curvealign.curvelet_analysis_run`, which
+orchestrates curvelet extraction and maps. Use this module for angles relative
+to a tumor boundary after fibers are available.
 """
 
 import numpy as np
@@ -137,3 +138,5 @@ def bin_relative_angles(
         
     hist, edges = np.histogram(df['relative_angle'], bins=bins, range=(0, 90))
     return hist, edges
+
+__all__ = ["compute_tacs", "bin_relative_angles"]
