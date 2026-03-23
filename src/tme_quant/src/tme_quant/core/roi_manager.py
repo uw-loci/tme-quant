@@ -330,6 +330,16 @@ class ROIObject(TMEObject):
                 ring.append(ring[0])
             geom_json = {"type": "Polygon", "coordinates": [ring]}
 
+        # Include image_id and pixel_size from metadata if present so the
+        # saved file carries enough context to round-trip back to the right image.
+        image_id   = self.metadata.get("image_id")   if self.metadata else None
+        pixel_size = self.metadata.get("pixel_size") if self.metadata else None
+        extra = {}
+        if image_id:
+            extra["image_id"]   = image_id
+        if pixel_size is not None:
+            extra["pixel_size"] = pixel_size
+
         return {
             "type": "Feature",
             "id": self.object_id,
@@ -339,6 +349,7 @@ class ROIObject(TMEObject):
                 "classification":  {"name": self.annotation_type},
                 "isLocked":        self.locked,
                 "measurements":    [],
+                **extra,
                 **self.properties,
             },
         }
@@ -891,6 +902,251 @@ class ROIManager:
         self._hierarchy_parent = None
 
     # ── Export ────────────────────────────────────────────────────────────────
+
+
+    # ── ROI transfer between images ───────────────────────────────────────────
+
+    def transfer_to(
+        self,
+        target_manager: "ROIManager",
+        scale_x: float = 1.0,
+        scale_y: float = 1.0,
+        offset_x: float = 0.0,
+        offset_y: float = 0.0,
+        roi_ids: Optional[List[str]] = None,
+        copy_metadata: bool = True,
+    ) -> List["ROIObject"]:
+        """
+        Copy ROIs from this manager into *target_manager*, optionally
+        rescaling and/or shifting their coordinates.
+
+        This is the base transfer primitive.  Use the higher-level helpers:
+          ``transfer_same_size()``      — no transform needed
+          ``transfer_scaled()``         — known pixel-size or dimension ratio
+          ``transfer_with_transform()`` — registration affine matrix
+
+        Parameters
+        ----------
+        target_manager : ROIManager
+            Destination manager (may belong to a different image).
+        scale_x, scale_y : float
+            Multiplicative scale applied to x and y coordinates.
+            1.0 = no scaling (same size images or same pixel size).
+        offset_x, offset_y : float
+            Additive offset applied after scaling (pixels in target space).
+        roi_ids : list of str, optional
+            Subset of ROI ids to transfer.  None = transfer all.
+        copy_metadata : bool
+            Copy the source ROI's metadata to the new ROI (except image_id
+            which is updated to target_manager.image_id).
+
+        Returns
+        -------
+        list of newly created ROIObject instances in *target_manager*.
+        """
+        sources = (
+            [self._by_id[i] for i in roi_ids if i in self._by_id]
+            if roi_ids is not None
+            else list(self._rois)
+        )
+        created: List[ROIObject] = []
+        for roi in sources:
+            coords = roi.coordinates
+            if coords is None:
+                continue
+
+            new_coords = coords.copy().astype(np.float32)
+            new_coords[:, 0] = new_coords[:, 0] * scale_x + offset_x
+            new_coords[:, 1] = new_coords[:, 1] * scale_y + offset_y
+
+            meta = {}
+            if copy_metadata and roi.metadata:
+                meta = dict(roi.metadata)
+            meta["image_id"]      = target_manager.image_id
+            meta["pixel_size"]    = target_manager.pixel_size
+            meta["transferred_from"] = self.image_id
+            meta["transferred_from_id"] = roi.object_id
+
+            new_roi = target_manager.add_polygon(
+                vertices=new_coords,
+                annotation_type=roi.annotation_type,
+                label=roi.label,
+                locked=roi.locked,
+                **{k: v for k, v in meta.items()
+                   if k not in ("image_id", "pixel_size",
+                                "transferred_from", "transferred_from_id")},
+            )
+            # Overwrite metadata with the full dict (add_polygon only passes **kwargs)
+            new_roi.metadata.update(meta)
+            created.append(new_roi)
+
+        return created
+
+    def transfer_same_size(
+        self,
+        target_manager: "ROIManager",
+        roi_ids: Optional[List[str]] = None,
+    ) -> List["ROIObject"]:
+        """
+        Copy ROIs to *target_manager* with no coordinate change.
+
+        Use when source and target images have the same pixel dimensions
+        AND the same pixel size (e.g. the registered H&E and the SHG image
+        from the same acquisition, both 2048×2048 at 0.5 µm/px).
+
+        Parameters
+        ----------
+        target_manager : ROIManager
+            Destination manager.
+        roi_ids : list of str, optional
+            Subset to transfer.  None = all.
+        """
+        return self.transfer_to(
+            target_manager,
+            scale_x=1.0, scale_y=1.0,
+            offset_x=0.0, offset_y=0.0,
+            roi_ids=roi_ids,
+        )
+
+    def transfer_scaled(
+        self,
+        target_manager: "ROIManager",
+        source_shape: Tuple[int, int],
+        target_shape: Tuple[int, int],
+        source_pixel_size: Optional[float] = None,
+        target_pixel_size: Optional[float] = None,
+        roi_ids: Optional[List[str]] = None,
+    ) -> List["ROIObject"]:
+        """
+        Copy ROIs to *target_manager*, rescaling coordinates to fit a
+        different image size or pixel size.
+
+        Two scaling modes — use whichever information you have:
+
+        **Pixel-size mode** (recommended when pixel sizes are known):
+            ``scale = source_pixel_size / target_pixel_size``
+            A 0.5 µm/px source ROI transferred to a 0.25 µm/px target
+            doubles all coordinates (the same physical region covers twice
+            as many pixels at finer resolution).
+
+        **Dimension mode** (fallback when pixel sizes are unknown):
+            ``scale_x = target_width  / source_width``
+            ``scale_y = target_height / source_height``
+            Proportionally rescales so the ROI covers the same *fraction*
+            of the image area.
+
+        If both pixel sizes and shapes are supplied, pixel-size mode takes
+        priority.
+
+        Parameters
+        ----------
+        target_manager : ROIManager
+            Destination manager.
+        source_shape : (H, W)
+            Pixel dimensions of the source image.
+        target_shape : (H, W)
+            Pixel dimensions of the target image.
+        source_pixel_size : float, optional
+            µm per pixel of the source image.
+        target_pixel_size : float, optional
+            µm per pixel of the target image.
+        roi_ids : list of str, optional
+            Subset to transfer.  None = all.
+        """
+        if (source_pixel_size is not None
+                and target_pixel_size is not None
+                and target_pixel_size > 0):
+            # Physical-unit scaling: keep µm coordinates constant
+            s = source_pixel_size / target_pixel_size
+            scale_x = scale_y = s
+        else:
+            # Dimension-ratio scaling
+            src_h, src_w = source_shape
+            tgt_h, tgt_w = target_shape
+            scale_x = tgt_w / src_w if src_w > 0 else 1.0
+            scale_y = tgt_h / src_h if src_h > 0 else 1.0
+
+        return self.transfer_to(
+            target_manager,
+            scale_x=scale_x, scale_y=scale_y,
+            roi_ids=roi_ids,
+        )
+
+    def transfer_with_transform(
+        self,
+        target_manager: "ROIManager",
+        transform_matrix: "np.ndarray",
+        roi_ids: Optional[List[str]] = None,
+    ) -> List["ROIObject"]:
+        """
+        Copy ROIs to *target_manager*, warping each vertex through a 2-D
+        affine transform matrix.
+
+        Use this when the target image was registered to the source (or
+        vice versa) and you have the registration transform.
+
+        Parameters
+        ----------
+        target_manager : ROIManager
+            Destination manager.
+        transform_matrix : (3, 3) or (2, 3) ndarray
+            Affine transform matrix in homogeneous coordinates.
+            Follows the scikit-image / OpenCV convention:
+              output_point = M @ [x, y, 1]^T
+
+            If your registration produces a (2, 3) matrix (e.g. from
+            cv2.getAffineTransform), pad it to (3, 3):
+              M = np.vstack([M23, [0, 0, 1]])
+
+            Typical source: the ``transform`` field of
+            ``HESHGRegistration.register()`` result, converted to a matrix
+            via ``result.transform.params`` (skimage AffineTransform).
+        roi_ids : list of str, optional
+            Subset to transfer.  None = all.
+        """
+        M = np.asarray(transform_matrix, dtype=np.float64)
+        if M.shape == (2, 3):
+            M = np.vstack([M, [0.0, 0.0, 1.0]])
+        if M.shape != (3, 3):
+            raise ValueError(
+                f"transform_matrix must be (3,3) or (2,3), got {M.shape}."
+            )
+
+        sources = (
+            [self._by_id[i] for i in roi_ids if i in self._by_id]
+            if roi_ids is not None
+            else list(self._rois)
+        )
+        created: List[ROIObject] = []
+        for roi in sources:
+            coords = roi.coordinates
+            if coords is None:
+                continue
+
+            # Apply affine: [x', y', 1]^T = M @ [x, y, 1]^T
+            n = len(coords)
+            ones = np.ones((n, 1), dtype=np.float64)
+            xy1  = np.hstack([coords[:, :2].astype(np.float64), ones])
+            transformed = (M @ xy1.T).T            # (n, 3)
+            new_coords   = transformed[:, :2].astype(np.float32)
+
+            meta = dict(roi.metadata) if roi.metadata else {}
+            meta["image_id"]           = target_manager.image_id
+            meta["pixel_size"]         = target_manager.pixel_size
+            meta["transferred_from"]   = self.image_id
+            meta["transferred_from_id"] = roi.object_id
+            meta["transform_applied"]  = "affine"
+
+            new_roi = target_manager.add_polygon(
+                vertices=new_coords,
+                annotation_type=roi.annotation_type,
+                label=roi.label,
+                locked=roi.locked,
+            )
+            new_roi.metadata.update(meta)
+            created.append(new_roi)
+
+        return created
 
     def to_geojson(self) -> Dict[str, Any]:
         """Export all ROIs as a GeoJSON FeatureCollection."""
