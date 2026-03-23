@@ -1,3 +1,12 @@
+"""
+Napari plugin pipeline for curvelet-based image analysis.
+
+The low-level FDCT and curvelet extraction live in :mod:`pycurvelets.new_curv`
+(``new_curv()``). This module calls :func:`pycurvelets.get_ct.get_ct`, which
+invokes that implementation — there is no second ``new_curv`` in the napari
+package.
+"""
+
 import numpy as np
 import pandas as pd
 from skimage.io import imread
@@ -7,7 +16,6 @@ import random
 from enum import Enum
 from typing import Tuple
 
-# Use pycurvelets (manually converted API from branch 22)
 try:
     from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
     from pycurvelets.get_ct import get_ct
