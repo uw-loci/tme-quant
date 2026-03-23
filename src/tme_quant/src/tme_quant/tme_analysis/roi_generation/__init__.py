@@ -1,13 +1,27 @@
 """
-ROI generation and tumor detection.
+ROI generation and annotation management.
 
-Note: Core functionality is in core.region_manager.
-This package provides additional specialized methods.
+Two complementary classes handle ROI work:
+
+  RegionManager  (tme_analysis.core.region_manager)
+      Automated tumor-region detection from cell populations:
+      DBSCAN clustering, density estimation, cell-type filtering.
+      Also provides generate_tumor_zones() and filter_cells/fibers_by_roi().
+      Used internally by TMEAnalyzer.
+
+  ROIManager  (core.roi_manager)
+      Manual and imported annotation shape management:
+      rectangle, circle, ellipse, polygon, freehand, line, point.
+      QuPath GeoJSON import/export.
+      First-class TMEHierarchy integration (each ROI is a TMEObject node).
 """
 
-# Import from region_manager for convenience
 from ..core.region_manager import RegionManager
+from ...core.roi_manager import ROIManager, ROIObject, ANNOTATION_TYPES
 
 __all__ = [
     'RegionManager',
+    'ROIManager',
+    'ROIObject',
+    'ANNOTATION_TYPES',
 ]

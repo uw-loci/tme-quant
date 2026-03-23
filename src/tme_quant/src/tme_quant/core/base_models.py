@@ -410,14 +410,21 @@ class Geometry:
             self.is_3d = coords.shape[-1] >= 3
 
     def area(self) -> float:
-        """Bounding-box area (2-D) or volume (3-D)."""
+        """Bounding-box area (2-D) or volume (3-D).
+
+        Bounds layout from _calculate_bounds():
+          2-D: [x_min, y_min, x_max, y_max]          — 4 elements
+          3-D: [x_min, y_min, z_min, x_max, y_max, z_max] — 6 elements
+        """
         if self.bounds is None:
             return 0.0
         if not self.is_3d:
+            # 2-D: bounds = [x_min, y_min, x_max, y_max]
             return float(
-                (self.bounds[3] - self.bounds[0]) *
-                (self.bounds[4] - self.bounds[1])
+                (self.bounds[2] - self.bounds[0]) *
+                (self.bounds[3] - self.bounds[1])
             )
+        # 3-D: bounds = [x_min, y_min, z_min, x_max, y_max, z_max]
         return float(
             (self.bounds[3] - self.bounds[0]) *
             (self.bounds[4] - self.bounds[1]) *
@@ -429,11 +436,13 @@ class Geometry:
         if self.bounds is None:
             return np.zeros(3)
         if not self.is_3d:
+            # 2-D: bounds = [x_min, y_min, x_max, y_max]
             return np.array([
-                (self.bounds[0] + self.bounds[3]) / 2,
-                (self.bounds[1] + self.bounds[4]) / 2,
+                (self.bounds[0] + self.bounds[2]) / 2,
+                (self.bounds[1] + self.bounds[3]) / 2,
                 0.0,
             ])
+        # 3-D: bounds = [x_min, y_min, z_min, x_max, y_max, z_max]
         return np.array([
             (self.bounds[0] + self.bounds[3]) / 2,
             (self.bounds[1] + self.bounds[4]) / 2,
