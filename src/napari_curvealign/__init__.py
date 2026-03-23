@@ -8,5 +8,5 @@ def napari_experimental_provide_dock_widget(viewer=None):
     For npe2 plugins, this function is called as a command and should
     return a widget instance directly.
     """
-    from .widget import CurveAlignWidget
+    from .widgets import CurveAlignWidget
     return CurveAlignWidget(viewer=viewer)
