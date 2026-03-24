@@ -51,5 +51,19 @@
     "algorithm": "cpp"
   },
   "cmake.sourceDirectory": "/Users/dongwoolee/Documents/GitHub/curvelets/cpp",
-  "cmake.ignoreCMakeListsMissing": true
+  "cmake.ignoreCMakeListsMissing": true,
+  "terminal.integrated.profiles.windows": {
+    "MSYS2 Bash": {
+      "path": "C:\\msys64\\usr\\bin\\bash.exe",
+      "args": ["--login", "-i"],
+      "env": {
+        "MSYSTEM": "UCRT64",
+        "CHERE_INVOKING": "1",
+        "python.defaultInterpreterPath": "C:\\msys64\\UCRT64\\bin\\python3.exe",
+      }
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "MSYS2 Bash",
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda"
 }
