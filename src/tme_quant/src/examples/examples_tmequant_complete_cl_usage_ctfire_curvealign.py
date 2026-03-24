@@ -1314,12 +1314,13 @@ if __name__ == "__main__":
     print("TMEQuant Complete Workflows — CurveAlign / CT-FIRE / 3-D")
     print("=" * 80)
 
+    '''
     # ── Print runtime backend status ─────────────────────────────────────────
     print("\nRuntime backend status:")
     print(f"  Curvelet: {available_backends()}")
     print(f"  CT-FIRE:  {ctfire_backend_status()}")
 
-    """
+   
     # ── Workflow 1: CurveAlign ────────────────────────────────────────────────
     print("\n\nWORKFLOW 1: CurveAlign Fiber Segments (2-D)")
     print("=" * 80)
@@ -1330,7 +1331,7 @@ if __name__ == "__main__":
         pixel_size=0.5,
         sample_id="patient_001_curvealign",
     )
-   
+    '''
 
     # ── Workflow 2: CT-FIRE ──────────────────────────────────────────────────
     print("\n\nWORKFLOW 2: CT-FIRE Individual Fibers (2-D)")
@@ -1342,7 +1343,7 @@ if __name__ == "__main__":
         pixel_size=0.5,
         sample_id="patient_001_ctfire",
     )
-     """
+    
 
     # ── Workflow 3: 3-D volumetric ────────────────────────────────────────────
     print("\n\nWORKFLOW 3: 3-D Volumetric Analysis")
