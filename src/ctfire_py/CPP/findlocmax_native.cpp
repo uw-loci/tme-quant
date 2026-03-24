@@ -24,37 +24,37 @@ struct FindLocalMax {
                  std::vector<std::array<int, d>>& pts, int radius, T dmin)
     {
         static_assert(d == 2, "Dimension must be 2");
-        // Sanity check before any memory access
+
         printf("sizey=%d sizez=%d total=%llu\n", sizey, sizez, (uint64_t)sizey * sizez);
         fflush(stdout);
-        // Then check: is sizey*sizez actually what mutable_data() has allocated?
 
-        const int nThreads = 1; // for initial debugging
-        // const int nThreads = omp_get_max_threads();
+        // FIX 1: Use actual thread count, not hardcoded 1
+        // (hardcoded 1 only sized the seeds/buffer vectors, but OMP still spawned many threads)
+        const int nThreads = omp_get_max_threads();
 
-        // Match original seed initialization: seeds[0] = 0, then recursive fastrand
+        // Seed per thread
         std::vector<int> seeds(nThreads, 0);
         for (int i = 1; i < nThreads; ++i)
-            seeds[i] = fastrand(seeds[i-1]); // original: fastrand(seeds[0]) but seeds[0] mutates
+            seeds[i] = fastrand(seeds[i-1]);
 
-        // Phase 1: add epsilon perturbation (separate parallel loop, matches original)
-        #pragma omp parallel for
+        // Phase 1: add epsilon perturbation
+        #pragma omp parallel for num_threads(nThreads)
         for (int i = 0; i < sizez; ++i) {
             const int tid = omp_get_thread_num();
             for (int j = 0; j < sizey; ++j) {
-                const uint64_t offset = (uint64_t)sizez * j + i; // row-major
+                const uint64_t offset = (uint64_t)sizey * i + j; 
                 image[offset] += epsilon * T(fastrand(seeds[tid])) / T(0x7FFF);
             }
         }
 
-        // Phase 2: find local maxima (separate parallel loop, matches original)
+        // Phase 2: find local maxima
         std::vector<std::vector<std::array<int, d>>> thread_buffer(nThreads);
 
-        #pragma omp parallel for
+        #pragma omp parallel for num_threads(nThreads)
         for (int i = 0; i < sizez; ++i) {
             const int tid = omp_get_thread_num();
             for (int j = 0; j < sizey; ++j) {
-                const uint64_t offset = (uint64_t)sizey * i + j;
+                const uint64_t offset = (uint64_t)sizey * i + j; // FIX: was sizey * j + i
                 if (image[offset] < dmin) continue;
 
                 bool local_max = true;
@@ -109,8 +109,6 @@ py::array_t<int32_t> findlocmax_native(
             FindLocalMax<float, 2>(sizey, sizez, img_ptr, pts, radius, dmin);
         }
 
-        // Row-major output: shape (N, 3), columns = [z+1, y+1, 1]
-        // This is the Python-idiomatic equivalent of the MEX column-major layout
         auto result = py::array_t<int32_t>({(int)pts.size(), 3});
         auto out_ptr = result.mutable_data();
         int N = (int)pts.size();

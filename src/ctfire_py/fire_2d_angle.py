@@ -341,10 +341,40 @@ def fire_2d_angle(
         K, J, I, dsm_flat, p.get("s_xlinkbox", 3), p.get("thresh_Dxlink", 1.0)
     )
 
-    print(f"  Found {xlink.shape[0]} nucleation points")
-
     if plotflag == 1:
-        print(f"  Nucleation points shape: {xlink.shape}")
+        fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+
+        # Left: raw distance map
+        axes[0].imshow(dsm, cmap="hot", origin="upper")
+        axes[0].set_title(f"Distance map (dsm)")
+
+        # Right: distance map + markers
+        axes[1].imshow(dsm, cmap="hot", origin="upper")
+
+        # xlink columns are [z, y, x] in 1-based indexing
+        # convert to 0-based and plot
+        if xlink.shape[0] > 0:
+            # xlink[:,0] = z (row), xlink[:,1] = y (col) in 1-based
+            rows = xlink[:, 0] - 1  # z -> row
+            cols = xlink[:, 1] - 1  # y -> col
+            axes[1].scatter(
+                cols,
+                rows,
+                c="cyan",
+                s=10,
+                marker="+",
+                linewidths=0.8,
+                label=f"{len(rows)} pts",
+            )
+            axes[1].legend(loc="upper right", fontsize=8)
+
+        axes[1].set_title(f"Local maxima ({xlink.shape[0]} points)")
+
+        plt.tight_layout()
+        plt.savefig("debug_markers.png", dpi=150, bbox_inches="tight")
+        plt.show()
+
+        print(f"  Found {xlink.shape[0]} nucleation points")
 
     # Step 5: Extend network from nucleation points
     print("Extending nucleation points")
@@ -592,4 +622,4 @@ if __name__ == "__main__":
     )
     im3[0, :, :] = reconstructed_ct
 
-    fire_2d_angle(p=ctfire_params["value"], im=im3, plotflag=0)
+    fire_2d_angle(p=ctfire_params["value"], im=im3, plotflag=1)
