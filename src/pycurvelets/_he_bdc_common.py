@@ -4,7 +4,9 @@ from pathlib import Path
 
 import numpy as np
 from scipy import ndimage
-from skimage import color, filters, io, morphology, transform
+from skimage import color, filters, io, morphology
+
+from ._matlab_imresize import matlab_imresize
 
 # MATLAB-derived HSV threshold defaults from:
 # - CurveAlign_CT-FIRE/BDcreation_reg2.m
@@ -15,6 +17,92 @@ COLLAGEN_HUE_MIN = 0.837
 COLLAGEN_HUE_MAX = 0.066  # wrapped hue range (>= min OR <= max)
 NUCLEI_MIN_AREA = 150
 COLLAGEN_MIN_AREA = 100
+
+
+def matlab_round(x: float | np.ndarray) -> float | np.ndarray:
+    """MATLAB ``round``: half-integers round away from zero (unlike ``numpy.round``)."""
+    arr = np.asarray(x, dtype=np.float64)
+    out = np.sign(arr) * np.floor(np.abs(arr) + 0.5)
+    if np.ndim(x) == 0:
+        return float(out)
+    return out
+
+
+def matlab_rgb2gray(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
+    """MATLAB ``rgb2gray``: Rec.601 luma ``[0.2989, 0.5870, 0.1140]``."""
+    if rgb.ndim == 2:
+        return rgb.astype(np.float64)
+    arr = np.moveaxis(rgb, axis, -1).astype(np.float64)
+    if arr.shape[-1] < 3:
+        raise ValueError(f"Expected RGB with >=3 channels, got shape {rgb.shape}.")
+    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    return 0.2989 * r + 0.5870 * g + 0.1140 * b
+
+
+def matlab_graythresh(image: np.ndarray, nbins: int = 256) -> float:
+    """
+    MATLAB ``graythresh`` for ``double`` images in ``[0, 1]``: 256-bin histogram on
+    ``[0, 1]``, then Otsu threshold (bin center of optimal split).
+    """
+    arr = np.asarray(image, dtype=np.float64).ravel()
+    arr = np.clip(arr, 0.0, 1.0)
+    if arr.size == 0:
+        raise ValueError("Cannot compute graythresh for empty image.")
+    hist, bin_edges = np.histogram(arr, bins=nbins, range=(0.0, 1.0))
+    hist = hist.astype(np.float64)
+    total = float(hist.sum())
+    if total <= 0:
+        raise ValueError("Cannot compute graythresh for empty histogram.")
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+    w0 = np.cumsum(hist)
+    w1 = total - w0
+    sum_b = np.cumsum(hist * bin_centers)
+    mu_t = sum_b[-1]
+    between = np.zeros(nbins, dtype=np.float64)
+    for t in range(nbins):
+        w0_t = w0[t]
+        w1_t = w1[t]
+        if w0_t <= 0 or w1_t <= 0:
+            continue
+        m0 = sum_b[t] / w0_t
+        m1 = (mu_t - sum_b[t]) / w1_t
+        between[t] = w0_t * w1_t * (m0 - m1) ** 2
+    idx = int(np.argmax(between))
+    return float(bin_centers[idx])
+
+
+def matlab_fspecial_gaussian(size: int, sigma: float) -> np.ndarray:
+    """MATLAB ``fspecial('gaussian', size, sigma)`` for scalar ``size`` (square kernel)."""
+    if size < 1:
+        raise ValueError(f"Kernel size must be >= 1, got {size}.")
+    if sigma <= 0:
+        raise ValueError(f"sigma must be > 0, got {sigma}.")
+    x = np.arange(size, dtype=np.float64) - (size - 1) / 2.0
+    xx, yy = np.meshgrid(x, x)
+    h = np.exp(-(xx**2 + yy**2) / (2.0 * sigma**2))
+    return h / np.sum(h)
+
+
+def matlab_imfilter(
+    image: np.ndarray,
+    kernel: np.ndarray,
+    *,
+    boundary: str = "zero",
+) -> np.ndarray:
+    """
+    MATLAB ``imfilter(..., 'corr')`` with ``'symmetric'``-equivalent boundaries.
+
+    ``boundary='zero'``: pad with 0 (default ``imfilter`` padding).
+    ``boundary='replicate'``: ``'replicate'`` edge padding.
+    """
+    img = np.asarray(image, dtype=np.float64)
+    k = np.asarray(kernel, dtype=np.float64)
+    if boundary == "zero":
+        return ndimage.correlate(img, k, mode="constant", cval=0.0).astype(np.float64)
+    if boundary == "replicate":
+        return ndimage.correlate(img, k, mode="nearest").astype(np.float64)
+    raise ValueError(f"boundary must be 'zero' or 'replicate', got {boundary!r}")
+
 
 def normalize_array_to_unit_interval(
     image: np.ndarray,
@@ -131,24 +219,17 @@ def resize_like(
     """
     Resize image to target (rows, cols) while preserving range.
 
-    Default ``order=3`` matches MATLAB ``imresize`` bicubic-like behavior more
-    closely than linear interpolation (order=1). When ``anti_aliasing`` is
-    omitted, it is enabled only when downsampling in either dimension, similar
-    to common ``imresize`` usage.
+    Uses MATLAB-compatible bicubic (keys cubic) via :func:`matlab_imresize` for
+    parity with ``BDcreation_reg2.m`` / ``BDcreationHE2.m``. ``order`` and
+    ``anti_aliasing`` are accepted for API compatibility but ignored.
     """
+    del order, anti_aliasing  # MATLAB path is fixed; kept for call-site compatibility
     if image.shape[:2] == out_shape:
         return image.copy()
-    if anti_aliasing is None:
-        anti_aliasing = any(
-            out_shape[i] < image.shape[i] for i in range(min(2, image.ndim))
-        )
-    return transform.resize(
-        image,
-        output_shape=out_shape if image.ndim == 2 else (*out_shape, image.shape[2]),
-        order=order,
-        anti_aliasing=anti_aliasing,
-        preserve_range=True,
-    ).astype(np.float64)
+    arr = np.asarray(image, dtype=np.float64)
+    if arr.ndim == 2:
+        return matlab_imresize(arr, output_shape=(out_shape[0], out_shape[1]), method="bicubic")
+    return matlab_imresize(arr, output_shape=(out_shape[0], out_shape[1]), method="bicubic")
 
 
 def prepare_he_image(he: np.ndarray, pixel_per_micron: float) -> tuple[np.ndarray, float]:
@@ -259,19 +340,18 @@ def remove_small_components(mask: np.ndarray, min_size: int) -> np.ndarray:
 
 
 def disk_se(radius: float) -> np.ndarray:
-    """Create a disk structuring element with MATLAB-like minimum size behavior."""
-    r = max(int(round(radius)), 0)
+    """Create a disk structuring element; radius uses :func:`matlab_round` like MATLAB ``strel``."""
+    r = max(int(matlab_round(radius)), 0)
     if r <= 0:
         return np.ones((1, 1), dtype=bool)
     return morphology.disk(r)
 
 
 def compute_otsu_threshold(image: np.ndarray) -> float:
-    """Compute Otsu threshold and raise if input is empty or homogeneous."""
+    """scikit-image Otsu (non-MATLAB). Prefer :func:`matlab_graythresh` for CurveAlign parity."""
     arr = image.astype(np.float64)
     if arr.size == 0:
         raise ValueError("Cannot compute Otsu threshold for empty image.")
-    # TODO: check tolerance value
     if np.allclose(arr, arr.flat[0]):
         raise ValueError(
             "Cannot compute Otsu threshold for homogeneous image "
@@ -287,7 +367,7 @@ def make_nuclei_mask(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Generate nuclei mask and masked nuclei RGB image from adjusted HE."""
     hsv = color.rgb2hsv(he_rgb_adjusted)
-    sat_thresh = compute_otsu_threshold(hsv[..., saturation_channel])
+    sat_thresh = matlab_graythresh(hsv[..., saturation_channel])
 
     nuclei_raw = (
         (hsv[..., 0] >= NUCLEI_HUE_MIN)
@@ -311,7 +391,7 @@ def make_collagen_mask(
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Generate collagen mask and non-background mask from adjusted HE."""
     hsv = color.rgb2hsv(he_rgb_adjusted)
-    sat_thresh = compute_otsu_threshold(hsv[..., saturation_channel])
+    sat_thresh = matlab_graythresh(hsv[..., saturation_channel])
 
     collagen = (
         ((hsv[..., 0] >= COLLAGEN_HUE_MIN) | (hsv[..., 0] <= COLLAGEN_HUE_MAX))
@@ -323,28 +403,30 @@ def make_collagen_mask(
     if enhanced_postprocessing:
         # Morphology radii are MATLAB-derived heuristics in units of pixel/micron.
         collagen = morphology.dilation(collagen, disk_se(np.ceil(pix_per_mic)))
-        collagen = morphology.closing(collagen, disk_se(np.round(3.0 * pix_per_mic)))
+        collagen = morphology.closing(collagen, disk_se(3.0 * pix_per_mic))
 
     no_background = hsv[..., saturation_channel] >= sat_thresh
     return collagen.astype(bool), no_background.astype(bool), sat_thresh
 
 
 def gaussian_filter_with_size_hint(
-    image: np.ndarray, sigma: float, kernel_size: int | None = None
+    image: np.ndarray,
+    sigma: float,
+    kernel_size: int | None = None,
+    *,
+    boundary: str = "zero",
 ) -> np.ndarray:
     """
-    Gaussian filter with optional kernel-size hint to constrain effective radius.
+    MATLAB ``fspecial('gaussian', kernel_size, sigma)`` + ``imfilter`` (correlation).
+
+    ``boundary='zero'`` for ``BDcreation_reg2`` nuclei filtering; ``'replicate'`` for
+    ``BDcreationHE2`` final Gaussian blur.
     """
-    truncate = 4.0
-    if kernel_size is not None and sigma > 0:
-        radius = (max(int(kernel_size), 1) - 1) / 2.0
-        truncate = max(radius / float(sigma), 0.5)
-    return ndimage.gaussian_filter(
-        image.astype(np.float64),
-        sigma=float(sigma),
-        mode="nearest",
-        truncate=truncate,
-    )
+    if kernel_size is None:
+        raise ValueError("kernel_size is required for MATLAB-compatible Gaussian filtering.")
+    sz = max(int(kernel_size), 1)
+    h = matlab_fspecial_gaussian(sz, float(sigma))
+    return matlab_imfilter(image.astype(np.float64), h, boundary=boundary)
 
 
 # Backward-compatible aliases for current call sites.
@@ -352,5 +434,5 @@ load_image_as_float = load_and_normalize_image
 save_image_uint8 = save_as_uint8_image
 to_grayscale = ensure_grayscale
 matlab_area_open = remove_small_components
-safe_otsu = compute_otsu_threshold
+safe_otsu = matlab_graythresh
 gaussian_filter_matlab_like = gaussian_filter_with_size_hint

@@ -184,6 +184,7 @@ pycurvelets/opt/*.*
 
 # test tmp folder
 tests/test_images/CA_Out/
+tests/artifacts/
 
 # referenced MATLAB files
 *.m

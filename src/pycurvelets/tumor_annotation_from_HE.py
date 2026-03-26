@@ -16,11 +16,12 @@ from ._he_bdc_common import (
     make_collagen_mask,
     make_nuclei_mask,
     matlab_area_open,
+    matlab_rgb2gray,
+    matlab_round,
     prepare_he_image,
     resize_like,
     safe_otsu,
     save_image_uint8,
-    to_grayscale,
 )
 
 # Morphology/filter constants copied from MATLAB BDcreationHE2 heuristics.
@@ -87,32 +88,33 @@ def tumor_annotation_from_he(
     )
 
     epith_cell_bw = (
-        (to_grayscale(masked_nuclei_image) > EPITH_BINARY_THRESHOLD)
+        (matlab_rgb2gray(masked_nuclei_image) > EPITH_BINARY_THRESHOLD)
         & (~bw_collagen1)
         & bw_no_background
     )
     epith_cell_bw_open = morphology.dilation(
         epith_cell_bw,
-        disk_se(np.round(EPITH_DILATION_RADIUS_MULTIPLIER * pix_per_mic)),
+        disk_se(EPITH_DILATION_RADIUS_MULTIPLIER * pix_per_mic),
     )
     bwx = ndimage.binary_fill_holes(epith_cell_bw_open)
     bwy = matlab_area_open(
         ~bwx,
-        int(np.round((BACKGROUND_HOLE_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2)),
+        int(matlab_round((BACKGROUND_HOLE_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2)),
     )
     mask_image = matlab_area_open(
         ~bwy,
-        int(np.round((TUMOR_MASK_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2)),
+        int(matlab_round((TUMOR_MASK_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2)),
     )
     mask_image1 = morphology.dilation(
         mask_image,
-        disk_se(np.round(FINAL_MASK_DILATION_RADIUS_MULTIPLIER * pix_per_mic)),
+        disk_se(FINAL_MASK_DILATION_RADIUS_MULTIPLIER * pix_per_mic),
     ) & (~bw_collagen1)
 
     smoothed = gaussian_filter_matlab_like(
         mask_image1.astype(np.float64),
         sigma=FINAL_MASK_GAUSSIAN_SIGMA,
         kernel_size=FINAL_MASK_GAUSSIAN_KERNEL_SIZE,
+        boundary="replicate",
     )
     mask_temp = resize_like(smoothed, orig_shape)
     mask_thresh = safe_otsu(mask_temp)

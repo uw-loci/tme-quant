@@ -23,13 +23,20 @@ except ImportError:
     _HAS_SITK = False
     sitk = None  # type: ignore[assignment]
 
-# Tuned toward MATLAB Image Processing Toolbox defaults shown in BDcreation_reg2 disp:
+# MATLAB ``imregconfig('multimodal')`` + ``BDcreation_reg2.m`` adjustments:
 # MattesMutualInformation: NumberOfHistogramBins=50, UseAllPixels=1
-# Optimizer: OnePlusOneEvolutionary with InitialRadius scaled; later RegularStepGradientDescent
-# with MaximumIterations=700 on the affine ``imregtform`` step.
+# Optimizer: OnePlusOneEvolutionary (not RegularStepGradientDescent) with
+# InitialRadius = default/3.5, GrowthFactor=1.05, Epsilon=1.5e-6, MaximumIterations=700.
 SITK_HISTOGRAM_BINS = 50
-SITK_SIMILARITY_ITERATIONS = 100
+# MATLAB sets optimizer.MaximumIterations = 700 before similarity + affine ``imregtform``.
+SITK_SIMILARITY_ITERATIONS = 700
 SITK_AFFINE_ITERATIONS = 700
+# Default multimodal InitialRadius is 6.25e-3; BDcreation_reg2 divides by 3.5.
+SITK_INITIAL_RADIUS = 6.25e-3 / 3.5
+SITK_GROWTH_FACTOR = 1.05
+SITK_EPSILON = 1.5e-6
+# Fixed seed so regression tests and repeated runs are deterministic.
+SITK_ONEPLUSONE_SEED = 42
 
 
 def has_simpleitk() -> bool:
@@ -63,20 +70,25 @@ def register_collagen_to_shg_sitk(
         im.SetSpacing((1.0, 1.0))
         im.SetOrigin((0.0, 0.0))
 
+    def _set_one_plus_one_evolutionary(reg: sitk.ImageRegistrationMethod, n_iter: int) -> None:
+        """Match MATLAB ``imregconfig('multimodal')`` OnePlusOneEvolutionary defaults."""
+        reg.SetOptimizerAsOnePlusOneEvolutionary(
+            numberOfIterations=n_iter,
+            epsilon=SITK_EPSILON,
+            initialRadius=SITK_INITIAL_RADIUS,
+            growthFactor=SITK_GROWTH_FACTOR,
+            shrinkFactor=-1.0,
+            seed=SITK_ONEPLUSONE_SEED,
+        )
+        reg.SetOptimizerScalesFromPhysicalShift()
+
     # --- Stage 1: similarity (MATLAB ``imregtform(..., 'similarity', ...)``) ---
     R1 = sitk.ImageRegistrationMethod()
     R1.SetMetricAsMattesMutualInformation(numberOfHistogramBins=SITK_HISTOGRAM_BINS)
     R1.SetMetricSamplingStrategy(R1.NONE)
     R1.SetMetricSamplingPercentage(1.0)
     R1.SetInterpolator(sitk.sitkLinear)
-    R1.SetOptimizerAsRegularStepGradientDescent(
-        learningRate=1.0,
-        minStep=1e-4,
-        numberOfIterations=SITK_SIMILARITY_ITERATIONS,
-        relaxationFactor=0.5,
-        gradientMagnitudeTolerance=1e-6,
-    )
-    R1.SetOptimizerScalesFromPhysicalShift()
+    _set_one_plus_one_evolutionary(R1, SITK_SIMILARITY_ITERATIONS)
 
     init_sim = sitk.CenteredTransformInitializer(
         fixed_img,
@@ -97,14 +109,7 @@ def register_collagen_to_shg_sitk(
     R2.SetMetricSamplingStrategy(R2.NONE)
     R2.SetMetricSamplingPercentage(1.0)
     R2.SetInterpolator(sitk.sitkLinear)
-    R2.SetOptimizerAsRegularStepGradientDescent(
-        learningRate=0.5,
-        minStep=1e-5,
-        numberOfIterations=SITK_AFFINE_ITERATIONS,
-        relaxationFactor=0.5,
-        gradientMagnitudeTolerance=1e-7,
-    )
-    R2.SetOptimizerScalesFromPhysicalShift()
+    _set_one_plus_one_evolutionary(R2, SITK_AFFINE_ITERATIONS)
     R2.SetMovingInitialTransform(tx_similarity)
     affine = sitk.AffineTransform(2)
     R2.SetInitialTransform(affine, inPlace=False)

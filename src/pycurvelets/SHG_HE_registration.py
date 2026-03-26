@@ -1,14 +1,14 @@
-from __future__ import annotations
-
 """SHG↔H&E registration (``BDcreation_reg2.m``).
 
 Preprocessing matches the MATLAB script. **Registration** defaults to
 **SimpleITK** Mattes mutual information with a similarity stage plus affine
 refinement (same moving/fixed pair as MATLAB: collagen mask vs SHG), which
-tracks MATLAB ``imregconfig('multimodal')`` / ``imregtform`` much more closely
+tracks MATLAB ``imregconfig('multimodal')`` (OnePlusOneEvolutionary) / ``imregtform`` much more closely
 than phase correlation + ECC. If SimpleITK is missing or registration fails,
 the code falls back to phase cross-correlation + OpenCV ``findTransformECC``.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +28,7 @@ from ._he_bdc_common import (
     make_collagen_mask,
     make_nuclei_mask,
     matlab_area_open,
+    matlab_rgb2gray,
     normalize_array_to_unit_interval,
     prepare_registration_pair,
     resize_like,
@@ -217,11 +218,12 @@ def shg_he_registration(
         enhanced_postprocessing=False,
     )
 
-    gray_nuclei = to_grayscale(masked_nuclei_image)
+    gray_nuclei = matlab_rgb2gray(masked_nuclei_image)
     nuclei_filtered = gaussian_filter_matlab_like(
         gray_nuclei,
         sigma=NUCLEI_FILTER_SIGMA,
         kernel_size=max(int(np.floor(pix_per_mic)), 1),
+        boundary="zero",
     )
     bw_nuclei = nuclei_filtered > NUCLEI_BINARY_THRESHOLD
     bw_nuclei_discard = matlab_area_open(

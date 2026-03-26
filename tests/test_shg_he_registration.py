@@ -41,12 +41,13 @@ REGRESSION_CASES: tuple[tuple[str, float, str], ...] = (
 # Keys: case id -> (max_mae, max_rmse, min_ncc per channel). Increase max_* / decrease min_ncc only
 # when intentionally changing registration; tighten to catch regressions.
 _REGRESSION_BOUNDS: dict[str, tuple[float, float, tuple[float, float, float]]] = {
-    # Observed ~ MAE 0.164 RMSE 0.282 NCC [0.009, 0.012, -0.004]
-    "test1": (0.19, 0.33, (-0.08, -0.08, -0.08)),
-    # Observed ~ MAE 0.156 RMSE 0.274 NCC [0.018, 0.013, -0.003]
-    "test2": (0.18, 0.32, (-0.08, -0.08, -0.08)),
-    # Observed ~ MAE 0.174 RMSE 0.293 NCC [0.084, 0.086, 0.090]
-    "test3": (0.21, 0.35, (0.0, 0.0, 0.0)),
+    # OnePlusOneEvolutionary + MATLAB-compat preprocess; uv run patient_001 fixtures:
+    # ~ MAE 0.164 RMSE 0.283 NCC [0.005, 0.008, -0.010]
+    "test1": (0.19, 0.33, (-0.02, -0.02, -0.02)),
+    # ~ MAE 0.156 RMSE 0.274 NCC [0.022, 0.017, 0.0]
+    "test2": (0.18, 0.32, (-0.01, -0.01, -0.01)),
+    # ~ MAE 0.177 RMSE 0.295 NCC [0.003, 0.008, -0.009]
+    "test3": (0.21, 0.36, (-0.02, -0.02, -0.02)),
 }
 
 

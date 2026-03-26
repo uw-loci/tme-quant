@@ -38,11 +38,12 @@ ANNOTATION_CASES: tuple[tuple[str, float, str, str], ...] = (
 # Per-case minimum IoU, Dice, pixel accuracy (Python vs MATLAB golden mask, empirical run).
 # Decrease these only when golden masks or algorithm intentionally change.
 _REGRESSION_MIN_METRICS: dict[str, tuple[float, float, float]] = {
-    # Observed ~ IoU 0.40 Dice 0.57 Acc 0.56
+    # MATLAB-compat graythresh / imresize / fspecial+imfilter; uv run patient_001:
+    # ~ IoU 0.40 Dice 0.57 Acc 0.56
     "test1": (0.35, 0.50, 0.50),
-    # Observed ~ IoU 0.38 Dice 0.55 Acc 0.52
+    # ~ IoU 0.38 Dice 0.55 Acc 0.52
     "test2": (0.32, 0.48, 0.47),
-    # Observed ~ IoU 0.44 Dice 0.61 Acc 0.57
+    # ~ IoU 0.44 Dice 0.61 Acc 0.57
     "test3": (0.38, 0.54, 0.51),
 }
 
