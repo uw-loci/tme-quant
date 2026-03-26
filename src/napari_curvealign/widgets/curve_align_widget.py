@@ -41,7 +41,12 @@ from skimage.io import imread
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-from ..preprocessing import PreprocessingOptions, ThresholdMethod, preprocess_image
+from ..preprocessing import (
+    PreprocessingOptions,
+    ThresholdMethod,
+    preprocess_image,
+    to_2d_grayscale_for_curvelets,
+)
 from ..roi_manager import ROIManager, ROIShape, ROIAnalysisMethod
 from ..imagej import get_fiji_bridge
 from ..segmentation import (
@@ -901,7 +906,7 @@ class CurveAlignWidget(QWidget):
             
         selected_path = selected_items[0].data(Qt.UserRole)
         selected_filename = selected_items[0].text()
-        
+
         try:
             from ..curvelet_analysis_run import run_analysis
         except ImportError:
@@ -917,9 +922,7 @@ class CurveAlignWidget(QWidget):
         # Apply preprocessing if enabled
         try:
             from skimage.io import imread
-            image_data = imread(selected_path)
-            if image_data.ndim > 2:
-                image_data = image_data[0]
+            image_data = to_2d_grayscale_for_curvelets(imread(selected_path))
             
             # Apply preprocessing based on tab settings
             preprocess_options = PreprocessingOptions(
@@ -966,7 +969,7 @@ class CurveAlignWidget(QWidget):
             # Pass advanced parameters
             advanced_params=self.advanced_params
         )
-        
+
         # Display results
         self.display_results(overlay_img, heatmap_img, measurements, selected_filename)
 

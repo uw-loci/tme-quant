@@ -38,8 +38,13 @@ class ImageProcessingError(FiberAnalysisError):
 @dataclass
 class CurveletControlParameters:
     keep: float
-    scale: float
+    scale: Union[int, float]
     radius: float
+
+    def __post_init__(self) -> None:
+        # new_curv uses ``len(c) - scale - 1`` as a list index; a float scale (e.g. 1.0)
+        # makes that expression float and breaks indexing without changing new_curv.
+        self.scale = int(self.scale)
 
 
 @dataclass

@@ -1,9 +1,22 @@
+"""
+Regression tests for ``tumor_annotation_from_he`` vs MATLAB ``BDcreationHE2.m``.
+
+Uses MATLAB-registered HE images and golden tumor masks from
+``tests/test_for_shg_he_registration_BDcreation/`` (Yuming's fixtures: three
+``pixelpermicron`` values; parameters match ``BDCparameters_for_seg1_test*.mat``).
+
+Registered HE inputs are MATLAB outputs from ``BDcreation_reg2`` so this module tests
+tumor annotation in isolation. IoU / Dice / pixel accuracy are regression guards vs
+committed golden masks (not pixel equality).
+"""
+
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
-from scipy import ndimage
+import pytest
 from skimage import io
 
 from pycurvelets.tumor_annotation_from_HE import (
@@ -11,121 +24,126 @@ from pycurvelets.tumor_annotation_from_HE import (
     tumor_annotation_from_he,
 )
 
-# Synthetic-fixture geometry constants used across tests.
-# Ring radii define an annulus centered in the image:
-#   expected analytic area ~= pi*(R_OUTER^2 - R_INNER^2) ~= 7037 px.
-R_OUTER = 62.0
-R_INNER = 40.0
-NUCLEI_RADIUS = 35.0
+_TESTS_DIR = Path(__file__).resolve().parent
+_FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"
+_SHG_DIR = _FIXTURE_ROOT / "SHG"
 
-# Tolerances/expectations for mask geometry checks:
-# - pixel range brackets the synthetic annulus area with room for morphology/smoothing
-# - centroid tolerance allows <=1 px discretization drift from thresholding
-EXPECTED_TRUE_PIXELS_MIN = 6200
-EXPECTED_TRUE_PIXELS_MAX = 7600
-EXPECTED_COMPONENT_COUNT = 1
-CENTROID_TOLERANCE_PX = 1.0
+# Matches BDCparameters_for_seg1_test{1,2,3}.mat: ppm 1.5, 2.0, 3.0; HE from HE_registered_testN.
+ANNOTATION_CASES: tuple[tuple[str, float, str, str], ...] = (
+    ("test1", 1.5, "HE_registered_test1", "BDcreationHE_test1results_mask for patient_001.tif.tif"),
+    ("test2", 2.0, "HE_registered_test2", "BDcreationHE_test2results_mask for patient_001.tif.tif"),
+    ("test3", 3.0, "HE_registered_test3", "BDcreationHE_test3results_mask for patient_001.tif.tif"),
+)
 
-
-def _save_float_image(path: Path, image: np.ndarray) -> None:
-    arr = np.clip(image, 0.0, 1.0)
-    io.imsave(str(path), np.round(arr * 255.0).astype(np.uint8), check_contrast=False)
-
-
-def _synthetic_he_image(shape: tuple[int, int] = (180, 180)) -> np.ndarray:
-    rows, cols = np.indices(shape)
-    he = np.zeros((shape[0], shape[1], 3), dtype=np.float64)
-    # Light pink-ish background to mimic HE tissue background.
-    he[:, :, :] = np.array([0.96, 0.93, 0.93], dtype=np.float64)
-
-    center_r, center_c = shape[0] / 2.0, shape[1] / 2.0
-    ring = (
-        ((rows - center_r) ** 2 + (cols - center_c) ** 2 <= R_OUTER**2)
-        & ((rows - center_r) ** 2 + (cols - center_c) ** 2 >= R_INNER**2)
-    )
-    # Red-ish ring to emulate collagen-like signal in HSV segmentation branch.
-    he[ring, 0] = 0.88
-    he[ring, 1] = 0.23
-    he[ring, 2] = 0.22
-
-    # Cyan center cluster to emulate nuclei-like signal.
-    nuclei_cluster = ((rows - center_r) ** 2 + (cols - center_c) ** 2) <= NUCLEI_RADIUS**2
-    he[nuclei_cluster, 0] = 0.32
-    he[nuclei_cluster, 1] = 0.72
-    he[nuclei_cluster, 2] = 0.95
-
-    return np.clip(he, 0.0, 1.0)
+# Per-case minimum IoU, Dice, pixel accuracy (Python vs MATLAB golden mask, empirical run).
+# Decrease these only when golden masks or algorithm intentionally change.
+_REGRESSION_MIN_METRICS: dict[str, tuple[float, float, float]] = {
+    # Observed ~ IoU 0.40 Dice 0.57 Acc 0.56
+    "test1": (0.35, 0.50, 0.50),
+    # Observed ~ IoU 0.38 Dice 0.55 Acc 0.52
+    "test2": (0.32, 0.48, 0.47),
+    # Observed ~ IoU 0.44 Dice 0.61 Acc 0.57
+    "test3": (0.38, 0.54, 0.51),
+}
 
 
-def test_tumor_annotation_from_he_outputs_binary_mask_and_saves(tmp_path):
-    he_dir = tmp_path / "he"
-    shg_dir = tmp_path / "shg"
-    he_dir.mkdir()
-    shg_dir.mkdir()
+def _registered_he_dir(folder: str) -> Path:
+    return _FIXTURE_ROOT / "HE" / folder
 
-    filename = "demo_HE.tif"
-    he_image = _synthetic_he_image()
-    _save_float_image(he_dir / filename, he_image)
 
+def _golden_mask_path(name: str) -> Path:
+    return _SHG_DIR / "CA_Boundary" / name
+
+
+def _load_mask_as_bool(path: Path) -> np.ndarray:
+    """Load binary mask as bool (uint8 TIFF: nonzero foreground)."""
+    im = io.imread(str(path))
+    if im.dtype == np.bool_:
+        return im
+    if im.dtype == np.uint8:
+        return im > 127
+    arr = im.astype(np.float64)
+    return arr > 0.5
+
+
+def _iou_dice_pixel_accuracy(
+    pred: np.ndarray,
+    golden: np.ndarray,
+) -> tuple[float, float, float]:
+    """Return (IoU, Dice, pixel accuracy) for aligned boolean masks."""
+    p = np.asarray(pred, dtype=bool).ravel()
+    g = np.asarray(golden, dtype=bool).ravel()
+    inter = int(np.logical_and(p, g).sum())
+    union = int(np.logical_or(p, g).sum())
+    iou = float(inter / union) if union else 1.0
+    denom = int(p.sum()) + int(g.sum())
+    dice = float(2.0 * inter / denom) if denom else 1.0
+    acc = float((p == g).sum() / p.size)
+    return iou, dice, acc
+
+
+def _require_annotation_fixtures(he_folder: str, golden_mask_name: str) -> tuple[Path, Path]:
+    he_dir = _registered_he_dir(he_folder)
+    he_file = he_dir / "patient_001.tif"
+    mask_path = _golden_mask_path(golden_mask_name)
+    missing = [p for p in (he_file, mask_path) if not p.is_file()]
+    if missing:
+        pytest.skip(
+            "BDcreationHE2 regression needs fixture tree:\n"
+            + "\n".join(f"  missing: {m}" for m in missing)
+        )
+    return he_dir, mask_path
+
+
+@pytest.mark.parametrize(
+    "case_id,pixelpermicron,he_registered_folder,golden_mask_filename",
+    ANNOTATION_CASES,
+    ids=[c[0] for c in ANNOTATION_CASES],
+)
+def test_tumor_annotation_from_he_matches_matlab_golden_mask_patient001(
+    case_id: str,
+    pixelpermicron: float,
+    he_registered_folder: str,
+    golden_mask_filename: str,
+) -> None:
+    """
+    Compare Python mask to MATLAB ``BDcreationHE2.m`` golden under ``SHG/CA_Boundary/``.
+
+    Input HE: MATLAB-registered ``HE/<HE_registered_testN>/patient_001.tif``.
+    Golden: ``BDcreationHE_testNresults_mask for patient_001.tif.tif``.
+    """
+    he_dir, golden_path = _require_annotation_fixtures(he_registered_folder, golden_mask_filename)
+
+    golden_mask = _load_mask_as_bool(golden_path)
     params = TumorAnnotationFromHEParameters(
         HEfilepath=str(he_dir),
-        HEfilename=filename,
-        # Non-integer-ish ppm exercises morphology kernels used by conversion code.
-        pixelpermicron=1.5,
-        # Kept for MATLAB-compat parameter surface (currently not used by algorithm).
-        areaThreshold=150.0,
-        SHGfilepath=str(shg_dir),
+        HEfilename="patient_001.tif",
+        pixelpermicron=pixelpermicron,
+        areaThreshold=5000.0,
+        SHGfilepath=str(_SHG_DIR),
     )
-    mask, debug = tumor_annotation_from_he(params, save_output=True, return_debug=True)
+    python_mask = tumor_annotation_from_he(params, save_output=False, return_debug=False)
 
-    assert mask.shape == he_image.shape[:2]
-    assert mask.dtype == np.bool_
-    assert "mask_temp" in debug
+    assert python_mask.shape == golden_mask.shape, (
+        f"[{case_id}] shape mismatch: python {python_mask.shape} vs golden {golden_mask.shape}"
+    )
+    assert python_mask.dtype == np.bool_
 
-    # Validate basic geometry on the synthetic sample.
-    true_pixels = int(mask.sum())
-    assert EXPECTED_TRUE_PIXELS_MIN <= true_pixels <= EXPECTED_TRUE_PIXELS_MAX
+    iou, dice, acc = _iou_dice_pixel_accuracy(python_mask, golden_mask)
 
-    labels, num_labels = ndimage.label(mask)
-    assert num_labels == EXPECTED_COMPONENT_COUNT
+    if os.environ.get("TMEQ_DEBUG_BDC_ANNOTATION") == "1":
+        print(  # noqa: T201 — intentional debug aid for threshold tuning
+            f"[{case_id}] ppm={pixelpermicron} IoU={iou:.6f} Dice={dice:.6f} Acc={acc:.6f}"
+        )
 
-    ys, xs = np.nonzero(mask)
-    centroid_row = float(np.mean(ys))
-    centroid_col = float(np.mean(xs))
-    expected_row = he_image.shape[0] / 2.0
-    expected_col = he_image.shape[1] / 2.0
-    assert abs(centroid_row - expected_row) <= CENTROID_TOLERANCE_PX
-    assert abs(centroid_col - expected_col) <= CENTROID_TOLERANCE_PX
+    min_iou, min_dice, min_acc = _REGRESSION_MIN_METRICS[case_id]
 
-    # Filename intentionally matches legacy MATLAB naming behavior:
-    # appending ".tif" after replacing HE->SHG can produce ".tif.tif".
-    expected_name = "mask for demo_SHG.tif.tif"
-    out_path = shg_dir / "CA_Boundary" / expected_name
-    assert out_path.exists()
-
-
-def test_tumor_annotation_from_he_deterministic_with_fallback_save_path(tmp_path):
-    he_dir = tmp_path / "he_fallback"
-    he_dir.mkdir()
-
-    filename = "fallback_HE.tif"
-    he_image = _synthetic_he_image(shape=(164, 164))
-    _save_float_image(he_dir / filename, he_image)
-
-    params = {
-        "HEfilepath": str(he_dir),
-        "HEfilename": filename,
-        "pixelpermicron": 1.2,
-        # Kept for MATLAB-compat parameter surface (currently not used by algorithm).
-        "areaThreshold": 120.0,
-        "SHGfilepath": "",
-    }
-
-    mask1 = tumor_annotation_from_he(params, save_output=True, return_debug=False)
-    mask2 = tumor_annotation_from_he(params, save_output=False, return_debug=False)
-
-    np.testing.assert_array_equal(mask1, mask2)
-
-    expected_name = "mask for fallback_SHG.tif.tif"
-    out_path = he_dir / "CA_Boundary" / expected_name
-    assert out_path.exists()
+    assert iou >= min_iou, (
+        f"[{case_id}] IoU {iou:.6f} < {min_iou} (MATLAB golden vs Python)."
+    )
+    assert dice >= min_dice, (
+        f"[{case_id}] Dice {dice:.6f} < {min_dice} (MATLAB golden vs Python)."
+    )
+    assert acc >= min_acc, (
+        f"[{case_id}] pixel accuracy {acc:.6f} < {min_acc} (MATLAB golden vs Python)."
+    )

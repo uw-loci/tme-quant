@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 from skimage.io import imread
 from skimage.color import gray2rgb
+
+from .preprocessing import to_2d_grayscale_for_curvelets
 from skimage.filters import gaussian
 import random
 from enum import Enum
@@ -236,13 +238,9 @@ def run_analysis(
         print(f"  - {param}: {value}")
     
 
-    # Load the image
-    image_data = imread(image_path)
-    
-    # For multi-page TIFFs, take the first page
-    if image_data.ndim > 2 and image_data.shape[0] > 1:
-        image_data = image_data[0]
-    
+    # Load the image and normalize to 2D (RGB HE images are H×W×3, not a Z-stack)
+    image_data = to_2d_grayscale_for_curvelets(imread(image_path))
+
     # Use pycurvelets analysis if available
     if HAS_PYCURVELETS:
         try:
