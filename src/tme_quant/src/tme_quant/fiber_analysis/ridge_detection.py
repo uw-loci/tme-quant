@@ -7,7 +7,7 @@ from .extraction import BaseExtractionMethod
 from .config import (
     ExtractionParams, RidgeDetectionParams, RidgeDetectionResult, FiberProperties,
 )
-from .io import FijiBridge
+from .fiji_bridge import FijiBridge
 from .utils.geometry_utils import compute_fiber_properties
 
 
