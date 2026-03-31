@@ -5,7 +5,7 @@ Cell-specific utility functions.
 import numpy as np
 from typing import List, Tuple
 from scipy.spatial import cKDTree
-from ...core.tme_models.cell_model import CellObject
+from ...core.tme_objects.cell_objects import CellObject
 
 
 def compute_cell_neighbors(

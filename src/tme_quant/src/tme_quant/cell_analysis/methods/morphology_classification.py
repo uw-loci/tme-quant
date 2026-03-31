@@ -6,7 +6,7 @@ import numpy as np
 from typing import Optional
 
 from ..config import ClassificationParams, ClassificationResult
-from tme_quant.core.tme_models.cell_model import SegmentationResult
+from tme_quant.core.tme_objects.cell_objects import SegmentationResult
 from .base_classification import BaseClassificationMethod
 
 
@@ -54,7 +54,7 @@ class MorphologyClassifier(BaseClassificationMethod):
 
     def _classify_morphology(self, features: dict, params) -> tuple:
         """Return (CellType, confidence) from morphology rules."""
-        from tme_quant.core.tme_models.cell_model import CellType
+        from tme_quant.core.tme_objects.cell_objects import CellType
 
         area = features.get('area', 0)
         circularity = features.get('circularity', 0)

@@ -379,7 +379,7 @@ class TMEHierarchy:
         -------
         list of FiberObject — the newly attached nodes.
         """
-        from .tme_models.fiber_model import FiberObject
+        from .tme_objects.fiber_objects import FiberObject
         from ..fiber_analysis.config import FiberProperties
 
         ps = pixel_size if pixel_size is not None else getattr(result, 'pixel_size', 1.0)
@@ -425,7 +425,7 @@ class TMEHierarchy:
         -------
         list of CellObject — the newly attached nodes.
         """
-        from .tme_models.cell_model import CellObject, CellProperties
+        from .tme_objects.cell_objects import CellObject, CellProperties
 
         attached: List[TMEObject] = []
 

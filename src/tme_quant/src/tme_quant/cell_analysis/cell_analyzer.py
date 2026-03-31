@@ -94,7 +94,7 @@ class CellAnalyzer:
 
         # Convert CellProperties → CellObject so that downstream TME analysis
         # (interaction_detector, tme_analyzer) receives the expected type.
-        from ..core.tme_models.cell_model import CellObject
+        from ..core.tme_objects.cell_objects import CellObject
         result.cells = [
             CellObject.from_cell_properties(
                 cp,
@@ -137,7 +137,7 @@ class CellAnalyzer:
         result = self.segmentation.segment_3d(image, params)
 
         # Convert CellProperties → CellObject for downstream TME analysis
-        from ..core.tme_models.cell_model import CellObject
+        from ..core.tme_objects.cell_objects import CellObject
         result.cells = [
             CellObject.from_cell_properties(
                 cp,

@@ -15,7 +15,7 @@ from enum import Enum
 import numpy as np
 from shapely.geometry import Point, Polygon
 
-from .base_models import TMEObject, ObjectType, TMEType
+from .base_objects import TMEObject, ObjectType, TMEType
 from ..geometry import BoundingBox, ROI
 
 

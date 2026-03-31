@@ -20,8 +20,8 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple, Any
 
 from ..tme_analysis.config import InteractionPair
-from ..core.tme_models.cell_model import CellObject
-from ..core.tme_models.fiber_model import FiberObject
+from ..core.tme_objects.cell_objects import CellObject
+from ..core.tme_objects.fiber_objects import FiberObject
 
 
 # ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 """
 Configuration and parameter types for cell analysis.
 
-All types are defined canonically in core.tme_models.cell_model and
+All types are defined canonically in core.tme_objects.cell_objects and
 re-exported here for convenient intra-package imports.
 """
 
-from ..core.tme_models.cell_model import (  # noqa: F401
+from ..core.tme_objects.cell_objects import (  # noqa: F401
     SegmentationMode,
     ImageModality,
     CellType,

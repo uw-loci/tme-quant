@@ -28,9 +28,9 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from ...core.tme_models.cell_model import CellObject
-from ...core.tme_models.fiber_model import FiberObject
-from ...core.tme_models.tumor_model import TumorRegion
+from ...core.tme_objects.cell_objects import CellObject
+from ...core.tme_objects.fiber_objects import FiberObject
+from ...core.tme_objects.tumor_objects import TumorRegion
 from ..interaction_detector import InteractionDetector
 from ..measurement_engine import MeasurementEngine
 from ..config import InteractionPair

@@ -15,8 +15,8 @@ DBSCAN = importlib.import_module("sklearn.cluster").DBSCAN
 
 from .config import TumorDetectionMethod, TumorDetectionParams
 from ..core.base_models import Geometry, GeometryType
-from ..core.tme_models.cell_model import CellObject
-from ..core.tme_models.tumor_model import TumorRegion
+from ..core.tme_objects.cell_objects import CellObject
+from ..core.tme_objects.tumor_objects import TumorRegion
 
 
 class RegionManager:

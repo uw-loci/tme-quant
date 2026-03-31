@@ -24,9 +24,9 @@ from .core import (
     ROIManager, ROIObject, ANNOTATION_TYPES,
 )
 from .core.project import TMEProject
-from .core.tme_models.fiber_model import FiberObject
-from .core.tme_models.cell_model import CellObject
-from .core.tme_models.tumor_model import TumorRegion
+from .core.tme_objects.fiber_objects import FiberObject
+from .core.tme_objects.cell_objects import CellObject
+from .core.tme_objects.tumor_objects import TumorRegion
 
 # ── Fiber analysis ────────────────────────────────────────────────────────────
 from .fiber_analysis import (

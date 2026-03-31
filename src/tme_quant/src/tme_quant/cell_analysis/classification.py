@@ -13,7 +13,7 @@ from collections import Counter
 from .methods import MethodRegistry
 from .methods.base_classification import BaseClassificationMethod
 from .config import ClassificationParams, ClassificationResult
-from ..core.tme_models.cell_model import ClassificationMode, CellType, SegmentationResult
+from ..core.tme_objects.cell_objects import ClassificationMode, CellType, SegmentationResult
 
 
 class CellClassificationAnalyzer:

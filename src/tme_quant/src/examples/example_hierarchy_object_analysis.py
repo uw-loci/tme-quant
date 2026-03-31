@@ -72,10 +72,10 @@ from tme_quant.core.hierarchy import TMEHierarchy
 from tme_quant.core.image_entry import ImageEntry
 
 # ── Concrete model classes ────────────────────────────────────────────────────
-from tme_quant.core.tme_models.cell_model import CellObject, CellType
-from tme_quant.core.tme_models.fiber_model import FiberObject
-from tme_quant.core.tme_models.tumor_model import Tumor, TumorRegion, TumorGrade
-from tme_quant.core.tme_models.stroma_model import StromaRegion, ECMComponent
+from tme_quant.core.tme_objects.cell_objects import CellObject, CellType
+from tme_quant.core.tme_objects.fiber_objects import FiberObject
+from tme_quant.core.tme_objects.tumor_objects import Tumor, TumorRegion, TumorGrade
+from tme_quant.core.tme_objects.stroma_objects import StromaRegion, ECMComponent
 
 # ── TACS classifier ───────────────────────────────────────────────────────────
 from tme_quant.fiber_analysis.tacs import (

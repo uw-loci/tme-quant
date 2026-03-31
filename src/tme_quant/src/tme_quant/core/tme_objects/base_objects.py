@@ -1,12 +1,12 @@
 """
-tme_models/base_models.py — backward-compatibility shim.
+tme_objects/base_objects.py — backward-compatibility shim.
 
-All concrete model classes (FiberObject, CellObject, TumorRegion, ...)
+All concrete object classes (FiberObject, CellObject, TumorRegion, ...)
 now inherit directly from the unified TMEObject in core/base_models.py.
 
 This file re-exports the symbols that existing code in this package
 imported from the old local base_models, so no import changes are needed
-in cell_model.py, fiber_model.py, or any other tme_models module.
+in cell_objects.py, fiber_objects.py, or any other tme_objects module.
 """
 
 from ..base_models import (   # noqa: F401  (re-export)

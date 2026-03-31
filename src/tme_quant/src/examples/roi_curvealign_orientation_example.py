@@ -324,7 +324,7 @@ def run_roi_curvealign_orientation(
         cx, cy = W//2, H//2
         rx, ry = W//5, H//6
         coords = np.column_stack([cx + rx*np.cos(angles), cy + ry*np.sin(angles)])
-        from tme_quant.core.tme_models.tumor_model import TumorRegion
+        from tme_quant.core.tme_objects.tumor_objects import TumorRegion
         fallback = TumorRegion(
             object_id="synthetic_auto",
             name="Synthetic auto boundary",

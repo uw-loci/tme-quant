@@ -17,7 +17,7 @@ from shapely.geometry import LineString, Point, Polygon
 
 # Import base models
 try:
-    from .base_models import TMEObject, ObjectType, TMEType
+    from .base_objects import TMEObject, ObjectType, TMEType
     from ..geometry import BoundingBox
 except ImportError:
     # Fallback for standalone testing

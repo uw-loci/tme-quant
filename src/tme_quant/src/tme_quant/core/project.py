@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Any
 import numpy as np
 from pathlib import Path
 
-from .tme_models.fiber_model import (
+from .tme_objects.fiber_objects import (
     FiberObject, RegionOrientationMap, FiberPopulation,
     OrientationResult, ExtractionResult
 )

@@ -9,15 +9,15 @@ src/tme_quant/
 │   ├── image_entry.py
 │   ├── project.py
 │   ├── roi_manager.py
-│   └── tme_models/
+│   └── tme_objects/
 │       ├── __init__.py
-│       ├── base_models.py
-│       ├── cell_model.py
-│       ├── fiber_model.py
-│       ├── interaction_models.py
-│       ├── stroma_model.py
-│       ├── tissue_model.py
-│       └── tumor_model.py
+│       ├── base_objects.py
+│       ├── cell_objects.py
+│       ├── fiber_objects.py
+│       ├── interaction_objects.py
+│       ├── stroma_objects.py
+│       ├── tissue_objects.py
+│       └── tumor_objects.py
 │
 ├── fiber_analysis/                ← fully flat; no sub-packages
 │   ├── __init__.py

@@ -4,7 +4,7 @@ Post-processing utilities for cell segmentation results.
 
 import numpy as np
 from typing import List
-from ...core.tme_models.cell_model import CellProperties
+from ...core.tme_objects.cell_objects import CellProperties
 
 
 def filter_cells(

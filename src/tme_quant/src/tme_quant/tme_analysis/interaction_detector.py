@@ -14,9 +14,9 @@ Point = shapely_geometry.Point
 Polygon = shapely_geometry.Polygon
 
 from .config import InteractionPair, InteractionStrategy
-from ..core.tme_models.cell_model import CellObject
-from ..core.tme_models.fiber_model import FiberObject
-from ..core.tme_models.tumor_model import TumorRegion
+from ..core.tme_objects.cell_objects import CellObject
+from ..core.tme_objects.fiber_objects import FiberObject
+from ..core.tme_objects.tumor_objects import TumorRegion
 from ..fiber_analysis.tacs import classify_fiber_tacs
 
 class InteractionDetector:

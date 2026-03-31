@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Union, Any
 import warnings
 
-from ..core.tme_models.cell_model import CellAnalysisResult
+from ..core.tme_objects.cell_objects import CellAnalysisResult
 
 
 class CellAnalysisExporter:

@@ -175,7 +175,7 @@ class FiberExtractionAnalyzer:
         # Convert FiberProperties → FiberObject so downstream TME analysis
         # (interaction_detector, annotate_interaction_pairs, etc.) receives
         # the expected TMEObject subclass with .object_id and hierarchy methods.
-        from ..core.tme_models.fiber_model import FiberObject
+        from ..core.tme_objects.fiber_objects import FiberObject
         from .config import FiberProperties
         image_id = params.to_dict().get('mode', 'fiber')
         result.fibers = [
@@ -230,7 +230,7 @@ class FiberExtractionAnalyzer:
         # Convert FiberProperties → FiberObject so downstream TME analysis
         # (interaction_detector, annotate_interaction_pairs, etc.) receives
         # the expected TMEObject subclass with .object_id and hierarchy methods.
-        from ..core.tme_models.fiber_model import FiberObject
+        from ..core.tme_objects.fiber_objects import FiberObject
         from .config import FiberProperties
         image_id = params.to_dict().get('mode', 'fiber')
         result.fibers = [

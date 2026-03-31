@@ -16,7 +16,7 @@ from matplotlib.collections import LineCollection
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from ...core.tme_models.interaction_models import (
+from ...core.tme_objects.interaction_objects import (
     CellFiberInteraction, InteractionNetwork, InteractionCategory
 )
 

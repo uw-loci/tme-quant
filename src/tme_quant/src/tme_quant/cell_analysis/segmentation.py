@@ -12,7 +12,7 @@ import time
 from .methods import MethodRegistry
 from .methods.base_segmentation import BaseSegmentationMethod
 from .config import SegmentationParams, SegmentationResult
-from ..core.tme_models.cell_model import SegmentationMode
+from ..core.tme_objects.cell_objects import SegmentationMode
 
 
 class CellSegmentationAnalyzer:

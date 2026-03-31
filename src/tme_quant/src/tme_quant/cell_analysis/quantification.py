@@ -12,7 +12,7 @@ from scipy.spatial import cKDTree
 from skimage.measure import regionprops
 
 from .config import QuantificationParams, QuantificationResult
-from ..core.tme_models.cell_model import SegmentationResult
+from ..core.tme_objects.cell_objects import SegmentationResult
 
 
 class CellQuantificationAnalyzer:

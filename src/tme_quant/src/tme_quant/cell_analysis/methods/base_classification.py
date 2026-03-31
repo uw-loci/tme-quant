@@ -7,7 +7,7 @@ import numpy as np
 from typing import Optional
 
 from ..config import ClassificationParams, ClassificationResult
-from tme_quant.core.tme_models.cell_model import SegmentationResult
+from tme_quant.core.tme_objects.cell_objects import SegmentationResult
 
 
 class BaseClassificationMethod(ABC):

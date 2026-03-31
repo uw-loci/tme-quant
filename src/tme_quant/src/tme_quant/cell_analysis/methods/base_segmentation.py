@@ -9,7 +9,7 @@ from skimage import measure
 from scipy.ndimage import binary_fill_holes
 
 from ..config import SegmentationParams, SegmentationResult
-from tme_quant.core.tme_models.cell_model import CellProperties
+from tme_quant.core.tme_objects.cell_objects import CellProperties
 
 
 class BaseSegmentationMethod(ABC):

@@ -9,9 +9,9 @@ from typing import Dict, Optional
 import numpy as np
 
 from ...core.base_models import ObjectType
-from ...core.tme_models.cell_model import CellObject
-from ...core.tme_models.fiber_model import FiberObject
-from ...core.tme_models.tumor_model import TumorRegion
+from ...core.tme_objects.cell_objects import CellObject
+from ...core.tme_objects.fiber_objects import FiberObject
+from ...core.tme_objects.tumor_objects import TumorRegion
 from ..tme_analyzer import TMEAnalyzer
 from ..interaction_detector import InteractionDetector
 from ..measurement_engine import MeasurementEngine

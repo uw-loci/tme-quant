@@ -7,7 +7,7 @@ from this package, alongside the MethodRegistry.
 
 from typing import Dict, Type
 
-from ...core.tme_models.cell_model import SegmentationMode, ClassificationMode
+from ...core.tme_objects.cell_objects import SegmentationMode, ClassificationMode
 
 # ── Segmentation methods ──────────────────────────────────────────────────────
 from .base_segmentation import BaseSegmentationMethod
