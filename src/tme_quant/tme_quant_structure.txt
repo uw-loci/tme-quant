@@ -1,64 +1,66 @@
 src/tme_quant/
-├── __init__.py                    ← flat public API (36 names)
+├── __init__.py                    ← flat public API
 │
 ├── core/
 │   ├── __init__.py
-│   ├── base_models.py
-│   ├── geometry.py                ← BoundingBox, ROI + 5 Shapely utilities
-│   ├── hierarchy.py
-│   ├── image_entry.py
-│   ├── project.py
-│   ├── roi_manager.py
-│   └── tme_objects/
-│       ├── __init__.py
-│       ├── base_objects.py
-│       ├── cell_objects.py
-│       ├── fiber_objects.py
-│       ├── interaction_objects.py
-│       ├── stroma_objects.py
-│       ├── tissue_objects.py
-│       └── tumor_objects.py
+│   ├── base_models.py             ← TMEObject, ObjectType, TMEType, Geometry, …
+│   ├── geometry.py                ← BoundingBox, ROI + Shapely utilities
+│   ├── hierarchy.py               ← TMEHierarchy
+│   ├── image_entry.py             ← ImageEntry
+│   ├── project.py                 ← TMEProject
+│   ├── roi_manager.py             ← ROIManager
+│   └── tme_objects/               ← canonical domain object definitions
+│       ├── __init__.py            ← re-exports CellObject, FiberObject, Tumor, …
+│       ├── base_objects.py        ← re-export shim → core/base_models.py
+│       ├── cell_objects.py        ← CellObject, CellType, SegmentationParams, …
+│       ├── fiber_objects.py       ← FiberObject, FiberPopulation, OrientationResult, …
+│       ├── interaction_objects.py ← Interaction, InteractionNetwork
+│       ├── stroma_objects.py      ← StromaRegion, Stroma, ECMComponent
+│       ├── tissue_objects.py      ← TissueRegion, TissueSample, TissueZone
+│       └── tumor_objects.py       ← TumorRegion, Tumor, TumorGrade
 │
 ├── fiber_analysis/                ← fully flat; no sub-packages
 │   ├── __init__.py
+│   ├── config.py                  ← ExtractionParams, OrientationParams
+│   ├── ctfire.py                  ← CT-FIRE curvelet fiber extraction
+│   ├── curvealign.py              ← CurveAlign orientation analysis
 │   ├── extraction.py              ← BaseExtractionMethod + FiberExtractionAnalyzer
+│   ├── fiji_bridge.py             ← FijiBridge, OrientationJBridge, RidgeDetectionBridge
+│   ├── gradient.py                ← gradient-based orientation
+│   ├── io.py                      ← FiberAnalysisExporter (+ FijiBridge re-export)
 │   ├── orientation.py             ← BaseOrientationMethod + FiberOrientationAnalyzer
-│   ├── ctfire.py
-│   ├── skeleton.py
-│   ├── ridge_detection.py
-│   ├── curvealign.py
-│   ├── orientationj.py
-│   ├── gradient.py
-│   ├── structure_tensor.py
+│   ├── orientationj.py            ← OrientationJ Fiji plugin wrapper
+│   ├── results.py                 ← FiberAnalysisResult
+│   ├── ridge_detection.py         ← Ridge Detection Fiji plugin wrapper
+│   ├── skeleton.py                ← skeletonization-based extraction
+│   ├── structure_tensor.py        ← structure tensor orientation
 │   ├── tacs.py                    ← classify_fiber_tacs(), get_tacs_color()
-│   ├── results.py
-│   ├── io.py                      ← FiberAnalysisExporter, FijiBridge,
-│   │                                 OrientationJBridge, RidgeDetectionBridge
-│   ├── config.py                  ← ExtractionParams, OrientationParams, results
 │   └── utils/
 │       ├── __init__.py
-│       ├── geometry_utils.py
 │       ├── ctfire_utils.py
-│       └── curvelet_utils.py
+│       ├── curvelet_utils.py
+│       └── geometry_utils.py
 │
 ├── cell_analysis/
 │   ├── __init__.py
-│   ├── cell_analyzer.py
-│   ├── segmentation.py            ← CellSegmentationAnalyzer
+│   ├── cell_analyzer.py           ← CellAnalyzer (orchestrator)
 │   ├── classification.py          ← CellClassificationAnalyzer
+│   ├── config.py                  ← re-export shim → tme_objects/cell_objects
+│   ├── io.py                      ← CellAnalysisExporter
+│   ├── model_loader.py            ← ModelLoader (StarDist / Cellpose)
 │   ├── quantification.py          ← CellQuantificationAnalyzer
-│   ├── results.py
-│   ├── io.py                      ← CellAnalysisExporter, model_loaders
-│   ├── config.py                  ← SegmentationParams, ClassificationParams,
-│   │                                 QuantificationParams + cell_model enums
-│   ├── methods/
-│   │   ├── __init__.py            ← MethodRegistry (inlined)
-│   │   ├── segmentation/
-│   │   │   ├── __init__.py
-│   │   │   └── base_segmentation.py
-│   │   └── classification/
-│   │       ├── __init__.py
-│   │       └── base_classification.py
+│   ├── results.py                 ← re-export shim → tme_objects/cell_objects
+│   ├── segmentation.py            ← CellSegmentationAnalyzer
+│   ├── methods/                   ← flat; all method classes at this level
+│   │   ├── __init__.py            ← MethodRegistry
+│   │   ├── base_classification.py
+│   │   ├── base_segmentation.py
+│   │   ├── cellpose_segmentation.py
+│   │   ├── marker_classification.py
+│   │   ├── morphology_classification.py
+│   │   ├── stardist_segmentation.py
+│   │   ├── threshold_segmentation.py
+│   │   └── watershed_segmentation.py
 │   └── utils/
 │       ├── __init__.py
 │       ├── cell_utils.py
@@ -68,24 +70,24 @@ src/tme_quant/
 │
 ├── tme_analysis/
 │   ├── __init__.py
-│   ├── tme_analyzer.py
-│   ├── tacs_classifier.py         ← NOTE: moved to fiber_analysis/tacs.py
-│   ├── interaction_detector.py
+│   ├── config.py
+│   ├── interaction_detector.py    ← CellFiberInteractionDetector
+│   ├── interaction_features.py    ← mechanical / migration / invasive scores
 │   ├── interaction_network.py     ← InteractionNetworkAnalyzer
-│   ├── measurement_engine.py
-│   ├── region_manager.py
+│   ├── io.py
+│   ├── measurement_engine.py      ← MeasurementEngine
+│   ├── region_manager.py          ← RegionManager
 │   ├── spatial_features.py        ← SpatialRelationshipExtractor
 │   ├── tacs_features.py           ← TACSFeatureExtractor
-│   ├── interaction_features.py    ← mechanical/migration/invasive scores
-│   ├── io.py
-│   ├── config.py
+│   ├── tme_analyzer.py            ← TMEAnalyzer (orchestrator)
 │   ├── pipelines/
 │   │   ├── __init__.py
-│   │   ├── standard_tme_pipeline.py
-│   │   └── interaction_analysis_pipeline.py
+│   │   ├── interaction_analysis_pipeline.py
+│   │   └── standard_tme_pipeline.py
 │   ├── utils/
 │   │   ├── __init__.py
 │   │   ├── distance_utils.py
+│   │   ├── orientation_utils.py
 │   │   ├── statistical_utils.py
 │   │   └── validation.py
 │   └── visualization/
@@ -94,30 +96,41 @@ src/tme_quant/
 │
 └── image_registration/
     ├── __init__.py
-    ├── registration_manager.py
-    ├── transform_handler.py
-    ├── preprocessing.py           ← 16 functions merged from 3 files
     ├── config.py
     ├── io.py
+    ├── preprocessing.py           ← 16 functions (merged from 3 files)
+    ├── registration_manager.py
+    ├── transform_handler.py
     ├── methods/
     │   ├── __init__.py
     │   ├── base_registration.py
+    │   ├── deep_learning/
+    │   │   ├── __init__.py
+    │   │   ├── comir_registration.py
+    │   │   └── voxelmorph_registration.py
+    │   ├── feature_based/
+    │   │   ├── __init__.py
+    │   │   ├── orb_registration.py
+    │   │   └── sift_registration.py
     │   ├── intensity_based/
     │   │   ├── __init__.py
     │   │   ├── cross_correlation.py
     │   │   ├── he_shg_registration_python.py
     │   │   └── mutual_information.py
-    │   ├── feature_based/
-    │   │   ├── __init__.py
-    │   │   ├── orb_registration.py
-    │   │   └── sift_registration.py
-    │   ├── landmark_based/
-    │   │   ├── __init__.py
-    │   │   ├── manual_landmarks.py
-    │   │   └── thin_plate_spline.py
-    │   └── deep_learning/
+    │   └── landmark_based/
     │       ├── __init__.py
-    │       ├── comir_registration.py
+    │       ├── manual_landmarks.py
+    │       └── thin_plate_spline.py
+    ├── utils/
+    │   ├── __init__.py
+    │   ├── image_utils.py
+    │   └── transform_utils.py
+    └── visualization/
+        ├── checkerboard.py
+        ├── difference_map.py
+        ├── interactive_viewer.py
+        └── overlay.py
+
     │       └── voxelmorph_registration.py
     ├── utils/
     │   ├── __init__.py
