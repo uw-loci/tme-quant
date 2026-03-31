@@ -179,3 +179,5 @@ pycurvelets/opt/*.*
 
 # test tmp folder
 tests/test_images/CA_Out/
+src/tme_quant/.../pyproject.toml
+src/tme_quant/.../tme_quant_structure.txt
