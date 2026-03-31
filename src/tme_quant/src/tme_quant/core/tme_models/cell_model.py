@@ -111,6 +111,10 @@ class SegmentationParams:
     return_probabilities: bool = False
     return_boundaries: bool = True
     
+    # Hardware options
+    use_gpu: bool = False
+    probability_threshold: float = 0.5
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {

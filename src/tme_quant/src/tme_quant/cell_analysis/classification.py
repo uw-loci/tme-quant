@@ -10,8 +10,8 @@ from typing import Optional, Dict
 import time
 from collections import Counter
 
-from .methods.classification.base_classification import BaseClassificationMethod
 from .methods import MethodRegistry
+from .methods.base_classification import BaseClassificationMethod
 from .config import ClassificationParams, ClassificationResult
 from ..core.tme_models.cell_model import ClassificationMode, CellType, SegmentationResult
 
@@ -43,7 +43,7 @@ class CellClassificationAnalyzer:
 
         Both classifier classes live in base_classification.py.
         """
-        from .methods.classification.base_classification import (
+        from .methods import (
             MorphologyClassifier,
             MarkerClassifier,
         )

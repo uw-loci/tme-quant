@@ -9,8 +9,8 @@ import numpy as np
 from typing import Dict, Type
 import time
 
-from .methods.segmentation.base_segmentation import BaseSegmentationMethod
 from .methods import MethodRegistry
+from .methods.base_segmentation import BaseSegmentationMethod
 from .config import SegmentationParams, SegmentationResult
 from ..core.tme_models.cell_model import SegmentationMode
 
@@ -42,7 +42,7 @@ class CellSegmentationAnalyzer:
 
         All four method classes live in base_segmentation.py.
         """
-        from .methods.segmentation.base_segmentation import (
+        from .methods import (
             StarDistSegmentation,
             CellposeSegmentation,
             ThresholdingSegmentation,

@@ -1,16 +1,9 @@
-"""Combined cell analysis result container."""
+"""Combined cell analysis result container.
 
-from dataclasses import dataclass, field
-from typing import Optional, Any
+The canonical definition lives in core.tme_models.cell_model and is
+re-exported here for convenient intra-package imports.
+"""
 
+from ..core.tme_models.cell_model import CellAnalysisResult  # noqa: F401
 
-@dataclass
-class CellAnalysisResult:
-    """Combined result from segmentation, classification, and quantification."""
-
-    image_id: str = ""
-    segmentation_result: Optional[Any] = None   # SegmentationResult
-    classification_result: Optional[Any] = None  # ClassificationResult
-    quantification_result: Optional[Any] = None  # QuantificationResult
-
-    combined_metrics: dict = field(default_factory=dict)
+__all__ = ["CellAnalysisResult"]

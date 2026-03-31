@@ -1322,16 +1322,16 @@ if __name__ == "__main__":
     print(f"  CT-FIRE:  {ctfire_backend_status()}")
     '''
    
-    # # ── Workflow 1: CurveAlign ────────────────────────────────────────────────
-    # print("\n\nWORKFLOW 1: CurveAlign Fiber Segments (2-D)")
-    # print("=" * 80)
-    # results_ca = workflow_1_curvealign_complete(
-    #     he_image_path="data/patient_001_HE.tif",
-    #     shg_image_path="data/patient_001_SHG.tif",
-    #     output_dir="output/patient_001_curvealign",
-    #     pixel_size=0.5,
-    #     sample_id="patient_001_curvealign",
-    # )
+    # ── Workflow 1: CurveAlign ────────────────────────────────────────────────
+    print("\n\nWORKFLOW 1: CurveAlign Fiber Segments (2-D)")
+    print("=" * 80)
+    results_ca = workflow_1_curvealign_complete(
+        he_image_path="data/patient_001_HE.tif",
+        shg_image_path="data/patient_001_SHG.tif",
+        output_dir="output/patient_001_curvealign",
+        pixel_size=0.5,
+        sample_id="patient_001_curvealign",
+    )
     
     
     # ── Workflow 2: CT-FIRE ──────────────────────────────────────────────────
