@@ -78,7 +78,7 @@ from tme_quant.core.tme_models.tumor_model import Tumor, TumorRegion, TumorGrade
 from tme_quant.core.tme_models.stroma_model import StromaRegion, ECMComponent
 
 # ── TACS classifier ───────────────────────────────────────────────────────────
-from tme_quant.tme_analysis.core.tacs_classifier import (
+from tme_quant.fiber_analysis.tacs import (
     classify_fiber_tacs, get_tacs_color,
 )
 

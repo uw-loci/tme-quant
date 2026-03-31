@@ -86,7 +86,7 @@ from tme_quant.image_registration.methods.intensity_based import HESHGRegistrati
 from tme_quant.image_registration.config import RegistrationParams, TransformType
 
 # ── Fiber analysis — top-level coordinator ───────────────────────────────────
-from tme_quant.fiber_analysis import FiberAnalyzer
+from tme_quant.fiber_analysis import FiberAnalyzer, FiberOrientationAnalyzer
 
 # ── Fiber analysis — parameter and result classes ────────────────────────────
 # Import the concrete subclasses directly; they carry all mode-specific fields.
@@ -151,24 +151,24 @@ from tme_quant.tme_analysis.config import (
 )
 
 # ── TACS classification ───────────────────────────────────────────────────────
-from tme_quant.tme_analysis.core.tacs_classifier import (
+from tme_quant.fiber_analysis.tacs import (
     classify_fiber_tacs,               # full TACS with straightness (CT-FIRE)
     classify_fiber_segment_tacs_like,  # orientation-only (CurveAlign)
     get_tacs_color,
 )
 
 # ── Interaction detection & measurement ──────────────────────────────────────
-from tme_quant.tme_analysis.core.interaction_detector import InteractionDetector
-from tme_quant.tme_analysis.core.measurement_engine import MeasurementEngine
-from tme_quant.measurement.interaction_features import (
+from tme_quant.tme_analysis.interaction_detector import InteractionDetector
+from tme_quant.tme_analysis.measurement_engine import MeasurementEngine
+from tme_quant.tme_analysis.interaction_features import (
     annotate_interaction_pairs,
     compute_alignment_heterogeneity,
 )
-from tme_quant.pipelines.interaction_analysis_pipeline import (
+from tme_quant.tme_analysis.pipelines.interaction_analysis_pipeline import (
     InteractionAnalysisPipeline,
     PipelineConfig,
 )
-from tme_quant.tme_analysis.interaction_network_analysis import (
+from tme_quant.tme_analysis.interaction_network import (
     InteractionNetworkAnalyzer,
 )
 
@@ -267,9 +267,9 @@ def workflow_1_curvealign_complete(
         keep_values=['angles', 'alignment', 'energy'],
         compute_statistics=True,
     )
-    fiber_analyzer     = FiberAnalyzer()
-    orientation_result = fiber_analyzer.analyze_orientation_2d(
-        shg_image, orientation_params, image_id=sample_id
+    orientation_analyzer = FiberOrientationAnalyzer()
+    orientation_result  = orientation_analyzer.analyze_2d(
+        shg_image, orientation_params
     )
     print(f"  ✓ Mean orientation: {orientation_result.mean_orientation:.2f}°")
     print(f"  ✓ Mean alignment:   {orientation_result.mean_alignment:.4f}")
@@ -519,8 +519,8 @@ def workflow_2_ctfire_complete(
         extract_centerlines=True,
     )
     fiber_analyzer = FiberAnalyzer()
-    fiber_result   = fiber_analyzer.extract_fibers_2d(
-        shg_image, extraction_params, image_id=sample_id
+    fiber_result   = fiber_analyzer.extract_2d(
+        shg_image, extraction_params
     )
     # fiber_result is a CTFireResult; fiber_result.fibers is List[FiberProperties].
     # Each FiberProperties has: .length, .width (from distance-transform), .straightness,
@@ -839,9 +839,9 @@ def workflow_3_volumetric(
         keep_values=['angles', 'alignment'],
         compute_statistics=True,
     )
-    fiber_analyzer = FiberAnalyzer()
-    orient_result_3d = fiber_analyzer.analyze_orientation_3d(
-        volume, orient_params_3d, image_id=f"{sample_id}_3d"
+    orientation_analyzer = FiberOrientationAnalyzer()
+    orient_result_3d    = orientation_analyzer.analyze_3d(
+        volume, orient_params_3d
     )
     print(f"  ✓ Orientation volume shape: {orient_result_3d.orientation_map.shape}")
     print(f"  ✓ Mean orientation:         {orient_result_3d.mean_orientation:.2f}°")
@@ -863,8 +863,9 @@ def workflow_3_volumetric(
         max_fiber_length=2000.0,
         extract_centerlines=True,
     )
-    skel_result_3d = fiber_analyzer.extract_fibers_3d(
-        volume, skel_params_3d, image_id=f"{sample_id}_3d"
+    fiber_analyzer_3d = FiberAnalyzer()
+    skel_result_3d    = fiber_analyzer_3d.extract_3d(
+        volume, skel_params_3d
     )
     fibers_3d = skel_result_3d.fibers
     print(f"  ✓ Extracted {len(fibers_3d)} 3-D fibers")
@@ -888,8 +889,8 @@ def workflow_3_volumetric(
             min_fiber_length=10.0,
             extract_centerlines=True,
         )
-        ctfire_result_3d = fiber_analyzer.extract_fibers_3d(
-            volume, ctfire_params_3d, image_id=f"{sample_id}_ctfire_3d"
+        ctfire_result_3d = fiber_analyzer_3d.extract_3d(
+            volume, ctfire_params_3d
         )
         print(f"  ✓ CT-FIRE 3-D: extracted {len(ctfire_result_3d.fibers)} fibers")
     else:
@@ -1319,7 +1320,7 @@ if __name__ == "__main__":
     print("\nRuntime backend status:")
     print(f"  Curvelet: {available_backends()}")
     print(f"  CT-FIRE:  {ctfire_backend_status()}")
-
+    '''
    
     # ── Workflow 1: CurveAlign ────────────────────────────────────────────────
     print("\n\nWORKFLOW 1: CurveAlign Fiber Segments (2-D)")
@@ -1331,8 +1332,8 @@ if __name__ == "__main__":
         pixel_size=0.5,
         sample_id="patient_001_curvealign",
     )
+    
     '''
-
     # ── Workflow 2: CT-FIRE ──────────────────────────────────────────────────
     print("\n\nWORKFLOW 2: CT-FIRE Individual Fibers (2-D)")
     print("=" * 80)
@@ -1343,8 +1344,8 @@ if __name__ == "__main__":
         pixel_size=0.5,
         sample_id="patient_001_ctfire",
     )
-    
-
+    '''    
+    '''
     # ── Workflow 3: 3-D volumetric ────────────────────────────────────────────
     print("\n\nWORKFLOW 3: 3-D Volumetric Analysis")
     print("=" * 80)
@@ -1355,6 +1356,7 @@ if __name__ == "__main__":
         z_spacing=1.0,
         sample_id="patient_001_3d",
     )
+    '''
 
     print("\n\n" + "=" * 80)
     print("ALL WORKFLOWS COMPLETE")

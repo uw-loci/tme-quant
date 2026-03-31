@@ -34,9 +34,9 @@ def ensure_grayscale(image: np.ndarray) -> np.ndarray:
 
 
 # pad_to_same_size and crop_to_common_roi are defined (with richer options)
-# in image_registration.preprocessing.resolution_matching — import from there
+# in image_registration.preprocessing — import from there
 # to keep a single canonical implementation.
-from ..preprocessing.resolution_matching import (  # noqa: E402
+from ..preprocessing import (  # noqa: E402
     pad_to_same_size,
     crop_to_common_roi,
 )

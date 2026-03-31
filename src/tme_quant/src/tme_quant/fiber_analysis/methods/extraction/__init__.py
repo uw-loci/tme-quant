@@ -1,1 +1,0 @@
-"""Fiber extraction methods."""

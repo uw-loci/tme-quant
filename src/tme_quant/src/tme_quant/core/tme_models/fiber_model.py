@@ -316,7 +316,7 @@ def _tacs_score(tacs_type, angle, straightness):
     ``angle`` is the BOUNDARY TANGENT angle (0-90deg):
       0deg = parallel, 90deg = perpendicular.
 
-    Consistent with tme_analysis.core.tacs_classifier.classify_fiber_tacs():
+    Consistent with fiber_analysis.tacs.classify_fiber_tacs():
       TACS-3: angle 60-90deg -> score = how close to 90deg * straightness
       TACS-2: angle  0-30deg -> score = how close to  0deg * straightness
       TACS-1: intermediate/curly -> curvature + randomness blend
@@ -614,7 +614,7 @@ class FiberObject(TMEObject):
         Classify TACS type based on fiber metrics.
 
         Delegates to the canonical classify_fiber_tacs() in
-        tme_analysis.core.tacs_classifier so that the angle convention,
+        fiber_analysis.tacs so that the angle convention,
         straightness threshold, and zone-width logic are defined in one place.
 
         TACS angle convention (relative to boundary normal):
@@ -625,7 +625,7 @@ class FiberObject(TMEObject):
         Returns:
             Dict with keys 'type' (str or None) and 'score' (float 0-1).
         """
-        from ...tme_analysis.core.tacs_classifier import classify_fiber_tacs
+        from ...fiber_analysis.tacs import classify_fiber_tacs
 
         # Use the tangent angle: 0deg = parallel (TACS-2), 90deg = perpendicular (TACS-3)
         if self.relative_angle_to_boundary_tangent is None:

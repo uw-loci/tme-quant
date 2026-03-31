@@ -77,7 +77,7 @@ from tme_quant.image_registration.methods.intensity_based import HESHGRegistrati
 from tme_quant.image_registration.config import RegistrationParams, TransformType
 
 # Fiber / orientation analysis
-from tme_quant.fiber_analysis import FiberAnalyzer
+from tme_quant.fiber_analysis import FiberOrientationAnalyzer
 from tme_quant.fiber_analysis.config import CurveAlignParams
 from tme_quant.fiber_analysis.utils.geometry_utils import (
     compute_angle_to_boundary_normal,
@@ -113,7 +113,7 @@ from tme_quant.core.base_models import TMEObject, TMEType
 from tme_quant.core.image_entry import ImageEntry
 
 # TACS classification
-from tme_quant.tme_analysis.core.tacs_classifier import (
+from tme_quant.fiber_analysis.tacs import (
     classify_fiber_segment_tacs_like,
 )
 
@@ -657,9 +657,9 @@ def run_roi_curvealign_orientation(
         keep_values=['angles', 'alignment', 'energy'],
         compute_statistics=True,
     )
-    fiber_analyzer = FiberAnalyzer()
-    orient_result  = fiber_analyzer.analyze_orientation_2d(
-        shg_image.astype(np.float32), ca_params, image_id=sample_id
+    fiber_analyzer = FiberOrientationAnalyzer()
+    orient_result  = fiber_analyzer.analyze_2d(
+        shg_image.astype(np.float32), ca_params
     )
     print(f"  ✓ Mean orientation: {orient_result.mean_orientation:.2f}°  "
           f"alignment: {orient_result.mean_alignment:.4f}  "

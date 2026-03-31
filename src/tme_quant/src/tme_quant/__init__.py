@@ -1,31 +1,88 @@
 """
-TMEQuant - Tumor Microenvironment Quantification Platform
+TMEQuant — Tumor Microenvironment Quantification Platform
 
-A comprehensive Python platform for quantitative analysis of the tumor
-microenvironment, including:
-    - Fiber analysis (collagen orientation and extraction)
-    - Cell analysis (segmentation, classification, quantification)
-    - TME analysis (TACS classification, prognostic scoring)
-    - Image registration (multimodal microscopy alignment)
-
-Example:
-    >>> from tme_quant.fiber_analysis import FiberAnalyzer
-    >>> from tme_quant.cell_analysis import CellAnalyzer
-    >>> from tme_quant.tme_analysis import TMEAnalyzer
-    >>> from tme_quant.image_registration import RegistrationManager
+Quick start
+-----------
+>>> import tme_quant as tq
+>>> fibers = tq.FiberExtractionAnalyzer().extract_2d(image, tq.ExtractionParams())
+>>> tacs   = tq.classify_fiber_tacs(fibers, boundary_roi)
+>>> cells  = tq.CellAnalyzer().segment(image, tq.SegmentationParams())
 """
 
-from .fiber_analysis import FiberAnalyzer
-from .cell_analysis import CellAnalyzer
-from .tme_analysis import TMEAnalyzer
+__version__ = "0.2.0"
+__author__ = "UW-LOCI / TMEQuant Development Team"
+
+# ── Data model ────────────────────────────────────────────────────────────────
+from .core import (
+    TMEObject, TMEType, ObjectType,
+    Geometry, GeometryType,
+    Measurement, Classification, TMEMetadata,
+    BoundingBox, ROI,
+    compute_region_centroid, compute_region_area,
+    point_in_polygon, compute_convex_hull, buffer_polygon,
+    TMEHierarchy, ImageEntry,
+    ROIManager, ROIObject, ANNOTATION_TYPES,
+)
+from .core.project import TMEProject
+from .core.tme_models.fiber_model import FiberObject
+from .core.tme_models.cell_model import CellObject
+from .core.tme_models.tumor_model import TumorRegion
+
+# ── Fiber analysis ────────────────────────────────────────────────────────────
+from .fiber_analysis import (
+    FiberExtractionAnalyzer, BaseExtractionMethod,
+    FiberOrientationAnalyzer, BaseOrientationMethod,
+    CTFireExtraction, CurveAlignOrientation,
+    classify_fiber_tacs, classify_fiber_segment_tacs_like, get_tacs_color,
+    ExtractionParams, ExtractionResult,
+    OrientationParams, OrientationResult,
+    FiberAnalysisResult,
+)
+
+# ── Cell analysis ─────────────────────────────────────────────────────────────
+from .cell_analysis import (
+    CellAnalyzer,
+    CellSegmentationAnalyzer, CellClassificationAnalyzer, CellQuantificationAnalyzer,
+    CellAnalysisResult,
+    SegmentationParams, ClassificationParams, QuantificationParams,
+)
+
+# ── TME / interaction analysis ────────────────────────────────────────────────
+from .tme_analysis import (
+    TMEAnalyzer, InteractionDetector, InteractionNetworkAnalyzer,
+    RegionManager, MeasurementEngine,
+    StandardTMEPipeline, InteractionAnalysisPipeline,
+)
+
+# ── Image registration ────────────────────────────────────────────────────────
 from .image_registration import RegistrationManager
 
-__version__ = '1.0.0'
-__author__ = 'TMEQuant Development Team'
-
 __all__ = [
-    'FiberAnalyzer',
-    'CellAnalyzer',
-    'TMEAnalyzer',
-    'RegistrationManager',
+    # Core
+    "TMEObject", "TMEType", "ObjectType",
+    "Geometry", "GeometryType", "Measurement", "Classification", "TMEMetadata",
+    "BoundingBox", "ROI",
+    "compute_region_centroid", "compute_region_area",
+    "point_in_polygon", "compute_convex_hull", "buffer_polygon",
+    "TMEHierarchy", "TMEProject", "ImageEntry",
+    "ROIManager", "ROIObject", "ANNOTATION_TYPES",
+    "FiberObject", "CellObject", "TumorRegion",
+    # Fiber
+    "FiberExtractionAnalyzer", "BaseExtractionMethod",
+    "FiberOrientationAnalyzer", "BaseOrientationMethod",
+    "CTFireExtraction", "CurveAlignOrientation",
+    "classify_fiber_tacs", "classify_fiber_segment_tacs_like", "get_tacs_color",
+    "ExtractionParams", "ExtractionResult",
+    "OrientationParams", "OrientationResult", "FiberAnalysisResult",
+    # Cell
+    "CellAnalyzer",
+    "CellSegmentationAnalyzer", "CellClassificationAnalyzer", "CellQuantificationAnalyzer",
+    "CellAnalysisResult",
+    "SegmentationParams", "ClassificationParams", "QuantificationParams",
+    # TME
+    "TMEAnalyzer", "InteractionDetector", "InteractionNetworkAnalyzer",
+    "RegionManager", "MeasurementEngine",
+    "StandardTMEPipeline", "InteractionAnalysisPipeline",
+    # Registration
+    "RegistrationManager",
 ]

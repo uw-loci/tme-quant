@@ -1,22 +1,28 @@
-# Cell Analysis Module
 """
-Cell analysis module for TME quantification.
+Cell analysis module for segmentation, classification, and quantification.
 
-Provides comprehensive cell segmentation, classification, and quantification
-with integration into the TME project hierarchy.
+Supports StarDist, Cellpose, and custom segmentation methods with
+marker-based and ML classification.
 """
 
-from .core.cell_analyzer import CellAnalyzer
-from .core.segmentation_analyzer import CellSegmentationAnalyzer
-from .core.classification_analyzer import CellClassificationAnalyzer
-from .core.quantification_analyzer import CellQuantificationAnalyzer
+from .cell_analyzer import CellAnalyzer
+from .segmentation import CellSegmentationAnalyzer
+from .classification import CellClassificationAnalyzer
+from .quantification import CellQuantificationAnalyzer
+from .results import CellAnalysisResult
+from .config import (
+    SegmentationParams,
+    ClassificationParams,
+    QuantificationParams,
+)
 
-# Export main classes
 __all__ = [
     'CellAnalyzer',
     'CellSegmentationAnalyzer',
     'CellClassificationAnalyzer',
     'CellQuantificationAnalyzer',
+    'CellAnalysisResult',
+    'SegmentationParams',
+    'ClassificationParams',
+    'QuantificationParams',
 ]
-
-__version__ = '0.1.0'

@@ -7,7 +7,7 @@ from scipy.ndimage import shift
 from skimage.registration import phase_cross_correlation
 
 from ..base_registration import BaseRegistration
-from ...config.registration_params import (
+from ...config import (
     RegistrationParams,
     RegistrationResult,
     Transform,

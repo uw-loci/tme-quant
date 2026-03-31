@@ -11,8 +11,8 @@ from typing import List, Optional
 from skimage import measure
 from scipy.ndimage import binary_fill_holes
 
-from ...config.segmentation_params import SegmentationParams, SegmentationResult
-from ....core.tme_models.cell_model import CellProperties
+from ...config import SegmentationParams, SegmentationResult
+from tme_quant.core.tme_models.cell_model import CellProperties
 
 
 class BaseSegmentationMethod(ABC):
@@ -309,6 +309,14 @@ class StarDistSegmentation(BaseSegmentationMethod):
                     out = (x - lo) / (_np.maximum(hi - lo, 1e-20))
                     return _np.clip(out, 0, 1) if clip else out
         
+        # Configure TensorFlow device
+        if not params.use_gpu:
+            try:
+                import tensorflow as tf
+                tf.config.set_visible_devices([], 'GPU')
+            except Exception:
+                pass
+
         # Load model
         if self.model_2d is None:
             if self.verbose:
@@ -465,12 +473,8 @@ class CellposeSegmentation(BaseSegmentationMethod):
             if self.verbose:
                 print(f"Loading Cellpose model: {params.cellpose_model}")
             
-            # Check for GPU
-            import torch
-            gpu = torch.cuda.is_available()
-            
             self.model = models.Cellpose(
-                gpu=gpu,
+                gpu=params.use_gpu,
                 model_type=params.cellpose_model
             )
         

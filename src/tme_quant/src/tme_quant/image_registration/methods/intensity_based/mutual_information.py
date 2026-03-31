@@ -132,7 +132,7 @@ class MutualInformationRegistration(BaseRegistration):
             print(f"  Time: {time.time() - start_time:.2f}s")
         
         # Create result
-        from ...config.registration_params import RegistrationResult, Transform, RegistrationMethod
+        from ...config import RegistrationResult, Transform, RegistrationMethod
         
         result = RegistrationResult(
             transform=Transform(
@@ -153,7 +153,7 @@ class MutualInformationRegistration(BaseRegistration):
     
     def _get_initial_transform(self, fixed, moving, transform_type):
         """Get initial transform based on type."""
-        from ...config.registration_params import TransformType
+        from ...config import TransformType
         
         if transform_type == TransformType.TRANSLATION:
             transform = sitk.TranslationTransform(2)

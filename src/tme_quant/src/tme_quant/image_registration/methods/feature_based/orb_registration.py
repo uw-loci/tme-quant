@@ -10,7 +10,7 @@ from typing import Any, cast
 import numpy as np
 
 from ..base_registration import BaseRegistration
-from ...config.registration_params import (
+from ...config import (
     RegistrationMethod,
     RegistrationResult,
     Transform,
@@ -86,7 +86,7 @@ class ORBRegistration(BaseRegistration):
         dst_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
         
         # Estimate transformation
-        from ...config.registration_params import TransformType
+        from ...config import TransformType
         
         if params.transform_type == TransformType.AFFINE:
             M, mask = cv2.estimateAffine2D(
@@ -118,7 +118,7 @@ class ORBRegistration(BaseRegistration):
             print(f"  Time: {time.time() - start_time:.2f}s")
         
         # Create result
-        from ...config.registration_params import RegistrationResult, Transform, RegistrationMethod
+        from ...config import RegistrationResult, Transform, RegistrationMethod
         
         result = RegistrationResult(
             transform=Transform(

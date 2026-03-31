@@ -33,7 +33,7 @@ def compose_transforms(transform1, transform2):
     Returns:
         Composed transform
     """
-    from ..config.registration_params import Transform
+    from ..config import Transform
     
     # Matrix multiplication
     composed_matrix = transform1.matrix @ transform2.matrix
@@ -54,7 +54,7 @@ def invert_transform(transform):
     Returns:
         Inverted transform
     """
-    from ..config.registration_params import Transform
+    from ..config import Transform
     
     return Transform(
         transform_type=transform.transform_type,

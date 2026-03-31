@@ -3,7 +3,7 @@ Validation utilities for cell analysis.
 """
 
 import numpy as np
-from ..config.segmentation_params import SegmentationParams
+from ..config import SegmentationParams
 
 
 def validate_image(image: np.ndarray) -> bool:

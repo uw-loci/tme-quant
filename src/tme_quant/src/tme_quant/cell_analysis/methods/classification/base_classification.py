@@ -13,8 +13,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 from typing import Optional
 
-from ...config.classification_params import ClassificationParams, ClassificationResult
-from ....core.tme_models.cell_model import SegmentationResult
+from ...config import ClassificationParams, ClassificationResult
+from tme_quant.core.tme_models.cell_model import SegmentationResult
 
 
 class BaseClassificationMethod(ABC):
@@ -64,7 +64,7 @@ class MorphologyClassifier(BaseClassificationMethod):
         image: Optional[np.ndarray] = None
     ) -> ClassificationResult:
         """Classify cells using morphology."""
-        from ....core.tme_models.cell_model import CellType
+        from tme_quant.core.tme_models.cell_model import CellType
         
         result = ClassificationResult(mode=params.mode)
         
@@ -114,7 +114,7 @@ class MorphologyClassifier(BaseClassificationMethod):
         - Immune cells: Small, round (high circularity)
         - Fibroblasts: Elongated (high eccentricity)
         """
-        from ....core.tme_models.cell_model import CellType
+        from tme_quant.core.tme_models.cell_model import CellType
         
         area = features.get('area', 0)
         circularity = features.get('circularity', 0)
@@ -156,7 +156,7 @@ class MarkerClassifier(BaseClassificationMethod):
         image: Optional[np.ndarray] = None
     ) -> ClassificationResult:
         """Classify cells using marker expression."""
-        from ....core.tme_models.cell_model import CellType
+        from tme_quant.core.tme_models.cell_model import CellType
         
         if image is None:
             raise ValueError("Image required for marker-based classification")
@@ -240,7 +240,7 @@ class MarkerClassifier(BaseClassificationMethod):
         - CD68+ → Macrophage
         - No markers → Stromal or Tumor (default)
         """
-        from ....core.tme_models.cell_model import CellType
+        from tme_quant.core.tme_models.cell_model import CellType
         
         # Get thresholds
         thresholds = params.marker_thresholds or {}
@@ -589,7 +589,7 @@ class RelationshipFeatureCalculator:
     ) -> dict:
         """Calculate cell-cell relationship features."""
         from scipy.spatial import cKDTree
-        from ....core.tme_models.cell_model import CellType
+        from tme_quant.core.tme_models.cell_model import CellType
         
         features = {}
         

@@ -1,11 +1,14 @@
-tme_quant/
-├── __init__.py
+src/tme_quant/
+├── __init__.py                    ← flat public API (36 names)
 │
 ├── core/
+│   ├── __init__.py
 │   ├── base_models.py
-│   ├── geometry.py
-│   ├── hyerarchy.py
+│   ├── geometry.py                ← BoundingBox, ROI + 5 Shapely utilities
+│   ├── hierarchy.py
+│   ├── image_entry.py
 │   ├── project.py
+│   ├── roi_manager.py
 │   └── tme_models/
 │       ├── __init__.py
 │       ├── base_models.py
@@ -16,33 +19,46 @@ tme_quant/
 │       ├── tissue_model.py
 │       └── tumor_model.py
 │
+├── fiber_analysis/                ← fully flat; no sub-packages
+│   ├── __init__.py
+│   ├── extraction.py              ← BaseExtractionMethod + FiberExtractionAnalyzer
+│   ├── orientation.py             ← BaseOrientationMethod + FiberOrientationAnalyzer
+│   ├── ctfire.py
+│   ├── skeleton.py
+│   ├── ridge_detection.py
+│   ├── curvealign.py
+│   ├── orientationj.py
+│   ├── gradient.py
+│   ├── structure_tensor.py
+│   ├── tacs.py                    ← classify_fiber_tacs(), get_tacs_color()
+│   ├── results.py
+│   ├── io.py                      ← FiberAnalysisExporter, FijiBridge,
+│   │                                 OrientationJBridge, RidgeDetectionBridge
+│   ├── config.py                  ← ExtractionParams, OrientationParams, results
+│   └── utils/
+│       ├── __init__.py
+│       ├── geometry_utils.py
+│       ├── ctfire_utils.py
+│       └── curvelet_utils.py
+│
 ├── cell_analysis/
 │   ├── __init__.py
-│   ├── config/
-│   │   └── __init__.py
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── cell_analyzer.py
-│   │   ├── classification_analyzer.py
-│   │   ├── quantification_analyzer.py
-│   │   └── segmentation_analyzer.py
-│   ├── io/
-│   │   ├── __init__.py
-│   │   ├── exporters.py
-│   │   └── model_loaders.py
+│   ├── cell_analyzer.py
+│   ├── segmentation.py            ← CellSegmentationAnalyzer
+│   ├── classification.py          ← CellClassificationAnalyzer
+│   ├── quantification.py          ← CellQuantificationAnalyzer
+│   ├── results.py
+│   ├── io.py                      ← CellAnalysisExporter, model_loaders
+│   ├── config.py                  ← SegmentationParams, ClassificationParams,
+│   │                                 QuantificationParams + cell_model enums
 │   ├── methods/
-│   │   ├── __init__.py
-│   │   ├── registry.py
-│   │   ├── classification/
+│   │   ├── __init__.py            ← MethodRegistry (inlined)
+│   │   ├── segmentation/
 │   │   │   ├── __init__.py
-│   │   │   └── base_classification.py
-│   │   ├── quantification/
-│   │   │   └── __init__.py
-│   │   └── segmentation/
+│   │   │   └── base_segmentation.py
+│   │   └── classification/
 │   │       ├── __init__.py
-│   │       ├── base_segmentation.py
-│   │       ├── cellpose.py
-│   │       └── stardist.py
+│   │       └── base_classification.py
 │   └── utils/
 │       ├── __init__.py
 │       ├── cell_utils.py
@@ -50,111 +66,83 @@ tme_quant/
 │       ├── preprocessing.py
 │       └── validation.py
 │
-├── fiber_analysis/
-│   ├── __init__.py
-│   ├── core/
-│   │   ├── extraction_analyzer.py
-│   │   ├── fiber_analyzer.py
-│   │   └── orientation_analyzer.py
-│   ├── io/
-│   │   └── exporters.py
-│   ├── methods/
-│   │   ├── extraction/
-│   │   │   ├── base_extraction.py
-│   │   │   ├── ctfire.py
-│   │   │   └── ridge_detection.py
-│   │   └── orientation/
-│   │       ├── base_orientation.py
-│   │       ├── curvealign.py
-│   │       └── orientationj.py
-│   └── utils/
-│       └── geometry_utils.py
-│
 ├── tme_analysis/
 │   ├── __init__.py
-│   ├── cell_fiber_interaction.py
-│   ├── interaction_network_analysis.py
-│   ├── config/
+│   ├── tme_analyzer.py
+│   ├── tacs_classifier.py         ← NOTE: moved to fiber_analysis/tacs.py
+│   ├── interaction_detector.py
+│   ├── interaction_network.py     ← InteractionNetworkAnalyzer
+│   ├── measurement_engine.py
+│   ├── region_manager.py
+│   ├── spatial_features.py        ← SpatialRelationshipExtractor
+│   ├── tacs_features.py           ← TACSFeatureExtractor
+│   ├── interaction_features.py    ← mechanical/migration/invasive scores
+│   ├── io.py
+│   ├── config.py
+│   ├── pipelines/
 │   │   ├── __init__.py
-│   │   └── analysis_params.py
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── interaction_detector.py
-│   │   ├── measurement_engine.py
-│   │   ├── region_manager.py
-│   │   ├── tacs_classifier.py
-│   │   └── tme_analyzer.py
-│   ├── io/
-│   │   ├── __init__.py
-│   │   └── exporters.py
-│   ├── measurements/
-│   │   ├── __init__.py
-│   │   ├── spatial_features.py
-│   │   └── tacs_features.py
-│   ├── roi_generation/
-│   │   └── __init__.py
-│   └── utils/
-│       ├── __init__.py
-│       ├── distance_utils.py
-│       ├── geometry_utils.py
-│       ├── statistical_utils.py
-│       └── validation.py
-│
-├── image_registration/
-│   ├── __init__.py
-│   ├── config/
-│   │   ├── __init__.py
-│   │   └── registration_params.py
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── registration_manager.py
-│   │   └── transform_handler.py
-│   ├── io/
-│   │   ├── __init__.py
-│   │   ├── landmark_io.py
-│   │   └── transform_io.py
-│   ├── methods/
-│   │   ├── __init__.py
-│   │   ├── base_registration.py
-│   │   ├── deep_learning/
-│   │   │   ├── __init__.py
-│   │   │   ├── comir_registration.py
-│   │   │   └── voxelmorph_registration.py
-│   │   ├── feature_based/
-│   │   │   ├── __init__.py
-│   │   │   ├── orb_registration.py
-│   │   │   └── sift_registration.py
-│   │   ├── intensity_based/
-│   │   │   ├── __init__.py
-│   │   │   ├── cross_correlation.py
-│   │   │   ├── he_shg_registration_python.py
-│   │   │   └── mutual_information.py
-│   │   └── landmark_based/
-│   │       ├── __init__.py
-│   │       ├── manual_landmarks.py
-│   │       └── thin_plate_spline.py
-│   ├── preprocessing/
-│   │   ├── __init__.py
-│   │   ├── intensity_normalization.py
-│   │   ├── modality_conversion.py
-│   │   └── resolution_matching.py
+│   │   ├── standard_tme_pipeline.py
+│   │   └── interaction_analysis_pipeline.py
 │   ├── utils/
 │   │   ├── __init__.py
-│   │   ├── image_utils.py
-│   │   └── transform_utils.py
+│   │   ├── distance_utils.py
+│   │   ├── statistical_utils.py
+│   │   └── validation.py
 │   └── visualization/
-│       ├── checkerboard.py
-│       ├── difference_map.py
-│       ├── interactive_viewer.py
-│       └── overlay.py
+│       ├── __init__.py
+│       └── interaction_visualization.py
 │
-├── measurement/
-│   └── interaction_features.py
-│
-├── pipelines/
-│   ├── interaction_analysis_pipeline.py
-│   └── standard_tme_pipeline.py
-│
-└── visualization/
+└── image_registration/
     ├── __init__.py
-    └── interaction_visualization.py
+    ├── registration_manager.py
+    ├── transform_handler.py
+    ├── preprocessing.py           ← 16 functions merged from 3 files
+    ├── config.py
+    ├── io.py
+    ├── methods/
+    │   ├── __init__.py
+    │   ├── base_registration.py
+    │   ├── intensity_based/
+    │   │   ├── __init__.py
+    │   │   ├── cross_correlation.py
+    │   │   ├── he_shg_registration_python.py
+    │   │   └── mutual_information.py
+    │   ├── feature_based/
+    │   │   ├── __init__.py
+    │   │   ├── orb_registration.py
+    │   │   └── sift_registration.py
+    │   ├── landmark_based/
+    │   │   ├── __init__.py
+    │   │   ├── manual_landmarks.py
+    │   │   └── thin_plate_spline.py
+    │   └── deep_learning/
+    │       ├── __init__.py
+    │       ├── comir_registration.py
+    │       └── voxelmorph_registration.py
+    ├── utils/
+    │   ├── __init__.py
+    │   ├── image_utils.py
+    │   └── transform_utils.py
+    └── visualization/
+        ├── checkerboard.py
+        ├── difference_map.py
+        ├── interactive_viewer.py
+        └── overlay.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VERIFICATION STATUS (final session)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[PASS] Structure matches targeted_tme_quant_structure.txt exactly
+[PASS] All 100 .py files parse without syntax errors (ast.parse)
+[PASS] All single-dot relative imports resolve to existing files
+[PASS] All two-dot relative imports resolve to existing files
+[PASS] All three-dot relative imports resolve to existing files
+[PASS] All absolute tme_quant.X imports in example files resolve
+[PASS] No stale module path references in live import statements
+[PASS] pyproject.toml package discovery unchanged (src/ layout preserved)
+
+STATISTICS
+  Original:   136 .py files, max depth 8 folders
+  Refactored: 100 .py files, max depth 8 folders
+  Files removed/merged: 36 net reduction
+  Depth profile shifted: 88 files at depth 7 → 36 (majority now at depth 6)

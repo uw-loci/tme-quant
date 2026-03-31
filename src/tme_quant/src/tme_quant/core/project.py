@@ -1,4 +1,6 @@
-from typing import Dict, List, Optional, Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Dict, List, Optional, Any
 import numpy as np
 from pathlib import Path
 
@@ -8,10 +10,9 @@ from .tme_models.fiber_model import (
 )
 from .hierarchy import TMEHierarchy
 from .image_entry import ImageEntry
-from ..fiber_analysis import FiberAnalyzer
-from ..fiber_analysis.config.orientation_params import OrientationParams
-from ..fiber_analysis.config.extraction_params import ExtractionParams
-from ..tme_analysis.core.tacs_classifier import classify_fiber_tacs
+
+if TYPE_CHECKING:
+    from ..fiber_analysis.config import OrientationParams, ExtractionParams
 
 
 class TMEProject:
@@ -35,8 +36,9 @@ class TMEProject:
         # Fiber populations by region
         self.fiber_populations: Dict[str, FiberPopulation] = {}
         
-        # Analyzers
-        self.fiber_analyzer = FiberAnalyzer()
+        # Analyzers — imported lazily to avoid circular import at module load
+        from ..fiber_analysis import FiberExtractionAnalyzer
+        self.fiber_analyzer = FiberExtractionAnalyzer()
     
     # ============================================================
     # FIBER ANALYSIS METHODS
@@ -572,6 +574,7 @@ class TMEProject:
             )
             straightness = fiber.straightness if fiber.straightness is not None else 0.5
 
+            from ..fiber_analysis.tacs import classify_fiber_tacs
             tacs = classify_fiber_tacs(
                 angle_to_tangent=abs(angle),
                 straightness=straightness,

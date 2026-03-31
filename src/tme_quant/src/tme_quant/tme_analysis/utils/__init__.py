@@ -17,7 +17,8 @@ from .statistical_utils import (
     bootstrap_confidence_interval,
 )
 
-from .geometry_utils import (
+# Geometry utilities live in core.geometry — re-exported here for convenience
+from ...core.geometry import (
     compute_region_centroid,
     compute_region_area,
     point_in_polygon,
@@ -38,20 +39,17 @@ __all__ = [
     'compute_distance_to_boundary',
     'points_within_distance',
     'compute_distance_map',
-    
     # Statistical utilities
     'compute_summary_statistics',
     'compute_circular_statistics',
     'test_spatial_randomness',
     'bootstrap_confidence_interval',
-    
-    # Geometry utilities
+    # Geometry utilities (from core.geometry)
     'compute_region_centroid',
     'compute_region_area',
     'point_in_polygon',
     'compute_convex_hull',
     'buffer_polygon',
-    
     # Validation
     'validate_analysis_inputs',
     'validate_distance_threshold',

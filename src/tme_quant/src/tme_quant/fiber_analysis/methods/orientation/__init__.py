@@ -1,1 +1,0 @@
-"""Fiber orientation methods."""

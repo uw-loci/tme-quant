@@ -76,7 +76,7 @@ class ManualLandmarkRegistration:
             raise ValueError("At least 3 landmark pairs required")
         
         # Compute transformation
-        from ...config.registration_params import TransformType
+        from ...config import TransformType
         
         if params.transform_type == TransformType.AFFINE:
             transform_matrix = self._estimate_affine(moving_landmarks, fixed_landmarks)
@@ -100,7 +100,7 @@ class ManualLandmarkRegistration:
             print(f"  Target Registration Error: {tre:.3f} pixels")
         
         # Create result
-        from ...config.registration_params import RegistrationResult, Transform, RegistrationMethod
+        from ...config import RegistrationResult, Transform, RegistrationMethod
         
         result = RegistrationResult(
             transform=Transform(
