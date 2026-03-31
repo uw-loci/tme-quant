@@ -32,6 +32,11 @@ from .validation import (
     validate_interaction_pairs,
 )
 
+from .orientation_utils import (
+    nearest_boundary_segment,
+    compute_orientation_relative_to_roi,
+)
+
 __all__ = [
     # Distance utilities
     'compute_pairwise_distances',
@@ -54,4 +59,7 @@ __all__ = [
     'validate_analysis_inputs',
     'validate_distance_threshold',
     'validate_interaction_pairs',
+    # Orientation utilities
+    'nearest_boundary_segment',
+    'compute_orientation_relative_to_roi',
 ]

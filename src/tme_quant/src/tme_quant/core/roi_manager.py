@@ -774,6 +774,60 @@ class ROIManager:
             created.append(roi)
         return created
 
+    def from_tumor_region(
+        self,
+        tumor_region,
+        label: Optional[str] = None,
+        locked: bool = True,
+    ) -> Optional["ROIObject"]:
+        """
+        Convert a TumorRegion (from RegionManager.detect_tumor_regions()) into
+        an ROIObject and register it in this manager.
+
+        Parameters
+        ----------
+        tumor_region : TumorRegion
+            A TumorRegion produced by RegionManager.detect_tumor_regions().
+            Must have a non-None geometry with (N, 2) polygon coordinates.
+        label : str, optional
+            Display name.  Defaults to ``tumor_region.name`` or
+            ``tumor_region.object_id``.
+        locked : bool
+            Lock the ROI to prevent accidental editing.  Default True for
+            auto-detected boundaries (manual annotations default to False).
+
+        Returns
+        -------
+        ROIObject, or None if the TumorRegion has no valid polygon geometry.
+        """
+        import warnings
+
+        geom = getattr(tumor_region, 'geometry', None)
+        if geom is None or geom.coordinates is None:
+            warnings.warn(
+                f"TumorRegion '{tumor_region.object_id}' has no polygon geometry "
+                "\u2014 skipping conversion to ROIObject."
+            )
+            return None
+
+        coords = np.asarray(geom.coordinates, dtype=np.float32)
+        if coords.ndim != 2 or coords.shape[1] < 2 or len(coords) < 3:
+            warnings.warn(
+                f"TumorRegion '{tumor_region.object_id}' geometry has insufficient "
+                f"vertices ({coords.shape}) \u2014 skipping."
+            )
+            return None
+
+        return self.add_polygon(
+            vertices=coords[:, :2],
+            annotation_type="tumor_boundary",
+            label=label or getattr(tumor_region, 'name', tumor_region.object_id),
+            object_id=f"auto_{tumor_region.object_id}",
+            locked=locked,
+            source="region_manager_auto",
+            original_id=tumor_region.object_id,
+        )
+
     # ── Removal ───────────────────────────────────────────────────────────────
 
     def remove(self, roi_id: str) -> bool:

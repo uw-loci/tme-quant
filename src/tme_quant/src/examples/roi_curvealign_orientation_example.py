@@ -58,16 +58,14 @@ Requirements
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
-from scipy.spatial import cKDTree
 from skimage import io
 
 # ── TMEQuant imports ─────────────────────────────────────────────────────────
@@ -79,9 +77,9 @@ from tme_quant.image_registration.config import RegistrationParams, TransformTyp
 # Fiber / orientation analysis
 from tme_quant.fiber_analysis import FiberOrientationAnalyzer
 from tme_quant.fiber_analysis.config import CurveAlignParams
-from tme_quant.fiber_analysis.utils.geometry_utils import (
-    compute_angle_to_boundary_normal,
-)
+
+# Orientation relative to ROI boundary
+from tme_quant.tme_analysis.utils import compute_orientation_relative_to_roi
 
 # Cell segmentation
 from tme_quant.cell_analysis import CellAnalyzer
@@ -112,241 +110,8 @@ from tme_quant.core.hierarchy import TMEHierarchy
 from tme_quant.core.base_models import TMEObject, TMEType
 from tme_quant.core.image_entry import ImageEntry
 
-# TACS classification
-from tme_quant.fiber_analysis.tacs import (
-    classify_fiber_segment_tacs_like,
-)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ROIManager bridge: load TumorRegion → ROIObject
-# ─────────────────────────────────────────────────────────────────────────────
-
-def from_tumor_region(
-    manager: ROIManager,
-    tumor_region,                   # TumorRegion from RegionManager
-    label: Optional[str] = None,
-    locked: bool = True,            # auto-detected boundaries default to locked
-) -> Optional[ROIObject]:
-    """
-    Convert a TumorRegion (RegionManager output) into an ROIObject and
-    register it in *manager*.
-
-    This is the bridge between the automated analysis pipeline and the
-    unified ROI annotation store.
-
-    Parameters
-    ----------
-    manager : ROIManager
-        The manager that will own the resulting annotation.
-    tumor_region : TumorRegion
-        A TumorRegion produced by RegionManager.detect_tumor_regions().
-        Must have a non-None geometry with (N, 2) polygon coordinates.
-    label : str, optional
-        Display name.  Defaults to ``tumor_region.name`` or ``object_id``.
-    locked : bool
-        Lock the ROI so it cannot accidentally be moved.  Default True for
-        auto-detected boundaries (manual ones default to unlocked).
-
-    Returns
-    -------
-    ROIObject, or None if the TumorRegion has no polygon geometry.
-    """
-    geom = getattr(tumor_region, 'geometry', None)
-    if geom is None or geom.coordinates is None:
-        warnings.warn(
-            f"TumorRegion '{tumor_region.object_id}' has no polygon geometry "
-            "— skipping conversion to ROIObject."
-        )
-        return None
-
-    coords = np.asarray(geom.coordinates, dtype=np.float32)
-    if coords.ndim != 2 or coords.shape[1] < 2 or len(coords) < 3:
-        warnings.warn(
-            f"TumorRegion '{tumor_region.object_id}' geometry has insufficient "
-            f"vertices ({coords.shape}) — skipping."
-        )
-        return None
-
-    roi = manager.add_polygon(
-        vertices=coords[:, :2],
-        annotation_type="tumor_boundary",
-        label=label or getattr(tumor_region, 'name', tumor_region.object_id),
-        object_id=f"auto_{tumor_region.object_id}",
-        locked=locked,
-        source="region_manager_auto",
-        original_id=tumor_region.object_id,
-    )
-    return roi
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Orientation analysis relative to a single ROI boundary
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _nearest_boundary_segment(
-    coords: np.ndarray,
-    px: float,
-    py: float,
-) -> Tuple[Tuple[float, float], Tuple[float, float]]:
-    """
-    Return the two polygon vertices that form the boundary edge nearest to
-    the query point (px, py).  Used to compute the local boundary tangent.
-    """
-    n = len(coords)
-    best_dist = np.inf
-    best_i    = 0
-
-    for i in range(n):
-        j = (i + 1) % n
-        mx = (coords[i, 0] + coords[j, 0]) / 2
-        my = (coords[i, 1] + coords[j, 1]) / 2
-        d  = (px - mx) ** 2 + (py - my) ** 2
-        if d < best_dist:
-            best_dist = d
-            best_i    = i
-
-    j = (best_i + 1) % n
-    return (
-        (float(coords[best_i, 0]), float(coords[best_i, 1])),
-        (float(coords[j,       0]), float(coords[j,       1])),
-    )
-
-
-def compute_orientation_relative_to_roi(
-    orientation_map: np.ndarray,
-    alignment_map:   Optional[np.ndarray],
-    roi:             ROIObject,
-    pixel_size:      float = 1.0,
-    tacs_zone_width: float = 100.0,
-    subsample:       int   = 2,
-) -> dict:
-    """
-    Compute boundary-relative fiber orientation for every valid pixel in
-    *orientation_map* that falls within the TACS zone of *roi*.
-
-    Parameters
-    ----------
-    orientation_map : (H, W) float32
-        Per-pixel dominant fiber orientation in degrees (CurveAlign output).
-        NaN = unreliable pixel.
-    alignment_map : (H, W) float32 or None
-        Per-pixel alignment strength [0, 1].
-    roi : ROIObject
-        The boundary to measure relative to.
-        Must be a closed shape (polygon, rectangle, ellipse).
-    pixel_size : float
-        µm per pixel.
-    tacs_zone_width : float
-        Maximum distance (µm) from the boundary to include a pixel.
-    subsample : int
-        Take every *subsample*-th pixel to reduce compute.
-
-    Returns
-    -------
-    dict with keys:
-        points           — list of dicts, one per valid orientation pixel
-        mean_angle_to_tangent   — float, mean over all points in zone
-        mean_angle_to_normal    — float
-        tacs_distribution       — Counter of TACS-like labels
-        n_points_in_zone        — int
-        roi_label               — str
-    """
-    from collections import Counter
-
-    coords = roi.coordinates
-    if coords is None or len(coords) < 3:
-        return {}
-
-    h, w = orientation_map.shape
-    points:    list[dict] = []
-    tacs_dist: Counter    = Counter()
-
-    for y in range(0, h, subsample):
-        for x in range(0, w, subsample):
-            angle = orientation_map[y, x]
-            if np.isnan(angle):
-                continue
-
-            # Distance from pixel to boundary (use bounding-box fast check first)
-            b = roi.geometry.bounds
-            if b is not None:
-                margin = tacs_zone_width / pixel_size
-                if (x < b[0] - margin or x > b[2] + margin or
-                        y < b[1] - margin or y > b[3] + margin):
-                    continue
-
-            # Precise distance to boundary polygon edge
-            min_dist_px = np.inf
-            n = len(coords)
-            for i in range(n):
-                j = (i + 1) % n
-                ax, ay = coords[i, 0], coords[i, 1]
-                bx, by = coords[j, 0], coords[j, 1]
-                # Distance from (x,y) to segment (ax,ay)→(bx,by)
-                seg_len = np.hypot(bx - ax, by - ay)
-                if seg_len < 1e-9:
-                    d = np.hypot(x - ax, y - ay)
-                else:
-                    t = max(0.0, min(1.0, ((x-ax)*(bx-ax) + (y-ay)*(by-ay)) / seg_len**2))
-                    d = np.hypot(x - (ax + t*(bx-ax)), y - (ay + t*(by-ay)))
-                if d < min_dist_px:
-                    min_dist_px = d
-
-            dist_um = min_dist_px * pixel_size
-            if dist_um > tacs_zone_width:
-                continue
-
-            # Local boundary tangent from the nearest edge
-            pt1, pt2 = _nearest_boundary_segment(coords, x, y)
-            angle_to_normal = compute_angle_to_boundary_normal(
-                fiber_orientation=angle,
-                boundary_point1=pt1,
-                boundary_point2=pt2,
-            )
-            if np.isnan(angle_to_normal):
-                continue
-
-            angle_to_tangent = 90.0 - angle_to_normal
-            tacs_like        = classify_fiber_segment_tacs_like(
-                angle_to_tangent=angle_to_tangent,
-                distance_to_boundary=dist_um,
-                tacs_zone_width=tacs_zone_width,
-            )
-
-            rec = {
-                'x':                x,
-                'y':                y,
-                'orientation':      float(angle),
-                'alignment':        float(alignment_map[y, x]) if alignment_map is not None else None,
-                'dist_to_boundary': dist_um,
-                'angle_to_normal':  angle_to_normal,
-                'angle_to_tangent': angle_to_tangent,
-                'tacs_like':        tacs_like,
-            }
-            points.append(rec)
-            if tacs_like:
-                tacs_dist[tacs_like] += 1
-
-    if not points:
-        return {
-            'points': [], 'mean_angle_to_tangent': np.nan,
-            'mean_angle_to_normal': np.nan, 'tacs_distribution': {},
-            'n_points_in_zone': 0, 'roi_label': roi.label,
-        }
-
-    tangents = [p['angle_to_tangent'] for p in points]
-    normals  = [p['angle_to_normal']  for p in points]
-
-    return {
-        'points':                points,
-        'mean_angle_to_tangent': float(np.mean(tangents)),
-        'mean_angle_to_normal':  float(np.mean(normals)),
-        'std_angle_to_tangent':  float(np.std(tangents)),
-        'tacs_distribution':     dict(tacs_dist),
-        'n_points_in_zone':      len(points),
-        'roi_label':             roi.label,
-    }
+# TACS colour map (for visualisation)
+from tme_quant.fiber_analysis.tacs import get_tacs_color
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -588,8 +353,7 @@ def run_roi_curvealign_orientation(
     roi_mgr = ROIManager(image_id=sample_id, pixel_size=pixel_size)
 
     # Source A: convert the TumorRegion → ROIObject
-    roi_auto = from_tumor_region(
-        roi_mgr,
+    roi_auto = roi_mgr.from_tumor_region(
         auto_region,
         label="Auto boundary (DBSCAN)",
         locked=True,
