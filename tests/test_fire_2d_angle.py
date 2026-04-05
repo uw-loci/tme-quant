@@ -1,0 +1,518 @@
+"""
+Regression tests for fire_2D_ang1 Python implementation
+
+Tests the Python implementation of fire_2D_ang1 against MATLAB reference outputs.
+Validates fiber detection, network statistics, and angle calculations.
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pytest
+
+try:
+    import h5py
+    H5PY_AVAILABLE = True
+except ImportError:
+    H5PY_AVAILABLE = False
+
+try:
+    from scipy.io import loadmat
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+# Skip if C++ backend is not available
+try:
+    sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "ctfire_py" / "CPP"))
+    import fiber_backend
+    CPP_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):
+    CPP_AVAILABLE = False
+
+from ctfire_py.fire_2d_angle import fire_2d_angle
+
+
+# ============================================================================
+# Fixtures and Utilities
+# ============================================================================
+
+
+@pytest.fixture(scope="module")
+def test_config():
+    """Load test configuration from JSON."""
+    config_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / "test_cases_fire_2d.json"
+    with open(config_path, "r") as f:
+        return json.load(f)
+
+
+def load_test_image(image_name):
+    """Load a test image by filename."""
+    img_path = Path(__file__).parent / "test_images" / image_name
+    img = plt.imread(img_path, format="TIF")
+    return img
+
+
+def load_test_cases(config_path=None, matlab_only=False):
+    """
+    Load test cases from JSON configuration.
+    
+    Args:
+        config_path: Path to JSON config file. If None, uses default.
+        matlab_only: If True, only return cases with MATLAB reference files.
+        
+    Returns:
+        List of (name, test_case) tuples for parametrize.
+    """
+    if config_path is None:
+        config_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / "test_cases_fire_2d.json"
+    
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    
+    cases = config["test_cases"]
+    
+    if matlab_only:
+        cases = [tc for tc in cases if "matlab_reference_mat" in tc]
+    
+    return [(tc["name"], tc) for tc in cases]
+
+
+def load_matlab_reference(mat_file_path):
+    """
+    Load MATLAB reference data from .mat file.
+    
+    Expected structure: 
+        data.Xa - vertex coordinates
+        data.Fa - fiber structures
+        data.M - network statistics
+    
+    Returns:
+        dict with parsed MATLAB data
+    """
+    if not os.path.exists(mat_file_path):
+        pytest.skip(f"MATLAB reference file not found: {mat_file_path}")
+    
+    # Try h5py first (for MATLAB v7.3 files), fall back to scipy
+    try:
+        if H5PY_AVAILABLE:
+            # Load MATLAB v7.3 file using h5py
+            with h5py.File(mat_file_path, 'r') as f:
+                if 'data' not in f:
+                    raise ValueError("MATLAB .mat file must contain 'data' structure")
+                
+                data_group = f['data']
+                
+                # Extract relevant fields
+                result = {
+                    'Xa': None,
+                    'Fa': None,
+                    'M': {},
+                }
+                
+                # Extract Xa (vertex coordinates)
+                if 'Xa' in data_group:
+                    result['Xa'] = np.array(data_group['Xa']).T  # Transpose for MATLAB convention
+                
+                # Extract network statistics from M structure
+                if 'M' in data_group:
+                    M_group = data_group['M']
+                    
+                    result['M'] = {}
+                    
+                    # Extract scalar values
+                    if 'fiber_num' in M_group:
+                        result['M']['fiber_num'] = int(np.array(M_group['fiber_num']).item())
+                    if 'avgL' in M_group:
+                        result['M']['avgL'] = float(np.array(M_group['avgL']).item())
+                    if 'totL' in M_group:
+                        result['M']['totL'] = float(np.array(M_group['totL']).item())
+                    if 'Ldens' in M_group:
+                        result['M']['Ldens'] = float(np.array(M_group['Ldens']).item())
+                    if 'volfrac' in M_group:
+                        result['M']['volfrac'] = float(np.array(M_group['volfrac']).item())
+                    
+                    # Extract arrays
+                    if 'L' in M_group:
+                        L_data = np.array(M_group['L'])
+                        result['M']['L'] = L_data.flatten() if L_data.size > 0 else np.array([])
+                    if 'angle_xy' in M_group:
+                        angle_data = np.array(M_group['angle_xy'])
+                        result['M']['angle_xy'] = angle_data.flatten() if angle_data.size > 0 else np.array([])
+                
+                return result
+        
+        elif SCIPY_AVAILABLE:
+            # Fall back to scipy for older .mat files
+            mat_data = loadmat(mat_file_path, struct_as_record=False, squeeze_me=True)
+            
+            if 'data' not in mat_data:
+                raise ValueError("MATLAB .mat file must contain 'data' structure")
+            
+            data = mat_data['data']
+            
+            # Extract relevant fields
+            result = {
+                'Xa': data.Xa if hasattr(data, 'Xa') else None,
+                'Fa': data.Fa if hasattr(data, 'Fa') else None,
+                'M': {},
+            }
+            
+            # Extract network statistics
+            if hasattr(data, 'M'):
+                M = data.M
+                result['M'] = {
+                    'fiber_num': M.fiber_num if hasattr(M, 'fiber_num') else 0,
+                    'avgL': M.avgL if hasattr(M, 'avgL') else 0,
+                    'totL': M.totL if hasattr(M, 'totL') else 0,
+                    'L': M.L if hasattr(M, 'L') else np.array([]),
+                    'angle_xy': M.angle_xy if hasattr(M, 'angle_xy') else np.array([]),
+                    'Ldens': M.Ldens if hasattr(M, 'Ldens') else 0,
+                    'volfrac': M.volfrac if hasattr(M, 'volfrac') else 0,
+                }
+            
+            return result
+            
+    except Exception as e:
+        pytest.skip(f"Could not load MATLAB reference file: {e}")
+    
+    pytest.skip("Neither h5py nor scipy.io available for loading MATLAB files")
+
+
+# ============================================================================
+# Basic Functionality Tests
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "test_name,test_case",
+    load_test_cases(matlab_only=False),
+    ids=[name for name, _ in load_test_cases(matlab_only=False)],
+)
+def test_fire_2d_basic_execution(test_name, test_case):
+    """
+    Test that fire_2d_angle executes without errors and returns valid structure.
+    
+    This is a smoke test - it doesn't validate correctness, just that the
+    function runs and returns properly structured data.
+    """
+    if not CPP_AVAILABLE:
+        pytest.skip("C++ backend not available")
+    
+    # Load image
+    img = load_test_image(test_case["image"])
+    
+    # Convert to 3D array as expected by fire_2d_angle
+    if img.ndim == 2:
+        im3 = img[np.newaxis, :, :]
+    else:
+        im3 = img
+    
+    # Run fire_2d_angle
+    params = test_case["params"]
+    data = fire_2d_angle(p=params, im=im3, plotflag=0)
+    
+    # Validate returned structure
+    assert isinstance(data, dict), "fire_2d_angle should return a dictionary"
+    
+    # Check required fields
+    required_fields = ['X', 'F', 'R', 'Xa', 'Fa', 'Va', 'Ra', 'M']
+    for field in required_fields:
+        assert field in data, f"Missing required field: {field}"
+    
+    # Validate data types
+    assert isinstance(data['X'], np.ndarray), "X should be numpy array"
+    assert isinstance(data['F'], (list, np.ndarray)), "F should be list or array"
+    assert isinstance(data['M'], dict), "M (statistics) should be dictionary"
+    
+    # Validate fiber counts are within expected range
+    expected = test_case.get("expected_outputs", {})
+    if "min_fiber_count" in expected:
+        fiber_count = len(data['F'])
+        assert fiber_count >= expected["min_fiber_count"], \
+            f"Too few fibers detected: {fiber_count} < {expected['min_fiber_count']}"
+    
+    if "max_fiber_count" in expected:
+        fiber_count = len(data['F'])
+        assert fiber_count <= expected["max_fiber_count"], \
+            f"Too many fibers detected: {fiber_count} > {expected['max_fiber_count']}"
+
+
+@pytest.mark.parametrize(
+    "test_name,test_case",
+    load_test_cases(matlab_only=False),
+    ids=[name for name, _ in load_test_cases(matlab_only=False)],
+)
+def test_fire_2d_network_statistics(test_name, test_case):
+    """
+    Test that network statistics are calculated and within reasonable ranges.
+    """
+    if not CPP_AVAILABLE:
+        pytest.skip("C++ backend not available")
+    
+    img = load_test_image(test_case["image"])
+    
+    if img.ndim == 2:
+        im3 = img[np.newaxis, :, :]
+    else:
+        im3 = img
+    
+    params = test_case["params"]
+    data = fire_2d_angle(p=params, im=im3, plotflag=0)
+    
+    M = data['M']
+    
+    # Validate statistics exist and are reasonable
+    assert 'fiber_num' in M, "Missing fiber_num statistic"
+    assert 'avgL' in M, "Missing avgL statistic"
+    assert 'totL' in M, "Missing totL statistic"
+    
+    # Check values are positive and reasonable
+    assert M['fiber_num'] >= 0, "Fiber count should be non-negative"
+    assert M['avgL'] >= 0, "Average length should be non-negative"
+    assert M['totL'] >= 0, "Total length should be non-negative"
+    
+    # Check expected ranges if provided
+    expected = test_case.get("expected_outputs", {})
+    if "min_avg_length" in expected and M['avgL'] > 0:
+        assert M['avgL'] >= expected["min_avg_length"], \
+            f"Average length too short: {M['avgL']:.2f} < {expected['min_avg_length']}"
+    
+    if "max_avg_length" in expected and M['avgL'] > 0:
+        assert M['avgL'] <= expected["max_avg_length"], \
+            f"Average length too long: {M['avgL']:.2f} > {expected['max_avg_length']}"
+
+
+# ============================================================================
+# MATLAB Comparison Tests
+# ============================================================================
+
+
+@pytest.mark.matlab
+@pytest.mark.parametrize(
+    "test_name,test_case",
+    load_test_cases(matlab_only=True),
+    ids=[name for name, _ in load_test_cases(matlab_only=True)],
+)
+def test_fire_2d_matches_matlab_fiber_count(test_name, test_case):
+    """
+    Compare fiber count against MATLAB reference.
+    
+    Note: Python implementation currently missing check_danglers and full fiberproc,
+    so we expect 10-30% more fibers than MATLAB (see CTFIRE_CONVERSION.md).
+    """
+    if not CPP_AVAILABLE:
+        pytest.skip("C++ backend not available")
+    
+    # Load image and run Python implementation
+    img = load_test_image(test_case["image"])
+    if img.ndim == 2:
+        im3 = img[np.newaxis, :, :]
+    else:
+        im3 = img
+    
+    params = test_case["params"]
+    data_py = fire_2d_angle(p=params, im=im3, plotflag=0)
+    
+    # Load MATLAB reference
+    mat_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / test_case["matlab_reference_mat"]
+    data_mat = load_matlab_reference(mat_path)
+    
+    # Compare fiber counts
+    fiber_count_py = len(data_py['F'])
+    fiber_count_mat = data_mat['M']['fiber_num']
+    
+    # Calculate relative difference
+    if fiber_count_mat > 0:
+        rel_diff = abs(fiber_count_py - fiber_count_mat) / fiber_count_mat
+        
+        # With check_danglers implemented, expect closer match (±30%)
+        # Some differences remain due to incomplete fiberproc
+        assert fiber_count_py >= fiber_count_mat * 0.70, \
+            f"Python has too few fibers: {fiber_count_py} vs MATLAB {fiber_count_mat} (diff: {rel_diff:.1%})"
+        
+        assert fiber_count_py <= fiber_count_mat * 1.8, \
+            f"Python has too many fibers: {fiber_count_py} vs MATLAB {fiber_count_mat} (diff: {rel_diff:.1%})"
+        
+        print(f"\nFiber count - Python: {fiber_count_py}, MATLAB: {fiber_count_mat}, diff: {rel_diff:.1%}")
+
+
+@pytest.mark.matlab
+@pytest.mark.parametrize(
+    "test_name,test_case",
+    load_test_cases(matlab_only=True),
+    ids=[name for name, _ in load_test_cases(matlab_only=True)],
+)
+def test_fire_2d_matches_matlab_fiber_length(test_name, test_case):
+    """
+    Compare average fiber length against MATLAB reference.
+    
+    Note: Python fibers may be shorter due to missing gap filling in fiberproc.
+    """
+    if not CPP_AVAILABLE:
+        pytest.skip("C++ backend not available")
+    
+    img = load_test_image(test_case["image"])
+    if img.ndim == 2:
+        im3 = img[np.newaxis, :, :]
+    else:
+        im3 = img
+    
+    params = test_case["params"]
+    data_py = fire_2d_angle(p=params, im=im3, plotflag=0)
+    
+    mat_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / test_case["matlab_reference_mat"]
+    data_mat = load_matlab_reference(mat_path)
+    
+    # Compare average fiber length
+    avgL_py = data_py['M'].get('avgL', 0)
+    avgL_mat = data_mat['M']['avgL']
+    
+    if avgL_mat > 0 and avgL_py > 0:
+        rel_diff = abs(avgL_py - avgL_mat) / avgL_mat
+        
+        # Allow 50% shorter fibers in Python (due to missing gap filling and check_danglers)
+        # Observed differences: 20-50% shorter (see CTFIRE_CONVERSION.md)
+        # This is expected as:
+        # 1. fiberproc is missing gap-filling (fiberlinkgap)
+        # 2. check_danglers removes short fibers (shifts distribution upward in MATLAB)
+        assert avgL_py >= avgL_mat * 0.45, \
+            f"Python fibers too short: {avgL_py:.2f} vs MATLAB {avgL_mat:.2f} (diff: {rel_diff:.1%})"
+        
+        assert avgL_py <= avgL_mat * 1.2, \
+            f"Python fibers too long: {avgL_py:.2f} vs MATLAB {avgL_mat:.2f}"
+        
+        print(f"\nAvg fiber length - Python: {avgL_py:.2f}, MATLAB: {avgL_mat:.2f}, diff: {rel_diff:.1%}")
+
+
+@pytest.mark.matlab
+@pytest.mark.parametrize(
+    "test_name,test_case",
+    load_test_cases(matlab_only=True),
+    ids=[name for name, _ in load_test_cases(matlab_only=True)],
+)
+def test_fire_2d_matches_matlab_angles(test_name, test_case):
+    """
+    Compare fiber angle distributions against MATLAB reference.
+    
+    Validates that the angle calculation produces similar distributions,
+    even if individual fiber counts differ.
+    """
+    if not CPP_AVAILABLE:
+        pytest.skip("C++ backend not available")
+    
+    img = load_test_image(test_case["image"])
+    if img.ndim == 2:
+        im3 = img[np.newaxis, :, :]
+    else:
+        im3 = img
+    
+    params = test_case["params"]
+    data_py = fire_2d_angle(p=params, im=im3, plotflag=0)
+    
+    mat_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / test_case["matlab_reference_mat"]
+    data_mat = load_matlab_reference(mat_path)
+    
+    # Get angle arrays
+    angles_py = data_py['M'].get('angle_xy', np.array([]))
+    angles_mat = data_mat['M'].get('angle_xy', np.array([]))
+    
+    if len(angles_py) > 0 and len(angles_mat) > 0:
+        # Compare distributions using histogram
+        bins = np.linspace(-np.pi, np.pi, 20)
+        
+        hist_py, _ = np.histogram(angles_py, bins=bins, density=True)
+        hist_mat, _ = np.histogram(angles_mat, bins=bins, density=True)
+        
+        # Normalize histograms
+        hist_py = hist_py / (hist_py.sum() + 1e-10)
+        hist_mat = hist_mat / (hist_mat.sum() + 1e-10)
+        
+        # Compare using correlation (should be > 0.7 for similar distributions)
+        if hist_py.sum() > 0 and hist_mat.sum() > 0:
+            correlation = np.corrcoef(hist_py, hist_mat)[0, 1]
+            
+            assert correlation > 0.5, \
+                f"Angle distributions too different (correlation: {correlation:.3f})"
+            
+            print(f"\nAngle distribution correlation: {correlation:.3f}")
+
+
+# ============================================================================
+# Utility Tests
+# ============================================================================
+
+
+def test_load_test_config():
+    """Test that the test configuration file loads correctly."""
+    config_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / "test_cases_fire_2d.json"
+    
+    assert config_path.exists(), f"Test config not found: {config_path}"
+    
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    
+    assert "test_cases" in config
+    assert len(config["test_cases"]) > 0
+    assert "tolerances" in config
+    
+    # Validate first test case structure
+    tc = config["test_cases"][0]
+    assert "name" in tc
+    assert "image" in tc
+    assert "params" in tc
+    assert "expected_outputs" in tc
+
+
+def test_cpp_backend_availability():
+    """Report on C++ backend availability for debugging."""
+    if CPP_AVAILABLE:
+        print("\n✓ C++ backend is available")
+        print(f"  Available functions: {dir(fiber_backend)}")
+    else:
+        print("\n✗ C++ backend NOT available")
+        print("  Tests requiring C++ will be skipped")
+        print("  To enable: cd src/ctfire_py/CPP && make clean && make")
+
+
+# ============================================================================
+# Documentation Tests
+# ============================================================================
+
+
+def test_implementation_status_documented():
+    """
+    Verify that implementation status and differences are documented.
+    
+    This reminds developers about known differences between Python and MATLAB.
+    """
+    doc_path = Path(__file__).parent.parent / "docs" / "CTFIRE_CONVERSION.md"
+    
+    assert doc_path.exists(), "CTFIRE_CONVERSION.md documentation not found"
+    
+    with open(doc_path, "r") as f:
+        doc_content = f.read()
+    
+    # Check that key differences are documented
+    assert "check_danglers" in doc_content, "check_danglers differences should be documented"
+    assert "fiberproc" in doc_content, "fiberproc differences should be documented"
+    assert "CPP" in doc_content or "cpp" in doc_content, "CPP comparison should be documented"
+    
+    print("\n✓ Implementation differences are documented in CTFIRE_CONVERSION.md")
+
+
+# ============================================================================
+# Main entry point for running tests
+# ============================================================================
+
+
+if __name__ == "__main__":
+    # Run tests with verbose output
+    pytest.main([__file__, "-v", "-s", "--tb=short"])

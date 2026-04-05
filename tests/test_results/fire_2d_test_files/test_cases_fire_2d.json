@@ -1,0 +1,165 @@
+{
+  "description": "Test cases for fire_2D_ang1 Python implementation vs MATLAB reference",
+  "test_cases": [
+    {
+      "name": "2B_D9_ROI1_default_params",
+      "image": "2B_D9_ROI1.tif",
+      "description": "Standard test image with default ctFIRE parameters",
+      "params": {
+        "sigma_im": 0,
+        "sigma_d": 0.3,
+        "dtype": "cityblock",
+        "thresh_im": [],
+        "thresh_im2": 5,
+        "thresh_Dxlink": 1.5,
+        "s_xlinkbox": 8,
+        "thresh_LMP": 0.2,
+        "thresh_LMPdist": 2,
+        "thresh_ext": 0.342,
+        "lam_dirdecay": 0.5,
+        "s_minstep": 2,
+        "s_maxstep": 6,
+        "thresh_dang_aextend": 0.9848,
+        "thresh_dang_L": 15,
+        "thresh_short_L": 15,
+        "s_fiberdir": 4,
+        "thresh_linkd": 15,
+        "thresh_linka": -0.866,
+        "thresh_flen": 15,
+        "thresh_numv": 3,
+        "scale": [1.0, 1.0, 1.0],
+        "s_boundthick": 10,
+        "blist": 1,
+        "s_maxspace": 5,
+        "lambda": 0.01,
+        "ang_interval": 3
+      },
+      "expected_outputs": {
+        "min_fiber_count": 50,
+        "max_fiber_count": 2000,
+        "min_avg_length": 10,
+        "max_avg_length": 150,
+        "note": "High fiber count expected: Python bypasses check_danglers (see CTFIRE_CONVERSION.md)"
+      },
+      "matlab_reference_mat": "test_fire_2d_2B_D9_ROI1_default.mat"
+    },
+    {
+      "name": "2B_D9_ROI1_high_threshold",
+      "image": "2B_D9_ROI1.tif",
+      "description": "Test with higher threshold to reduce fiber count",
+      "params": {
+        "sigma_im": 0,
+        "sigma_d": 0.3,
+        "dtype": "cityblock",
+        "thresh_im": [],
+        "thresh_im2": 10,
+        "thresh_Dxlink": 2.0,
+        "s_xlinkbox": 8,
+        "thresh_LMP": 0.3,
+        "thresh_LMPdist": 2,
+        "thresh_ext": 0.342,
+        "lam_dirdecay": 0.5,
+        "s_minstep": 2,
+        "s_maxstep": 6,
+        "thresh_dang_aextend": 0.9848,
+        "thresh_dang_L": 15,
+        "thresh_short_L": 15,
+        "s_fiberdir": 4,
+        "thresh_linkd": 15,
+        "thresh_linka": -0.866,
+        "thresh_flen": 15,
+        "thresh_numv": 3,
+        "scale": [1.0, 1.0, 1.0],
+        "s_boundthick": 10,
+        "blist": 1,
+        "s_maxspace": 5,
+        "lambda": 0.01,
+        "ang_interval": 3
+      },
+      "expected_outputs": {
+        "min_fiber_count": 50,
+        "max_fiber_count": 1500,
+        "min_avg_length": 15,
+        "max_avg_length": 150,
+        "note": "High fiber count expected: Python bypasses check_danglers"
+      },
+      "matlab_reference_mat": "test_fire_2d_2B_D9_ROI1_high_threshold.mat"
+    },
+    {
+      "name": "real1_ctfire_params",
+      "image": "real1.tif",
+      "description": "Test with real1 image used in curvelet tests",
+      "params": {
+        "sigma_im": 0,
+        "sigma_d": 0.3,
+        "dtype": "cityblock",
+        "thresh_im": [],
+        "thresh_im2": 5,
+        "thresh_Dxlink": 1.5,
+        "s_xlinkbox": 8,
+        "thresh_LMP": 0.2,
+        "thresh_LMPdist": 2,
+        "thresh_ext": 0.342,
+        "lam_dirdecay": 0.5,
+        "s_minstep": 2,
+        "s_maxstep": 6,
+        "thresh_dang_aextend": 0.9848,
+        "thresh_dang_L": 15,
+        "thresh_short_L": 15,
+        "s_fiberdir": 4,
+        "thresh_linkd": 15,
+        "thresh_linka": -0.866,
+        "thresh_flen": 15,
+        "thresh_numv": 3,
+        "scale": [1.0, 1.0, 1.0],
+        "s_boundthick": 10,
+        "blist": 1,
+        "s_maxspace": 5,
+        "lambda": 0.01,
+        "ang_interval": 3
+      },
+      "expected_outputs": {
+        "min_fiber_count": 50,
+        "max_fiber_count": 1000,
+        "min_avg_length": 10,
+        "max_avg_length": 120,
+        "note": "High fiber count expected: Python bypasses check_danglers"
+      },
+      "matlab_reference_mat": "test_fire_2d_real1_default.mat"
+    }
+  ],
+  "tolerances": {
+    "fiber_count": {
+      "description": "Tolerance for number of fibers detected",
+      "relative": 0.15,
+      "note": "15% tolerance accounts for differences in edge cases"
+    },
+    "fiber_length": {
+      "description": "Tolerance for average fiber length",
+      "relative": 0.10,
+      "absolute": 5.0,
+      "note": "10% relative or 5 pixels absolute"
+    },
+    "fiber_angle": {
+      "description": "Tolerance for fiber angles",
+      "absolute_degrees": 5.0,
+      "note": "5 degree tolerance for angle measurements"
+    },
+    "vertex_position": {
+      "description": "Tolerance for vertex coordinates",
+      "absolute_pixels": 2.0,
+      "note": "2 pixel tolerance for coordinate precision"
+    },
+    "network_stats": {
+      "description": "Tolerance for network statistics",
+      "relative": 0.10,
+      "note": "10% tolerance for derived statistics"
+    }
+  },
+  "notes": [
+    "MATLAB reference files (.mat) should contain 'data' structure from fire_2D_ang1 output",
+    "Python implementation currently missing check_danglers and full fiberproc",
+    "Expected differences: Python may have 10-30% more fibers, 20% shorter average length",
+    "To generate MATLAB reference: run fire_2D_ang1(p, im3, 0) and save('ref.mat', 'data')"
+  ]
+}
