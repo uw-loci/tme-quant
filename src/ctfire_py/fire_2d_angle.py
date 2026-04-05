@@ -405,12 +405,8 @@ def fire_2d_angle(
 
     # Step 6: Remove danglers and shorties
     print("Remove danglers and shorties")
-    # TODO: Implement check_danglers function
-    # For now, pass through
-    Xz2 = Xz.copy()
-    Fz2 = Fz.copy() if isinstance(Fz, list) else Fz
-    Vz2 = Vz.copy() if isinstance(Vz, list) else Vz
-    Rz2 = Rz.copy()
+    from ctfire_py.fiber_processing import check_danglers
+    Xz2, Fz2, Vz2, Rz2 = check_danglers(Xz, Fz, Vz, Rz, p)
 
     # Identify cross-links
     xlinkind = np.zeros(len(Vz2), dtype=bool)
@@ -457,12 +453,17 @@ def fire_2d_angle(
     for k in range(Xa.shape[0]):
         Xas[k, :] = Xa[k, :] * scale[: Xa.shape[1]]
 
-    # TODO: Implement network_statK function
-    M = {}  # Placeholder for network statistics
+    # Import analysis functions
+    from ctfire_py.fiber_analysis.network_stats import network_statK
+    from ctfire_py.fiber_analysis.fiber_angles import calc_fiberang2
+    
+    # Calculate network statistics
+    M = network_statK(Xas, Fa, Va, Ra)
 
     # Step 10: Fiber interpolation
     print("Interpolating fibers")
     # TODO: Implement fiber2beam function
+    # For now, use scaled coordinates
     Xai = Xas.copy()
     Fai = Fa
     Vai = Va
@@ -470,11 +471,13 @@ def fire_2d_angle(
     # Step 11: Calculate fiber angles
     print("Calculating fiber angles")
     SPI = p.get("ang_interval", 5)
-    # TODO: Implement calc_fiberang2 function
-    FiberAngle = []  # Placeholder
-    FiberAngleI = []  # Placeholder
-
+    
+    # Calculate angles for original fibers
+    FiberAngle = calc_fiberang2(Xas, Fa, SPI)
     M["Fang"] = FiberAngle
+    
+    # Calculate angles for interpolated fibers
+    FiberAngleI = calc_fiberang2(Xai, Fai, SPI)
     M["FangI"] = FiberAngleI
 
     # Step 12: Beam processing
