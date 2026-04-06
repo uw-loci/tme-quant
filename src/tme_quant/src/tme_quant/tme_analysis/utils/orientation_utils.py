@@ -44,6 +44,16 @@ def nearest_boundary_segment(
     point (fast O(n) scan).  Used to obtain the local boundary tangent for
     ``compute_angle_to_boundary_normal``.
 
+    .. note::
+        This function is intentionally kept as a fast O(n) midpoint scan and
+        is designed for the **pixel-map loop** in
+        ``compute_orientation_relative_to_roi``, where it is called once per
+        valid pixel.  For **single-fiber analysis** on a dense 8-connected
+        pixel-trace boundary (e.g. CurveAlign output), prefer
+        ``fiber_analysis.utils.compute_boundary_tangent_angle`` which uses a
+        polynomial fit over 21 connected neighbours and is more robust near
+        corners and high-curvature regions.
+
     Parameters
     ----------
     coords : (N, 2) ndarray

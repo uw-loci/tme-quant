@@ -349,6 +349,7 @@ class FiberObject(TMEObject):
         metadata: Optional[Dict[str, Any]] = None,
         # Geometric properties (from fiber extraction)
         centerline: Optional[np.ndarray] = None,   # Nx2 or Nx3 coordinates
+        orientation_point: Optional[np.ndarray] = None, # explicit measurement location
         length: float = 0.0,                        # microns
         width: float = 0.0,                         # microns
         # Orientation
@@ -396,6 +397,7 @@ class FiberObject(TMEObject):
         self.centerline: np.ndarray = (
             centerline if centerline is not None else np.array([])
         )
+        self.orientation_point: Optional[np.ndarray] = orientation_point
         self.length: float = length
         self.width: float = width
         # Orientation
@@ -440,6 +442,9 @@ class FiberObject(TMEObject):
         # TACS
         self.tacs_type: Optional[str] = tacs_type
         self.tacs_score: Optional[float] = tacs_score
+        # Extended relative-orientation angles (set by compute_boundary_relative_metrics)
+        self.angle_to_roi_orientation: Optional[float] = None
+        self.angle_to_centers_line: Optional[float] = None
         # Analysis metadata
         self.extraction_mode: Optional[str] = extraction_mode
         self.confidence: Optional[float] = confidence
@@ -476,7 +481,39 @@ class FiberObject(TMEObject):
             raise ValueError("Fiber has no points")
         mid_idx = len(self.centerline) // 2
         return Point(self.centerline[mid_idx])
-    
+
+    @property
+    def center_point(self) -> Optional[np.ndarray]:
+        """Representative spatial coordinate for this fiber object.
+
+        Two source types are supported:
+
+        **Orientation-map measurement** (CurveAlign curvelet group, OrientationJ
+        window, pixel-wise gradient, structure-tensor window):
+            There is no geometric centerline.  ``orientation_point`` is the
+            pixel coordinate or window centre at which the orientation was
+            computed and IS the only meaningful location.  Set it explicitly
+            when constructing the object or assigning analysis results.
+
+        **Extracted individual fiber** (CT-FIRE, ridge detection, skeleton):
+            ``orientation_point`` may be set to the specific point along the
+            fiber where orientation was sampled (e.g. the curvelet-group centre
+            for a curve segment).  If not set, the centerline midpoint is used
+            as a convenient fallback.
+
+        Returns
+        -------
+        ndarray or None
+            ``orientation_point`` if explicitly set, otherwise the centerline
+            midpoint for extracted fibers, or ``None`` when neither is
+            available.
+        """
+        if self.orientation_point is not None:
+            return self.orientation_point
+        if len(self.centerline) > 0:
+            return self.centerline[len(self.centerline) // 2]
+        return None
+
     def get_center_coordinates(self) -> np.ndarray:
         """Get center coordinates as numpy array [x, y] or [x, y, z]."""
         if len(self.centerline) == 0:
@@ -506,78 +543,139 @@ class FiberObject(TMEObject):
     def compute_boundary_relative_metrics(
         self,
         tumor_boundary: 'ROI',
-        pixel_size: float = 1.0
+        pixel_size: float = 1.0,
+        roi_coords: Optional[np.ndarray] = None,
+        image_size: Optional[tuple] = None,
+        dense_boundary: bool = False,
     ) -> Dict[str, Any]:
         """
         Compute all boundary-relative metrics for this fiber.
-        
-        This is the main method for calculating fiber orientation relative to
-        the nearest point on the tumor boundary (NEW method).
-        
-        Args:
-            tumor_boundary: Tumor boundary ROI
-            pixel_size: Pixel size in microns
-            
-        Returns:
-            Dictionary with all computed metrics
+
+        When *roi_coords* is supplied the unified ``compute_relative_fiber_angles``
+        function is used, returning all three relative-angle measurements
+        (boundary-tangent, ROI-orientation, centers-line) and storing them on
+        ``self``.  When *roi_coords* is None the legacy Shapely-based path is
+        used for backward compatibility (``angle_to_roi_orientation`` and
+        ``angle_to_centers_line`` remain None in that case).
+
+        Parameters
+        ----------
+        tumor_boundary : ROI
+            Tumor boundary ROI (used only when *roi_coords* is None).
+        pixel_size : float
+            Microns per pixel.
+        roi_coords : (N, 2) ndarray or None
+            ROI boundary in (row, col) order.  When provided, takes precedence
+            over the *tumor_boundary* Shapely path.
+        image_size : (height, width) or None
+            Passed to ``compute_relative_fiber_angles`` for regionprops-based
+            ROI orientation; if None a moment approximation is used.
+        dense_boundary : bool
+            Pass True when *roi_coords* is a dense 8-connected pixel trace.
+
+        Returns
+        -------
+        dict with all computed metrics.
         """
-        from ..utils.geometry_utils import (
-            find_nearest_boundary_point,
-            compute_boundary_normal,
-            compute_relative_angles
-        )
-        
-        # Get fiber midpoint (most representative point)
-        mid_idx = len(self.centerline) // 2
-        fiber_point = self.centerline[mid_idx]
-        
-        # Find nearest point on boundary
-        nearest_point, distance = find_nearest_boundary_point(
-            fiber_point,
-            tumor_boundary,
-            pixel_size=pixel_size
-        )
-        
-        self.nearest_boundary_point = nearest_point
-        self.nearest_boundary_distance = distance
-        
-        # Compute boundary normal at nearest point
-        boundary_normal_angle = compute_boundary_normal(
-            nearest_point,
-            tumor_boundary
-        )
-        self.nearest_boundary_normal_angle = boundary_normal_angle
-        
-        # Compute fiber orientation
-        if len(self.centerline) < 2:
-            return {'error': 'Fiber must have at least 2 points'}
-        
-        fiber_vector = self.centerline[-1] - self.centerline[0]
-        fiber_angle = np.degrees(np.arctan2(fiber_vector[1], fiber_vector[0]))
-        
-        # Compute relative angles
-        relative_metrics = compute_relative_angles(
-            fiber_angle,
-            boundary_normal_angle
-        )
-        
-        self.relative_angle_to_boundary_normal = relative_metrics['angle_to_normal']
-        self.relative_angle_to_boundary_tangent = relative_metrics['angle_to_tangent']
-        
-        # Compute TACS classification
+        cp = self.center_point
+        if cp is None:
+            return {'error': 'Fiber has no location: set orientation_point or provide a centerline'}
+        fiber_mid = cp                                # (x, y) or (col, row)
+
+        if roi_coords is not None:
+            # ── New unified path via compute_relative_fiber_angles ─────────
+            from ...fiber_analysis.utils.geometry_utils import (
+                compute_relative_fiber_angles,
+                find_nearest_boundary_index,
+            )
+
+            if len(self.centerline) >= 2:
+                fiber_vector = self.centerline[-1] - self.centerline[0]
+                fiber_angle  = float(
+                    np.degrees(np.arctan2(fiber_vector[1], fiber_vector[0])) % 180
+                )
+            else:
+                # orientation-map object: use the stored angle directly
+                fiber_angle = float(self.angle % 180)
+            # obj_center in (x, y); roi_coords in (row, col)
+            obj_center = (float(fiber_mid[0]), float(fiber_mid[1]))
+
+            rel_angles, roi_meas = compute_relative_fiber_angles(
+                obj_center      = obj_center,
+                obj_angle       = fiber_angle,
+                roi_coords      = roi_coords,
+                image_size      = image_size,
+                angle_option    = 0,
+                dense_boundary  = dense_boundary,
+            )
+
+            # Store all angle results on self
+            self.relative_angle_to_boundary_tangent = rel_angles['angle_to_boundary_tangent']
+            self.relative_angle_to_boundary_normal  = (
+                None if self.relative_angle_to_boundary_tangent is None
+                else 90.0 - self.relative_angle_to_boundary_tangent
+            )
+            self.angle_to_roi_orientation = rel_angles['angle_to_roi_orientation']
+            self.angle_to_centers_line    = rel_angles['angle_to_centers_line']
+
+            # Find nearest boundary point for distance / normal storage
+            coords_arr = np.asarray(roi_coords, dtype=float)
+            # roi_coords in (row,col): search with (row=y, col=x)
+            bidx = find_nearest_boundary_index(
+                coords_arr, float(fiber_mid[1]), float(fiber_mid[0])
+            )
+            bp = coords_arr[bidx]
+            # Convert (row, col) → (x, y)
+            self.nearest_boundary_point    = np.array([bp[1], bp[0]]) * pixel_size
+            self.nearest_boundary_distance = float(
+                np.linalg.norm(fiber_mid - self.nearest_boundary_point)
+            )
+
+        else:
+            # ── Legacy Shapely path (backward compatible) ──────────────────
+            from ...fiber_analysis.utils.geometry_utils import (
+                find_nearest_boundary_point,
+                compute_boundary_normal,
+                compute_relative_angles,
+            )
+
+            nearest_point, distance = find_nearest_boundary_point(
+                fiber_mid, tumor_boundary, pixel_size=pixel_size
+            )
+            self.nearest_boundary_point    = nearest_point
+            self.nearest_boundary_distance = distance
+
+            boundary_normal_angle = compute_boundary_normal(
+                nearest_point, tumor_boundary
+            )
+            self.nearest_boundary_normal_angle = boundary_normal_angle
+
+            if len(self.centerline) >= 2:
+                fiber_vector = self.centerline[-1] - self.centerline[0]
+                fiber_angle  = np.degrees(np.arctan2(fiber_vector[1], fiber_vector[0]))
+            else:
+                fiber_angle = float(self.angle)
+
+            rel = compute_relative_angles(fiber_angle, boundary_normal_angle)
+            self.relative_angle_to_boundary_normal  = rel['angle_to_normal']
+            self.relative_angle_to_boundary_tangent = rel['angle_to_tangent']
+            # angle_to_roi_orientation / angle_to_centers_line not available
+            # via the Shapely path; leave as None
+
+        # TACS classification (uses relative_angle_to_boundary_tangent)
         tacs_result = self._classify_tacs_from_metrics()
-        self.tacs_type = tacs_result['type']
+        self.tacs_type  = tacs_result['type']
         self.tacs_score = tacs_result['score']
-        
+
         return {
-            'nearest_point': nearest_point,
-            'distance': distance,
-            'normal_angle': boundary_normal_angle,
-            'fiber_angle': fiber_angle,
-            'angle_to_normal': self.relative_angle_to_boundary_normal,
-            'angle_to_tangent': self.relative_angle_to_boundary_tangent,
-            'tacs_type': self.tacs_type,
-            'tacs_score': self.tacs_score
+            'nearest_point':                    self.nearest_boundary_point,
+            'distance':                         self.nearest_boundary_distance,
+            'angle_to_normal':                  self.relative_angle_to_boundary_normal,
+            'angle_to_tangent':                 self.relative_angle_to_boundary_tangent,
+            'angle_to_roi_orientation':         self.angle_to_roi_orientation,
+            'angle_to_centers_line':            self.angle_to_centers_line,
+            'tacs_type':                        self.tacs_type,
+            'tacs_score':                       self.tacs_score,
         }
     
     def compute_alignment_to_boundary(
@@ -596,7 +694,7 @@ class FiberObject(TMEObject):
                 - angle_to_boundary: alignment angle
                 - alignment_score: 0-1 (1 = parallel, 0 = perpendicular)
         """
-        from ..utils.geometry_utils import compute_fiber_to_boundary_alignment
+        from ...fiber_analysis.utils.geometry_utils import compute_fiber_to_boundary_alignment
         
         alignment = compute_fiber_to_boundary_alignment(
             self.centerline,
@@ -706,13 +804,16 @@ class FiberObject(TMEObject):
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for export."""
-        center = self.get_center_coordinates() if len(self.centerline) > 0 else np.array([])
+        cp = self.center_point   # Optional[np.ndarray]
+        op = self.orientation_point
         return {
             'object_id': self.object_id,
             'parent_id': self.parent.object_id if self.parent is not None else None,
-            'center_x': float(center[0]) if len(center) > 0 else None,
-            'center_y': float(center[1]) if len(center) > 1 else None,
-            'center_z': float(center[2]) if len(center) > 2 else None,
+            'center_x': float(cp[0]) if cp is not None and len(cp) > 0 else None,
+            'center_y': float(cp[1]) if cp is not None and len(cp) > 1 else None,
+            'center_z': float(cp[2]) if cp is not None and len(cp) > 2 else None,
+            'orientation_point_x': float(op[0]) if op is not None and len(op) > 0 else None,
+            'orientation_point_y': float(op[1]) if op is not None and len(op) > 1 else None,
             'length': self.length,
             'width': self.width,
             'angle': self.angle,
@@ -722,6 +823,8 @@ class FiberObject(TMEObject):
             'nearest_boundary_distance': self.nearest_boundary_distance,
             'relative_angle_to_boundary_normal': self.relative_angle_to_boundary_normal,
             'relative_angle_to_boundary_tangent': self.relative_angle_to_boundary_tangent,
+            'angle_to_roi_orientation': self.angle_to_roi_orientation,
+            'angle_to_centers_line': self.angle_to_centers_line,
             'tacs_type': self.tacs_type,
             'tacs_score': self.tacs_score,
             'in_tumor_boundary': self.in_tumor_boundary,

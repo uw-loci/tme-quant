@@ -37,6 +37,12 @@ from .orientation_utils import (
     compute_orientation_relative_to_roi,
 )
 
+from ...fiber_analysis.utils.geometry_utils import (
+    compute_boundary_tangent_angle,
+    find_nearest_boundary_index,
+    compute_relative_fiber_angles,
+)
+
 __all__ = [
     # Distance utilities
     'compute_pairwise_distances',
@@ -59,6 +65,14 @@ __all__ = [
     'validate_analysis_inputs',
     'validate_distance_threshold',
     'validate_interaction_pairs',
+    # Pixel-map orientation (sparse polygon fast path)
+    'nearest_boundary_segment',
+    'compute_orientation_relative_to_roi',
+    # Single-object relative-angle utilities (dense trace + polygon)
+    'compute_boundary_tangent_angle',
+    'find_nearest_boundary_index',
+    'compute_relative_fiber_angles',
+]
     # Orientation utilities
     'nearest_boundary_segment',
     'compute_orientation_relative_to_roi',

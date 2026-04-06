@@ -17,6 +17,9 @@ from .geometry_utils import (
     compute_angle_to_boundary_normal,
     compute_angle_to_boundary_normal_simplified,
     compute_fiber_properties,
+    compute_boundary_tangent_angle,
+    find_nearest_boundary_index,
+    compute_relative_fiber_angles,
 )
 
 __all__ = [
@@ -34,4 +37,8 @@ __all__ = [
     'compute_angle_to_boundary_normal',
     'compute_angle_to_boundary_normal_simplified',
     'compute_fiber_properties',
+    # Dense-trace tangent and unified relative-angle utilities
+    'compute_boundary_tangent_angle',
+    'find_nearest_boundary_index',
+    'compute_relative_fiber_angles',
 ]
