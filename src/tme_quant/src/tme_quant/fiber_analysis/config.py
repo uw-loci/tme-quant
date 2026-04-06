@@ -979,6 +979,19 @@ class CurveAlignResult(OrientationResult):
 
     Attributes
     ----------
+    alignment_map : ndarray or None
+        Per-pixel angular energy concentration ∈ [0, 1].  For each sliding
+        window, this equals ``peak_bin_energy / total_energy`` — how tightly
+        the curvelet energy is concentrated in the dominant angular bin.  All
+        pixels covered by the same window share the same value.
+
+        .. note::
+            This is a **per-window pixel map**, not the same as the
+            *per-region* alignment score (mean resultant length R of fiber
+            angles within a TACS zone, ROI, or k-nearest-neighbor group).
+            That per-region metric is computed by
+            ``CurveAlignOrientation.compute_region_alignment``.
+
     energy_map : ndarray or None
         Per-pixel total curvelet energy (summed across all angles and
         scales).  Higher energy indicates stronger fiber signal.

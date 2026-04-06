@@ -34,6 +34,7 @@ from .validation import (
 
 from .orientation_utils import (
     nearest_boundary_segment,
+    discretize_roi_boundary,
     compute_orientation_relative_to_roi,
 )
 
@@ -65,8 +66,9 @@ __all__ = [
     'validate_analysis_inputs',
     'validate_distance_threshold',
     'validate_interaction_pairs',
-    # Pixel-map orientation (sparse polygon fast path)
+    # Pixel-map orientation utilities
     'nearest_boundary_segment',
+    'discretize_roi_boundary',
     'compute_orientation_relative_to_roi',
     # Single-object relative-angle utilities (dense trace + polygon)
     'compute_boundary_tangent_angle',
