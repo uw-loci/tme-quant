@@ -73,7 +73,3 @@ __all__ = [
     'find_nearest_boundary_index',
     'compute_relative_fiber_angles',
 ]
-    # Orientation utilities
-    'nearest_boundary_segment',
-    'compute_orientation_relative_to_roi',
-]

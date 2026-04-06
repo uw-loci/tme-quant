@@ -119,8 +119,8 @@ from tme_quant.fiber_analysis.utils import (
 # For TACS classification convert: angle_to_tangent = 90 - angle_to_normal.
 from tme_quant.fiber_analysis.utils.geometry_utils import (
     compute_angle_to_boundary_normal,   # returns angle-to-NORMAL (0–90°)
-    compute_relative_angles,            # returns dict with both angle_to_normal
-                                        # and angle_to_tangent
+    _angle_between_orientations,        # internal helper: two scalars → dict
+                                        # with angle_to_normal + angle_to_tangent
 )
 
 # ── Cell analysis ─────────────────────────────────────────────────────────────

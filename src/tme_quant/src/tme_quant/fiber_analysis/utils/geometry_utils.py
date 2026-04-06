@@ -125,21 +125,34 @@ def compute_boundary_normal(
     return normal_angle
 
 
-def compute_relative_angles(
+def _angle_between_orientations(
     fiber_angle: float,
-    boundary_normal_angle: float
+    boundary_normal_angle: float,
 ) -> Dict[str, float]:
     """
-    Compute relative angles between fiber and boundary.
-    
-    Args:
-        fiber_angle: Fiber orientation in degrees
-        boundary_normal_angle: Boundary normal angle in degrees
-        
-    Returns:
-        Dictionary with:
-            - angle_to_normal: 0° = perpendicular to boundary (TACS-3)
-            - angle_to_tangent: 0° = parallel to boundary (TACS-2)
+    Pure-math helper: compute angle_to_tangent between a fiber orientation and
+    a boundary normal angle.
+
+    This is an internal building block used by ``compute_fiber_to_boundary_alignment``
+    (the legacy Shapely path) and ``FiberObject.compute_boundary_relative_metrics``.
+    It performs no geometry — callers are responsible for deriving the boundary
+    normal angle before calling this function.
+
+    For the full spatial pipeline that accepts raw boundary coordinates and
+    returns all three TACS angles, use ``compute_tacs_angles`` instead.
+
+    Parameters
+    ----------
+    fiber_angle : float
+        Fiber orientation in degrees.
+    boundary_normal_angle : float
+        Boundary normal angle in degrees.
+
+    Returns
+    -------
+    float
+        ``angle_to_tangent`` — acute angle [0°, 90°]; 0° = fiber parallel to
+        boundary (TACS-2 pattern).
     """
     # Normalize angles to 0-180 range for orientation
     def normalize_orientation(angle):
@@ -149,18 +162,13 @@ def compute_relative_angles(
     fiber_orientation = normalize_orientation(fiber_angle)
     normal_orientation = normalize_orientation(boundary_normal_angle)
     
-    # Angle to normal (0° = fiber perpendicular to boundary)
+    # Angle to normal (intermediate; 0° = fiber perpendicular to boundary)
     angle_to_normal = abs(fiber_orientation - normal_orientation)
     if angle_to_normal > 90:
         angle_to_normal = 180 - angle_to_normal
-    
-    # Angle to tangent (0° = fiber parallel to boundary)
-    angle_to_tangent = 90 - angle_to_normal
-    
-    return {
-        'angle_to_normal': angle_to_normal,
-        'angle_to_tangent': angle_to_tangent
-    }
+
+    # Angle to tangent (0° = fiber parallel to boundary — used for TACS)
+    return float(90 - angle_to_normal)
 
 
 def compute_fiber_to_boundary_alignment(
@@ -193,23 +201,22 @@ def compute_fiber_to_boundary_alignment(
     # Compute boundary normal
     normal_angle = compute_boundary_normal(nearest_point, boundary)
     
-    # Compute fiber orientation
+    # Compute fiber orientation [0°, 180°)
     fiber_vector = fiber_centerline[-1] - fiber_centerline[0]
-    fiber_angle = np.degrees(np.arctan2(fiber_vector[1], fiber_vector[0]))
+    fiber_angle = float(np.degrees(np.arctan2(fiber_vector[1], fiber_vector[0])) % 180)
     
     # Compute relative angles
-    relative_angles = compute_relative_angles(fiber_angle, normal_angle)
-    
+    angle_to_tangent = _angle_between_orientations(fiber_angle, normal_angle)
+
     # Compute alignment score (0 = perpendicular, 1 = parallel)
-    alignment_score = abs(relative_angles['angle_to_tangent']) / 90.0
-    
+    alignment_score = abs(angle_to_tangent) / 90.0
+
     return {
         'distance': distance,
         'nearest_point': nearest_point,
         'boundary_normal_angle': normal_angle,
         'fiber_angle': fiber_angle,
-        'angle_to_normal': relative_angles['angle_to_normal'],
-        'angle_to_tangent': relative_angles['angle_to_tangent'],
+        'angle_to_tangent': angle_to_tangent,
         'alignment_score': alignment_score
     }
 
@@ -259,12 +266,11 @@ def compute_angle_to_boundary_normal(
         # Points are too close, return NaN
         return np.nan
     
-    # Boundary tangent angle (angle of the vector from point1 to point2)
-    boundary_tangent = np.arctan2(dy, dx) * 180 / np.pi
-    
-    # Normalize to [0, 180) range
-    if boundary_tangent < 0:
-        boundary_tangent += 180
+    # Normalize fiber orientation to [0°, 180°)
+    fiber_orientation = float(fiber_orientation) % 180
+
+    # Boundary tangent angle [0°, 180°)
+    boundary_tangent = float(np.degrees(np.arctan2(dy, dx)) % 180)
     
     # Boundary normal is perpendicular to tangent
     boundary_normal = (boundary_tangent + 90) % 180
@@ -300,12 +306,16 @@ def compute_angle_to_boundary_normal_simplified(
         >>> print(angle)  # 0° (parallel to normal)
     """
     import numpy as np
-    
+
+    # Normalize both inputs to [0°, 180°)
+    fiber_orientation   = float(fiber_orientation)   % 180
+    boundary_tangent_angle = float(boundary_tangent_angle) % 180
+
     # Boundary normal is perpendicular to tangent
     boundary_normal = (boundary_tangent_angle + 90) % 180
-    
+
     # Angular difference
-    angle_diff = np.abs(fiber_orientation - boundary_normal)
+    angle_diff = abs(fiber_orientation - boundary_normal)
     
     # Normalize to [0, 90]
     if angle_diff > 90:
@@ -355,11 +365,9 @@ def compute_fiber_properties(
     end_to_end   = float(np.linalg.norm(coords[-1] - coords[0])) * pixel_size
     straightness = float(np.clip(end_to_end / max(arc_length, 1e-10), 0.0, 1.0))
 
-    # Angle of end-to-end vector (-90 to 90 degrees)
+    # Angle of end-to-end vector [0°, 180°)
     vec   = coords[-1] - coords[0]
     angle = float(np.degrees(np.arctan2(vec[0], vec[1])) % 180)
-    if angle > 90:
-        angle -= 180
 
     # Curvature (mean turning angle per unit length)
     if len(diffs) >= 2:
@@ -720,6 +728,7 @@ def compute_relative_fiber_angles(
     """
     coords = np.asarray(roi_coords, dtype=float)
     obj_cx, obj_cy = float(obj_center[0]), float(obj_center[1])   # x, y
+    obj_angle = float(obj_angle) % 180   # enforce [0°, 180°)
 
     # ── ROI global measurements ───────────────────────────────────────────
     if image_size is not None:
@@ -863,7 +872,6 @@ def compute_relative_fiber_angles(
 __all__ = [
     'find_nearest_boundary_point',
     'compute_boundary_normal',
-    'compute_relative_angles',
     'compute_fiber_to_boundary_alignment',
     'compute_angle_to_boundary_normal',
     'compute_angle_to_boundary_normal_simplified',

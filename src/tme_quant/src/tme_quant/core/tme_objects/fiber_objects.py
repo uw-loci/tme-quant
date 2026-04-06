@@ -367,7 +367,6 @@ class FiberObject(TMEObject):
         nearest_boundary_distance: Optional[float] = None,
         nearest_boundary_normal_angle: Optional[float] = None,
         # Relative orientation (KEY for TACS)
-        relative_angle_to_boundary_normal: Optional[float] = None,
         relative_angle_to_boundary_tangent: Optional[float] = None,
         # Global boundary metrics (legacy comparison method)
         distance_to_tumor_boundary: Optional[float] = None,
@@ -425,9 +424,6 @@ class FiberObject(TMEObject):
         self.nearest_boundary_distance: Optional[float] = nearest_boundary_distance
         self.nearest_boundary_normal_angle: Optional[float] = (
             nearest_boundary_normal_angle
-        )
-        self.relative_angle_to_boundary_normal: Optional[float] = (
-            relative_angle_to_boundary_normal
         )
         self.relative_angle_to_boundary_tangent: Optional[float] = (
             relative_angle_to_boundary_tangent
@@ -611,10 +607,6 @@ class FiberObject(TMEObject):
 
             # Store all angle results on self
             self.relative_angle_to_boundary_tangent = rel_angles['angle_to_boundary_tangent']
-            self.relative_angle_to_boundary_normal  = (
-                None if self.relative_angle_to_boundary_tangent is None
-                else 90.0 - self.relative_angle_to_boundary_tangent
-            )
             self.angle_to_roi_orientation = rel_angles['angle_to_roi_orientation']
             self.angle_to_centers_line    = rel_angles['angle_to_centers_line']
 
@@ -636,7 +628,7 @@ class FiberObject(TMEObject):
             from ...fiber_analysis.utils.geometry_utils import (
                 find_nearest_boundary_point,
                 compute_boundary_normal,
-                compute_relative_angles,
+                _angle_between_orientations,
             )
 
             nearest_point, distance = find_nearest_boundary_point(
@@ -652,13 +644,13 @@ class FiberObject(TMEObject):
 
             if len(self.centerline) >= 2:
                 fiber_vector = self.centerline[-1] - self.centerline[0]
-                fiber_angle  = np.degrees(np.arctan2(fiber_vector[1], fiber_vector[0]))
+                fiber_angle  = float(np.degrees(np.arctan2(fiber_vector[1], fiber_vector[0])) % 180)
             else:
-                fiber_angle = float(self.angle)
+                fiber_angle = float(self.angle) % 180
 
-            rel = compute_relative_angles(fiber_angle, boundary_normal_angle)
-            self.relative_angle_to_boundary_normal  = rel['angle_to_normal']
-            self.relative_angle_to_boundary_tangent = rel['angle_to_tangent']
+            self.relative_angle_to_boundary_tangent = _angle_between_orientations(
+                fiber_angle, boundary_normal_angle
+            )
             # angle_to_roi_orientation / angle_to_centers_line not available
             # via the Shapely path; leave as None
 
@@ -670,7 +662,6 @@ class FiberObject(TMEObject):
         return {
             'nearest_point':                    self.nearest_boundary_point,
             'distance':                         self.nearest_boundary_distance,
-            'angle_to_normal':                  self.relative_angle_to_boundary_normal,
             'angle_to_tangent':                 self.relative_angle_to_boundary_tangent,
             'angle_to_roi_orientation':         self.angle_to_roi_orientation,
             'angle_to_centers_line':            self.angle_to_centers_line,
@@ -748,9 +739,9 @@ class FiberObject(TMEObject):
     
     def is_perpendicular_to_boundary(self, threshold: float = 30.0) -> bool:
         """Check if fiber is perpendicular to boundary (TACS-3)."""
-        if self.relative_angle_to_boundary_normal is None:
+        if self.relative_angle_to_boundary_tangent is None:
             return False
-        return abs(self.relative_angle_to_boundary_normal) < threshold
+        return abs(self.relative_angle_to_boundary_tangent) > (90.0 - threshold)
     
     def is_parallel_to_boundary(self, threshold: float = 30.0) -> bool:
         """Check if fiber is parallel to boundary (TACS-2)."""
@@ -821,7 +812,6 @@ class FiberObject(TMEObject):
             'curvature': self.curvature,
             'aspect_ratio': self.aspect_ratio,
             'nearest_boundary_distance': self.nearest_boundary_distance,
-            'relative_angle_to_boundary_normal': self.relative_angle_to_boundary_normal,
             'relative_angle_to_boundary_tangent': self.relative_angle_to_boundary_tangent,
             'angle_to_roi_orientation': self.angle_to_roi_orientation,
             'angle_to_centers_line': self.angle_to_centers_line,

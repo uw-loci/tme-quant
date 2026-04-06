@@ -12,7 +12,6 @@ from .ctfire_utils   import fire_2d, fire_3d, ctfire_backend_status
 from .geometry_utils import (
     find_nearest_boundary_point,
     compute_boundary_normal,
-    compute_relative_angles,
     compute_fiber_to_boundary_alignment,
     compute_angle_to_boundary_normal,
     compute_angle_to_boundary_normal_simplified,
@@ -32,7 +31,6 @@ __all__ = [
     # Geometry / boundary-angle utilities
     'find_nearest_boundary_point',
     'compute_boundary_normal',
-    'compute_relative_angles',
     'compute_fiber_to_boundary_alignment',
     'compute_angle_to_boundary_normal',
     'compute_angle_to_boundary_normal_simplified',
