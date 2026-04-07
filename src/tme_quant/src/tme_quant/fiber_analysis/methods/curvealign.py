@@ -33,11 +33,11 @@ from __future__ import annotations
 import numpy as np
 from typing import Optional, Tuple
 
-from .orientation import BaseOrientationMethod
-from .config import (
+from ..orientation import BaseOrientationMethod
+from ..config import (
     OrientationParams, CurveAlignParams, CurveAlignResult,
 )
-from .utils.curvelet_utils import curvelet_transform_2d, curvelet_transform_3d
+from ..utils.curvelet_utils import curvelet_transform_2d, curvelet_transform_3d
 
 
 class CurveAlignOrientation(BaseOrientationMethod):

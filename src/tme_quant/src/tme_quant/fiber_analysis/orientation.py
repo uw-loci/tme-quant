@@ -137,8 +137,8 @@ class FiberOrientationAnalyzer:
 
     def _register_methods(self) -> None:
         """Lazily register all available orientation method classes."""
-        from .curvealign import CurveAlignOrientation
-        from .orientationj import OrientationJMethod
+        from .methods.curvealign import CurveAlignOrientation
+        from .methods.orientationj import OrientationJMethod
 
         self._orientation_methods[OrientationMode.CURVEALIGN]   = CurveAlignOrientation
         self._orientation_methods[OrientationMode.ORIENTATIONJ] = OrientationJMethod
@@ -242,8 +242,8 @@ class FiberOrientationAnalyzer:
     def _ensure_extra_methods_registered(self) -> None:
         """Register GRADIENT and STRUCTURE_TENSOR if not already done."""
         if OrientationMode.GRADIENT not in self._orientation_methods:
-            from .gradient import GradientOrientationMethod
+            from .methods.gradient import GradientOrientationMethod
             self._orientation_methods[OrientationMode.GRADIENT] = GradientOrientationMethod
         if OrientationMode.STRUCTURE_TENSOR not in self._orientation_methods:
-            from .structure_tensor import StructureTensorMethod
+            from .methods.structure_tensor import StructureTensorMethod
             self._orientation_methods[OrientationMode.STRUCTURE_TENSOR] = StructureTensorMethod

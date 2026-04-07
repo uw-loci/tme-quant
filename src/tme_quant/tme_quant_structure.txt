@@ -1,3 +1,11 @@
+src/examples/                          ← runnable demo scripts
+├── example_3d_volumetric_workflow.py  ← 3-D z-stack volumetric analysis
+├── example_analyze_tacs_zone.py       ← standalone TACS zone analysis demo
+├── example_ctfire_workflow.py         ← CT-FIRE individual fiber + TACS workflow
+├── example_curvealign_workflow.py     ← CurveAlign segment orientation + TACS workflow
+├── example_hierarchy_object_analysis.py
+└── roi_curvealign_orientation_example.py
+
 src/tme_quant/
 ├── __init__.py                    ← flat public API
 │
@@ -19,22 +27,24 @@ src/tme_quant/
 │       ├── tissue_objects.py      ← TissueRegion, TissueSample, TissueZone
 │       └── tumor_objects.py       ← TumorRegion, Tumor, TumorGrade
 │
-├── fiber_analysis/                ← fully flat; no sub-packages
-│   ├── __init__.py
-│   ├── config.py                  ← ExtractionParams, OrientationParams
-│   ├── ctfire.py                  ← CT-FIRE curvelet fiber extraction
-│   ├── curvealign.py              ← CurveAlign orientation analysis
+├── fiber_analysis/
+│   ├── __init__.py                ← public API; re-exports all key symbols
+│   ├── config.py                  ← ExtractionParams, OrientationParams + all sub-params
 │   ├── extraction.py              ← BaseExtractionMethod + FiberExtractionAnalyzer
-│   ├── fiji_bridge.py             ← FijiBridge, OrientationJBridge, RidgeDetectionBridge
-│   ├── gradient.py                ← gradient-based orientation
-│   ├── io.py                      ← FiberAnalysisExporter (+ FijiBridge re-export)
 │   ├── orientation.py             ← BaseOrientationMethod + FiberOrientationAnalyzer
-│   ├── orientationj.py            ← OrientationJ Fiji plugin wrapper
+│   ├── io.py                      ← FiberAnalysisExporter (+ FijiBridge re-export)
 │   ├── results.py                 ← FiberAnalysisResult
-│   ├── ridge_detection.py         ← Ridge Detection Fiji plugin wrapper
-│   ├── skeleton.py                ← skeletonization-based extraction
-│   ├── structure_tensor.py        ← structure tensor orientation
 │   ├── tacs.py                    ← classify_fiber_tacs(), get_tacs_color()
+│   ├── methods/                   ← concrete method implementations
+│   │   ├── __init__.py            ← re-exports all method classes
+│   │   ├── ctfire.py              ← CT-FIRE curvelet fiber extraction
+│   │   ├── curvealign.py          ← CurveAlign orientation analysis
+│   │   ├── fiji_bridge.py         ← unified Fiji/ImageJ subprocess bridge
+│   │   ├── gradient.py            ← Sobel/Scharr gradient orientation
+│   │   ├── orientationj.py        ← OrientationJ Fiji plugin wrapper
+│   │   ├── ridge_detection.py     ← Ridge Detection Fiji plugin wrapper
+│   │   ├── skeleton.py            ← skeletonization-based extraction
+│   │   └── structure_tensor.py    ← windowed structure tensor orientation
 │   └── utils/
 │       ├── __init__.py
 │       ├── ctfire_utils.py
@@ -81,9 +91,10 @@ src/tme_quant/
 │   ├── tacs_features.py           ← TACSFeatureExtractor
 │   ├── tme_analyzer.py            ← TMEAnalyzer (orchestrator)
 │   ├── pipelines/
-│   │   ├── __init__.py
+│   │   ├── __init__.py                    ← re-exports analyze_tacs_zone
 │   │   ├── interaction_analysis_pipeline.py
-│   │   └── standard_tme_pipeline.py
+│   │   ├── standard_tme_pipeline.py
+│   │   └── tacs_pipeline.py               ← analyze_tacs_zone(), plot_tacs_heatmap()
 │   ├── utils/
 │   │   ├── __init__.py
 │   │   ├── distance_utils.py
@@ -142,12 +153,22 @@ src/tme_quant/
         ├── interactive_viewer.py
         └── overlay.py
 
+tests/
+└── test_geometry_utils.py             ← 55 unit tests for fiber_analysis/utils/geometry_utils.py
+                                         covers: _angle_between_orientations,
+                                         compute_angle_to_boundary_normal{,_simplified},
+                                         _circ_r, find_nearest_boundary_index,
+                                         _get_first_neighbor, _find_connected_pts,
+                                         compute_boundary_tangent_angle,
+                                         compute_fiber_properties,
+                                         compute_relative_fiber_angles
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VERIFICATION STATUS (final session)
+VERIFICATION STATUS (2026-04-06)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[PASS] Structure matches targeted_tme_quant_structure.txt exactly
-[PASS] All 100 .py files parse without syntax errors (ast.parse)
+[PASS] All .py files parse without syntax errors
 [PASS] All single-dot relative imports resolve to existing files
+[PASS] pytest tests/test_geometry_utils.py — 55 passed
 [PASS] All two-dot relative imports resolve to existing files
 [PASS] All three-dot relative imports resolve to existing files
 [PASS] All absolute tme_quant.X imports in example files resolve

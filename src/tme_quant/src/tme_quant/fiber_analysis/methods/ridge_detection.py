@@ -3,12 +3,12 @@
 import numpy as np
 from typing import List
 
-from .extraction import BaseExtractionMethod
-from .config import (
+from ..extraction import BaseExtractionMethod
+from ..config import (
     ExtractionParams, RidgeDetectionParams, RidgeDetectionResult, FiberProperties,
 )
 from .fiji_bridge import FijiBridge
-from .utils.geometry_utils import compute_fiber_properties
+from ..utils.geometry_utils import compute_fiber_properties
 
 
 class RidgeDetectionMethod(BaseExtractionMethod):

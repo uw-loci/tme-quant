@@ -128,9 +128,9 @@ class FiberExtractionAnalyzer:
 
     def _register_methods(self) -> None:
         """Register all available extraction method classes."""
-        from .ctfire import CTFireExtraction
-        from .ridge_detection import RidgeDetectionMethod
-        from .skeleton import SkeletonExtractionMethod
+        from .methods.ctfire import CTFireExtraction
+        from .methods.ridge_detection import RidgeDetectionMethod
+        from .methods.skeleton import SkeletonExtractionMethod
 
         self._extraction_methods[ExtractionMode.CTFIRE]          = CTFireExtraction
         self._extraction_methods[ExtractionMode.RIDGE_DETECTION] = RidgeDetectionMethod

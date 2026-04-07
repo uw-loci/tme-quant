@@ -13,7 +13,7 @@ from typing import List, Dict, Any
 import numpy as np
 
 from .results import FiberAnalysisResult, FiberProperties
-from .fiji_bridge import FijiBridge  # noqa: F401  # backward-compat re-export
+from .methods.fiji_bridge import FijiBridge  # noqa: F401  # backward-compat re-export
 
 
 class FiberAnalysisExporter:

@@ -3,8 +3,8 @@
 import numpy as np
 from typing import Optional
 
-from .orientation import BaseOrientationMethod
-from .config import (
+from ..orientation import BaseOrientationMethod
+from ..config import (
     OrientationParams, GradientParams, GradientResult,
 )
 

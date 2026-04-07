@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from .orientation import BaseOrientationMethod
-from .config import (
+from ..orientation import BaseOrientationMethod
+from ..config import (
     OrientationParams, OrientationJParams, OrientationJResult,
 )
 from .fiji_bridge import FijiBridge

@@ -66,13 +66,13 @@ from typing import List, Optional
 
 import numpy as np
 
-from .extraction import BaseExtractionMethod
-from .config import (
+from ..extraction import BaseExtractionMethod
+from ..config import (
     ExtractionParams, CTFireParams, CTFireResult, FiberProperties,
 )
-from .utils.curvelet_utils import curvelet_transform_2d, curvelet_transform_3d
-from .utils.ctfire_utils import fire_2d, fire_3d, ctfire_backend_status
-from .utils.geometry_utils import compute_fiber_properties
+from ..utils.curvelet_utils import curvelet_transform_2d, curvelet_transform_3d
+from ..utils.ctfire_utils import fire_2d, fire_3d, ctfire_backend_status
+from ..utils.geometry_utils import compute_fiber_properties
 
 
 class CTFireExtraction(BaseExtractionMethod):

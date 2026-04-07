@@ -9,8 +9,8 @@ classification.
 
 from .extraction import FiberExtractionAnalyzer, BaseExtractionMethod
 from .orientation import FiberOrientationAnalyzer, BaseOrientationMethod
-from .ctfire import CTFireExtraction
-from .curvealign import CurveAlignOrientation
+from .methods.ctfire import CTFireExtraction
+from .methods.curvealign import CurveAlignOrientation
 from .tacs import classify_fiber_tacs, classify_fiber_segment_tacs_like, get_tacs_color
 from .config import ExtractionParams, ExtractionResult, OrientationParams, OrientationResult
 from .results import FiberAnalysisResult

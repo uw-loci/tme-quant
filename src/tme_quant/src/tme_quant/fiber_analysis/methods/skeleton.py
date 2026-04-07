@@ -48,11 +48,11 @@ from __future__ import annotations
 import numpy as np
 from typing import List, Optional, Tuple
 
-from .extraction import BaseExtractionMethod
-from .config import (
+from ..extraction import BaseExtractionMethod
+from ..config import (
     ExtractionParams, SkeletonParams, SkeletonResult, FiberProperties,
 )
-from .utils.geometry_utils import compute_fiber_properties
+from ..utils.geometry_utils import compute_fiber_properties
 
 
 class SkeletonExtractionMethod(BaseExtractionMethod):
