@@ -709,11 +709,6 @@ class TMEProject:
         
         if use_nearest_point:
             # NEW: Analyze with nearest-point metrics
-            angles_to_normal = [
-                f.relative_angle_to_boundary_normal 
-                for f in fibers 
-                if f.relative_angle_to_boundary_normal is not None
-            ]
             angles_to_tangent = [
                 f.relative_angle_to_boundary_tangent
                 for f in fibers
@@ -734,11 +729,6 @@ class TMEProject:
                     'std_angle_to_tangent': np.std(angles_to_tangent),
                     'perpendicular_ratio': perpendicular_ratio,  # TACS-3
                     'parallel_ratio': parallel_ratio,            # TACS-2
-                })
-            if angles_to_normal:
-                results.update({
-                    'mean_angle_to_normal': np.mean(angles_to_normal),
-                    'std_angle_to_normal': np.std(angles_to_normal),
                 })
         else:
             # OLD: Global boundary method

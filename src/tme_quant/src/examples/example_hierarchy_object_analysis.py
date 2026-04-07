@@ -184,7 +184,6 @@ def _make_fibers(
             curvature=1.0 - straightness,
             nearest_boundary_distance=dist,
             relative_angle_to_boundary_tangent=angle,
-            relative_angle_to_boundary_normal=90.0 - angle,
             in_tumor_boundary=tacs_zone,
             in_stroma=not tacs_zone,
             at_invasive_front=(dist < 30),
