@@ -405,6 +405,8 @@ def fire_2d_angle(
 
     # Step 6: Remove danglers and shorties
     print("Remove danglers and shorties")
+    # NOTE: MATLAB calls check_danglers, C++ skips it
+    # We call it here to match MATLAB behavior
     from ctfire_py.fiber_processing import check_danglers
     Xz2, Fz2, Vz2, Rz2 = check_danglers(Xz, Fz, Vz, Rz, p)
 
@@ -425,13 +427,13 @@ def fire_2d_angle(
 
     # Step 8: Fiber processing
     print("Fiberproc")
-    # TODO: Implement full fiberproc when C++ backend is complete
-    # For now, use the data we have
-    Xa = Xz2
-    Fa = Fz2
-    Va = Vz2
-    Ra = Rz2
-
+    # NOTE: C++ implementation uses simplified fiberproc (see fiberproc_native.cpp line 163)
+    # We replicate that behavior here: basic cleanup only
+    from ctfire_py.utils import trimxfv
+    
+    # Just do basic cleanup - skip complex fiber linking to match C++ behavior
+    Xa, Fa, Va, Ra = trimxfv(Xz2, Fz2, Vz2, Rz2)
+    
     # Create edges array
     Ea = np.zeros((len(Fa), 2), dtype=np.int32)
     for i in range(len(Fa)):
@@ -440,7 +442,7 @@ def fire_2d_angle(
             if len(v_list) > 0:
                 Ea[i, 0] = v_list[0]
                 Ea[i, 1] = v_list[-1]
-
+    
     elapsed_time = time.time() - start_time
     print(f"CPP code for this image takes {elapsed_time:.2f} seconds")
 
