@@ -1,0 +1,10 @@
+{
+  "test_cases": [
+    {"name":"findlocmax_2B_D9_ROI1_default","function":"findlocmax","image":"2B_D9_ROI1.tif","parameters":{"s_xlinkbox":8,"thresh_Dxlink":1.5},"matlab_reference_mat":"findlocmax_2B_D9_ROI1_default.mat"},
+    {"name":"findlocmax_real1_default","function":"findlocmax","image":"real1.tif","parameters":{"s_xlinkbox":8,"thresh_Dxlink":1.5},"matlab_reference_mat":"findlocmax_real1_default.mat"},
+    {"name":"findlocmax_2B_D9_ROI1_box5","function":"findlocmax","image":"2B_D9_ROI1.tif","parameters":{"s_xlinkbox":5,"thresh_Dxlink":1.5},"matlab_reference_mat":"findlocmax_2B_D9_ROI1_box5.mat"},
+    {"name":"extend_xlink_2B_D9_ROI1_default","function":"extend_xlink","image":"2B_D9_ROI1.tif","parameters":{"thresh_LMP":0.2,"thresh_LMPdist":2,"thresh_ext":0.342,"lam_dirdecay":0.5,"s_fiberdir":4,"thresh_linkd":15,"thresh_linka":-0.866},"matlab_reference_mat":"extend_xlink_2B_D9_ROI1_default.mat"},
+    {"name":"extend_xlink_real1_default","function":"extend_xlink","image":"real1.tif","parameters":{"thresh_LMP":0.2,"thresh_LMPdist":2,"thresh_ext":0.342,"lam_dirdecay":0.5,"s_fiberdir":4,"thresh_linkd":15,"thresh_linka":-0.866},"matlab_reference_mat":"extend_xlink_real1_default.mat"},
+    {"name":"extend_xlink_2B_D9_ROI1_lmp05","function":"extend_xlink","image":"2B_D9_ROI1.tif","parameters":{"thresh_LMP":0.5,"thresh_LMPdist":2,"thresh_ext":0.342,"lam_dirdecay":0.5,"s_fiberdir":4,"thresh_linkd":15,"thresh_linka":-0.866},"matlab_reference_mat":"extend_xlink_2B_D9_ROI1_lmp05.mat"}
+  ]
+}
