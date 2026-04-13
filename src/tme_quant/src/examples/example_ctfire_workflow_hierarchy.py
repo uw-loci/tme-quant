@@ -113,6 +113,9 @@ from tme_quant.core.image_entry import ImageEntry
 from tme_quant.core.roi_manager import ROIObject
 from tme_quant.tme_analysis.pipelines import analyze_tacs_zone
 
+# ── Project-level IO ─────────────────────────────────────────────────────────
+from tme_quant.core.io import save_project, load_project, export_project_summary
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # INTERNAL HELPERS
@@ -1354,6 +1357,111 @@ def _display_tacs_zone_figure(results: Dict) -> None:
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 
+def demo_project_io(results: Dict) -> None:
+    """
+    Demonstrate project-level save / load / export using the completed
+    CT-FIRE workflow results.
+
+    Three capabilities are shown:
+
+    1. ``save_project`` — Snapshot the full TMEProject to disk as a set of
+       JSON files (hierarchy, images, orientation maps, fiber populations,
+       and a manifest).  The saved state is fully self-contained and can be
+       shared or archived.
+
+    2. ``load_project`` — Reconstruct a ``TMEProject`` from the snapshot.
+       The hierarchy tree, fiber metadata (centerlines, TACS type, angles),
+       and image metadata are restored exactly.  Pixel data is *not* reloaded
+       by default (pass ``reload_images=True`` to load image arrays from
+       their original paths).
+
+    3. ``export_project_summary`` — Write a human-readable Excel workbook
+       (and matching CSV files) with 7 sheets:
+         • Project      — top-level sample metadata
+         • Images       — per-image path, pixel size, modality
+         • FiberPopulations — population-level orientation statistics
+         • OrientationMaps  — region-level mean angle / alignment score
+         • TACS_Summary — TACS-1 / -2 / -3 counts and percentages
+         • Fibers       — per-fiber measurements incl. local density
+           and local alignment score (KD-tree, ``local_radius`` µm)
+         • SpatialGrid  — hexagonal spatial binning of fiber metrics
+           over a ``grid_bin_size`` µm grid
+    """
+    from tme_quant.core.project import TMEProject
+
+    out        = results['output_dir']
+    sample_id  = results['sample_id']
+    hierarchy  = results['hierarchy']
+
+    # ── Build a minimal TMEProject to pass to the IO functions ───────────────
+    # In a real pipeline the project would already exist; here we construct
+    # one from the workflow's hierarchy so the demo is self-contained.
+    project = TMEProject(
+        name=f'CT-FIRE demo — {sample_id}',
+    )
+    project.hierarchy = hierarchy
+
+    # Add every ImageEntry that lives in the hierarchy into project.images so
+    # the images.json snapshot includes full path / modality / channel data.
+    for img in hierarchy.get_objects_by_type(TMEType.IMAGE):
+        project.images[img.object_id] = img
+
+    # ── 1. SAVE ──────────────────────────────────────────────────────────────
+    print('\n' + '─' * 72)
+    print('  Project IO — Demo')
+    print('─' * 72)
+
+    snapshot_dir = out / f'{sample_id}_snapshot'
+    print(f'\n[IO 1/3] Saving project snapshot → {snapshot_dir}')
+    saved_path = save_project(project, snapshot_dir, overwrite=True)
+    print(f'  Saved to : {saved_path}')
+    import json, os
+    saved_files = sorted(os.listdir(saved_path))
+    print(f'  Files    : {saved_files}')
+    # Peek at the manifest to confirm what was written
+    with open(saved_path / 'project_manifest.json') as _f:
+        manifest = json.load(_f)
+    print(f'  Manifest : name={manifest["name"]!r}  '
+          f'saved_at={manifest.get("saved_at", "n/a")}')
+
+    # ── 2. LOAD ──────────────────────────────────────────────────────────────
+    print(f'\n[IO 2/3] Loading project from {snapshot_dir}')
+    restored = load_project(snapshot_dir, reload_images=False)
+    r_fibers = restored.hierarchy.get_objects_by_type(TMEType.FIBER)
+    r_tacs3  = [f for f in r_fibers if getattr(f, 'tacs_type', None) == 'TACS-3']
+    r_tacs2  = [f for f in r_fibers if getattr(f, 'tacs_type', None) == 'TACS-2']
+    print(f'  Restored project name: {restored.name}')
+    print(f'  Restored fibers     : {len(r_fibers)}')
+    print(f'  Restored TACS-3     : {len(r_tacs3)}')
+    print(f'  Restored TACS-2     : {len(r_tacs2)}')
+    # Spot-check: first fiber centerline should survive the JSON round-trip
+    if r_fibers:
+        _f0 = r_fibers[0]
+        _cl = getattr(_f0, 'centerline', None)
+        _cl_info = f'shape={_cl.shape}' if _cl is not None else 'None'
+        print(f'  Fiber[0] id={_f0.object_id!r}  '
+              f'tacs_type={getattr(_f0, "tacs_type", None)!r}  '
+              f'centerline {_cl_info}')
+
+    # ── 3. EXPORT ─────────────────────────────────────────────────────────────
+    export_dir = out / f'{sample_id}_summary_export'
+    print(f'\n[IO 3/3] Exporting human-readable summary → {export_dir}')
+    exported = export_project_summary(
+        project,
+        output_dir=export_dir,
+        formats=['csv', 'excel'],
+        prefix=sample_id,
+        local_radius=50.0,    # KD-tree radius for local density / alignment
+        grid_bin_size=100.0,  # spatial grid cell size in µm
+    )
+    print('  Exported files:')
+    for table, path in sorted(exported.items()):
+        print(f'    {table:<20} → {Path(path).name}')
+
+    print('\n  Project IO demo complete.')
+    print('─' * 72)
+
+
 def display_results(results: Dict) -> None:
     """Print measurement tables and show the figure panels."""
     print_measurement_tables(results)
@@ -1392,3 +1500,6 @@ if __name__ == '__main__':
           f'{net_m.get("n_edges", 0)} edges')
     issues = h.validate_hierarchy()
     print(f'  Hierarchy valid   : {len(issues) == 0}  ({len(issues)} issue(s))')
+
+    # ── Project IO demo ───────────────────────────────────────────────────────
+    demo_project_io(results)

@@ -378,6 +378,25 @@ class ImageEntry(TMEObject):
         })
         return d
 
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "ImageEntry":
+        """Reconstruct from a dict produced by to_dict(). Pixel data is NOT loaded."""
+        ps_raw = d.get("pixel_size")
+        pixel_size: Optional[Tuple[float, ...]] = (
+            tuple(float(v) for v in ps_raw) if ps_raw is not None else None
+        )
+        return cls(
+            object_id=d.get("object_id", ""),
+            name=d.get("name", ""),
+            image_data=None,
+            path=d.get("path"),
+            channel_names=d.get("channel_names") or [],
+            pixel_size=pixel_size,
+            magnification=d.get("magnification"),
+            modality=d.get("modality", ""),
+            metadata=d.get("metadata") or {},
+        )
+
     def __repr__(self) -> str:
         loaded = f"shape={self.shape}" if self.is_loaded() else "not loaded"
         ch = f", channels={self.channel_names}" if self.channel_names else ""

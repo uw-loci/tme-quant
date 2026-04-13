@@ -24,6 +24,7 @@ from .core import (
     ROIManager, ROIObject, ANNOTATION_TYPES,
 )
 from .core.project import TMEProject
+from .core.io import save_project, load_project, export_project_summary
 from .core.tme_objects.fiber_objects import FiberObject
 from .core.tme_objects.cell_objects import CellObject
 from .core.tme_objects.tumor_objects import TumorRegion
@@ -85,4 +86,6 @@ __all__ = [
     "StandardTMEPipeline", "InteractionAnalysisPipeline",
     # Registration
     "RegistrationManager",
+    # Project IO
+    "save_project", "load_project", "export_project_summary",
 ]

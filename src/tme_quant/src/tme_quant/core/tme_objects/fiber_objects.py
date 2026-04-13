@@ -181,6 +181,20 @@ class OrientationResult:
             'parameters': self.parameters,
         }
 
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'OrientationResult':
+        """Reconstruct from a dictionary produced by to_dict()."""
+        return cls(
+            mode=OrientationMode(d['mode']),
+            dimension=d.get('dimension', '2D'),
+            orientation_map=np.array([]),  # large arrays are not serialised
+            mean_orientation=d.get('mean_orientation'),
+            alignment_score=d.get('alignment_score'),
+            pixel_size=d.get('pixel_size', 1.0),
+            processing_time=d.get('processing_time'),
+            parameters=d.get('parameters'),
+        )
+
 
 @dataclass
 class FiberProperties:
@@ -792,7 +806,50 @@ class FiberObject(TMEObject):
             tortuosity=props.tortuosity,
             confidence=props.confidence
         )
-    
+
+    def to_hierarchy_dict(self) -> Dict[str, Any]:
+        """Full recursive serialisation including all FiberObject fields."""
+        d = super().to_hierarchy_dict()
+        fiber_d = self.to_dict()
+        for key in ('object_id', 'name', 'tme_type', 'object_type',
+                    'metadata', 'properties', 'parent_id'):
+            fiber_d.pop(key, None)
+        d.update(fiber_d)
+        return d
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'FiberObject':
+        """Reconstruct from a dictionary produced by to_hierarchy_dict() or to_dict()."""
+        cl_raw = d.get('centerline')
+        centerline = np.array(cl_raw, dtype=float) if cl_raw else np.array([])
+        op_x = d.get('orientation_point_x')
+        op_y = d.get('orientation_point_y')
+        orientation_point = (
+            np.array([op_x, op_y], dtype=float) if op_x is not None else None
+        )
+        obj = cls(
+            object_id=d.get('object_id', ''),
+            name=d.get('name', ''),
+            centerline=centerline,
+            orientation_point=orientation_point,
+            length=d.get('length') or 0.0,
+            width=d.get('width') or 0.0,
+            angle=d.get('angle') or 0.0,
+            straightness=d.get('straightness') or 0.0,
+            curvature=d.get('curvature') or 0.0,
+            aspect_ratio=d.get('aspect_ratio'),
+            nearest_boundary_distance=d.get('nearest_boundary_distance'),
+            relative_angle_to_boundary_tangent=d.get(
+                'relative_angle_to_boundary_tangent'),
+            tacs_type=d.get('tacs_type'),
+            tacs_score=d.get('tacs_score'),
+            in_tumor_boundary=d.get('in_tumor_boundary'),
+            in_tumor_core=d.get('in_tumor_core'),
+        )
+        obj.angle_to_roi_orientation = d.get('angle_to_roi_orientation')
+        obj.angle_to_centers_line = d.get('angle_to_centers_line')
+        return obj
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for export."""
         cp = self.center_point   # Optional[np.ndarray]
@@ -871,6 +928,41 @@ class RegionOrientationMap(TMEObject):
             return 0.0
         return self.orientation_result.alignment_score or 0.0
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialise RegionOrientationMap fields (orientation arrays excluded)."""
+        d = super().to_dict()
+        d['region_type'] = self.region_type
+        d['orientation_result'] = (
+            self.orientation_result.to_dict()
+            if self.orientation_result is not None else None
+        )
+        return d
+
+    def to_hierarchy_dict(self) -> Dict[str, Any]:
+        """Full recursive serialisation including orientation summary."""
+        d = super().to_hierarchy_dict()
+        d['region_type'] = self.region_type
+        d['orientation_result'] = (
+            self.orientation_result.to_dict()
+            if self.orientation_result is not None else None
+        )
+        return d
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'RegionOrientationMap':
+        """Reconstruct from a serialised dictionary."""
+        or_raw = d.get('orientation_result')
+        orientation_result = (
+            OrientationResult.from_dict(or_raw) if or_raw is not None else None
+        )
+        return cls(
+            object_id=d.get('object_id', ''),
+            name=d.get('name', ''),
+            orientation_result=orientation_result,
+            region_type=d.get('region_type', ''),
+            metadata=d.get('metadata') or {},
+        )
+
 
 # ============================================================
 # FIBER POPULATION
@@ -920,6 +1012,24 @@ class FiberPopulation:
             'tacs_score': self.tacs_score,
             'tacs_type_distribution': self.tacs_type_distribution,
         }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'FiberPopulation':
+        """Reconstruct from a dictionary produced by to_dict()."""
+        return cls(
+            fiber_ids=d.get('fiber_ids') or [],
+            region_id=d.get('region_id', ''),
+            region_type=d.get('region_type', ''),
+            count=d.get('count', 0),
+            mean_length=d.get('mean_length', 0.0),
+            mean_width=d.get('mean_width', 0.0),
+            mean_straightness=d.get('mean_straightness', 0.0),
+            mean_orientation=d.get('mean_orientation', 0.0),
+            alignment_score=d.get('alignment_score', 0.0),
+            tacs_type=d.get('tacs_type'),
+            tacs_score=d.get('tacs_score'),
+            tacs_type_distribution=d.get('tacs_type_distribution'),
+        )
 
 
 # ============================================================

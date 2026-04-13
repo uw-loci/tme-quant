@@ -18,6 +18,7 @@ from .geometry import (
 from .hierarchy import TMEHierarchy
 from .image_entry import ImageEntry
 from .roi_manager import ROIManager, ROIObject, ANNOTATION_TYPES
+from .io import save_project, load_project, export_project_summary
 
 __all__ = [
     # Base model
@@ -34,4 +35,6 @@ __all__ = [
     'ImageEntry',
     # ROI management
     'ROIManager', 'ROIObject', 'ANNOTATION_TYPES',
+    # IO
+    'save_project', 'load_project', 'export_project_summary',
 ]
