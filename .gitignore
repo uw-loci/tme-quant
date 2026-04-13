@@ -177,6 +177,9 @@ lastPATH_CTF.mat
 
 pycurvelets/opt/*.*
 
+# ── Output / generated data ───────────────────────────────────────────────────
+src/tme_quant/output/
+
 # test tmp folder
 tests/test_images/CA_Out/
 src/tme_quant/.../pyproject.toml
