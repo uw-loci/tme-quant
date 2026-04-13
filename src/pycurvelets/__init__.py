@@ -9,6 +9,7 @@ except Exception:
 from .SHG_HE_registration import (
     BDcreation_reg2,
     SHGHERegistrationParameters,
+    has_simpleitk,
     shg_he_registration,
 )
 from .tumor_annotation_from_HE import (
@@ -21,6 +22,7 @@ __all__ = [
     "HAS_CURVELETS",
     "new_curv",
     "SHGHERegistrationParameters",
+    "has_simpleitk",
     "shg_he_registration",
     "BDcreation_reg2",
     "TumorAnnotationFromHEParameters",
