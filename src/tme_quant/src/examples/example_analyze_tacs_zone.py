@@ -315,6 +315,9 @@ def plot_tacs_heatmap(
     pixel_size:                 float = 1.0,
     title:                      str   = '',
     save_path:                  str | None = None,
+    background_image            = None,
+    exclude_inside_roi:         bool  = True,
+    show_connector_lines:       bool  = False,
 ) -> None:
     """
     Two-panel TACS zone heatmap.
@@ -374,6 +377,13 @@ def plot_tacs_heatmap(
         Optional suptitle for the figure.
     save_path : str or None
         If given, save the figure to this path instead of showing it.
+    exclude_inside_roi : bool, default True
+        When True, fibers whose center falls inside the ROI polygon are not
+        counted as TACS-zone fibers; they are drawn in the same gray style as
+        *inside_roi_fibers* regardless of their distance to the boundary.
+    show_connector_lines : bool, default False
+        When True, draw a deepskyblue line from each counted fiber center to
+        its nearest ROI boundary vertex.
     """
     pr     = result.get('pixel_result', {})
     frs    = result.get('fiber_results', [])
@@ -383,11 +393,33 @@ def plot_tacs_heatmap(
         print('[plot_tacs_heatmap] no data to plot')
         return
 
+    # ── Figure dimensions ──────────────────────────────────────────────────
+    fig_w = 13.0
+    if background_image is not None:
+        img_h, img_w = background_image.shape[:2]
+        # Size the figure so the left panel can show the image without
+        # distortion.  Left panel ≈ 61 % of fig width; ~80 % usable after
+        # margins and colourbar.  Add 1.5 in for title + tick labels.
+        left_panel_in = fig_w * (1.6 / 2.6) * 0.80
+        fig_h = max(5.5, left_panel_in * (img_h / img_w) + 1.5)
+    else:
+        fig_h = 5.5
+
     fig, (ax_map, ax_bar) = plt.subplots(
         1, 2,
-        figsize       = (13, 5.5),
+        figsize       = (fig_w, fig_h),
         gridspec_kw   = {'width_ratios': [1.6, 1]},
     )
+
+    # ── Background image on spatial panel ─────────────────────────────────
+    if background_image is not None:
+        ax_map.imshow(
+            background_image,
+            origin='upper',
+            aspect='equal',   # preserve pixel aspect ratio — no stretching
+            alpha=0.55,
+            zorder=0,
+        )
 
     # ── Left panel: spatial heatmap ───────────────────────────────────────
     # Threshold in µm — same unit as each point's dist_to_boundary field.
@@ -505,12 +537,19 @@ def plot_tacs_heatmap(
     # ROI boundary vertex so the visualization threshold is independent of the
     # µm-based pipeline threshold.
     if fiber_objects and roi.coordinates is not None:
+        from matplotlib.path import Path as _MplPath
         fr_by_id  = {fr['fiber_id']: fr for fr in frs}
         roi_xy    = roi.coordinates          # (N, 2) in (x, y)
         # thr_um already computed in pixel-split block above
 
+        # Build a closed polygon path for inside-ROI testing
+        _roi_path = _MplPath(
+            np.vstack([roi_xy, roi_xy[:1]])  # close the ring
+        ) if exclude_inside_roi else None
+
         n_counted   = 0
         n_uncounted = 0
+        n_inside    = 0   # fibers excluded because they are inside the ROI
 
         for fib in fiber_objects:
             # Resolve fiber center (row, col)
@@ -524,6 +563,22 @@ def plot_tacs_heatmap(
 
             fx, fy = float(center[1]), float(center[0])   # (col=x, row=y)
 
+            # Optionally skip fibers inside the ROI polygon
+            if _roi_path is not None and _roi_path.contains_point((fx, fy)):
+                # Draw as inside-ROI gray style
+                ax_map.scatter(fx, fy, c='dimgray', s=60,
+                               edgecolors='white', linewidths=0.6,
+                               alpha=0.65, zorder=5)
+                angle_rad = np.radians(getattr(fib, 'angle', 0.0))
+                dx = 2.0 * np.cos(angle_rad)
+                dy = 2.0 * np.sin(angle_rad)
+                ax_map.plot([fx - dx, fx + dx], [fy - dy, fy + dy],
+                            color='dimgray', lw=1.2, linestyle='dashed',
+                            zorder=6, solid_capstyle='round')
+                n_inside += 1
+                _has_inside = True
+                continue
+
             # Pixel distance to nearest ROI boundary vertex
             dist_px = float(
                 np.min(np.linalg.norm(roi_xy - np.array([fx, fy]), axis=1))
@@ -532,8 +587,7 @@ def plot_tacs_heatmap(
             fid = getattr(fib, 'object_id', None)
 
             if dist_px <= boundary_dist_threshold_px:
-                # ── Counted: TACS-colored dot + red orientation line
-                #             + blue connector to nearest boundary point ──
+                # ── Counted: TACS-colored dot + red orientation line ──────
                 fr       = fr_by_id.get(fid)
                 tacs_lbl = (fr.get('tacs_like') if fr else None) or 'TACS-1-like'
                 color    = _TACS_COLORS.get(tacs_lbl, 'grey')
@@ -553,17 +607,18 @@ def plot_tacs_heatmap(
                     color='red', lw=1.4, zorder=6,
                     solid_capstyle='round',
                 )
-                # Blue connector: center → nearest ROI boundary vertex
-                dists_to_boundary = np.linalg.norm(
-                    roi_xy - np.array([fx, fy]), axis=1
-                )
-                nearest_idx = int(np.argmin(dists_to_boundary))
-                bpx, bpy = roi_xy[nearest_idx, 0], roi_xy[nearest_idx, 1]
-                ax_map.plot(
-                    [fx, bpx], [fy, bpy],
-                    color='deepskyblue', lw=0.8, alpha=0.7,
-                    zorder=4, solid_capstyle='round',
-                )
+                # Optional blue connector: center → nearest ROI boundary vertex
+                if show_connector_lines:
+                    dists_to_boundary = np.linalg.norm(
+                        roi_xy - np.array([fx, fy]), axis=1
+                    )
+                    nearest_idx = int(np.argmin(dists_to_boundary))
+                    bpx, bpy = roi_xy[nearest_idx, 0], roi_xy[nearest_idx, 1]
+                    ax_map.plot(
+                        [fx, bpx], [fy, bpy],
+                        color='deepskyblue', lw=0.8, alpha=0.7,
+                        zorder=4, solid_capstyle='round',
+                    )
                 n_counted += 1
             else:
                 # ── Uncounted: green dot + dashed gray orientation line ────
@@ -609,9 +664,12 @@ def plot_tacs_heatmap(
         counted_items = [
             mlines.Line2D([], [], color='red', lw=1.4,
                           label='fiber orientation (counted)'),
-            mlines.Line2D([], [], color='deepskyblue', lw=0.8,
-                          label='fiber → nearest boundary'),
         ] if n_counted > 0 else []
+        if n_counted > 0 and show_connector_lines:
+            counted_items.append(
+                mlines.Line2D([], [], color='deepskyblue', lw=0.8,
+                              label='fiber → nearest boundary')
+            )
         import matplotlib.lines as _ml2
         inside_items = (
             [_ml2.Line2D([], [], marker='o', color='dimgray', linestyle='None',
@@ -631,11 +689,13 @@ def plot_tacs_heatmap(
         )
         print(f'  Pixel split: in (<={boundary_dist_threshold_px} px): {n_px_in}  beyond: {n_px_out}')
         print(f'  Fiber split: counted (<={boundary_dist_threshold_px} px): {n_counted}'
-              f'  uncounted (>{boundary_dist_threshold_px} px): {n_uncounted}')
+              f'  uncounted (>{boundary_dist_threshold_px} px): {n_uncounted}'
+              + (f'  inside ROI (excluded): {n_inside}' if n_inside else ''))
+        _inside_str = f' / {n_inside} inside' if n_inside else ''
         ax_map.set_title(
             f'threshold: {boundary_dist_threshold_px} px ({thr_um:.0f} µm)  |  '
             f'px {n_px_in} in / {n_px_out} out  |  '
-            f'fibers {n_counted} counted / {n_uncounted} uncounted',
+            f'fibers {n_counted} counted / {n_uncounted} uncounted{_inside_str}',
             fontsize=8,
         )
     else:
@@ -714,8 +774,10 @@ def plot_tacs_heatmap(
     ax_bar.tick_params(labelsize=8)
 
     if title:
-        fig.suptitle(title, fontsize=11, y=1.01)
-    fig.tight_layout()
+        fig.suptitle(title, fontsize=11)
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+    else:
+        fig.tight_layout()
 
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
@@ -821,6 +883,14 @@ def main():
                   f"{f['angle_to_boundary_tangent']:>13.1f}")
     print()
 
+    # ── Synthetic SHG-like background from orientation map ────────────────
+    # Real usage: pass your SHG (or SHG+H&E composite) array here.
+    # For this self-contained demo we derive a stand-in from the orientation
+    # map itself: pixels where a fiber orientation was detected appear bright
+    # (imitating the collagen signal in SHG); all other pixels are dark.
+    _bg_gray = np.where(np.isnan(orientation_map), 0.08, 0.85).astype(np.float32)
+    _background_image = np.stack([_bg_gray, _bg_gray, _bg_gray], axis=-1)  # H×W×3
+
     # ── Heatmap visualisation (Case 2 result) ─────────────────────────────
     print('[Heatmap] plotting TACS distribution heatmap ...')
     plot_tacs_heatmap(
@@ -832,6 +902,7 @@ def main():
         boundary_dist_threshold_px = 100,
         pixel_size                 = 1.0,
         title                      = 'TACS zone analysis — dense boundary, with fiber objects',
+        background_image           = _background_image,
     )
     print()
 

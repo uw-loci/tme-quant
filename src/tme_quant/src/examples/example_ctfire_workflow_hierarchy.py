@@ -1321,7 +1321,9 @@ def _display_tacs_zone_figure(results: Dict) -> None:
 
     Calls ``plot_tacs_heatmap`` from ``example_analyze_tacs_zone`` — the same
     two-panel visualisation (spatial heatmap + TACS distribution bar chart)
-    used in the standalone TACS zone example.
+    used in the standalone TACS zone example.  The SHG+H&E composite image is
+    passed as a background so tissue structure is visible behind the fiber
+    scatter plot.
     """
     import sys
     import os
@@ -1333,15 +1335,39 @@ def _display_tacs_zone_figure(results: Dict) -> None:
         print('[TACS display] no TACS zone results to plot')
         return
 
-    pixel_size     = results.get('pixel_size', 1.0)
-    fibers         = results.get('fibers', [])
-    thr_px         = int(round(100.0 / pixel_size))   # 100 µm → pixels
+    pixel_size    = results.get('pixel_size', 1.0)
+    fibers        = results.get('fibers', [])
+    thr_px        = int(round(100.0 / pixel_size))   # 100 µm → pixels
+    shg_image     = results.get('shg_image')
+    registered_he = results.get('registered_he')
+
+    # Build SHG+H&E composite (same 60/40 blend used by _create_fiber_overlay)
+    background = None
+    if shg_image is not None:
+        import cv2 as cv2 # noqa: PLC0415
+        shg_norm = (shg_image / shg_image.max() * 255).astype(np.uint8)
+        shg_rgb  = (
+            cv2.cvtColor(shg_norm, cv2.COLOR_GRAY2RGB)
+            if shg_image.ndim == 2 else shg_norm.copy()
+        )
+        if registered_he is not None:
+            he_rgb = (
+                registered_he if registered_he.ndim == 3
+                else cv2.cvtColor(
+                    (registered_he * 255).astype(np.uint8), cv2.COLOR_GRAY2RGB
+                )
+            )
+            if he_rgb.shape[:2] != shg_rgb.shape[:2]:
+                he_rgb = cv2.resize(he_rgb, (shg_rgb.shape[1], shg_rgb.shape[0]))
+            background = cv2.addWeighted(shg_rgb, 0.6, he_rgb, 0.4, 0)
+        else:
+            background = shg_rgb
 
     for entry in tacs_zone_results:
         plot_tacs_heatmap(
             result                     = entry['result'],
             roi                        = entry['roi'],
-            fiber_objects              = fibers,   # FiberObject list
+            fiber_objects              = fibers,
             inside_roi_pixels          = None,
             inside_roi_fibers          = None,
             boundary_dist_threshold_px = thr_px,
@@ -1350,6 +1376,7 @@ def _display_tacs_zone_figure(results: Dict) -> None:
                 f"TACS zone — {results['sample_id']}  "
                 f"tumor {entry['tumor_idx']}  (CT-FIRE fibers)"
             ),
+            background_image           = background,
         )
 
 
