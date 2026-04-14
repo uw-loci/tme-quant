@@ -123,17 +123,22 @@ struct ExtendXLink {
                         bool found_next = true;
                         
                         while (found_next) {
-                            T max_d = 0;
-                            found_next = false;
-                            std::array<int, d> next_pt{};
-                            std::array<T, d> next_dir{};
+                            found_next = false;  // Reset - will be set to true if we find next point
                             bool found_nucleation = false;
                             std::array<int, d> nucleation_pt{};
                             
                             const int r_curr = ceil(image[p_current[0] * sizex + p_current[1]]);
                             const std::array<int, d> cur_min = {p_current[0] - r_curr, p_current[1] - r_curr};
                             const std::array<int, d> cur_max = {p_current[0] + r_curr, p_current[1] + r_curr};
-
+                            
+                            // Collect ALL LMP candidates first (like MATLAB does)
+                            struct LMPCandidate {
+                                std::array<int, d> pt;
+                                T d_value;
+                                T dir_dot;
+                            };
+                            std::vector<LMPCandidate> lmp_candidates;
+                            
                             for (int m = -r_curr; m <= r_curr && !found_nucleation; ++m) {
                                 for (int n = -r_curr; n <= r_curr; ++n) {
                                     const std::array<int, d> p_cand{m + p_current[0], n + p_current[1]};
@@ -155,7 +160,7 @@ struct ExtendXLink {
                                         p_cand[1] != cur_min[1] && p_cand[1] != cur_max[1]) continue;
                                     
                                     const T d_val = image[offset];
-                                    if (d_val < thresh_LMP || d_val < max_d) continue;
+                                    if (d_val < thresh_LMP) continue;
 
                                     // Check if it's a local maximum
                                     bool is_LMP_cand = true;
@@ -178,17 +183,57 @@ struct ExtendXLink {
                                     }
 
                                     if (is_LMP_cand) {
+                                        // Compute direction for this candidate
                                         std::array<T, d> new_dir{T(p_cand[0] - p_current[0]), 
                                                                  T(p_cand[1] - p_current[1])};
                                         T nl = Length(new_dir);
                                         new_dir = {new_dir[0] / nl, new_dir[1] / nl};
                                         
-                                        if (Dot(new_dir, dir) < thresh_ext) continue;
-
-                                        max_d = d_val;
-                                        next_pt = p_cand;
-                                        next_dir = new_dir;
+                                        T dir_dot = Dot(new_dir, dir);
+                                        
+                                        // Add to candidates list (filter by direction LATER like MATLAB)
+                                        lmp_candidates.push_back({p_cand, d_val, dir_dot});
+                                    }
+                                }
+                            }
+                            
+                            // Process LMP candidates (like MATLAB): filter by direction, then select max distance
+                            if (!found_nucleation && !lmp_candidates.empty()) {
+                                // Check if ANY candidate passes direction threshold
+                                T max_dot_all = -2.0;
+                                for (const auto& cand : lmp_candidates) {
+                                    if (cand.dir_dot > max_dot_all) max_dot_all = cand.dir_dot;
+                                }
+                                
+                                // If best direction passes threshold, select among those passing
+                                if (max_dot_all >= thresh_ext) {
+                                    T max_d = -1.0;
+                                    std::array<int, d> best_pt{};
+                                    std::array<T, d> best_dir{};
+                                    
+                                    for (const auto& cand : lmp_candidates) {
+                                        if (cand.dir_dot >= thresh_ext && cand.d_value > max_d) {
+                                            max_d = cand.d_value;
+                                            best_pt = cand.pt;
+                                            
+                                            // Recompute direction
+                                            std::array<T, d> new_dir{T(cand.pt[0] - p_current[0]), 
+                                                                     T(cand.pt[1] - p_current[1])};
+                                            T nl = Length(new_dir);
+                                            best_dir = {new_dir[0] / nl, new_dir[1] / nl};
+                                        }
+                                    }
+                                    
+                                    if (max_d > 0) {
                                         found_next = true;
+                                        fibres[i].back().link.push_back(best_pt);
+                                        p_current = best_pt;
+                                        
+                                        // Update direction with decay
+                                        dir = {T(1.0 / (1.0 + lambda)) * dir[0] + T(lambda / (1.0 + lambda)) * best_dir[0],
+                                               T(1.0 / (1.0 + lambda)) * dir[1] + T(lambda / (1.0 + lambda)) * best_dir[1]};
+                                        T dl = Length(dir);
+                                        dir = {dir[0] / dl, dir[1] / dl};
                                     }
                                 }
                             }
@@ -196,16 +241,6 @@ struct ExtendXLink {
                             if (found_nucleation) {
                                 fibres[i].back().link.push_back(nucleation_pt);
                                 break;
-                            }
-                            
-                            if (found_next) {
-                                fibres[i].back().link.push_back(next_pt);
-                                p_current = next_pt;
-                                // Update direction with decay
-                                dir = {T(1.0 / (1.0 + lambda)) * dir[0] + T(lambda / (1.0 + lambda)) * next_dir[0],
-                                       T(1.0 / (1.0 + lambda)) * dir[1] + T(lambda / (1.0 + lambda)) * next_dir[1]};
-                                T dl = Length(dir);
-                                dir = {dir[0] / dl, dir[1] / dl};
                             }
                         }
                         fibres[i].back().direction = dir;
@@ -292,11 +327,12 @@ struct ExtendXLink {
             }
         }
 
-        // Step 4: Copy radius values
+        // Step 4: Copy radius values (DSM values at vertex locations)
         R.resize(X.size());
         #pragma omp parallel for
         for (int i = 0; i < (int)X.size(); ++i) {
-            R[i] = ceil(image[(X[i][0] - 1) * sizex + (X[i][1] - 1)]);
+            // Store actual DSM value, not ceil (ceil is only for search radius during extension)
+            R[i] = image[(X[i][0] - 1) * sizex + (X[i][1] - 1)];
         }
 
         // Step 5: Prepare nucleation points for linking (0-based indexing)
