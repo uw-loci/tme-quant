@@ -601,17 +601,22 @@ def workflow_ctfire_complete(
 
     # ── [3/12] CT-FIRE fiber extraction ──────────────────────────────────────
     print('\n[3/12] Extracting individual fibers (CT-FIRE)...')
+    # Use pixel_size=1.0 for extraction so all length/width thresholds are
+    # in pixels — no unit-conversion needed.  Centerlines stay in pixel coords
+    # for downstream TME analysis regardless of this setting.
     extraction_params = CTFireParams(
-        pixel_size=pixel_size,
-        ctfire_threshold=0.1,
+        pixel_size=1.0,                 # thresholds below are in pixels
+        ctfire_threshold=0.15,          # Frangi ridge threshold (0–1); bright pixels always included
         ctfire_n_levels=5,
         ctfire_n_angles=16,
         straightness_threshold=0.0,
+        mask_closing_radius=2,          # bridge 2-px gaps → fewer fragmented fibers
+        spur_length_px=5,               # remove stubs < 5 px attached to junctions
         use_matlab_backend=False,
-        min_fiber_length=10.0,
-        max_fiber_length=500.0,
-        min_fiber_width=1.0,
-        max_fiber_width=10.0,
+        min_fiber_length=20,            # pixels minimum arc length
+        max_fiber_length=1000,          # pixels maximum arc length
+        min_fiber_width=1.0,            # pixels (DT half-width ≥ 1 px = 2 px total)
+        max_fiber_width=30.0,           # pixels (= 30 px half-width; catches thick bundles)
         measure_length=True,
         measure_width=True,
         measure_straightness=True,
@@ -624,8 +629,8 @@ def workflow_ctfire_complete(
     fibers         = fiber_result.fibers
     print(f'  Extracted {len(fibers):,} individual fibers')
     if fibers:
-        print(f'  Mean length      : {np.mean([f.length for f in fibers]):.2f} µm')
-        print(f'  Mean width (DT)  : {np.mean([f.width for f in fibers]):.2f} µm')
+        print(f'  Mean length      : {np.mean([f.length for f in fibers]):.1f} px')
+        print(f'  Mean width (DT)  : {np.mean([f.width for f in fibers]):.2f} px')
         print(f'  Mean straightness: {np.mean([f.straightness for f in fibers]):.3f}')
     print(f'  Candidates before filter: {fiber_result.n_candidates}')
     print(f'  Fiber mask coverage: {fiber_result.fiber_mask.mean() * 100:.1f}%')
@@ -1233,6 +1238,7 @@ def display_figure_panel(results: Dict) -> None:
     figs     = results['saved_figures']
     shg      = results['shg_image']
     fr       = results['fiber_result']
+    fibers   = results.get('fibers', [])
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 12))
     fig.suptitle(
@@ -1240,15 +1246,31 @@ def display_figure_panel(results: Dict) -> None:
         fontsize=14, fontweight='bold',
     )
 
-    # Panel [0,0]: SHG + fiber mask
+    # Panel [0,0]: SHG + extracted fiber centerlines
     ax = axes[0, 0]
     ax.imshow(shg, cmap='gray')
-    if fr is not None and hasattr(fr, 'fiber_mask'):
-        mask_rgba       = np.zeros((*shg.shape[:2], 4), dtype=np.float32)
-        mask_rgba[..., 0] = 1.0   # red channel
-        mask_rgba[..., 3] = (fr.fiber_mask > 0).astype(np.float32) * 0.5
-        ax.imshow(mask_rgba)
-    ax.set_title('SHG + fiber mask', fontsize=11)
+    if fibers:
+        from matplotlib.collections import LineCollection as _LC
+        import matplotlib.colors as _mcolors
+        import numpy as _np2
+        segs = []
+        for fib in fibers:
+            cl = getattr(fib, 'centerline', None)
+            if cl is not None and len(cl) >= 2:
+                # centerline is (N, 2) in (row, col); matplotlib needs (x, y) = (col, row)
+                segs.append(cl[:, ::-1].astype(float))
+        if segs:
+            n = len(segs)
+            # Spread N hues evenly across the full HSV wheel (saturation and
+            # value fixed for vivid, high-contrast colours), then shuffle with
+            # a fixed seed so numerically adjacent fibers get distinct hues.
+            hues = _np2.linspace(0.0, 1.0, n, endpoint=False)
+            rng = _np2.random.default_rng(42)
+            hues = rng.permutation(hues)
+            _colors = [_mcolors.hsv_to_rgb([h, 0.85, 0.95]) for h in hues]
+            lc = _LC(segs, colors=_colors, linewidths=1.0, alpha=0.9)
+            ax.add_collection(lc)
+    ax.set_title(f'SHG + fiber centerlines (n={len(fibers)})', fontsize=11)
     ax.axis('off')
 
     # Panels [0,1], [1,0], [1,1]: saved heatmaps / overlay
@@ -1327,8 +1349,12 @@ def _display_tacs_zone_figure(results: Dict) -> None:
     """
     import sys
     import os
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from example_analyze_tacs_zone import plot_tacs_heatmap  # type: ignore[import]
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from example_analyze_tacs_zone import plot_tacs_heatmap  # type: ignore[import]
+    except (ImportError, Exception):
+        print('[TACS display] example_analyze_tacs_zone not available — skipping TACS zone figure')
+        return
 
     tacs_zone_results = results.get('tacs_zone_results', [])
     if not tacs_zone_results:

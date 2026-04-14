@@ -227,6 +227,19 @@ class CTFireParams(ExtractionParams):
     straightness_threshold : float
         Minimum straightness (0–1) for a traced fiber to be kept.
         0 = keep all; 0.7 = keep only relatively straight fibers.
+    mask_closing_radius : int
+        Radius (pixels) of the morphological closing (dilation then erosion)
+        applied to the binary fiber mask before skeletonization.  Closing
+        bridges small gaps between nearly-touching fiber segments, reducing
+        missed (fragmented) detections.  ``0`` disables closing.
+        Typical: 1–3 px; larger values risk merging distinct fibers.
+    spur_length_px : int
+        Spur-pruning iterations applied to the skeleton before edge tracing
+        (Python backend only).  Each iteration removes one pixel from every
+        terminal branch (degree-1 endpoint) that is attached to a junction.
+        Running N iterations removes stubs shorter than N pixels, eliminating
+        the short fragments created when two fibers cross.
+        ``0`` disables pruning.  Typical: 5–15 px.
     use_matlab_backend : bool
         If ``True``, attempt to call the original MATLAB CT-FIRE
         binary via the MATLAB Engine for Python.  Falls back to the
@@ -247,10 +260,12 @@ class CTFireParams(ExtractionParams):
     """
     mode: ExtractionMode = ExtractionMode.CTFIRE
 
-    ctfire_threshold:     float = 0.1
-    ctfire_n_levels:      int   = 5
-    ctfire_n_angles:      int   = 16
+    ctfire_threshold:       float = 0.1
+    ctfire_n_levels:        int   = 5
+    ctfire_n_angles:        int   = 16
     straightness_threshold: float = 0.0
+    mask_closing_radius:    int   = 0
+    spur_length_px:         int   = 8
     use_matlab_backend:     bool  = False
     z_spacing:              float = 1.0  # inter-slice spacing in µm (3-D only)
 
@@ -261,6 +276,8 @@ class CTFireParams(ExtractionParams):
             'ctfire_n_levels':        self.ctfire_n_levels,
             'ctfire_n_angles':        self.ctfire_n_angles,
             'straightness_threshold': self.straightness_threshold,
+            'mask_closing_radius':    self.mask_closing_radius,
+            'spur_length_px':         self.spur_length_px,
             'use_matlab_backend':     self.use_matlab_backend,
             'z_spacing':              self.z_spacing,
         })

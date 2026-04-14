@@ -108,6 +108,7 @@ def fire_2d(
     straightness_threshold: float = 0.0,
     min_fiber_width: float = 0.5,
     max_fiber_width: float = 20.0,
+    spur_length_px: int = 8,
 ) -> List[np.ndarray]:
     """
     Run the FIRE fiber extraction algorithm on a 2-D binary fiber mask.
@@ -140,6 +141,12 @@ def fire_2d(
         Minimum mean fiber width (µm) to keep.
     max_fiber_width : float
         Maximum mean fiber width (µm) to keep.
+    spur_length_px : int
+        Number of spur-pruning iterations (Python backend only).  Each
+        iteration removes one pixel from every terminal skeleton branch
+        attached to a junction, eliminating short stubs produced when
+        fibers cross.  Equivalent to removing branches shorter than this
+        many pixels.  ``0`` disables pruning.
 
     Returns
     -------
@@ -150,6 +157,7 @@ def fire_2d(
         Each array has at least 2 rows.
     """
     if _try_import_cpp():
+        # C++ FIRE has its own internal stub merging; spur_length_px is ignored
         return _fire_cpp_2d(
             fiber_mask, image, pixel_size,
             min_fiber_length, max_fiber_length,
@@ -160,6 +168,7 @@ def fire_2d(
         fiber_mask, image, pixel_size,
         min_fiber_length, max_fiber_length,
         straightness_threshold, min_fiber_width, max_fiber_width,
+        spur_length_px=spur_length_px,
     )
 
 
@@ -328,6 +337,7 @@ def _fire_python_2d(
     straightness_threshold: float,
     min_fiber_width: float,
     max_fiber_width: float,
+    spur_length_px: int = 8,
 ) -> List[np.ndarray]:
     """
     Pure-Python approximation of the 2-D FIRE algorithm.
@@ -363,6 +373,14 @@ def _fire_python_2d(
     # skimage.skeletonize preserves the topology; we then use the distance
     # transform to assign radius to each skeleton pixel.
     skeleton = skeletonize(mask)
+
+    # ── Step 2b: Spur pruning ─────────────────────────────────────────────
+    # Iteratively remove terminal branches attached to junctions.  Each
+    # iteration shaves one pixel off every stub, so after N iterations all
+    # stubs shorter than N px are gone.  This dramatically reduces the
+    # oversegmentation caused by cross-fiber junctions in the skeleton.
+    if spur_length_px > 0:
+        skeleton = _prune_spurs(skeleton, n_iters=spur_length_px)
 
     # ── Step 3: Detect junction (≥3 neighbours) and end (1 neighbour) points ─
     k = np.ones((3, 3), dtype=np.uint8); k[1, 1] = 0
@@ -407,6 +425,13 @@ def _fire_python_2d(
         trace   = np.column_stack([ordered, radii]).astype(np.float32)
         traces.append(trace)
 
+    # ── Step 4b: Chain segments through junctions ─────────────────────────────
+    # A single physical fiber that crosses another gets split at every junction
+    # into multiple short segments. Here we rejoin the most collinear pair of
+    # segments at each junction before applying the length filter, so the full
+    # fiber arc survives.
+    traces = _chain_segments_at_junctions(traces, junction_mask, dist)
+
     # ── Step 5: Filter by length, straightness, and width ────────────────────
     kept: List[np.ndarray] = []
     for trace in traces:
@@ -433,6 +458,193 @@ def _fire_python_2d(
 # ─────────────────────────────────────────────────────────────────────────────
 # Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _chain_segments_at_junctions(
+    traces: List[np.ndarray],
+    junction_mask: np.ndarray,
+    dist: np.ndarray,
+    max_turn_deg: float = 75.0,
+    max_passes: int = 6,
+) -> List[np.ndarray]:
+    """
+    Iteratively merge skeleton segments that pass through junction nodes
+    nearly collinearly, converging to longer fiber arcs.
+
+    A curvy collagen bundle may cross several junctions along its length,
+    being split into many short segments.  A single pass can only chain one
+    pair per junction; the merged result might then become chainable at its
+    next junction.  Iterating up to ``max_passes`` times (or until no new
+    merges occur) recovers the full arc.
+
+    Parameters
+    ----------
+    traces : list of (N, 3) float32
+        Ordered (row, col, radius_px) arrays from the skeleton tracer.
+    junction_mask : bool ndarray (H, W)
+        True at skeleton pixels that have ≥ 3 neighbours.
+    dist : float32 ndarray (H, W)
+        Euclidean distance transform of the fiber mask.
+    max_turn_deg : float
+        Maximum direction change (in degrees) allowed at a junction for two
+        segments to be merged.  75° tolerates moderately curvy fibers while
+        still rejecting true branch-offs.
+    max_passes : int
+        Maximum number of merge iterations.  Stops early if a pass produces
+        no new merges.
+
+    Returns
+    -------
+    list of (N, 3) float32 — merged traces plus unmerged leftovers.
+    """
+    if len(traces) < 2:
+        return traces
+
+    from scipy.ndimage import label as ndi_label
+
+    # Straight-through: outward tangents are antiparallel → dot ≈ −1.
+    # Acceptable if turn < max_turn_deg:
+    #   angle between outward tangents = 180° − turn
+    #   → dot threshold = cos(180° − max_turn_deg)
+    cos_thresh = float(np.cos(np.radians(180.0 - max_turn_deg)))
+
+    H, W = junction_mask.shape
+    junc_lbl, _ = ndi_label(junction_mask)
+
+    # ── Outward tangent: direction FROM junction-end INTO fiber body ───────
+    def _outward(trace: np.ndarray, is_tail: bool, n: int = 5) -> np.ndarray:
+        pts = trace[:, :2]
+        if is_tail:
+            idx = max(0, len(pts) - 1 - n)
+            seg = pts[idx] - pts[-1]   # from tail toward interior
+        else:
+            idx = min(n, len(pts) - 1)
+            seg = pts[idx] - pts[0]    # from head toward interior
+        nm = float(np.linalg.norm(seg))
+        return seg / nm if nm > 1e-9 else np.zeros(2)
+
+    def _junction_centroid(jid: int):
+        pxs = np.argwhere(junc_lbl == jid)
+        jr, jc = pxs[len(pxs) // 2]
+        return float(jr), float(jc), float(dist[jr, jc])
+
+    # ── Iterate until convergence ──────────────────────────────────────────
+    for _pass in range(max_passes):
+        # Build endpoint → (trace_idx, is_tail) map fresh each pass
+        ep_map: dict = {}
+        for i, t in enumerate(traces):
+            for is_tail in (False, True):
+                rc = (int(t[-1, 0] if is_tail else t[0, 0]),
+                      int(t[-1, 1] if is_tail else t[0, 1]))
+                ep_map.setdefault(rc, []).append((i, is_tail))
+
+        # Group endpoints by labeled junction blob (with 8-neighbour fallback)
+        group_eps: dict = {}
+        for (r, c), items in ep_map.items():
+            jid = int(junc_lbl[r, c])
+            if jid == 0:
+                for dr in (-1, 0, 1):
+                    for dc in (-1, 0, 1):
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < H and 0 <= nc < W:
+                            jid = int(junc_lbl[nr, nc])
+                            if jid:
+                                break
+                    if jid:
+                        break
+            if jid:
+                for item in items:
+                    group_eps.setdefault(jid, []).append(item)
+
+        # Greedy merge: best collinear pair per junction
+        used = [False] * len(traces)
+        extra: List[np.ndarray] = []
+
+        for jid, eps in group_eps.items():
+            seen: set = set()
+            active = []
+            for ti, is_t in eps:
+                key = (ti, is_t)
+                if not used[ti] and key not in seen:
+                    seen.add(key)
+                    active.append((ti, is_t))
+            if len(active) < 2:
+                continue
+
+            # Pick the most antiparallel (most straight-through) pair
+            best_dot = 2.0
+            best_a, best_b = -1, -1
+            for a in range(len(active)):
+                for b in range(a + 1, len(active)):
+                    ti, ti_tail = active[a]
+                    tj, tj_tail = active[b]
+                    dot = float(np.dot(
+                        _outward(traces[ti], ti_tail),
+                        _outward(traces[tj], tj_tail),
+                    ))
+                    if dot < best_dot:
+                        best_dot = dot
+                        best_a, best_b = a, b
+
+            if best_dot > cos_thresh:   # turn too sharp — skip
+                continue
+
+            ti, ti_tail = active[best_a]
+            tj, tj_tail = active[best_b]
+
+            # Orient: seg_i ends at junction, seg_j begins at junction
+            seg_i = traces[ti]       if ti_tail  else traces[ti][::-1]
+            seg_j = traces[tj][::-1] if tj_tail  else traces[tj]
+
+            jr, jc, jr_dt = _junction_centroid(jid)
+            j_arr = np.array([[jr, jc, jr_dt]], dtype=np.float32)
+
+            extra.append(np.vstack([seg_i, j_arr, seg_j]).astype(np.float32))
+            used[ti] = True
+            used[tj] = True
+
+        n_merged = sum(used)
+        traces = [t for i, t in enumerate(traces) if not used[i]]
+        traces.extend(extra)
+
+        if n_merged == 0:   # converged — no more merges possible
+            break
+
+    return traces
+
+
+def _prune_spurs(skeleton: np.ndarray, n_iters: int) -> np.ndarray:
+    """
+    Iteratively remove terminal skeleton branches attached to junctions.
+
+    Each iteration removes one pixel from every degree-1 endpoint that is
+    8-adjacent to a junction (degree ≥ 3).  After ``n_iters`` passes, all
+    stubs shorter than ``n_iters`` pixels have been eliminated.
+
+    Isolated fibers (no junction neighbours) are left untouched.
+    """
+    from scipy.ndimage import convolve, binary_dilation
+
+    k = np.ones((3, 3), dtype=np.uint8)
+    k[1, 1] = 0
+    skel = skeleton.copy()
+
+    for _ in range(n_iters):
+        nbr       = convolve(skel.astype(np.uint8), k, mode='constant', cval=0)
+        endpoints = skel & (nbr == 1)
+        if not endpoints.any():
+            break
+        junctions    = skel & (nbr >= 3)
+        if not junctions.any():
+            break
+        # Only remove endpoints that neighbour a junction (true stubs)
+        junc_dilated = binary_dilation(junctions, structure=np.ones((3, 3)))
+        removable    = endpoints & junc_dilated
+        if not removable.any():
+            break
+        skel = skel & ~removable
+
+    return skel
+
 
 def _adjacent_nodes(
     edge_coords: np.ndarray,

@@ -135,22 +135,49 @@ class CTFireExtraction(BaseExtractionMethod):
         p = self._coerce_params_2d(params)
 
         # ── Stage 1: Curvelet Transform (CT) ─────────────────────────────────
-        #   Apply the multi-scale curvelet decomposition to enhance fiber-like
-        #   structures.  Angular energy bins reveal dominant fiber orientations.
+        #   Normalise to float32 [0, 1] and apply CLAHE to boost local contrast
+        #   for faint fibers before the curvelet decomposition.
+        img_norm = image.astype(np.float32)
+        if img_norm.max() > 0:
+            img_norm /= img_norm.max()
+        from skimage.exposure import equalize_adapthist
+        img_proc = equalize_adapthist(img_norm, clip_limit=0.03).astype(np.float32)
+
         coeffs = curvelet_transform_2d(
-            image,
+            img_proc,
             n_levels=p.ctfire_n_levels,
             n_angles=p.ctfire_n_angles,
             use_matlab=p.use_matlab_backend,
         )
 
-        # Sum angular energy to get total curvelet energy per pixel
-        energy_map    = np.sum(coeffs ** 2, axis=-1).astype(np.float32)
+        # Sum absolute curvelet coefficients to get total ridge response per pixel.
+        # Using |coeffs| (not coeffs²) keeps the threshold linear in the Frangi
+        # response so that ctfire_threshold maps directly to the normalised
+        # Frangi ridge strength  (0 = no ridge, 1 = peak ridge).
+        energy_map    = np.sum(np.abs(coeffs), axis=-1).astype(np.float32)
         e_max         = float(energy_map.max())
         reconstructed = energy_map / (e_max + 1e-10)
 
-        # Binary fiber mask from energy threshold
+        # Binary fiber mask: Frangi ridge response above threshold.
         fiber_mask = reconstructed > p.ctfire_threshold
+
+        # Additionally include the brightest pixels in the raw image.
+        # Frangi undershoots on very thick/saturated collagen bundles because
+        # CLAHE flattens their gradient, making them look like blobs rather
+        # than ridges.  In SHG images background is near-zero, so the top
+        # ~8 % of intensity reliably corresponds to fiber signal.
+        bright_thresh = float(np.percentile(img_norm, 92))
+        fiber_mask = fiber_mask | (img_norm > bright_thresh)
+
+        # Optional morphological closing: bridges small gaps between
+        # near-touching fiber segments, reducing fragmented detections.
+        if p.mask_closing_radius > 0:
+            from scipy.ndimage import binary_closing
+            from skimage.morphology import disk
+            fiber_mask = binary_closing(
+                fiber_mask,
+                structure=disk(p.mask_closing_radius),
+            )
 
         # ── Stage 2: FIRE (Fiber Extraction) ─────────────────────────────────
         #   FIRE operates on the fiber mask directly, not the skeleton.
@@ -166,6 +193,7 @@ class CTFireExtraction(BaseExtractionMethod):
             straightness_threshold = p.straightness_threshold,
             min_fiber_width   = p.min_fiber_width,
             max_fiber_width   = p.max_fiber_width,
+            spur_length_px    = p.spur_length_px,
         )
         n_candidates = len(traces)
 
