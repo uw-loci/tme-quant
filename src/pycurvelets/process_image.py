@@ -1,13 +1,15 @@
 from functools import partial
 import math
+import os
+import matplotlib
+if os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen":
+    matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import pandas as pd
 from PIL import Image
 from skimage.draw import polygon, polygon2mask
 from skimage.measure import regionprops, label, find_contours
-import tkinter as tk
 import time
 from multiprocessing import Pool
 from typing import Optional
@@ -55,13 +57,13 @@ def process_image(
         - img_name : str - Name of the image (without path), used for labeling outputs
         - slice_num : int - Slice number within a stack (default 1)
         - num_sections : int - Number of sections within a stack (default 1)
-    
+
     fiber_params : FiberAnalysisParameters
         Fiber analysis method parameters including:
         - fiber_mode : int - Determines fiber processing method (0=curvelet, 1/2/3=FIRE)
         - keep : float - Percentage of curvelet coefficients to keep (default 0.05)
         - fire_directory : str - Directory containing FIRE fiber results (optional)
-    
+
     output_params : OutputControlParameters
         Output generation control flags including:
         - output_directory : str - Directory where results will be saved
@@ -69,17 +71,17 @@ def process_image(
         - make_map : bool - Generate heatmap
         - make_overlay : bool - Generate curvelet overlay figure
         - make_feature_file : bool - Generate feature file
-    
+
     boundary_params : BoundaryParameters, optional
         Boundary analysis parameters including:
         - coordinates : dict - Coordinates of a boundary for evaluation
         - distance_threshold : float - Distance from boundary to evaluate fibers/curvelets
         - tif_boundary : int - Boundary type (0=none, 1/2=CSV, 3=TIFF)
         - boundary_img : ndarray - Boundary image used for overlay outputs
-    
+
     advanced_options : AdvancedAnalysisOptions, optional
         Advanced interface controls including:
-        - exclude_fibers_in_mask_flag : int - Exclude fibers inside boundary mask
+        - exclude_fibers_in_mask : bool - Exclude fibers inside boundary mask
         - curvelets_group_radius : float - Radius to group nearby curvelets
         - selected_scale : int - Curvelet scale for analysis
         - min_dist : list/float - Minimum distance to boundary
@@ -114,28 +116,28 @@ def process_image(
     img_name = image_params.img_name
     slice_num = image_params.slice_num
     num_sections = image_params.num_sections
-    
+
     fiber_mode = fiber_params.fiber_mode
     keep = fiber_params.keep
     fire_directory = fiber_params.fire_directory
-    
+
     output_directory = output_params.output_directory
     make_associations = output_params.make_associations
     make_map = output_params.make_map
     make_overlay = output_params.make_overlay
     make_feature_file = output_params.make_feature_file
-    
+
     # Initialize defaults if not provided
     if boundary_params is None:
         boundary_params = BoundaryParameters()
     if advanced_options is None:
         advanced_options = AdvancedAnalysisOptions()
-    
+
     coordinates = boundary_params.coordinates
     distance_threshold = boundary_params.distance_threshold
     tif_boundary = boundary_params.tif_boundary
     boundary_img = boundary_params.boundary_img
-    
+
     # Initialize parameters
     params = initialize_parameters(
         img_name=img_name,
@@ -147,7 +149,7 @@ def process_image(
         boundary_img=boundary_img,
     )
 
-    exclude_fibers_in_mask_flag = params["exclude_fibers_in_mask_flag"]
+    exclude_fibers_in_mask = params["exclude_fibers_in_mask"]
     img_name_plain = params["img_name_plain"]
     img_name = params["img_name"]
     boundary_measurement = params["boundary_measurement"]
@@ -171,8 +173,16 @@ def process_image(
         print("Computing curvelet transform.")
         curve_cp = CurveletControlParameters(
             keep=keep,
-            scale=advanced_options.selected_scale if isinstance(advanced_options, AdvancedAnalysisOptions) else advanced_options["selected_scale"],
-            radius=advanced_options.curvelets_group_radius if isinstance(advanced_options, AdvancedAnalysisOptions) else advanced_options["curvelets_group_radius"],
+            scale=(
+                advanced_options.selected_scale
+                if isinstance(advanced_options, AdvancedAnalysisOptions)
+                else advanced_options["selected_scale"]
+            ),
+            radius=(
+                advanced_options.curvelets_group_radius
+                if isinstance(advanced_options, AdvancedAnalysisOptions)
+                else advanced_options["curvelets_group_radius"]
+            ),
         )
         # Call getCT
         fiber_structure, density_df, alignment_df, curvelet_coefficients = get_ct(
@@ -207,7 +217,7 @@ def process_image(
             if coordinates is None and boundary_img is not None:
                 print("Extracting boundary coordinates from mask image...")
                 coordinates = extract_boundary_coords_from_mask(boundary_img)
-            
+
             # Process ROIs in parallel only if coordinates are available
             if coordinates is not None and len(coordinates) > 0:
                 (
@@ -236,7 +246,7 @@ def process_image(
                 fiber_structure=fiber_structure,
                 distance_threshold=distance_threshold,
                 min_dist=min_dist,
-                exclude_fibers_in_mask_flag=exclude_fibers_in_mask_flag,
+                exclude_fibers_in_mask=exclude_fibers_in_mask,
             )
 
             nearest_angles = boundary_results["nearest_angles"]
@@ -402,12 +412,12 @@ def process_single_roi(
     """
     roi_list = ROIList(
         coordinates=[roi_coords],
-        image_width=img_shape[1],
-        image_height=img_shape[0],
+        img_width=img_shape[1],
+        img_height=img_shape[0],
     )
     roi_coords_array = np.array(roi_coords)
     roi_mask = polygon2mask(
-        (roi_list.image_width, roi_list.image_height), roi_coords_array[:, [1, 0]]
+        (roi_list.img_width, roi_list.img_height), roi_coords_array[:, [1, 0]]
     )
     roi_regions = regionprops(label(roi_mask.astype(int)))
 
@@ -441,8 +451,13 @@ def process_single_roi(
 
 
 def initialize_parameters(
-    img_name, num_sections, slice_num, coordinates, advanced_options, 
-    tif_boundary=0, boundary_img=None
+    img_name,
+    num_sections,
+    slice_num,
+    coordinates,
+    advanced_options,
+    tif_boundary=0,
+    boundary_img=None,
 ):
     """
     Initialize parameters and control structures for image processing.
@@ -468,7 +483,7 @@ def initialize_parameters(
     -------
     dict
         Dictionary containing initialized parameters:
-        - exclude_fibers_in_mask_flag
+        - exclude_fibers_in_mask
         - img_name_plain
         - img_name (modified with slice number if needed)
         - boundary_measurement
@@ -477,18 +492,18 @@ def initialize_parameters(
     """
     # Handle both dict and dataclass
     if isinstance(advanced_options, AdvancedAnalysisOptions):
-        exclude_fibers_in_mask_flag = advanced_options.exclude_fibers_in_mask_flag
+        exclude_fibers_in_mask = advanced_options.exclude_fibers_in_mask
         minimum_nearest_fibers = advanced_options.minimum_nearest_fibers
         minimum_box_size = advanced_options.minimum_box_size
         fiber_midpoint_estimate = advanced_options.fiber_midpoint_estimate
         min_dist = advanced_options.min_dist
     else:
-        exclude_fibers_in_mask_flag = advanced_options["exclude_fibers_in_mask_flag"]
+        exclude_fibers_in_mask = advanced_options["exclude_fibers_in_mask"]
         minimum_nearest_fibers = advanced_options["minimum_nearest_fibers"]
         minimum_box_size = advanced_options["minimum_box_size"]
         fiber_midpoint_estimate = advanced_options["fiber_midpoint_estimate"]
         min_dist = advanced_options.get("min_dist", [])
-    
+
     img_name_length = len(img_name)
     img_name_plain = img_name  # plain image name, without slice number
 
@@ -502,7 +517,9 @@ def initialize_parameters(
 
     # Check if we are measuring with respect to boundary
     # Boundary measurement is enabled if coordinates are provided OR if tif_boundary=3 with boundary_img
-    boundary_measurement = bool(coordinates) or (tif_boundary == 3 and boundary_img is not None)
+    boundary_measurement = bool(coordinates) or (
+        tif_boundary == 3 and boundary_img is not None
+    )
 
     # Feature control structure initialized: feature_cp
     feature_cp = FeatureControlParameters(
@@ -512,7 +529,7 @@ def initialize_parameters(
     )
 
     return {
-        "exclude_fibers_in_mask_flag": exclude_fibers_in_mask_flag,
+        "exclude_fibers_in_mask": exclude_fibers_in_mask,
         "img_name_plain": img_name_plain,
         "img_name": img_name,
         "boundary_measurement": boundary_measurement,
@@ -524,12 +541,12 @@ def initialize_parameters(
 def extract_boundary_coords_from_mask(boundary_img):
     """
     Extract boundary coordinates from a binary mask image.
-    
+
     Parameters
     ----------
     boundary_img : ndarray
         Binary mask image where non-zero values represent the boundary/ROI regions
-        
+
     Returns
     -------
     dict
@@ -539,29 +556,29 @@ def extract_boundary_coords_from_mask(boundary_img):
     # Label connected regions in the mask
     labeled_mask = label(boundary_img > 0)
     num_regions = labeled_mask.max()
-    
+
     if num_regions == 0:
         print("Warning: No boundary regions found in mask image")
         return {}
-    
+
     print(f"Found {num_regions} boundary region(s) in mask image")
-    
+
     coordinates = {}
-    
+
     for region_id in range(1, num_regions + 1):
         # Create binary mask for this region
         region_mask = (labeled_mask == region_id).astype(np.uint8)
-        
+
         # Find contours at 0.5 level (boundary between 0 and 1)
         contours = find_contours(region_mask, 0.5)
-        
+
         if len(contours) > 0:
             # Use the longest contour for this region
             longest_contour = max(contours, key=len)
             # Store as [row, col] format
-            coordinates[f'ROI_{region_id}'] = longest_contour
+            coordinates[f"ROI_{region_id}"] = longest_contour
             print(f"  ROI {region_id}: {len(longest_contour)} boundary points")
-    
+
     return coordinates
 
 
@@ -571,7 +588,7 @@ def analyze_global_boundary(
     fiber_structure,
     distance_threshold,
     min_dist,
-    exclude_fibers_in_mask_flag,
+    exclude_fibers_in_mask,
 ):
     """
     Analyze global fiber-boundary relationships using get_tif_boundary.
@@ -588,8 +605,8 @@ def analyze_global_boundary(
         Distance threshold for fiber selection
     min_dist : list or array
         Minimum distance threshold
-    exclude_fibers_in_mask_flag : int
-        Flag to exclude fibers inside mask (1=exclude, 0=keep)
+    exclude_fibers_in_mask : bool
+        Flag to exclude fibers inside mask
 
     Returns
     -------
@@ -622,7 +639,7 @@ def analyze_global_boundary(
         )
     out_curvs_flag = ~in_curvs_flag
 
-    if exclude_fibers_in_mask_flag == 1:
+    if exclude_fibers_in_mask:
         print(
             f"Excluding fibers in mask. Region distance values: {res_df['nearest_region_distance'].unique()}"
         )
@@ -656,8 +673,8 @@ def analyze_global_boundary(
             "nearest_boundary_angle",
             "extension_point_distance",
             "extension_point_angle",
-            "boundary_point_row",
             "boundary_point_col",
+            "boundary_point_row",
         ]
     ]
 
@@ -722,8 +739,8 @@ def process_tiff_boundary_rois(
         "fiber_center_col",
         "fiber_angle_list",
         "distance_list",
-        "boundary_point_row",
         "boundary_point_col",
+        "boundary_point_row",
     ]
     roi_measurement_details = pd.DataFrame(columns=roi_measurement_details_cols)
 
@@ -860,12 +877,12 @@ def save_fiber_features(
     # Build fiber features DataFrame with descriptive column names
     fib_feat_data = {
         "fiber_key": fiber_key if fiber_key else list(range(len(fiber_structure))),
-        "end_point_row": (
+        "center_row": (
             fiber_structure["center_row"]
             if "center_row" in fiber_structure.columns
             else fiber_structure["center_1"]
         ),
-        "end_point_col": (
+        "center_col": (
             fiber_structure["center_col"]
             if "center_col" in fiber_structure.columns
             else fiber_structure["center_2"]
@@ -907,8 +924,8 @@ def save_fiber_features(
             "nearest_boundary_angle": "nearest_relative_boundary_angle",
             "extension_point_distance": "extension_point_distance",
             "extension_point_angle": "extension_point_angle",
-            "boundary_point_row": "boundary_point_row",
             "boundary_point_col": "boundary_point_col",
+            "boundary_point_row": "boundary_point_row",
         }
         for src_col, dest_col in boundary_col_mapping.items():
             if src_col in measured_boundary.columns:
@@ -923,8 +940,8 @@ def save_fiber_features(
             "nearest_relative_boundary_angle",
             "extension_point_distance",
             "extension_point_angle",
-            "boundary_point_row",
             "boundary_point_col",
+            "boundary_point_row",
         ]
         for col_name in boundary_cols:
             fib_feat_df[col_name] = np.nan
@@ -1211,15 +1228,14 @@ def generate_overlay(
             # Plot lines connecting each fiber center to its nearest boundary point
             for center, bndry_pt in zip(in_curvs, in_bndry):
                 if not np.isnan(bndry_pt[0]) and not np.isnan(bndry_pt[1]):
-                    # Plot line from fiber center to boundary point
-                    # MATLAB: plot([center(1,2) bndry(1)], [center(1,1) bndry(2)], 'b')
-                    # bndry_pt is [row, col], center is [row, col]
+                    # center    : [col, row], bndry_pt: [col, row]
                     ax.plot(
-                        [center[1], bndry_pt[1]],  # x: col coordinates
-                        [center[0], bndry_pt[0]],  # y: row coordinates
+                        [center[1], bndry_pt[1]],  # x: center col → boundary col
+                        [center[0], bndry_pt[0]],  # y: center row → boundary row
                         "b-",
                         linewidth=0.5,
                     )
+
     elif tif_boundary == 0:  # No boundary - draw all fibers
         # Draw all fibers in green
         draw_curvs(
@@ -1532,15 +1548,15 @@ if __name__ == "__main__":
         "..",
         "tests",
         "test_results",
-        "get_tif_boundary_test_files",
+        "shared_data",
+        "real2",
     )
 
     files = [
         os.path.join(base_path, f)
         for f in [
-            "real1_boundary1_coords.csv",
-            "real1_boundary2_coords.csv",
-            "real1_boundary3_coords.csv",
+            "boundary1_coords.csv",
+            "boundary2_coords.csv",
         ]
     ]
     coords = {}
@@ -1553,7 +1569,7 @@ if __name__ == "__main__":
 
     img = plt.imread(
         os.path.join(
-            os.path.dirname(__file__), "..", "..", "tests", "test_images", "real1.tif"
+            os.path.dirname(__file__), "..", "..", "tests", "test_images", "real2.tif"
         ),
         format="TIF",
     )
@@ -1562,14 +1578,14 @@ if __name__ == "__main__":
     min_dist = []
     obj = {}
 
-    # Load curvelet data as DataFrame
-    obj = pd.read_csv(os.path.join(base_path, "real1_curvelets.csv"))
-    # Convert from MATLAB 1-based to Python 0-based indexing
-    obj["center_1"] = obj["center_1"] - 1
-    obj["center_2"] = obj["center_2"] - 1
+    # # Load curvelet data as DataFrame
+    # obj = pd.read_csv(os.path.join(base_path, "real1_curvelets.csv"))
+    # # Convert from MATLAB 1-based to Python 0-based indexing
+    # obj["center_1"] = obj["center_1"] - 1
+    # obj["center_2"] = obj["center_2"] - 1
 
     boundary_img = np.loadtxt(
-        os.path.join(base_path, "real1_boundary_img.csv"), delimiter=","
+        os.path.join(base_path, "boundary_img.csv"), delimiter=","
     )
 
     # Create parameter objects
@@ -1579,13 +1595,13 @@ if __name__ == "__main__":
         slice_num=1,
         num_sections=1,
     )
-    
+
     fiber_params = FiberAnalysisParameters(
         fiber_mode=0,
         keep=0.05,
         fire_directory=os.getcwd(),
     )
-    
+
     output_params = OutputControlParameters(
         output_directory=".",
         make_associations=True,
@@ -1593,19 +1609,19 @@ if __name__ == "__main__":
         make_overlay=True,
         make_feature_file=True,
     )
-    
+
     boundary_params = BoundaryParameters(
         coordinates=coords,
         distance_threshold=dist_thresh,
         tif_boundary=3,
         boundary_img=boundary_img,
     )
-    
+
     advanced_options = AdvancedAnalysisOptions(
-        exclude_fibers_in_mask_flag=1,
+        exclude_fibers_in_mask=True,
         curvelets_group_radius=10,
         selected_scale=1,
-        heatmap_STD_filter_size=16,
+        heatmap_STD_filter_size=19,
         heatmap_SQUARE_max_filter_size=12,
         heatmap_GAUSSIAN_disc_filter_sigma=4,
         minimum_nearest_fibers=2,
@@ -1613,7 +1629,7 @@ if __name__ == "__main__":
         fiber_midpoint_estimate=1,
         min_dist=[],
     )
-    
+
     process_image(
         image_params=image_params,
         fiber_params=fiber_params,

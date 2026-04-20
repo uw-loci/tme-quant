@@ -131,6 +131,7 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
                     img_width=img_width,
                 )
             else:
+                # Fiber is too far from boundary
                 nearest_boundary_relative_angle[i] = np.nan
                 boundary_point = np.full(2, np.nan)
 

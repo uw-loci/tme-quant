@@ -99,8 +99,8 @@ def get_relative_angles(ROI, obj, angle_option=0, fig_flag=False):
     """
 
     coords = np.array(ROI["coords"])  # [[y1, x1], [y2, x2], ...]
-    image_height = ROI["imageHeight"]
-    image_width = ROI["imageWidth"]
+    img_height = ROI["imageHeight"]
+    img_width = ROI["imageWidth"]
     index2object = ROI["index2object"]
     object_center = obj["center"][::-1]  # switch to [x, y]
     object_angle = obj["angle"]
@@ -109,7 +109,7 @@ def get_relative_angles(ROI, obj, angle_option=0, fig_flag=False):
     # coords_xy = np.flip(coords, axis=1)  # now shape: (N, 2), with (x, y)
 
     # Step 2: Use polygon2mask, which behaves more like MATLAB's roipoly
-    mask = polygon2mask((image_height, image_width), coords)  # output is bool array
+    mask = polygon2mask((img_height, img_width), coords)  # output is bool array
 
     # Step 3: Label and compute properties (regionprops values are slightly off though)
     labeled = label(mask.astype(np.uint8))
@@ -142,8 +142,8 @@ def get_relative_angles(ROI, obj, angle_option=0, fig_flag=False):
         boundary_angle = find_outline_slope(coords, index2object)
         if (
             any(boundary_pt == 1)
-            or boundary_pt[0] == image_height
-            or boundary_pt[1] == image_width
+            or boundary_pt[0] == img_height
+            or boundary_pt[1] == img_width
         ):
             temp_ang = 0
         else:
@@ -205,8 +205,8 @@ def get_relative_angles(ROI, obj, angle_option=0, fig_flag=False):
             label="Centers Line",
         )
 
-        ax.set_xlim(0, image_width)
-        ax.set_ylim(image_height, 0)
+        ax.set_xlim(0, img_width)
+        ax.set_ylim(img_height, 0)
         ax.set_title("Angle Visualization")
         ax.legend()
         plt.show()
