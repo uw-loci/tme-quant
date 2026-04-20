@@ -1,0 +1,54 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git commit*)",
+            "prompt": "A git commit was just made. Run:\n  git -C \"H:/GitHub.06.2022/tme-quant/src/tme_quant\" diff HEAD~1 HEAD\n\nAnalyze the diff for structural changes: new modules or packages, renamed/moved directories, new or changed config files (pyproject.toml, setup.cfg, etc.), new top-level scripts. If any structural change is present, update CLAUDE.md and/or ARCHITECTURE.md under H:/GitHub.06.2022/tme-quant/src/tme_quant/ to reflect the new structure.\n\nSkip (make no edits) if the diff contains only minor code fixes, logic changes within existing functions, or comment/docstring changes.",
+            "statusMessage": "Checking for structural changes to document...",
+            "timeout": 180
+          },
+          {
+            "type": "agent",
+            "if": "Bash(git commit*)",
+            "prompt": "A git commit was just made. Run:\n  git -C \"H:/GitHub.06.2022/tme-quant/src/tme_quant\" diff HEAD~1 HEAD\n\nFocus on __init__.py files and any public .py file (not prefixed with underscore). Check whether any public symbol (function, class, or constant without a leading underscore) was added, removed, or had its signature modified between HEAD~1 and HEAD.\n\nIf public API changed, append a new entry to H:/GitHub.06.2022/tme-quant/src/tme_quant/API_CHANGES.md using this format:\n\n## YYYY-MM-DD\n- <module>: <description of change>\n\nSkip entirely if only private symbols (leading underscore) changed, or if no .py files were touched.",
+            "statusMessage": "Scanning for public API changes...",
+            "timeout": 180
+          },
+          {
+            "type": "agent",
+            "if": "Bash(git commit*)",
+            "prompt": "A git commit was just made. Run:\n  git -C \"H:/GitHub.06.2022/tme-quant/src/tme_quant\" diff HEAD~1 HEAD\n\nCheck whether any import statements changed in the diff (lines beginning with 'import' or 'from ... import'). If import statements changed, read the module structure under H:/GitHub.06.2022/tme-quant/src/tme_quant/ and update the module dependency section of H:/GitHub.06.2022/tme-quant/src/tme_quant/ARCHITECTURE.md to reflect the current inter-module dependencies.\n\nSkip entirely if no import lines appear in the diff.",
+            "statusMessage": "Checking for dependency graph changes...",
+            "timeout": 180
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import sys, json; d=json.load(sys.stdin); open('H:/GitHub.06.2022/tme-quant/src/tme_quant/.claude/session-summary.md','w').write(d.get('compact_summary','(no summary)'))\"",
+            "statusMessage": "Saving compact session summary..."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "BRANCH=$(git -C \"H:/GitHub.06.2022/tme-quant/src/tme_quant\" rev-parse --abbrev-ref HEAD 2>/dev/null || echo \"unknown\") && COMMIT=$(git -C \"H:/GitHub.06.2022/tme-quant/src/tme_quant\" log -1 --oneline 2>/dev/null || echo \"none\") && SUMMARY=$(cat \"H:/GitHub.06.2022/tme-quant/src/tme_quant/.claude/session-summary.md\" 2>/dev/null || echo \"(no summary)\") && printf '## %s\\n- Branch: %s\\n- Commit: %s\\n\\n%s\\n\\n---\\n\\n' \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \"$BRANCH\" \"$COMMIT\" \"$SUMMARY\" >> \"H:/GitHub.06.2022/tme-quant/src/tme_quant/.claude/session-log.md\"",
+            "statusMessage": "Appending session log entry..."
+          }
+        ]
+      }
+    ]
+  }
+}
