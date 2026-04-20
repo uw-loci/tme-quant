@@ -273,3 +273,105 @@ class TestInputValidation:
         coords, h, w = square_roi
         with pytest.raises(ValueError, match="empty"):
             compute_fiber_alignment_to_roi(coords, h, w, pd.DataFrame())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Real-dataset tests — ported from pycurvelets tests/test_get_alignment_to_roi.py
+#
+# Data: tests/test_results/process_image_test_files/
+#   real1_roi_df.csv          dense CurveAlign boundary (row, col, no header)
+#   real1_fiber_structure.csv fiber DataFrame with center_1/center_2/angle cols
+#   real1_ROImeasurements.csv MATLAB reference output (pycurvelets col names)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_REPO_TEST_DIR  = pathlib.Path(__file__).parent.parent.parent.parent / "tests"
+_ALIGN_DATA_DIR = _REPO_TEST_DIR / "test_results" / "process_image_test_files"
+_ALIGN_MISSING  = not _ALIGN_DATA_DIR.exists()
+
+
+@pytest.mark.skipif(_ALIGN_MISSING, reason="pycurvelets test data not found")
+class TestComputeFiberAlignmentRealData:
+    """
+    Ported from pycurvelets ``tests/test_get_alignment_to_roi.py``.
+
+    Uses real1 image data with distance_threshold=100.  Tolerances match
+    the original (rtol=0.05, atol=15).
+
+    Column convention note
+    ----------------------
+    The reference CSV uses pycurvelets names.  tme_quant renames them and
+    applies the 90°-complement to angle_to_boundary_tangent:
+
+      ref ``angle2boundaryEdge``   → compare against 90 − result ``angle_to_boundary_tangent``
+      ref ``angle2boundaryCenter`` → compare against result ``angle_to_roi_orientation``
+      ref ``angle2centersLine``    → compare against result ``angle_to_centers_line``
+                                     (tme_quant uses corrected formula; small
+                                     differences from ref are expected for this column)
+    """
+
+    @pytest.fixture(scope="class")
+    def real1_data(self):
+        roi_path    = _ALIGN_DATA_DIR / "real1_roi_df.csv"
+        fiber_path  = _ALIGN_DATA_DIR / "real1_fiber_structure.csv"
+        ref_path    = _ALIGN_DATA_DIR / "real1_ROImeasurements.csv"
+
+        roi_coords    = pd.read_csv(roi_path, header=None,
+                                    names=["row", "col"]).to_numpy(dtype=float)
+        fiber_df      = pd.read_csv(fiber_path)
+        reference_df  = pd.read_csv(ref_path)
+        return roi_coords, fiber_df, reference_df
+
+    def test_returns_dataframe_with_expected_row_count(self, real1_data):
+        roi_coords, fiber_df, reference_df = real1_data
+        result, count = compute_fiber_alignment_to_roi(
+            roi_coords, img_height=512, img_width=512,
+            fiber_structure=fiber_df, distance_threshold=100,
+        )
+        assert isinstance(result, pd.DataFrame)
+        assert count == len(reference_df), (
+            f"Expected {len(reference_df)} fibres, got {count}"
+        )
+
+    def test_angle_to_boundary_tangent_matches_reference(self, real1_data):
+        roi_coords, fiber_df, reference_df = real1_data
+        result, _ = compute_fiber_alignment_to_roi(
+            roi_coords, img_height=512, img_width=512,
+            fiber_structure=fiber_df, distance_threshold=100,
+        )
+        # Convert pycurvelets reference: angle_to_boundary_tangent = 90 - angle2boundaryEdge
+        ref_tangent = 90.0 - reference_df["angle2boundaryEdge"].to_numpy(dtype=float)
+        pred = pd.to_numeric(result["angle_to_boundary_tangent"],
+                             errors="coerce").fillna(0.0).to_numpy()
+        np.testing.assert_allclose(pred, ref_tangent, rtol=0.05, atol=15,
+                                   err_msg="angle_to_boundary_tangent vs reference")
+
+    def test_angle_to_roi_orientation_matches_reference(self, real1_data):
+        roi_coords, fiber_df, reference_df = real1_data
+        result, _ = compute_fiber_alignment_to_roi(
+            roi_coords, img_height=512, img_width=512,
+            fiber_structure=fiber_df, distance_threshold=100,
+        )
+        ref = reference_df["angle2boundaryCenter"].to_numpy(dtype=float)
+        pred = result["angle_to_roi_orientation"].to_numpy(dtype=float)
+        np.testing.assert_allclose(pred, ref, rtol=0.05, atol=15,
+                                   err_msg="angle_to_roi_orientation vs reference")
+
+    def test_fiber_centers_match_reference(self, real1_data):
+        roi_coords, fiber_df, reference_df = real1_data
+        result, _ = compute_fiber_alignment_to_roi(
+            roi_coords, img_height=512, img_width=512,
+            fiber_structure=fiber_df, distance_threshold=100,
+        )
+        # pycurvelets maps center_1→center_row and center_2→center_col.
+        # In the MATLAB reference, fibercenterX = center_1 = center_row
+        # and fibercenterY = center_2 = center_col.
+        np.testing.assert_allclose(
+            result["fiber_center_row"].to_numpy(dtype=float),
+            reference_df["fibercenterX"].to_numpy(dtype=float),
+            rtol=0.05, atol=1,
+        )
+        np.testing.assert_allclose(
+            result["fiber_center_col"].to_numpy(dtype=float),
+            reference_df["fibercenterY"].to_numpy(dtype=float),
+            rtol=0.05, atol=1,
+        )

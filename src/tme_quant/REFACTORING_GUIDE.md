@@ -102,6 +102,45 @@ After completing a batch:
 - [ ] `pytest` passes (green) for the new test file(s).
 - [ ] `pytest tests/test_geometry_utils.py` still passes (regression check).
 - [ ] Import health check passes for all affected subpackages.
+- [ ] Real-dataset tests ported (see §3.1 below).
+
+### 3.1  Real-dataset test porting
+
+For every function ported from pycurvelets, check whether a corresponding
+real-dataset test exists in `H:/GitHub.06.2022/tme-quant/tests/`:
+
+```
+tests/
+├── test_relative_angles.py          → compute_relative_fiber_angles
+├── test_get_alignment_to_roi.py     → compute_fiber_alignment_to_roi
+├── test_new_curv.py                 → extract_curvelet_fiber_candidates  ✓
+├── test_get_ct.py                   → build_fiber_structure_from_curvelets
+└── test_results/
+    ├── relative_angle_test_files/   → boundary_coords.csv, real1_BoundaryMeasurements.xlsx
+    ├── process_image_test_files/    → real1_roi_df.csv, real1_fiber_structure.csv, ...
+    ├── new_curv_test_files/         → test_cases_new_curv.json, MATLAB reference CSVs
+    └── get_ct_test_files/           → (future)
+```
+
+**Rules:**
+
+1. If a real-dataset test file exists in `tme-quant/tests/` for the pycurvelets
+   source, add a corresponding `TestXxxRealData` class to the appropriate
+   `src/tme_quant/tests/test_*.py` file in the **same batch**.
+2. Reference data lives in `tme-quant/tests/test_results/` and is shared —
+   **do not copy** it into `src/tme_quant/tests/`.  Resolve the path via
+   `Path(__file__).parent.parent.parent.parent / "tests"`.
+3. Guard the entire class with
+   `@pytest.mark.skipif(not _DATA_DIR.exists(), reason="pycurvelets test data not found")`
+   so CI without the pycurvelets subtree still passes.
+4. Angle convention conversions required (see §6):
+   - `angle2boundaryEdge` (ref) → compare against `90 − angle_to_boundary_tangent` (result)
+   - `angle2boundaryCenter` (ref) → compare against `angle_to_roi_orientation`
+   - `angle2centersLine` (ref) → compare against `angle_to_centers_line`
+     (note: coordinate-mixing bug not replicated; small divergence expected)
+5. For curvelops-dependent tests, additionally gate on
+   `pytest.importorskip("curvelops")` and run under WSL miniconda
+   (see CLAUDE.md "Running tests").
 
 ---
 

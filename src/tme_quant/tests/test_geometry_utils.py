@@ -2,8 +2,10 @@
 Tests for tme_quant.fiber_analysis.utils.geometry_utils
 """
 import math
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from tme_quant.fiber_analysis.utils.geometry_utils import (
@@ -510,3 +512,101 @@ class TestComputeRelativeFiberAngles:
         for key in a1:
             if a1[key] is not None and a2[key] is not None:
                 _close(a1[key], a2[key], atol=1e-5)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Real-dataset tests — ported from pycurvelets tests/test_relative_angles.py
+#
+# Data: tests/test_results/relative_angle_test_files/
+#   boundary_coords.csv              dense CurveAlign boundary trace (Y, X)
+#   real1_BoundaryMeasurements.xlsx  per-fiber MATLAB reference angles (sheet 1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_REPO_TEST_DIR    = Path(__file__).parent.parent.parent.parent / "tests"
+_REL_ANGLE_DIR    = _REPO_TEST_DIR / "test_results" / "relative_angle_test_files"
+_REL_ANGLE_MISSING = not _REL_ANGLE_DIR.exists()
+
+
+def _load_relative_angle_cases():
+    """Build (name, row_dict) list from the reference Excel file."""
+    if _REL_ANGLE_MISSING:
+        return []
+    coords_csv = _REL_ANGLE_DIR / "boundary_coords.csv"
+    xl_path    = _REL_ANGLE_DIR / "real1_BoundaryMeasurements.xlsx"
+    if not coords_csv.exists() or not xl_path.exists():
+        return []
+
+    coords = pd.read_csv(coords_csv, sep=r"\s+")[["Y", "X"]].to_numpy() - 1  # 0-indexed
+
+    try:
+        df = pd.read_excel(xl_path, sheet_name=1)
+    except Exception:
+        return []
+
+    cases = []
+    for _, row in df.iterrows():
+        bpt = np.array([row["boundaryPointRow"] - 1, row["boundaryPointCol"] - 1])
+        hits = np.where((coords == bpt).all(axis=1))[0]
+        if len(hits) == 0:
+            continue  # no matching boundary point — skip this fiber
+        cases.append({
+            "obj_center":     (float(row["fibercenterCol"] - 1),   # x = col
+                               float(row["fibercenterRow"] - 1)),  # y = row
+            "obj_angle":      float(row["fiberangleList"]),
+            "index2object":   int(hits[0]),
+            "ref_tangent":    float(90.0 - row["angle2boundaryEdge"]),
+            "ref_orientation": float(row["angle2boundaryCenter"]),
+            "ref_centers_line": float(row["angle2centersLine"]),
+        })
+    return cases
+
+
+_REL_CASES = _load_relative_angle_cases()
+
+
+@pytest.mark.skipif(_REL_ANGLE_MISSING, reason="pycurvelets test data not found")
+class TestComputeRelativeFiberAnglesRealData:
+    """
+    Ported from pycurvelets ``tests/test_relative_angles.py``.
+
+    Tolerance: 0.5° on all three angle outputs, matching the original.
+
+    Angle convention note
+    ---------------------
+    The reference XLSX stores ``angle2boundaryEdge`` (pycurvelets convention,
+    0° = perpendicular to boundary).  tme_quant stores
+    ``angle_to_boundary_tangent`` = 90° − angle2boundaryEdge (TACS convention,
+    0° = parallel to boundary).  The expected value is converted before
+    comparison.
+    """
+
+    @pytest.fixture(scope="class")
+    def boundary_coords(self):
+        coords_csv = _REL_ANGLE_DIR / "boundary_coords.csv"
+        return pd.read_csv(coords_csv, sep=r"\s+")[["Y", "X"]].to_numpy() - 1
+
+    @pytest.mark.parametrize("case", _REL_CASES,
+                             ids=[f"fiber_{i}" for i in range(len(_REL_CASES))])
+    def test_angle_outputs_match_matlab_reference(self, case, boundary_coords):
+        angles, _ = compute_relative_fiber_angles(
+            obj_center=case["obj_center"],
+            obj_angle=case["obj_angle"],
+            roi_coords=boundary_coords,
+            image_size=(512, 512),
+            index2object=case["index2object"],
+            angle_option=0,
+            dense_boundary=True,
+        )
+
+        tol = 0.5  # degrees, matches original test tolerance
+
+        if angles["angle_to_boundary_tangent"] is not None:
+            _close(angles["angle_to_boundary_tangent"], case["ref_tangent"], atol=tol)
+
+        _close(angles["angle_to_roi_orientation"], case["ref_orientation"], atol=tol)
+
+        # angle_to_centers_line: tme_quant uses the corrected formula from
+        # get_relative_angles (not the coordinate-mixed version in
+        # get_alignment_to_roi).  The reference was generated from
+        # get_relative_angles so the values should agree.
+        _close(angles["angle_to_centers_line"], case["ref_centers_line"], atol=tol)
