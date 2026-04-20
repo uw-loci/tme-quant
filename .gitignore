@@ -186,3 +186,8 @@ src/tme_quant/.../pyproject.toml
 src/tme_quant/.../tme_quant_structure.txt
 src/tme_quant/.../docs/architecture.md
 *.bak0
+
+# CT-FIRE C++ compiled extension output
+*/_ctfire_cpp*.pyd
+*/_ctfire_cpp*.so
+build/ctfire_cpp/

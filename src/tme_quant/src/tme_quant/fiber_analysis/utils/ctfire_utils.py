@@ -89,7 +89,7 @@ def _try_import_cpp() -> bool:
     if not _CPP_AVAILABLE:
         return False
     try:
-        import _ctfire_cpp  # type: ignore  # noqa: F401
+        from . import _ctfire_cpp  # type: ignore  # noqa: F401
         return True
     except ImportError:
         return False
@@ -274,7 +274,7 @@ def _fire_cpp_2d(
 
     TODO: Replace body with actual _ctfire_cpp.fire_2d() call.
     """
-    import _ctfire_cpp  # type: ignore
+    from . import _ctfire_cpp  # type: ignore
     traces = _ctfire_cpp.fire_2d(
         fiber_mask.astype(np.uint8,   copy=False),
         image.astype(np.float64,      copy=False),
@@ -309,7 +309,7 @@ def _fire_cpp_3d(
       4. Anisotropic arc-length computation using z_spacing vs pixel_size
       5. Return (z, row, col, radius_px) traces
     """
-    import _ctfire_cpp  # type: ignore
+    from . import _ctfire_cpp  # type: ignore
     traces = _ctfire_cpp.fire_3d(
         fiber_mask.astype(np.uint8,  copy=False),
         image.astype(np.float64,     copy=False),

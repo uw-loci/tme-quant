@@ -32,6 +32,12 @@ src/tme_quant/
 │       └── tumor_objects.py       ← TumorRegion, Tumor, TumorGrade
 │
 ├── fiber_analysis/
+│   ├── _cpp/                      ← C++ source for pybind11 extension modules
+│   │   └── ctfire/
+│   │       ├── CMakeLists.txt     ← build config (pybind11 + cmake)
+│   │       ├── fire.h             ← FIRE algorithm declarations
+│   │       ├── fire.cpp           ← FIRE algorithm implementation (TODO)
+│   │       └── fire_bindings.cpp  ← pybind11 bindings → _ctfire_cpp.pyd/.so
 │   ├── __init__.py                ← public API; re-exports all key symbols
 │   ├── config.py                  ← ExtractionParams, OrientationParams + all sub-params
 │   ├── extraction.py              ← BaseExtractionMethod + FiberExtractionAnalyzer
@@ -53,7 +59,8 @@ src/tme_quant/
 │       ├── __init__.py
 │       ├── ctfire_utils.py
 │       ├── curvelet_utils.py
-│       └── geometry_utils.py
+│       ├── geometry_utils.py
+│       └── _ctfire_cpp.pyd/.so    ← compiled output (not in VCS; built from _cpp/ctfire/)
 │
 ├── cell_analysis/
 │   ├── __init__.py

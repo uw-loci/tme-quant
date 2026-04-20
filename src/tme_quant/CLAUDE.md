@@ -182,14 +182,16 @@ fallbacks; see status flags in each module.
 
 The FIRE (Fiber Extraction) graph-based tracing algorithm:
 
-- **C++ source:** `https://github.com/uw-loci/curvelets/tree/master/src/CurveAlign_CT-FIRE/ctFIRE/CPP`
-- **Python wrapper module:** `_ctfire_cpp` (to be compiled with pybind11)
-- **Integration point:** `fiber_analysis/utils/ctfire_utils.py`
+- **C++ source (upstream):** `https://github.com/uw-loci/curvelets/tree/master/src/CurveAlign_CT-FIRE/ctFIRE/CPP`
+- **C++ source (this repo):** `fiber_analysis/_cpp/ctfire/` — `fire.h`, `fire.cpp`, `fire_bindings.cpp`, `CMakeLists.txt`
+- **Python wrapper module:** `_ctfire_cpp` (pybind11); compiled output placed in `fiber_analysis/utils/`
+- **Integration point:** `fiber_analysis/utils/ctfire_utils.py` — uses `from . import _ctfire_cpp`
 - **Status flag:** `_CPP_AVAILABLE = False` in `ctfire_utils.py`; set to `True`
   when the shared library is built and installed
 - **Entry points:**
   - `_fire_cpp_2d(mask, pixel_size, params)` → list of fiber trace dicts
   - `_fire_cpp_3d(mask, voxel_size, params)` → list of 3D fiber trace dicts
+- **Build:** `cmake -S fiber_analysis/_cpp/ctfire -B build/ctfire_cpp && cmake --build build/ctfire_cpp && cmake --install build/ctfire_cpp`
 - **Fallback:** Pure-Python distance-transform tracer (slower, less accurate
   for touching fibers)
 - **3D status:** `CTFireExtraction.supports_3d()` returns `False` until the
