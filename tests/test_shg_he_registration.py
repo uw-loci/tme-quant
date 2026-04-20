@@ -6,9 +6,10 @@ Uses golden registered H&E TIFFs from ``tests/test_for_shg_he_registration_BDcre
 The test feeds the raw unregistered ``HE/patient_001.tif`` into the Python
 registration pipeline and compares the uint8 output to the MATLAB golden in
 ``HE/HE_registered_testN/patient_001.tif``.  Pixel-exact match is not
-achievable: SimpleITK's stochastic (1+1)-ES optimizer converges to a different
-local minimum than MATLAB's ``imregtform``.  Approximate MAE bounds guard
-against regressions.  Tests skip if fixtures or SimpleITK are missing.
+achievable: the Python pipeline uses a grid search + Nelder-Mead refinement
+on SimpleITK's Mattes MI metric, which converges to a slightly different
+local minimum than MATLAB's ``imregtform`` (1+1)-ES.  Approximate MAE bounds
+guard against regressions.  Tests skip if fixtures or SimpleITK are missing.
 """
 
 from __future__ import annotations
@@ -43,9 +44,9 @@ REGRESSION_CASES: tuple[tuple[str, float, str], ...] = (
 # MATLAB imregtform) so transforms differ slightly; bounds are set above
 # observed values to catch actual regressions.
 _MAX_MAE_UINT8: dict[str, float] = {
-    "test1": 20.0,
-    "test2": 18.0,
-    "test3": 20.0,
+    "test1": 8.5,
+    "test2": 8.0,
+    "test3": 10.0,
 }
 
 

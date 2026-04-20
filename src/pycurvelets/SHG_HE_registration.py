@@ -1,10 +1,11 @@
 """H&E ↔ SHG registration — Python port of MATLAB ``BDcreation_reg2.m``.
 
-Algorithm: skimage preprocessing, SimpleITK Mattes MI with
-OnePlusOneEvolutionary (similarity then affine refinement).  Optimizer
-parameters match MATLAB's ``imregconfig('multimodal')`` defaults:
-InitialRadius 6.25e-3 (divided by 3.5), GrowthFactor 1.05, Epsilon 1.5e-6,
-MaxIterations 700, all-pixel sampling.
+Algorithm: skimage preprocessing, SimpleITK Mattes MI with exhaustive
+grid search (angle, scale, translation) followed by Nelder-Mead
+refinement of similarity and affine parameters.  The grid search
+replaces MATLAB's stochastic 1+1-ES initial exploration, while
+Nelder-Mead provides deterministic sub-pixel convergence for all
+transform parameters simultaneously.
 
 Public entry points: :func:`shg_he_registration`, :func:`BDcreation_reg2` (MATLAB
 name), :class:`SHGHERegistrationParameters`, :func:`has_simpleitk`.
@@ -18,8 +19,20 @@ from typing import Any
 
 import numpy as np
 from scipy.ndimage import binary_fill_holes
-from skimage import color, filters, io, morphology, registration, transform
-from skimage.filters import threshold_otsu
+from scipy.optimize import minimize as _scipy_minimize
+from skimage import io, morphology, registration
+
+from ._he_bdc_common import (
+    adjust_rgb_mean_std,
+    disk_se,
+    gaussian_filter_matlab_like,
+    make_collagen_mask,
+    make_nuclei_mask,
+    matlab_rgb2gray,
+    prepare_registration_pair,
+    remove_small_components,
+    resize_like,
+)
 
 try:
     import SimpleITK as sitk  # type: ignore[import-untyped]
@@ -73,87 +86,57 @@ def _shg_he_registration_core(
     he_img = io.imread(he_path).astype(np.float64) / 255.0
     shg_img = io.imread(shg_path).astype(np.float64) / 255.0
     if shg_img.ndim == 3:
-        shg_img = color.rgb2gray(shg_img)
+        shg_img = matlab_rgb2gray(shg_img)
 
     original_shg_shape = shg_img.shape[:2]
-    pixpermic = float(pixelpermicron)
+    # MATLAB-parity sizing: fixed grid is (possibly downsampled) SHG, HE resized to match.
+    he_scaled, fixed_shg, pixpermic = prepare_registration_pair(
+        he_img, shg_img, float(pixelpermicron)
+    )
 
-    if pixpermic > 2:
-        scale = 2.0 / pixpermic
-        fixed_shg = transform.resize(
-            shg_img,
-            (int(shg_img.shape[0] * scale), int(shg_img.shape[1] * scale)),
-            anti_aliasing=True,
-        )
-        pixpermic = 2.0
-    else:
-        fixed_shg = shg_img.copy()
+    # MATLAB-parity intensity adjust + nuclei/collagen masks (HSV thresholds use matlab_graythresh).
+    he_adjusted = adjust_rgb_mean_std(he_scaled)
+    _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask(he_adjusted, pixpermic)
+    bw_collagen, _bw_no_background, _sat_thresh = make_collagen_mask(
+        he_adjusted, pixpermic, enhanced_postprocessing=False
+    )
 
-    target_h, target_w = fixed_shg.shape[:2]
-    rgb = transform.resize(he_img, (target_h, target_w, 3), anti_aliasing=True)
-
-    r, g, b = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
-    stats: dict[str, tuple[float, float, float]] = {}
-    for ch, name in [(r, "r"), (g, "g"), (b, "b")]:
-        mu = float(ch.mean())
-        sigma = float(ch.std())
-        high_in = min(mu + 2.0 * sigma, 1.0)
-        stats[name] = (mu, sigma, high_in)
-
-    he_data = np.zeros_like(rgb)
-    for i, name in enumerate(["r", "g", "b"]):
-        _, _, high_in = stats[name]
-        channel = rgb[:, :, i]
-        stretched = np.clip(channel / high_in, 0.0, 1.0) if high_in > 0 else channel
-        he_data[:, :, i] = stretched
-
-    he_gray = color.rgb2gray(he_data)
-    _ = threshold_otsu(he_gray)
-
-    he_hsv = color.rgb2hsv(he_data)
-    h_ch, s_ch, _v_ch = he_hsv[:, :, 0], he_hsv[:, :, 1], he_hsv[:, :, 2]
-
-    nuclei_hue_mask = (h_ch >= 0.500) & (h_ch <= 0.790)
-    sat_thresh_nuclei = threshold_otsu(s_ch)
-    nuclei_sat_mask = s_ch >= sat_thresh_nuclei
-    bw_nuclei_raw = nuclei_hue_mask & nuclei_sat_mask
-    bw_nuclei_raw = morphology.remove_small_objects(bw_nuclei_raw, min_size=150)
-
-    disk_radius_half = max(1, int(np.ceil(pixpermic / 2)))
-    se_open = morphology.disk(disk_radius_half)
-    bw_nuclei = morphology.opening(bw_nuclei_raw, se_open)
-
-    masked_nuclei = he_data.copy()
-    for c in range(3):
-        masked_nuclei[:, :, c][~bw_nuclei] = 0.0
-
-    collagen_hue_mask = (h_ch >= 0.837) | (h_ch <= 0.066)
-    sat_thresh_collagen = threshold_otsu(s_ch)
-    collagen_sat_mask = s_ch >= sat_thresh_collagen
-    bw_collagen = collagen_hue_mask & collagen_sat_mask
-    bw_collagen = morphology.remove_small_objects(bw_collagen, min_size=100)
-
-    gray_nuclei = color.rgb2gray(masked_nuclei)
-    kernel_size = max(1, int(np.floor(pixpermic)))
-    nuclei_filtered = filters.gaussian(gray_nuclei, sigma=0.5, truncate=kernel_size)
-
-    bw_nuclei2 = nuclei_filtered > 0.001
-    min_nucleus_area = int(np.ceil(50 * pixpermic**2))
-    bw_nuclei2 = morphology.remove_small_objects(bw_nuclei2, min_size=min_nucleus_area)
-    se_dilate = morphology.disk(max(1, int(np.floor(pixpermic))))
-    bw_nuclei_dilated = morphology.dilation(bw_nuclei2, se_dilate)
+    # Reproduce BDcreation_reg2 nuclei suppression + collagen exclusion.
+    # MATLAB:
+    #   gray_nuclei=rgb2gray(maskednucleiImage);
+    #   h = fspecial('gaussian', floor(ppm), 0.5);
+    #   nuclei_filtered = imfilter(gray_nuclei, h);   % zero-pad
+    #   BW_nuclei = im2bw(nuclei_filtered, 0.001);
+    #   BW_nuclei_discard = bwareaopen(BW_nuclei, ceil(50*ppm^2));  % 8-connected
+    #   se = strel('disk', floor(ppm));
+    #   BW_nuclei_dilated = imdilate(BW_nuclei_discard, se);
+    #   BW_nuclei_filled = imfill(BW_nuclei_dilated,'holes');
+    #   HE_collagen_BW = BW_collagen .* (~BW_nuclei_filled);
+    #   BW_discard = bwareaopen(HE_collagen_BW, ceil(ppm^2));
+    #   HEmoving = HE_collagen_BW .* BW_discard;
+    gray_nuclei = matlab_rgb2gray(masked_nuclei_image)
+    ksize = max(1, int(np.floor(pixpermic)))
+    nuclei_filtered = gaussian_filter_matlab_like(
+        gray_nuclei, sigma=0.5, kernel_size=ksize, boundary="zero"
+    )
+    bw_nuclei = nuclei_filtered > 0.001
+    bw_nuclei_discard = remove_small_components(
+        bw_nuclei, int(np.ceil(50.0 * pixpermic**2))
+    )
+    bw_nuclei_dilated = morphology.dilation(
+        bw_nuclei_discard, disk_se(np.floor(pixpermic))
+    )
     bw_nuclei_filled = binary_fill_holes(bw_nuclei_dilated)
 
     he_collagen_bw = bw_collagen & (~bw_nuclei_filled)
-    min_collagen_area = int(np.ceil(pixpermic**2))
-    he_collagen_bw = morphology.remove_small_objects(
-        he_collagen_bw, min_size=min_collagen_area
+    he_collagen_bw = remove_small_components(
+        he_collagen_bw, int(np.ceil(pixpermic**2))
     )
     he_moving = he_collagen_bw.astype(np.float64)
 
     fixed = fixed_shg.astype(np.float64)
     if fixed.ndim == 3:
-        fixed = color.rgb2gray(fixed)
+        fixed = matlab_rgb2gray(fixed)
 
     backend: str
     if _HAS_SITK:
@@ -162,21 +145,6 @@ def _shg_he_registration_core(
         fixed_sitk = sitk.Cast(fixed_sitk, sitk.sitkFloat64)
         moving_sitk = sitk.Cast(moving_sitk, sitk.sitkFloat64)
 
-        # MATLAB: [optimizer,metric] = imregconfig('multimodal');
-        #   optimizer.InitialRadius  = 6.25e-3 (then /3.5)
-        #   optimizer.GrowthFactor   = 1.05
-        #   optimizer.Epsilon        = 1.5e-6
-        #   optimizer.MaximumIterations = 700
-        #   metric.UseAllPixels      = true
-        #   imregtform default PyramidLevels = 3
-        _INITIAL_RADIUS = 6.25e-3 / 3.5
-
-        # Stage 1a: Exhaustive coarse 2D search over angle AND scale.
-        # MATLAB's multi-resolution pyramid explores both rotation and
-        # scaling at coarse levels.  SimpleITK's 1+1-ES with small
-        # initialRadius cannot explore far enough on the sparse collagen
-        # mask, so we grid-search (angle, scale) explicitly before
-        # handing off to the optimizer.
         geom_init = sitk.CenteredTransformInitializer(
             fixed_sitk, moving_sitk,
             sitk.Similarity2DTransform(),
@@ -184,100 +152,203 @@ def _shg_he_registration_core(
         )
         center = list(geom_init.GetFixedParameters())
 
+        # ----------------------------------------------------------
+        # Stage 1a: Grid search over (angle, scale, translation).
+        # 3-level refinement for angle/scale, then 2-level for
+        # translation at the best (angle, scale).
+        # ----------------------------------------------------------
         best_angle = 0.0
         best_scale = 1.0
+        best_tx = 0.0
+        best_ty = 0.0
         best_metric = float("inf")
         eval_method = sitk.ImageRegistrationMethod()
         eval_method.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
         eval_method.SetMetricSamplingStrategy(eval_method.NONE)
         eval_method.SetInterpolator(sitk.sitkLinear)
 
-        # Coarse pass: 2° angle steps, 0.02 scale steps
-        for scale_val in np.arange(0.80, 1.25, 0.02):
-            for angle_deg in range(-45, 46, 2):
-                probe = sitk.Similarity2DTransform()
-                probe.SetAngle(float(np.radians(angle_deg)))
-                probe.SetScale(float(scale_val))
-                probe.SetCenter(center)
-                eval_method.SetInitialTransform(probe)
-                val = eval_method.MetricEvaluate(fixed_sitk, moving_sitk)
+        def _eval_similarity(angle_deg, scale_val, tx, ty):
+            probe = sitk.Similarity2DTransform()
+            probe.SetAngle(float(np.radians(angle_deg)))
+            probe.SetScale(float(scale_val))
+            probe.SetCenter(center)
+            probe.SetTranslation([float(tx), float(ty)])
+            eval_method.SetInitialTransform(probe)
+            return eval_method.MetricEvaluate(fixed_sitk, moving_sitk)
+
+        def _probe_angle_scale(angle_range, scale_range):
+            nonlocal best_angle, best_scale, best_metric
+            for scale_val in scale_range:
+                for angle_deg in angle_range:
+                    val = _eval_similarity(angle_deg, scale_val, best_tx, best_ty)
+                    if val < best_metric:
+                        best_metric = val
+                        best_angle = float(angle_deg)
+                        best_scale = float(scale_val)
+
+        # Coarse angle/scale: 2° angle, 0.02 scale
+        _probe_angle_scale(range(-45, 46, 2), np.arange(0.80, 1.25, 0.02))
+        # Fine angle/scale: 0.5° angle, 0.005 scale
+        _probe_angle_scale(
+            np.arange(best_angle - 3, best_angle + 3.01, 0.5),
+            np.arange(best_scale - 0.04, best_scale + 0.041, 0.005),
+        )
+        # Ultra-fine angle/scale: 0.1° angle, 0.001 scale
+        _probe_angle_scale(
+            np.arange(best_angle - 0.5, best_angle + 0.51, 0.1),
+            np.arange(best_scale - 0.005, best_scale + 0.0051, 0.001),
+        )
+
+        # Coarse translation: 5-pixel steps in [-50, 50]
+        for tx in np.arange(-50, 51, 5):
+            for ty in np.arange(-50, 51, 5):
+                val = _eval_similarity(best_angle, best_scale, tx, ty)
                 if val < best_metric:
                     best_metric = val
-                    best_angle = float(angle_deg)
-                    best_scale = float(scale_val)
+                    best_tx = float(tx)
+                    best_ty = float(ty)
 
-        # Fine pass: 0.5° angle, 0.005 scale around coarse optimum
-        for scale_val in np.arange(best_scale - 0.04, best_scale + 0.05, 0.005):
-            for angle_deg_f in np.arange(best_angle - 3, best_angle + 4, 0.5):
-                probe = sitk.Similarity2DTransform()
-                probe.SetAngle(float(np.radians(angle_deg_f)))
-                probe.SetScale(float(scale_val))
-                probe.SetCenter(center)
-                eval_method.SetInitialTransform(probe)
-                val = eval_method.MetricEvaluate(fixed_sitk, moving_sitk)
+        # Fine translation: 1-pixel steps around coarse optimum
+        for tx in np.arange(best_tx - 5, best_tx + 5.01, 1):
+            for ty in np.arange(best_ty - 5, best_ty + 5.01, 1):
+                val = _eval_similarity(best_angle, best_scale, tx, ty)
                 if val < best_metric:
                     best_metric = val
-                    best_angle = float(angle_deg_f)
-                    best_scale = float(scale_val)
+                    best_tx = float(tx)
+                    best_ty = float(ty)
 
-        # Stage 1b: Refine similarity from best coarse (angle, scale).
-        sim_init = sitk.Similarity2DTransform()
-        sim_init.SetAngle(float(np.radians(best_angle)))
-        sim_init.SetScale(best_scale)
-        sim_init.SetCenter(center)
+        # Joint ultra-fine: 0.1° angle, 0.001 scale, 0.5px translation
+        for scale_val in np.arange(best_scale - 0.003, best_scale + 0.0031, 0.001):
+            for angle_deg in np.arange(best_angle - 0.3, best_angle + 0.31, 0.1):
+                for tx in np.arange(best_tx - 1.5, best_tx + 1.51, 0.5):
+                    for ty in np.arange(best_ty - 1.5, best_ty + 1.51, 0.5):
+                        val = _eval_similarity(angle_deg, scale_val, tx, ty)
+                        if val < best_metric:
+                            best_metric = val
+                            best_angle = float(angle_deg)
+                            best_scale = float(scale_val)
+                            best_tx = float(tx)
+                            best_ty = float(ty)
 
-        reg_method = sitk.ImageRegistrationMethod()
-        reg_method.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
-        reg_method.SetMetricSamplingStrategy(reg_method.NONE)
-        reg_method.SetOptimizerAsOnePlusOneEvolutionary(
-            numberOfIterations=700,
-            epsilon=1.5e-6,
-            initialRadius=_INITIAL_RADIUS,
-            growthFactor=1.05,
-        )
-        reg_method.SetOptimizerScalesFromPhysicalShift()
-        reg_method.SetInitialTransform(sim_init, inPlace=False)
-        reg_method.SetInterpolator(sitk.sitkLinear)
-        reg_method.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
-        reg_method.SetSmoothingSigmasPerLevel(smoothingSigmas=[2, 1, 0])
-        reg_method.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
-        similarity_transform = reg_method.Execute(fixed_sitk, moving_sitk)
+        # ----------------------------------------------------------
+        # Stage 1b: Nelder-Mead similarity refinement.
+        # The 1+1-ES cannot refine translation (perturbation ~0.001px
+        # with InitialRadius=0.001786), leaving the result at the grid
+        # search's 0.5px precision.  Nelder-Mead uses per-dimension
+        # step sizes via its simplex, achieving sub-pixel refinement
+        # in all 4 parameters simultaneously.
+        # ----------------------------------------------------------
+        _sim_eval = sitk.ImageRegistrationMethod()
+        _sim_eval.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
+        _sim_eval.SetMetricSamplingStrategy(_sim_eval.NONE)
+        _sim_eval.SetInterpolator(sitk.sitkLinear)
+        _sim_penalty = 0.0
 
-        # Stage 2: Affine refinement from similarity result.
-        sim_result = sitk.Similarity2DTransform(
-            similarity_transform.GetNthTransform(0)
-        )
-        affine_init = sitk.AffineTransform(2)
-        s = sim_result.GetScale()
-        theta = sim_result.GetAngle()
-        cos_t, sin_t = float(np.cos(theta)), float(np.sin(theta))
-        affine_init.SetMatrix([
-            s * cos_t, -s * sin_t,
-            s * sin_t,  s * cos_t,
+        def _similarity_cost(params):
+            nonlocal _sim_penalty
+            probe = sitk.Similarity2DTransform()
+            probe.SetAngle(float(params[0]))
+            probe.SetScale(float(params[1]))
+            probe.SetCenter(center)
+            probe.SetTranslation([float(params[2]), float(params[3])])
+            _sim_eval.SetInitialTransform(probe)
+            try:
+                return _sim_eval.MetricEvaluate(fixed_sitk, moving_sitk)
+            except RuntimeError:
+                _sim_penalty += 1.0
+                return _sim_penalty
+
+        x0_sim = np.array([
+            np.radians(best_angle), best_scale, best_tx, best_ty
+        ], dtype=np.float64)
+        sim_simplex = np.vstack([
+            x0_sim,
+            x0_sim + [0.005, 0, 0, 0],
+            x0_sim + [0, 0.002, 0, 0],
+            x0_sim + [0, 0, 2.0, 0],
+            x0_sim + [0, 0, 0, 2.0],
         ])
-        affine_init.SetTranslation(list(sim_result.GetTranslation()))
-        affine_init.SetCenter(list(sim_result.GetCenter()))
-
-        reg_method2 = sitk.ImageRegistrationMethod()
-        reg_method2.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
-        reg_method2.SetMetricSamplingStrategy(reg_method2.NONE)
-        reg_method2.SetOptimizerAsOnePlusOneEvolutionary(
-            numberOfIterations=700,
-            epsilon=1.5e-6,
-            initialRadius=_INITIAL_RADIUS,
-            growthFactor=1.05,
+        sim_opt = _scipy_minimize(
+            _similarity_cost, x0_sim, method="Nelder-Mead",
+            options={
+                "maxiter": 5000, "xatol": 1e-8, "fatol": 1e-12,
+                "adaptive": True, "initial_simplex": sim_simplex,
+            },
         )
-        reg_method2.SetOptimizerScalesFromPhysicalShift()
-        reg_method2.SetInitialTransform(affine_init, inPlace=False)
-        reg_method2.SetInterpolator(sitk.sitkLinear)
-        reg_method2.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
-        reg_method2.SetSmoothingSigmasPerLevel(smoothingSigmas=[2, 1, 0])
-        reg_method2.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
-        final_transform = reg_method2.Execute(fixed_sitk, moving_sitk)
 
-        rgb_for_warp = transform.resize(
-            he_img, (target_h, target_w, 3), anti_aliasing=True
+        opt_angle = float(sim_opt.x[0])
+        opt_scale = float(sim_opt.x[1])
+        opt_tx = float(sim_opt.x[2])
+        opt_ty = float(sim_opt.x[3])
+
+        # ----------------------------------------------------------
+        # Stage 2: Nelder-Mead affine refinement.
+        # Convert similarity → zero-centered affine, then let
+        # Nelder-Mead discover shear and anisotropic scaling that
+        # the similarity model cannot represent.
+        # ----------------------------------------------------------
+        cos_t, sin_t = float(np.cos(opt_angle)), float(np.sin(opt_angle))
+        sim_matrix = [
+            opt_scale * cos_t, -opt_scale * sin_t,
+            opt_scale * sin_t,  opt_scale * cos_t,
+        ]
+        A_mat = np.asarray(sim_matrix, dtype=np.float64).reshape(2, 2)
+        sim_center = np.asarray(center, dtype=np.float64)
+        sim_trans = np.array([opt_tx, opt_ty], dtype=np.float64)
+        zero_center_trans = (np.eye(2) - A_mat) @ sim_center + sim_trans
+
+        _aff_eval = sitk.ImageRegistrationMethod()
+        _aff_eval.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
+        _aff_eval.SetMetricSamplingStrategy(_aff_eval.NONE)
+        _aff_eval.SetInterpolator(sitk.sitkLinear)
+        _aff_penalty = 0.0
+
+        def _affine_cost(params):
+            nonlocal _aff_penalty
+            aff = sitk.AffineTransform(2)
+            aff.SetMatrix(params[:4].tolist())
+            aff.SetCenter([0.0, 0.0])
+            aff.SetTranslation(params[4:].tolist())
+            _aff_eval.SetInitialTransform(aff)
+            try:
+                return _aff_eval.MetricEvaluate(fixed_sitk, moving_sitk)
+            except RuntimeError:
+                _aff_penalty += 1.0
+                return _aff_penalty
+
+        x0_aff = np.array(
+            sim_matrix + [float(zero_center_trans[0]), float(zero_center_trans[1])],
+            dtype=np.float64,
         )
+        aff_simplex = np.vstack([
+            x0_aff,
+            x0_aff + [0.01, 0, 0, 0, 0, 0],
+            x0_aff + [0, 0.01, 0, 0, 0, 0],
+            x0_aff + [0, 0, 0.01, 0, 0, 0],
+            x0_aff + [0, 0, 0, 0.01, 0, 0],
+            x0_aff + [0, 0, 0, 0, 2.0, 0],
+            x0_aff + [0, 0, 0, 0, 0, 2.0],
+        ])
+        aff_opt = _scipy_minimize(
+            _affine_cost, x0_aff, method="Nelder-Mead",
+            options={
+                "maxiter": 10000, "xatol": 1e-10, "fatol": 1e-12,
+                "adaptive": True, "initial_simplex": aff_simplex,
+            },
+        )
+
+        final_affine = sitk.AffineTransform(2)
+        final_affine.SetMatrix(aff_opt.x[:4].tolist())
+        final_affine.SetCenter([0.0, 0.0])
+        final_affine.SetTranslation(aff_opt.x[4:].tolist())
+        final_transform = final_affine
+
+        # ----------------------------------------------------------
+        # Warp RGB using the final affine transform.
+        # MATLAB uses FillValues=255 on im2double ([0,1]) images, which
+        # causes all boundary-blended pixels to clip to 1.0 (white).
+        # ----------------------------------------------------------
+        rgb_for_warp = resize_like(he_img, fixed_shg.shape[:2])
         registered_channels = []
         for c in range(3):
             ch_sitk = sitk.GetImageFromArray(rgb_for_warp[:, :, c].astype(np.float64))
@@ -287,7 +358,7 @@ def _shg_he_registration_core(
                 fixed_sitk,
                 final_transform,
                 sitk.sitkLinear,
-                1.0,
+                255.0,
             )
             registered_channels.append(sitk.GetArrayFromImage(warped))
         registered = np.stack(registered_channels, axis=-1)
@@ -297,23 +368,17 @@ def _shg_he_registration_core(
         from skimage.transform import AffineTransform, warp
 
         tform_fallback = AffineTransform(translation=(-shift[1], -shift[0]))
-        rgb_for_warp = transform.resize(
-            he_img, (target_h, target_w, 3), anti_aliasing=True
-        )
+        rgb_for_warp = resize_like(he_img, fixed_shg.shape[:2])
         registered = warp(
             rgb_for_warp,
             tform_fallback.inverse,
-            output_shape=(target_h, target_w),
+            output_shape=fixed_shg.shape[:2],
             cval=1.0,
             channel_axis=-1,
         )
         backend = "skimage_ecc_fallback"
 
-    registered_img = transform.resize(
-        registered,
-        (original_shg_shape[0], original_shg_shape[1], 3),
-        anti_aliasing=True,
-    )
+    registered_img = resize_like(registered, original_shg_shape)
     registered_img = np.clip(registered_img, 0.0, 1.0)
     return registered_img, backend
 
