@@ -146,7 +146,6 @@ Known equivalences between pycurvelets and tme_quant (do NOT re-implement these)
 | `find_connected_pts`               | `geometry_utils._find_connected_pts`             |
 | `get_first_neighbor`               | `geometry_utils._get_first_neighbor`             |
 | `get_relative_angles`              | `geometry_utils.compute_relative_fiber_angles`   |
-| `new_curv` (curvelet transform)    | `curvelet_utils.curvelet_transform_2d`           |
 | `pycurvelets3D` (3D curvelets)     | `curvelet_utils.curvelet_transform_3d`           |
 | `get_fire` (FIRE algorithm)        | `ctfire_utils.fire_2d`                           |
 
@@ -156,6 +155,7 @@ Functions that are **not yet integrated** and are suitable targets for future ba
 |------------------------------|-----------------------------------------------------------|
 | `process_fibers`             | `fiber_analysis/utils/fiber_dataframe_utils.py`          |
 | `get_alignment_to_roi`       | `tme_analysis/utils/alignment_utils.py`                  |
+| `new_curv`                   | `fiber_analysis/utils/curvelet_utils.py::extract_curvelet_fiber_candidates` |
 | `get_tif_boundary`           | `fiber_analysis/utils/boundary_tif_utils.py`             |
 | `draw_curvs`                 | visualization layer (no Qt dependency)                   |
 | `draw_map`                   | visualization layer (no Qt dependency)                   |

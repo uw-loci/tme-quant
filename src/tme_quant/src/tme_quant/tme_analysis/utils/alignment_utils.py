@@ -119,6 +119,17 @@ def compute_fiber_alignment_to_roi(
     ValueError
         If *roi_coords* is ``None``, has fewer than 3 points, or
         *fiber_structure* is empty.
+
+    Notes
+    -----
+    **Dense boundary assumption:** ``angle_to_boundary_tangent`` is computed
+    via ``compute_boundary_tangent_angle``, which requires *roi_coords* to be
+    a **dense 8-connected pixel trace** (e.g. CurveAlign boundary output).
+    If *roi_coords* is a sparse polygon (a handful of vertices), the
+    8-connected neighbour search will fail to collect ``num=21`` points and
+    ``angle_to_boundary_tangent`` will be ``None`` for every fibre.
+    For sparse polygon ROIs use ``compute_relative_fiber_angles`` with
+    ``dense_boundary=False`` instead.
     """
     if roi_coords is None or len(roi_coords) < 3:
         raise ValueError("roi_coords must be a valid boundary array with ≥ 3 points.")
