@@ -184,3 +184,4 @@ src/tme_quant/output/
 tests/test_images/CA_Out/
 src/tme_quant/.../pyproject.toml
 src/tme_quant/.../tme_quant_structure.txt
+*.bak0
