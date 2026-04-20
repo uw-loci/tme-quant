@@ -1,7 +1,11 @@
+# tme_quant — Package Architecture
+
+```
 src/examples/                          ← runnable demo scripts
 ├── example_3d_volumetric_workflow.py  ← 3-D z-stack volumetric analysis
 ├── example_analyze_tacs_zone.py       ← standalone TACS zone analysis demo
 ├── example_ctfire_workflow.py         ← CT-FIRE individual fiber + TACS workflow
+├── example_ctfire_workflow_hierarchy.py ← CT-FIRE workflow with TMEHierarchy
 ├── example_curvealign_workflow.py     ← CurveAlign segment orientation + TACS workflow
 ├── example_hierarchy_object_analysis.py
 └── roi_curvealign_orientation_example.py
@@ -142,17 +146,6 @@ src/tme_quant/
         ├── interactive_viewer.py
         └── overlay.py
 
-    │       └── voxelmorph_registration.py
-    ├── utils/
-    │   ├── __init__.py
-    │   ├── image_utils.py
-    │   └── transform_utils.py
-    └── visualization/
-        ├── checkerboard.py
-        ├── difference_map.py
-        ├── interactive_viewer.py
-        └── overlay.py
-
 tests/
 └── test_geometry_utils.py             ← 55 unit tests for fiber_analysis/utils/geometry_utils.py
                                          covers: _angle_between_orientations,
@@ -162,21 +155,24 @@ tests/
                                          compute_boundary_tangent_angle,
                                          compute_fiber_properties,
                                          compute_relative_fiber_angles
+```
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VERIFICATION STATUS (2026-04-06)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[PASS] All .py files parse without syntax errors
-[PASS] All single-dot relative imports resolve to existing files
-[PASS] pytest tests/test_geometry_utils.py — 55 passed
-[PASS] All two-dot relative imports resolve to existing files
-[PASS] All three-dot relative imports resolve to existing files
-[PASS] All absolute tme_quant.X imports in example files resolve
-[PASS] No stale module path references in live import statements
-[PASS] pyproject.toml package discovery unchanged (src/ layout preserved)
+---
 
-STATISTICS
-  Original:   136 .py files, max depth 8 folders
-  Refactored: 100 .py files, max depth 8 folders
-  Files removed/merged: 36 net reduction
-  Depth profile shifted: 88 files at depth 7 → 36 (majority now at depth 6)
+## Verification Status (2026-04-19)
+
+- [PASS] All .py files parse without syntax errors
+- [PASS] All single-dot relative imports resolve to existing files
+- [PASS] `pytest tests/test_geometry_utils.py` — 55 passed
+- [PASS] All two-dot relative imports resolve to existing files
+- [PASS] All three-dot relative imports resolve to existing files
+- [PASS] All absolute `tme_quant.X` imports in example files resolve
+- [PASS] No stale module path references in live import statements
+- [PASS] pyproject.toml package discovery unchanged (src/ layout preserved)
+
+## Statistics
+
+| | Count |
+|---|---|
+| .py files | 100 |
+| Max folder depth | 8 |
