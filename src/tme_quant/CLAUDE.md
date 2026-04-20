@@ -316,6 +316,44 @@ faster dependency resolution.
 Models for StarDist / Cellpose are auto-downloaded on first use and cached at
 `~/.tme_quant/models/` via `cell_analysis/model_loader.py`.
 
+### Building C++ Extensions (optional)
+
+The C++ extensions are optional — the package imports and runs without them.
+Build them to get the full-speed FIRE algorithm instead of the Python fallback.
+
+**Prerequisites:** cmake ≥ 3.18, a C++17 compiler (MSVC 2019+, GCC 9+, or
+Clang 10+), and pybind11:
+
+```bash
+pip install pybind11
+```
+
+**Build `_ctfire_cpp`** (FIRE fiber extraction):
+
+```bash
+# From the repo root (tme-quant/)
+cmake -S src/tme_quant/src/tme_quant/fiber_analysis/_cpp/ctfire \
+      -B build/ctfire_cpp \
+      -DCMAKE_BUILD_TYPE=Release
+cmake --build  build/ctfire_cpp
+cmake --install build/ctfire_cpp
+# installs _ctfire_cpp.pyd/.so into fiber_analysis/utils/
+```
+
+**Enable in Python** — after a successful build, flip the flag in
+`fiber_analysis/utils/ctfire_utils.py`:
+
+```python
+_CPP_AVAILABLE: bool = True   # was False
+```
+
+**Verify:**
+
+```python
+from tme_quant.fiber_analysis.utils.ctfire_utils import ctfire_backend_status
+print(ctfire_backend_status())   # 'cpp_available' should be True
+```
+
 ---
 
 ## Running Examples and Tests
