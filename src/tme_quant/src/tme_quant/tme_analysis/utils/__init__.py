@@ -38,6 +38,8 @@ from .orientation_utils import (
     compute_orientation_relative_to_roi,
 )
 
+from .alignment_utils import compute_fiber_alignment_to_roi
+
 from ...fiber_analysis.utils.geometry_utils import (
     compute_boundary_tangent_angle,
     find_nearest_boundary_index,
@@ -74,4 +76,6 @@ __all__ = [
     'compute_boundary_tangent_angle',
     'find_nearest_boundary_index',
     'compute_relative_fiber_angles',
+    # Fiber DataFrame alignment to ROI (adapted from pycurvelets)
+    'compute_fiber_alignment_to_roi',
 ]

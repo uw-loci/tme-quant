@@ -253,6 +253,30 @@ change it without reviewing `tacs.py` and `measurement_engine.py` together.
 
 ## Architecture Rules
 
+> **When integrating MATLAB-converted functions or performing library-wide refactors,
+> strictly follow the rules in [@REFACTORING_GUIDE.md](REFACTORING_GUIDE.md).**
+> That document defines anti-hallucination rules, mandatory test-suite runs (pytest),
+> incremental batch limits (max 3–5 files), overlap-check protocol, and naming
+> conventions for adapted functions.
+
+### Core / Plugin separation
+
+`tme_quant` (this library) and `napari-tme-quant` (the GUI plugin) are **separate
+packages** governed by a strict one-way dependency:
+
+```
+napari-tme-quant → tme_quant   (plugin depends on library)
+tme_quant        ← (no dependency on napari, Qt, or magicgui)
+```
+
+- **No Qt/napari imports** (`napari`, `qtpy`, `PyQt5`, `PySide2`, `PySide6`,
+  `magicgui`) anywhere inside `src/tme_quant/`.
+- GUI logic, event-handling, and layer management live exclusively in the plugin
+  package (documented in [CLAUDE_NAPARI.md](CLAUDE_NAPARI.md)).
+- Plugin code must call `tme_quant` APIs — never the reverse.
+- Analysis logic that a plugin widget needs must be added to the **library**,
+  then called from the plugin controller layer.
+
 ### Object model
 - Every domain object inherits from `TMEObject` in `core/base_models.py`.
 - `TMEObject` is a **regular class** (not a dataclass) — deep inheritance with

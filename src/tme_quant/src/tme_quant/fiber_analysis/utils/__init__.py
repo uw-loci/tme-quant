@@ -9,6 +9,7 @@ geometry_utils  — fiber geometry and property measurement helpers
 
 from .curvelet_utils import curvelet_transform_2d, curvelet_transform_3d, available_backends
 from .ctfire_utils   import fire_2d, fire_3d, ctfire_backend_status
+from .fiber_dataframe_utils import compute_fiber_density_and_alignment, round_mlab
 from .geometry_utils import (
     find_nearest_boundary_point,
     compute_boundary_normal,
@@ -22,6 +23,9 @@ from .geometry_utils import (
 )
 
 __all__ = [
+    # Fiber DataFrame utilities (adapted from pycurvelets process_fibers)
+    'compute_fiber_density_and_alignment',
+    'round_mlab',
     'curvelet_transform_2d',
     'curvelet_transform_3d',
     'available_backends',

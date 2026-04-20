@@ -1208,10 +1208,47 @@ class StructureTensorResult(OrientationResult):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# FiberFeatureParams  (adapted from pycurvelets FeatureControlParameters)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class FiberFeatureParams:
+    """Parameters for fiber density and local alignment feature extraction.
+
+    Adapted from pycurvelets ``FeatureControlParameters``.  Controls the
+    neighbourhood sizes used by ``compute_fiber_density_and_alignment``.
+
+    Attributes
+    ----------
+    minimum_nearest_fibers : int
+        Base number of nearest fibers for kNN-based density/alignment.
+        Features are computed at 1×, 2×, 4×, and 8× this value.
+    minimum_box_size : int
+        Base side length (pixels) of the square region for box-filter
+        density/alignment.  Features are computed at 1×, 2×, and 4× this value.
+    fiber_midpoint_estimate : int
+        0 = derive midpoint from endpoint coordinates;
+        1 = derive midpoint from fiber-length density (original CT-FIRE default).
+    """
+    minimum_nearest_fibers: int = 2
+    minimum_box_size: int = 32
+    fiber_midpoint_estimate: int = 1
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'minimum_nearest_fibers': self.minimum_nearest_fibers,
+            'minimum_box_size':       self.minimum_box_size,
+            'fiber_midpoint_estimate': self.fiber_midpoint_estimate,
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
 __all__ = [
+    # Fiber feature extraction params (adapted from pycurvelets)
+    'FiberFeatureParams',
     # Enum
     'OrientationMode',
     # Parameter base + subclasses
