@@ -48,11 +48,12 @@ References
 
 from __future__ import annotations
 
+import math
 import warnings
 from typing import Optional
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
+import pandas as pd
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -465,8 +466,334 @@ def available_backends() -> dict:
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Private helpers for extract_curvelet_fiber_candidates
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _fix_angle(angles: np.ndarray, inc: float) -> float:
+    """
+    Adjust a set of curvelet angles to minimise angular spread.
+
+    Direct port of the ``fixAngle`` nested function inside
+    ``pycurvelets/new_curv.py``.  Finds the rotation (in multiples of
+    ``inc``) that minimises the standard deviation of the adjusted angles,
+    then returns their mean.
+
+    Parameters
+    ----------
+    angles : array-like of float
+        Raw angular values in degrees for one neighbourhood group.
+    inc : float
+        Angular increment (degrees) equal to ``360 / n_wedges``.
+
+    Returns
+    -------
+    float
+        Mean angle after optimal rotation.
+    """
+    x = np.array(angles, dtype=float)
+    bins = np.arange(np.min(x), np.max(x) + inc, inc)
+
+    temp = x.copy()
+    angs = x.copy()
+    stdev = []
+
+    for aa in range(len(bins) - 1):
+        idx = temp >= bins[-(aa + 1)]
+        temp_adj = temp.copy()
+        temp_adj[idx] -= 180
+        stdev.append(np.std(temp_adj))
+
+    stdev_arr = np.array([np.std(x)] + stdev)
+    I = int(np.argmin(stdev_arr))
+    C = float(stdev_arr[I])
+
+    if C < np.std(angs) and I < len(bins) - 1:
+        idx = angs >= bins[-(I + 1)]
+        angs[idx] -= 180
+
+        if I > 0.5 * len(bins):
+            angs += 180
+
+    if np.any(angs < 0):
+        angs += 180
+
+    return float(np.mean(angs))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public API — curvelet fiber candidate extraction
+# ─────────────────────────────────────────────────────────────────────────────
+
+def extract_curvelet_fiber_candidates(
+    image: np.ndarray,
+    keep: float = 0.05,
+    scale: int = 1,
+    radius: float = 4.0,
+) -> tuple[pd.DataFrame, list, float]:
+    """
+    Extract curvelet-based fiber candidates from a 2-D image.
+
+    Direct port of ``pycurvelets/new_curv.py::new_curv``.  Applies the Fast
+    Discrete Curvelet Transform (FDCT) via ``curvelops.fdct2d_wrapper``,
+    thresholds the coefficients at the selected scale, groups spatially
+    adjacent curvelets within *radius* pixels, adjusts angles per group via
+    :func:`_fix_angle`, and trims candidates too close to the image edge.
+
+    .. important::
+        This function requires the **curvelops** package::
+
+            pip install curvelops
+
+        Unlike :func:`curvelet_transform_2d`, there is no approximate
+        fallback — fiber candidate extraction depends on genuine FDCT
+        coefficient geometry that cannot be replicated by a ridge filter.
+
+    Parameters
+    ----------
+    image : ndarray, shape (H, W)
+        2-D grayscale image (any numeric dtype).
+    keep : float
+        Fraction of curvelet coefficients to retain (top ``keep`` by
+        magnitude).  ``0.05`` keeps the top 5 %.
+        Corresponds to ``CurveletControlParameters.keep`` in pycurvelets.
+    scale : int
+        Scale index to analyse (0-based from the coarsest detail level).
+        Internally mapped as ``s = len(c) - scale - 1`` to match MATLAB
+        index convention.
+        Corresponds to ``CurveletControlParameters.scale`` in pycurvelets.
+    radius : float
+        Radius in pixels for grouping adjacent curvelets into a single
+        candidate.
+        Corresponds to ``CurveletControlParameters.radius`` in pycurvelets.
+
+    Returns
+    -------
+    in_curves : pd.DataFrame
+        One row per fiber candidate after edge trimming.  Columns:
+
+        * ``center_row`` — row coordinate of the candidate centre (pixels).
+        * ``center_col`` — column coordinate of the candidate centre (pixels).
+        * ``angle``      — orientation angle in degrees [0°, 180°).
+
+    curvelet_coefficients : list of lists of ndarray
+        Thresholded FDCT coefficient structure (same shape as the raw
+        transform output, zeroed everywhere except the selected scale and
+        passing wedges).
+    inc : float
+        Angular increment used (``360 / n_wedges`` at the selected scale).
+
+    Raises
+    ------
+    ImportError
+        If ``curvelops`` is not installed.
+    ValueError
+        If *image* is not 2-D.
+
+    Notes
+    -----
+    ``ac = 0`` (wavelet mode) is preserved from the original MATLAB/pycurvelets
+    implementation.  ``nbangles_coarse = 16`` is hard-coded to match the
+    default CT-FIRE parameters.
+    """
+    if image.ndim != 2:
+        raise ValueError(
+            f"extract_curvelet_fiber_candidates expects a 2-D image, got shape {image.shape}"
+        )
+
+    try:
+        from curvelops import fdct2d_wrapper  # type: ignore
+    except ImportError as exc:
+        raise ImportError(
+            "extract_curvelet_fiber_candidates requires the 'curvelops' package "
+            "(pip install curvelops).  No approximate fallback is available for "
+            "fiber candidate extraction."
+        ) from exc
+
+    from tme_quant.fiber_analysis.utils.fiber_dataframe_utils import round_mlab
+
+    img = image.astype(np.float64)
+    M, N = img.shape
+    ac = 0  # wavelet mode (matches MATLAB/pycurvelets new_curv)
+    nbscales = math.floor(math.log2(min(M, N)) - 3)
+    nbangles_coarse = 16
+
+    # ── Forward FDCT ──────────────────────────────────────────────────────────
+    c = fdct2d_wrapper.fdct2d_forward_wrap(nbscales, nbangles_coarse, ac, img)
+
+    # Empty coefficient structure of same shape
+    curvelet_coefficients = [
+        [np.zeros_like(c[cc][dd]) for dd in range(len(c[cc]))]
+        for cc in range(len(c))
+    ]
+
+    # Scale selection: s = len(c) - scale - 1  (same as MATLAB: length(C) - Sscale)
+    s = len(c) - scale - 1
+
+    # Take absolute value at selected scale
+    for ee in range(len(c[s])):
+        c[s][ee] = np.abs(c[s][ee])
+
+    abs_max = max(np.max(arr) for arr in c[s])
+
+    # Threshold via cumulative histogram (top `keep` fraction by magnitude)
+    bins = np.linspace(0, abs_max, 101)
+    bin_width = bins[1] - bins[0]
+    bin_edges = np.concatenate(([bins[0] - bin_width / 2], bins + bin_width / 2))
+
+    hist_per_wedge = []
+    for arr in c[s]:
+        hist_w, _ = np.histogram(arr.flatten(), bins=bin_edges)
+        hist_per_wedge.append(hist_w)
+
+    sum_hist = np.sum(hist_per_wedge, axis=0)
+    cum_sum = np.cumsum(sum_hist)
+    threshold_idx = np.where(cum_sum > (1 - keep) * cum_sum[-1])[0][0]
+    max_val = bins[threshold_idx]
+
+    for dd in range(len(c[s])):
+        mask = np.abs(c[s][dd]) >= max_val
+        curvelet_coefficients[s][dd] = c[s][dd] * mask
+
+    # ── Spatial coordinate grids ──────────────────────────────────────────────
+    m, n = img.shape
+    SX, SY, FX, FY, NX, NY = fdct2d_wrapper.fdct2d_param_wrap(
+        m, n, nbscales, nbangles_coarse, 0
+    )
+
+    for scl in range(nbscales):
+        for wedge_scl in range(len(FX[scl])):
+            nx = NX[scl][wedge_scl]
+            ny = NY[scl][wedge_scl]
+            cx = math.ceil((nx + 1) / 2)
+            cy = math.ceil((ny + 1) / 2)
+            sx = SX[scl][wedge_scl]
+            sy = SY[scl][wedge_scl]
+            IX, IY = np.meshgrid(
+                np.arange(1, nx + 1), np.arange(1, ny + 1), indexing="ij"
+            )
+            SX[scl][wedge_scl] = 1 + M * (sx * (IX - cx) + 0.5)
+            SY[scl][wedge_scl] = 1 + N * (sy * (IY - cy) + 0.5)
+
+    # ── Extract curvelet centres and raw angles ───────────────────────────────
+    long = len(c[s]) // 2
+    angs = [np.array([]) for _ in range(long)]
+    row  = [np.array([]) for _ in range(long)]
+    col  = [np.array([]) for _ in range(long)]
+    inc  = 360.0 / len(c[s])
+    start_ang = 225
+
+    for w in range(long):
+        test = np.flatnonzero(curvelet_coefficients[s][w])
+
+        if len(test) > 0:
+            angle = np.zeros(len(test))
+            # Outer loop preserved from MATLAB original (bb is unused but kept for parity)
+            for bb in range(2):
+                for aa in range(len(test)):
+                    temp_angle = start_ang - (inc * w)
+                    shift_temp = start_ang - (inc * (w + 1))
+                    angle[aa] = np.mean([temp_angle, shift_temp])
+
+            ind = angle < 0
+            angle[ind] += 360
+
+            IND = angle > 225
+            angle[IND] -= 180
+
+            idx = angle < 45
+            angle[idx] += 180
+
+            angs[w] = np.array(angle)
+            row[w]  = np.array(round_mlab(SX[s][w].ravel(order="F")[test]))
+            col[w]  = np.array(round_mlab(SY[s][w].ravel(order="F")[test]))
+        else:
+            angs[w] = np.array([0])
+            row[w]  = np.array([0])
+            col[w]  = np.array([0])
+
+    # ── Filter empty wedges and concatenate ───────────────────────────────────
+    c_test = [len(cv) > 0 and not (len(cv) == 1 and cv[0] == 0) for cv in col]
+    bb_idx = np.where(c_test)[0]
+
+    if len(bb_idx) == 0:
+        empty = pd.DataFrame(columns=["center_row", "center_col", "angle"])
+        return empty, curvelet_coefficients, inc
+
+    col_flat  = np.concatenate([col[i]  for i in bb_idx])
+    row_flat  = np.concatenate([row[i]  for i in bb_idx])
+    angs_flat = np.concatenate([angs[i] for i in bb_idx])
+
+    curves  = np.column_stack((row_flat, col_flat, angs_flat))
+    curves2 = curves.copy()
+
+    # ── Radius-based grouping ─────────────────────────────────────────────────
+    groups = [[] for _ in range(len(curves2))]
+    for xx in range(len(curves2)):
+        if np.all(curves2[xx, :]):
+            c_low = curves2[:, 1] > math.ceil(curves2[xx, 1] - radius)
+            c_hi  = curves2[:, 1] < math.floor(curves2[xx, 1] + radius)
+            c_rad = c_hi & c_low
+
+            r_hi  = curves2[:, 0] < math.ceil(curves2[xx, 0] + radius)
+            r_low = curves2[:, 0] > math.floor(curves2[xx, 0] - radius)
+            r_rad = r_hi & r_low
+
+            in_nh = c_rad & r_rad
+            groups[xx] = np.where(in_nh)[0]
+            curves2[in_nh, :] = 0
+
+    comb_nh  = [g for g in groups if len(g) > 0]
+    n_hoods  = [curves[g] for g in comb_nh]
+
+    # ── Per-group angle fixing and centre computation ─────────────────────────
+    angles  = [_fix_angle(nh[:, 2], inc) for nh in n_hoods]
+    centers = [
+        np.array([round_mlab(np.median(nh[:, 0])), round_mlab(np.median(nh[:, 1]))])
+        for nh in n_hoods
+    ]
+
+    objects = [
+        {"center": center, "angle": angle}
+        for center, angle in zip(centers, angles)
+    ]
+
+    # Normalise angles to [0°, 180°)  — port of group6() in new_curv.py
+    for obj in objects:
+        obj["angle"] = (180 + obj["angle"]) % 180
+
+    # ── Edge trimming ─────────────────────────────────────────────────────────
+    all_centers = np.vstack([obj["center"] for obj in objects])
+    cen_row = all_centers[:, 0]
+    cen_col = all_centers[:, 1]
+    im_rows, im_cols = img.shape
+    edge_buf = math.ceil(min(im_rows, im_cols) / 100)
+
+    in_idx = np.where(
+        (cen_row < im_rows - edge_buf)
+        & (cen_col < im_cols - edge_buf)
+        & (cen_row > edge_buf)
+        & (cen_col > edge_buf)
+    )[0]
+
+    in_curves = pd.DataFrame(
+        [
+            {
+                "center_row": obj["center"][0],
+                "center_col": obj["center"][1],
+                "angle":      obj["angle"],
+            }
+            for i, obj in enumerate(objects)
+            if i in in_idx
+        ]
+    ).reset_index(drop=True)
+
+    return in_curves, curvelet_coefficients, inc
+
+
 __all__ = [
     'curvelet_transform_2d',
     'curvelet_transform_3d',
+    'extract_curvelet_fiber_candidates',
     'available_backends',
 ]

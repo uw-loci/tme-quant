@@ -39,7 +39,7 @@ def round_mlab(num) -> int | list:
 
     Parameters
     ----------
-    num : int, float, or list
+    num : int, float, list, tuple, or array-like
         Value(s) to round.
 
     Returns
@@ -47,9 +47,11 @@ def round_mlab(num) -> int | list:
     int or list of int
     """
     import math
-    if isinstance(num, list):
-        return [int(math.floor(x + 0.5)) for x in num]
-    return int(math.floor(num + 0.5))
+    if isinstance(num, (list, tuple)):
+        return [int(math.floor(float(x) + 0.5)) for x in num]
+    if hasattr(num, "__iter__"):  # numpy array or other iterable
+        return [int(math.floor(float(x) + 0.5)) for x in num]
+    return int(math.floor(float(num) + 0.5))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

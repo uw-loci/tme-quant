@@ -77,6 +77,21 @@ Path conventions used below:
 
 ---
 
+#### `new_curv` → `extract_curvelet_fiber_candidates`  *(Batch 3)*
+- **Source:** `src/pycurvelets/new_curv.py`
+- **Target:** `fiber_analysis/utils/curvelet_utils.py`
+- **Original:** `new_curv(img, curve_cp: CurveletControlParameters)`
+- **New:** `extract_curvelet_fiber_candidates(image, keep=0.05, scale=1, radius=4.0)`
+- **Changes:**
+  - `CurveletControlParameters.keep/scale/radius` → explicit plain params (per REFACTORING_GUIDE §6)
+  - No fallback if `curvelops` absent — raises `ImportError` (approximate backends cannot produce fiber candidates)
+  - `fix_angle` nested function extracted as module-private `_fix_angle(angles, inc)`
+  - `ac=0` (wavelet mode) and `nbangles_coarse=16` preserved from original
+  - Returns identical `(in_curves: DataFrame[center_row, center_col, angle], coefficients, inc)`
+  - Also fixed `round_mlab` in `fiber_dataframe_utils.py` to handle numpy arrays (pycurvelets version handles them via `hasattr(__iter__)`; tme_quant previously only handled `list`)
+
+---
+
 #### `get_fire` → `fire_2d`
 - **Source:** `src/pycurvelets/get_fire.py`
 - **Target:** `fiber_analysis/utils/ctfire_utils.py`
@@ -118,15 +133,6 @@ Path conventions used below:
 ---
 
 ## Remaining (Future Batches)
-
----
-
-#### `new_curv` → `extract_curvelet_fiber_candidates`
-- **Source:** `src/pycurvelets/new_curv.py`
-- **Planned target:** `fiber_analysis/utils/curvelet_utils.py`
-- **Original:** `new_curv(img, curve_cp: CurveletControlParameters)`
-- **Proposed:** `extract_curvelet_fiber_candidates(image, keep=0.05, scale=1, radius=4.0)`
-- **Notes:** `CurveletControlParameters` fields become explicit params; returns `(in_curves: DataFrame[center_row, center_col, angle], coefficients, inc)`; must include threshold selection, radius-based grouping, `fix_angle` per group, and edge trimming — none of which exist in `curvelet_transform_2d`
 
 ---
 

@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -c \"import sys, json; d=json.load(sys.stdin); open('H:/GitHub.06.2022/tme-quant/src/tme_quant/.claude/session-summary.md','w').write(d.get('compact_summary','(no summary)'))\"",
+            "command": "python -c \"import sys, json; d=json.load(sys.stdin); open('H:/GitHub.06.2022/tme-quant/src/tme_quant/.claude/session-summary.md','w',encoding='utf-8').write(d.get('compact_summary','(no summary)'))\"",
             "statusMessage": "Saving compact session summary..."
           }
         ]

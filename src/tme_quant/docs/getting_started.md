@@ -173,6 +173,51 @@ Expected output: `PASSED : 41/41 — All checks passed.`
 
 ---
 
+## Step 6 — Run the tests
+
+### Standard suite (no curvelops required)
+
+```bash
+# From src/tme_quant/  (project root containing pyproject.toml)
+pytest tests/ -v
+```
+
+Expected: all tests pass; curvelops integration tests are skipped automatically
+when curvelops is not installed.
+
+### Full suite with curvelops
+
+`extract_curvelet_fiber_candidates` and its real-dataset tests require
+curvelops.  If curvelops is installed in a separate environment (e.g. WSL
+miniconda — see Step 2), run pytest with that interpreter:
+
+```bash
+# Example: WSL miniconda
+wsl bash -c "cd /mnt/h/GitHub.06.2022/tme-quant/src/tme_quant && \
+    ~/miniconda3/bin/python -m pytest tests/ -v"
+```
+
+All tests should pass with 0 skipped when curvelops is available.
+
+### MATLAB-reference parity checks
+
+A subset of `test_curvelet_fiber_candidates.py` compares output against
+MATLAB-generated reference CSVs.  These are skipped by default and enabled
+with an environment variable:
+
+```bash
+TMEQ_VALIDATE_MATLAB=1 pytest tests/test_curvelet_fiber_candidates.py -v
+# or from WSL:
+wsl bash -c "cd /mnt/.../tme_quant && \
+    TMEQ_VALIDATE_MATLAB=1 ~/miniconda3/bin/python -m pytest \
+    tests/test_curvelet_fiber_candidates.py -v"
+```
+
+Reference CSVs live in
+`H:/GitHub.06.2022/tme-quant/tests/test_results/new_curv_test_files/`.
+
+---
+
 ## Optional dependency groups
 
 Install additional groups as needed with `pip install -e ".[group]"`:

@@ -391,12 +391,39 @@ PYTHONPATH=src python src/examples/example_3d_volumetric_workflow.py
 PYTHONPATH=src python src/examples/example_analyze_tacs_zone.py
 PYTHONPATH=src python src/examples/example_hierarchy_object_analysis.py
 
-# Tests (55 passing as of 2026-04-19)
-pytest tests/test_geometry_utils.py
+# Standard test suite (121 passing as of 2026-04-20)
+# Run from src/tme_quant/ — curvelops integration tests are skipped automatically
+# when curvelops is not installed.
+pytest tests/ -v
+
+# Full test suite WITH curvelops (35 additional tests; requires curvelops installed)
+# On this machine curvelops lives in WSL miniconda — run from WSL:
+#
+#   wsl bash -c "cd /mnt/h/GitHub.06.2022/tme-quant/src/tme_quant && \
+#       ~/miniconda3/bin/python -m pytest tests/ -v"
+#
+# Expected: 121 passed, 0 skipped
+
+# Strict MATLAB-reference parity assertions (needs TMEQ_VALIDATE_MATLAB=1):
+#   TMEQ_VALIDATE_MATLAB=1 pytest tests/test_curvelet_fiber_candidates.py -v
+# or from WSL:
+#   wsl bash -c "cd /mnt/h/GitHub.06.2022/tme-quant/src/tme_quant && \
+#       TMEQ_VALIDATE_MATLAB=1 ~/miniconda3/bin/python -m pytest \
+#       tests/test_curvelet_fiber_candidates.py -v"
 
 # Linting and type checking
 black src/ && ruff check src/ && mypy src/tme_quant/
 ```
+
+### Installing / locating curvelops
+
+**General install instructions:** `docs/getting_started.md` Step 2 and Step 6.
+
+**On this machine:** curvelops 0.23 is installed in WSL at
+`/home/yuming/miniconda3/`.  FFTW 2.1.5 and CurveLab 2.1.3 are pre-built
+(ELF/Linux) under `H:/GitHub.06.2022/utils/` — the Windows `.venv` cannot
+link against them.  Always use the WSL miniconda Python for curvelops-dependent
+tests (see the WSL command above).
 
 ---
 
