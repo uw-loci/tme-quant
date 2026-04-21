@@ -2,11 +2,8 @@
 Fiber analysis IO: exporters and external tool bridges.
 """
 
-"""
-Export fiber analysis results to various formats.
-"""
-
 import json
+import os
 import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any
@@ -14,6 +11,68 @@ import numpy as np
 
 from .results import FiberAnalysisResult, FiberProperties
 from .methods.fiji_bridge import FijiBridge  # noqa: F401  # backward-compat re-export
+
+
+def export_dataframe_to_excel(
+    df: pd.DataFrame,
+    filename: str,
+    sheet_name: str = "Sheet1",
+    mode: str = "w",
+) -> None:
+    """Save a DataFrame to Excel with auto-adjusted column widths and a frozen header.
+
+    Port of pycurvelets ``format_df_to_excel``.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to save.
+    filename : str
+        Path to the Excel file (created or overwritten when ``mode='w'``).
+    sheet_name : str
+        Worksheet name.
+    mode : str
+        ``'w'`` — create/overwrite; ``'a'`` — append/replace sheet in existing file.
+    """
+    from openpyxl import load_workbook
+
+    file_created = False
+    if mode == "a" and os.path.exists(filename):
+        try:
+            with pd.ExcelWriter(
+                filename, engine="openpyxl", mode="a", if_sheet_exists="replace"
+            ) as writer:
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+            file_created = True
+        except Exception as e:
+            print(f"Warning: Excel file corrupted during append, recreating: {e}")
+            if os.path.exists(filename):
+                os.remove(filename)
+
+    if not file_created:
+        df.to_excel(filename, sheet_name=sheet_name, index=False)
+
+    try:
+        wb = load_workbook(filename)
+    except Exception as e:
+        print(f"Warning: Excel file corrupted after creation, recreating: {e}")
+        if os.path.exists(filename):
+            os.remove(filename)
+        df.to_excel(filename, sheet_name=sheet_name, index=False)
+        wb = load_workbook(filename)
+
+    ws = wb[sheet_name]
+    ws.freeze_panes = "A2"
+
+    for col in ws.columns:
+        max_length = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            if cell.value is not None:
+                max_length = max(max_length, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = max_length + 2
+
+    wb.save(filename)
 
 
 class FiberAnalysisExporter:

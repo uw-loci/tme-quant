@@ -187,6 +187,15 @@ Also added in this batch:
 
 ---
 
+#### `format_df_to_excel` → `export_dataframe_to_excel`  *(Batch 7)*
+- **Source:** `src/pycurvelets/utils/misc/format_df_to_excel.py`
+- **Target:** `fiber_analysis/io.py` (module-level function)
+- **Original:** `format_df_to_excel(df, filename, sheet_name='Sheet1', mode='w')`
+- **New:** `export_dataframe_to_excel(df, filename, sheet_name='Sheet1', mode='w')`
+- **Changes:** Renamed for clarity; `from openpyxl import load_workbook` moved inside function body (lazy) because import health check mocks `openpyxl`; all logic preserved exactly
+
+---
+
 #### `draw_map` → `draw_map`  *(Batch 6)*
 - **Source:** `src/pycurvelets/utils/visualization/draw_map.py`
 - **Target:** `fiber_analysis/visualization/draw_utils.py` (same file as `draw_curvs`)
@@ -199,15 +208,6 @@ Also added in this batch:
 ---
 
 ## Remaining (Future Batches)
-
----
-
-#### `format_df_to_excel` → `export_dataframe_to_excel`
-- **Source:** `src/pycurvelets/utils/misc/format_df_to_excel.py`
-- **Planned target:** `fiber_analysis/io.py` or `tme_analysis/io.py`
-- **Original:** `format_df_to_excel(df, filename, sheet_name='Sheet1', mode='w')`
-- **Proposed:** `export_dataframe_to_excel(df, filename, sheet_name='Sheet1', mode='w')`
-- **Notes:** Thin `openpyxl` wrapper; check which `io.py` already has similar functionality before placing
 
 ---
 

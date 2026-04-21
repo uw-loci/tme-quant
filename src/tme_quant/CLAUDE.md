@@ -54,7 +54,8 @@ tme-quant/
     ├── test_fiber_dataframe_utils.py       ← compute_fiber_density_and_alignment
     ├── test_boundary_tif_utils.py          ← extract_tif_boundary + helpers
     ├── test_curvelet_fiber_candidates.py   ← extract_curvelet_fiber_candidates
-    └── test_draw_utils.py                  ← draw_curvs + draw_map
+    ├── test_draw_utils.py                  ← draw_curvs + draw_map
+    └── test_fiber_io.py                    ← export_dataframe_to_excel
 ```
 
 > **Maintenance rule:** After every refactoring, file addition, or file removal,
@@ -101,7 +102,7 @@ tme-quant/
 - `tacs.py` — `classify_fiber_tacs()`, `classify_fiber_segment_tacs_like()`,
   `get_tacs_color()`
 - `results.py` — `FiberAnalysisResult`
-- `io.py` — `FiberAnalysisExporter` + re-export of `FijiBridge`
+- `io.py` — `FiberAnalysisExporter`, `export_dataframe_to_excel` (saves DataFrame to `.xlsx` with auto-column-widths + frozen header; ported from `pycurvelets/utils/misc/format_df_to_excel.py`), re-export of `FijiBridge`
 - `methods/` — concrete method implementations:
   - `ctfire.py` — `CTFireExtraction` (curvelet preprocessing + FIRE individual fiber extraction)
   - `curvealign.py` — `CurveAlignOrientation` (windowed curvelet orientation/coherency maps;
@@ -415,7 +416,7 @@ PYTHONPATH=src python src/examples/example_3d_volumetric_workflow.py
 PYTHONPATH=src python src/examples/example_analyze_tacs_zone.py
 PYTHONPATH=src python src/examples/example_hierarchy_object_analysis.py
 
-# Standard test suite (179 passed, 1 skipped on Windows/no-curvelops as of 2026-04-21)
+# Standard test suite (187 passed, 1 skipped on Windows/no-curvelops as of 2026-04-21)
 # Run from src/tme_quant/ — curvelops integration tests are skipped automatically
 # when curvelops is not installed.
 pytest tests/ -v
@@ -426,7 +427,7 @@ pytest tests/ -v
 #   wsl bash -c "cd /mnt/h/GitHub.06.2022/tme-quant/src/tme_quant && \
 #       ~/miniconda3/bin/python -m pytest tests/ -v"
 #
-# Expected: 207 passed, 7 skipped (MATLAB parity checks disabled by default)
+# Expected: 215 passed, 7 skipped (MATLAB parity checks disabled by default)
 
 # Strict MATLAB-reference parity assertions (needs TMEQ_VALIDATE_MATLAB=1):
 #   TMEQ_VALIDATE_MATLAB=1 pytest tests/test_curvelet_fiber_candidates.py -v
