@@ -6,10 +6,11 @@ Uses golden registered H&E TIFFs from ``tests/test_for_shg_he_registration_BDcre
 The test feeds the raw unregistered ``HE/patient_001.tif`` into the Python
 registration pipeline and compares the uint8 output to the MATLAB golden in
 ``HE/HE_registered_testN/patient_001.tif``.  Pixel-exact match is not
-achievable: the Python pipeline uses a grid search + Nelder-Mead refinement
-on SimpleITK's Mattes MI metric, which converges to a slightly different
-local minimum than MATLAB's ``imregtform`` (1+1)-ES.  Approximate MAE bounds
-guard against regressions.  Tests skip if fixtures or SimpleITK are missing.
+achievable: the Python pipeline uses SimpleITK's Mattes MI for basin finding
+plus a bounded NCC trust-region refinement (with a raw-NCC accept gate),
+which converges to a slightly different local minimum than MATLAB's
+``imregtform`` (1+1)-ES.  Approximate MAE + exact-match bounds guard against
+regressions.  Tests skip if fixtures or SimpleITK are missing.
 """
 
 from __future__ import annotations
@@ -39,14 +40,31 @@ REGRESSION_CASES: tuple[tuple[str, float, str], ...] = (
     ("test3", 3.0, "HE_registered_test3"),
 )
 
-# uint8-scale regression bounds (empirically measured).
-# Python and MATLAB use different optimizer implementations (SimpleITK vs
-# MATLAB imregtform) so transforms differ slightly; bounds are set above
-# observed values to catch actual regressions.
+# uint8-scale regression bounds (empirically measured against the MATLAB
+# golden ``BDcreation_reg2`` outputs). Python and MATLAB use different
+# optimizer implementations (SimpleITK Mattes MI + bounded NCC TRF refine
+# with a raw-NCC accept gate, vs MATLAB's ``imregtform`` (1+1)-ES) so the
+# transforms differ slightly; bounds are set ~10-15% above observed values
+# to catch true regressions while absorbing minor cross-platform float drift.
+#
+# Observed (mi_ncc, raw-NCC accept gate):
+#   test1 ppm=1.5  MAE=4.78  Exact=40.1%
+#   test2 ppm=2.0  MAE=2.39  Exact=44.1%
+#   test3 ppm=3.0  MAE=8.09  Exact=38.9%
 _MAX_MAE_UINT8: dict[str, float] = {
-    "test1": 8.5,
-    "test2": 8.0,
-    "test3": 10.0,
+    "test1": 5.5,
+    "test2": 3.0,
+    "test3": 9.5,
+}
+
+# Lower bound on the fraction of pixels that must match the MATLAB golden
+# byte-for-byte. Pixel-exact match is impossible across optimizer + bilinear
+# interpolation differences, but a sudden drop here is the most sensitive
+# signal that the registration transform has drifted.
+_MIN_EXACT_FRAC_UINT8: dict[str, float] = {
+    "test1": 0.35,
+    "test2": 0.40,
+    "test3": 0.32,
 }
 
 
@@ -109,9 +127,15 @@ def test_shg_he_registration_matches_matlab_golden_patient001(
 
     diff = np.abs(python_uint8.astype(np.float64) - matlab_golden.astype(np.float64))
     mae = float(np.mean(diff))
+    exact_frac = float(np.mean(python_uint8 == matlab_golden))
 
     max_mae = _MAX_MAE_UINT8[case_id]
+    min_exact = _MIN_EXACT_FRAC_UINT8[case_id]
     assert mae <= max_mae, (
         f"[{case_id}] ppm={pixelpermicron}: MAE={mae:.2f} exceeds bound {max_mae} "
-        f"(uint8 scale, Python vs MATLAB golden)."
+        f"(uint8 scale, Python vs MATLAB golden). Exact match: {exact_frac*100:.1f}%."
+    )
+    assert exact_frac >= min_exact, (
+        f"[{case_id}] ppm={pixelpermicron}: exact-pixel match {exact_frac*100:.1f}% "
+        f"is below required {min_exact*100:.1f}% (Python vs MATLAB golden, MAE={mae:.2f})."
     )

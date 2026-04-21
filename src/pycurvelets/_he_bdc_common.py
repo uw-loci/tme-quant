@@ -409,6 +409,150 @@ def make_collagen_mask(
     return collagen.astype(bool), no_background.astype(bool), sat_thresh
 
 
+def matlab_imwarp_bilinear(
+    src: np.ndarray,
+    out_shape: tuple[int, int],
+    A: np.ndarray,
+    fill_value: float = 0.0,
+) -> np.ndarray:
+    """
+    MATLAB-parity bilinear warp replicating ``imwarp(moving, Rmoving, tform, 'OutputView',
+    Rfixed, 'FillValues', fill_value)`` with ``imref2d(size)`` defaults.
+
+    Parameters
+    ----------
+    src : np.ndarray
+        Source image ``(H_in, W_in)`` or ``(H_in, W_in, C)``, float.
+    out_shape : (int, int)
+        Output ``(H_out, W_out)``.
+    A : np.ndarray, shape (2, 3) or (3, 3)
+        Affine mapping **fixed (output) 0-based intrinsic coords -> moving (input)
+        0-based intrinsic coords**, in column-vector form:
+        ``[x_moving; y_moving; 1] = A @ [x_fixed; y_fixed; 1]``.
+        Equivalent to applying the inverse of a forward (moving->fixed) affine.
+    fill_value : float
+        Value used for output pixels whose source sample lies outside the
+        MATLAB-parity half-pixel-extended input domain, and for out-of-bound
+        neighbours encountered during bilinear blending.
+
+    Returns
+    -------
+    np.ndarray
+        Warped image with the same number of channels as ``src`` and shape
+        ``(H_out, W_out[, C])``, dtype float64.
+
+    Notes
+    -----
+    Matches the ``imref2d``/``imwarp`` conventions critical for pixel-exact
+    parity with MATLAB's ``BDcreation_reg2.m``:
+
+    - Output pixel ``(r, c)`` center is at world ``(c, r)`` (0-based world
+      coords, which differ from MATLAB's 1-based world only by a constant
+      offset that cancels out when both domains share the same convention).
+    - A source sample ``(x, y)`` is "inside" iff ``-0.5 <= x <= W_in - 0.5``
+      and ``-0.5 <= y <= H_in - 0.5`` (half-pixel extension of the intrinsic
+      grid, matching MATLAB's ``[0.5, N+0.5]`` world limits).
+    - Bilinear interpolation blends ``fill_value`` for any of the four
+      neighbours that fall outside the intrinsic grid, which reproduces
+      MATLAB's boundary halo behaviour.
+
+    Implemented with vectorised NumPy rather than
+    ``scipy.ndimage.map_coordinates`` because the latter treats the grid as
+    ``[0, N-1]`` with no half-pixel extension, diverging from ``imwarp`` at
+    the outermost band.
+    """
+    src_arr = np.asarray(src, dtype=np.float64)
+    if src_arr.ndim not in (2, 3):
+        raise ValueError(f"src must be 2D or 3D, got shape {src_arr.shape}")
+
+    A_arr = np.asarray(A, dtype=np.float64)
+    if A_arr.shape == (2, 3):
+        A_full = np.vstack([A_arr, [0.0, 0.0, 1.0]])
+    elif A_arr.shape == (3, 3):
+        A_full = A_arr
+    else:
+        raise ValueError(f"A must be 2x3 or 3x3, got shape {A_arr.shape}")
+
+    H_in, W_in = src_arr.shape[:2]
+    H_out, W_out = int(out_shape[0]), int(out_shape[1])
+
+    # Build output intrinsic grid (0-based pixel indices).
+    c_grid, r_grid = np.meshgrid(
+        np.arange(W_out, dtype=np.float64),
+        np.arange(H_out, dtype=np.float64),
+    )
+    ones = np.ones_like(c_grid)
+    pts_out = np.stack([c_grid, r_grid, ones], axis=0).reshape(3, -1)
+
+    # Source intrinsic coords for every output pixel.
+    pts_in = A_full @ pts_out
+    x_in = pts_in[0].reshape(H_out, W_out)
+    y_in = pts_in[1].reshape(H_out, W_out)
+
+    # Inside = half-pixel-extended input domain (MATLAB imref2d limits).
+    inside = (
+        (x_in >= -0.5)
+        & (x_in <= (W_in - 1) + 0.5)
+        & (y_in >= -0.5)
+        & (y_in <= (H_in - 1) + 0.5)
+    )
+
+    # Bilinear: floor + ceil neighbours in intrinsic coords.
+    x0 = np.floor(x_in).astype(np.int64)
+    y0 = np.floor(y_in).astype(np.int64)
+    x1 = x0 + 1
+    y1 = y0 + 1
+    wx = (x_in - x0).astype(np.float64)
+    wy = (y_in - y0).astype(np.float64)
+
+    # Pad source with fill_value so any OOB neighbour samples the fill.
+    if src_arr.ndim == 2:
+        padded = np.full((H_in + 2, W_in + 2), float(fill_value), dtype=np.float64)
+        padded[1:-1, 1:-1] = src_arr
+    else:
+        C = src_arr.shape[2]
+        padded = np.full(
+            (H_in + 2, W_in + 2, C), float(fill_value), dtype=np.float64
+        )
+        padded[1:-1, 1:-1, :] = src_arr
+
+    # Pad index shift of +1; clip to padded bounds (all fill outside padded).
+    x0p = np.clip(x0 + 1, 0, W_in + 1)
+    y0p = np.clip(y0 + 1, 0, H_in + 1)
+    x1p = np.clip(x1 + 1, 0, W_in + 1)
+    y1p = np.clip(y1 + 1, 0, H_in + 1)
+
+    if src_arr.ndim == 2:
+        v00 = padded[y0p, x0p]
+        v01 = padded[y0p, x1p]
+        v10 = padded[y1p, x0p]
+        v11 = padded[y1p, x1p]
+        interp = (
+            (1.0 - wx) * (1.0 - wy) * v00
+            + wx * (1.0 - wy) * v01
+            + (1.0 - wx) * wy * v10
+            + wx * wy * v11
+        )
+        out = np.where(inside, interp, float(fill_value))
+        return out.astype(np.float64)
+
+    out_channels = []
+    for k in range(src_arr.shape[2]):
+        v00 = padded[y0p, x0p, k]
+        v01 = padded[y0p, x1p, k]
+        v10 = padded[y1p, x0p, k]
+        v11 = padded[y1p, x1p, k]
+        interp = (
+            (1.0 - wx) * (1.0 - wy) * v00
+            + wx * (1.0 - wy) * v01
+            + (1.0 - wx) * wy * v10
+            + wx * wy * v11
+        )
+        ch_out = np.where(inside, interp, float(fill_value))
+        out_channels.append(ch_out)
+    return np.stack(out_channels, axis=-1).astype(np.float64)
+
+
 def gaussian_filter_with_size_hint(
     image: np.ndarray,
     sigma: float,
