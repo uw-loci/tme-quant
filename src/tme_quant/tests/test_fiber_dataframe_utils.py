@@ -20,9 +20,13 @@ _SRC = pathlib.Path(__file__).parent.parent / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from unittest.mock import patch
+
 from tme_quant.fiber_analysis.config import FiberFeatureParams
 from tme_quant.fiber_analysis.utils.fiber_dataframe_utils import (
+    build_fiber_structure_from_curvelets,
     compute_fiber_density_and_alignment,
+    flatten_numeric,
     round_mlab,
 )
 
@@ -244,3 +248,216 @@ class TestFiberFeatureParams:
         assert d["minimum_nearest_fibers"] == 4
         assert d["minimum_box_size"] == 64
         assert "fiber_midpoint_estimate" in d
+
+
+# ---------------------------------------------------------------------------
+# flatten_numeric
+# ---------------------------------------------------------------------------
+
+class TestFlattenNumeric:
+    def test_numeric_dtype_series(self):
+        s = pd.Series([1.0, 2.5, 3.7])
+        result = flatten_numeric(s)
+        np.testing.assert_array_almost_equal(result, [1.0, 2.5, 3.7])
+        assert result.dtype == float
+
+    def test_object_dtype_single_element_arrays(self):
+        s = pd.Series([np.array([1.0]), np.array([2.0]), np.array([3.0])])
+        result = flatten_numeric(s)
+        np.testing.assert_array_almost_equal(result, [1.0, 2.0, 3.0])
+
+    def test_mixed_scalars_and_arrays(self):
+        s = pd.Series([1.0, np.array([2.0]), [3.0]])
+        result = flatten_numeric(s)
+        np.testing.assert_array_almost_equal(result, [1.0, 2.0, 3.0])
+
+    def test_integer_series_converted_to_float(self):
+        s = pd.Series([1, 2, 3])
+        result = flatten_numeric(s)
+        assert result.dtype == float
+
+    def test_output_is_1d(self):
+        s = pd.Series([1.0, 2.0, 3.0])
+        result = flatten_numeric(s)
+        assert result.ndim == 1
+
+
+# ---------------------------------------------------------------------------
+# build_fiber_structure_from_curvelets — structure tests (mocked inner call)
+# ---------------------------------------------------------------------------
+
+def _make_synthetic_fiber_df(n: int = 20) -> pd.DataFrame:
+    rng = np.random.default_rng(0)
+    return pd.DataFrame({
+        "center_row": rng.uniform(0, 200, n),
+        "center_col": rng.uniform(0, 200, n),
+        "angle":      rng.uniform(0, 180, n),
+        "width":      rng.uniform(1, 5, n),
+    })
+
+
+_MOCK_COEFFICIENTS = object()  # sentinel
+
+
+class TestBuildFiberStructureFromCurvelets:
+    """All tests mock extract_curvelet_fiber_candidates so curvelops is not required."""
+
+    @pytest.fixture
+    def mock_extractor(self):
+        fiber_df = _make_synthetic_fiber_df(20)
+        # Patch at the source module — build_fiber_structure_from_curvelets does a
+        # lazy local import so patching the source attribute is the correct target.
+        with patch(
+            "tme_quant.fiber_analysis.utils.curvelet_utils"
+            ".extract_curvelet_fiber_candidates",
+            return_value=(fiber_df, _MOCK_COEFFICIENTS, None),
+        ) as m:
+            yield m, fiber_df
+
+    @pytest.fixture
+    def mock_extractor_empty(self):
+        empty_df = pd.DataFrame(columns=["center_row", "center_col", "angle", "width"])
+        with patch(
+            "tme_quant.fiber_analysis.utils.curvelet_utils"
+            ".extract_curvelet_fiber_candidates",
+            return_value=(empty_df, _MOCK_COEFFICIENTS, None),
+        ) as m:
+            yield m
+
+    def test_returns_four_tuple(self, mock_extractor):
+        _, fiber_df = mock_extractor
+        image = np.zeros((64, 64), dtype=np.float32)
+        result = build_fiber_structure_from_curvelets(image)
+        assert isinstance(result, tuple)
+        assert len(result) == 4
+
+    def test_output_types(self, mock_extractor):
+        _, _ = mock_extractor
+        image = np.zeros((64, 64), dtype=np.float32)
+        fiber_structure, density_df, alignment_df, coefficients = (
+            build_fiber_structure_from_curvelets(image)
+        )
+        assert isinstance(fiber_structure, pd.DataFrame)
+        assert isinstance(density_df, pd.DataFrame)
+        assert isinstance(alignment_df, pd.DataFrame)
+
+    def test_density_alignment_have_9_columns(self, mock_extractor):
+        _, _ = mock_extractor
+        image = np.zeros((64, 64), dtype=np.float32)
+        _, density_df, alignment_df, _ = build_fiber_structure_from_curvelets(image)
+        assert density_df.shape[1] == 9
+        assert alignment_df.shape[1] == 9
+
+    def test_empty_fiber_structure_returns_empty_dfs(self, mock_extractor_empty):
+        image = np.zeros((64, 64), dtype=np.float32)
+        fiber_structure, density_df, alignment_df, coefficients = (
+            build_fiber_structure_from_curvelets(image)
+        )
+        assert len(fiber_structure) == 0
+        assert len(density_df) == 0
+        assert len(alignment_df) == 0
+        assert coefficients is _MOCK_COEFFICIENTS
+
+    def test_default_feature_params_applied(self, mock_extractor):
+        _, _ = mock_extractor
+        image = np.zeros((64, 64), dtype=np.float32)
+        # No feature_params supplied — should not raise
+        _, density_df, _, _ = build_fiber_structure_from_curvelets(image)
+        assert "distance_to_nearest_2_fibers" in density_df.columns
+
+    def test_custom_params_respected(self, mock_extractor):
+        _, _ = mock_extractor
+        image = np.zeros((64, 64), dtype=np.float32)
+        params = FiberFeatureParams(minimum_nearest_fibers=3, minimum_box_size=16)
+        _, density_df, _, _ = build_fiber_structure_from_curvelets(
+            image, feature_params=params
+        )
+        assert "distance_to_nearest_3_fibers" in density_df.columns
+
+
+# ---------------------------------------------------------------------------
+# Real-dataset tests — ported from pycurvelets tests/test_get_ct.py
+#
+# Data: tests/test_results/process_image_test_files/
+#   real1_fiber_structure.csv  — curvelet fiber candidates (center_1/center_2/angle)
+#   real1_density_df.csv       — reference density output (9 cols, no header)
+#   real1_alignment_df.csv     — reference alignment output (9 cols, no header)
+# ---------------------------------------------------------------------------
+
+_REPO_TEST_DIR  = pathlib.Path(__file__).parent.parent.parent.parent / "tests"
+_CT_DATA_DIR    = _REPO_TEST_DIR / "test_results" / "process_image_test_files"
+_CT_DATA_MISSING = not _CT_DATA_DIR.exists()
+
+
+@pytest.mark.skipif(_CT_DATA_MISSING, reason="pycurvelets test data not found")
+class TestBuildFiberStructureRealData:
+    """
+    Validates compute_fiber_density_and_alignment against MATLAB reference outputs
+    using the real1 fiber structure.  Does not require curvelops — uses the
+    pre-extracted fiber_structure CSV as input to compute_fiber_density_and_alignment
+    directly (bypassing the curvelet candidate extraction step).
+
+    Ported from pycurvelets ``tests/test_get_ct.py``.
+    """
+
+    @pytest.fixture(scope="class")
+    def real1_data(self):
+        fiber_path   = _CT_DATA_DIR / "real1_fiber_structure.csv"
+        density_path = _CT_DATA_DIR / "real1_density_df.csv"
+        align_path   = _CT_DATA_DIR / "real1_alignment_df.csv"
+
+        fiber_df      = pd.read_csv(fiber_path)
+        ref_density   = pd.read_csv(density_path, header=None)
+        ref_alignment = pd.read_csv(align_path, header=None)
+        return fiber_df, ref_density, ref_alignment
+
+    def test_fiber_structure_has_required_columns(self, real1_data):
+        fiber_df, _, _ = real1_data
+        required = {"angle"}
+        # Accepts center_1/center_2 or center_row/center_col
+        has_coords = (
+            {"center_row", "center_col"}.issubset(fiber_df.columns)
+            or {"center_1", "center_2"}.issubset(fiber_df.columns)
+        )
+        assert has_coords
+        assert required.issubset(fiber_df.columns)
+
+    def test_density_shape_matches_reference(self, real1_data):
+        fiber_df, ref_density, _ = real1_data
+        params = FiberFeatureParams(minimum_nearest_fibers=2, minimum_box_size=32)
+        density_df, _ = compute_fiber_density_and_alignment(fiber_df, params)
+        assert density_df.shape[0] == ref_density.shape[0], (
+            f"Row count: got {density_df.shape[0]}, expected {ref_density.shape[0]}"
+        )
+        assert density_df.shape[1] == ref_density.shape[1] == 9
+
+    def test_alignment_shape_matches_reference(self, real1_data):
+        fiber_df, _, ref_alignment = real1_data
+        params = FiberFeatureParams(minimum_nearest_fibers=2, minimum_box_size=32)
+        _, alignment_df = compute_fiber_density_and_alignment(fiber_df, params)
+        assert alignment_df.shape[0] == ref_alignment.shape[0]
+        assert alignment_df.shape[1] == ref_alignment.shape[1] == 9
+
+    def test_density_values_match_reference(self, real1_data):
+        fiber_df, ref_density, _ = real1_data
+        params = FiberFeatureParams(minimum_nearest_fibers=2, minimum_box_size=32)
+        density_df, _ = compute_fiber_density_and_alignment(fiber_df, params)
+        np.testing.assert_allclose(
+            density_df.values,
+            ref_density.values,
+            rtol=0.05,
+            atol=15,
+            err_msg="density_df values differ from MATLAB reference",
+        )
+
+    def test_alignment_values_match_reference(self, real1_data):
+        fiber_df, _, ref_alignment = real1_data
+        params = FiberFeatureParams(minimum_nearest_fibers=2, minimum_box_size=32)
+        _, alignment_df = compute_fiber_density_and_alignment(fiber_df, params)
+        np.testing.assert_allclose(
+            alignment_df.values,
+            ref_alignment.values,
+            rtol=0.05,
+            atol=0.2,
+            err_msg="alignment_df values differ from MATLAB reference",
+        )

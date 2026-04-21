@@ -213,7 +213,117 @@ def compute_fiber_density_and_alignment(
     return density_df, alignment_df
 
 
+def flatten_numeric(series: "pd.Series") -> np.ndarray:
+    """Convert a Series of numbers or 1-element arrays into a flat float array.
+
+    Port of pycurvelets ``flatten_numeric`` (unchanged signature).  Handles
+    object-dtype Series where each element may be a scalar, a list, or a
+    single-element ndarray (e.g. outputs from vectorised curvelet operations).
+
+    Parameters
+    ----------
+    series : pd.Series
+        Input Series.
+
+    Returns
+    -------
+    np.ndarray of float64, 1-D
+    """
+    arr = series.to_numpy()
+    if arr.dtype == object:
+        flat = []
+        for x in arr:
+            if isinstance(x, (list, np.ndarray)):
+                if np.ndim(x) == 0:
+                    flat.append(float(x))
+                elif len(np.ravel(x)) == 1:
+                    flat.append(float(np.ravel(x)[0]))
+                else:
+                    flat.extend(np.ravel(x).astype(float))
+            else:
+                flat.append(float(x))
+        return np.array(flat, dtype=float)
+    return arr.astype(float).ravel()
+
+
+def build_fiber_structure_from_curvelets(
+    image: np.ndarray,
+    keep: float = 0.05,
+    scale: int = 1,
+    radius: float = 4.0,
+    feature_params: "FiberFeatureParams | None" = None,
+) -> "tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, object]":
+    """Extract curvelet fiber candidates and compute density/alignment features.
+
+    Orchestrates ``extract_curvelet_fiber_candidates`` and
+    ``compute_fiber_density_and_alignment`` into a single call, mirroring
+    ``get_ct`` from the pycurvelets CurveAlign pipeline.
+
+    This function belongs to the **CurveAlign orientation pipeline** (population-
+    level density and alignment statistics), not the CT-FIRE individual fiber
+    extraction pipeline.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        2-D image array ``(H, W)`` to be analysed.
+    keep : float
+        Fraction of curvelet coefficients to retain (default ``0.05``).
+        Maps to ``CurveletControlParameters.keep``.
+    scale : int
+        Curvelet scale index to use (default ``1``).
+        Maps to ``CurveletControlParameters.scale``.
+    radius : float
+        Grouping radius in pixels for curvelet candidates (default ``4.0``).
+        Maps to ``CurveletControlParameters.radius``.
+    feature_params : FiberFeatureParams, optional
+        Controls neighbourhood sizes for density/alignment computation.
+        Defaults to ``FiberFeatureParams()`` (uses library defaults).
+
+    Returns
+    -------
+    fiber_structure : pd.DataFrame
+        One row per curvelet candidate.  Columns: ``angle``, ``center_row``,
+        ``center_col``, ``width``.
+    density_df : pd.DataFrame
+        Shape ``(n_fibers, 9)`` — kNN and box-filter density features.
+        Empty DataFrame when no candidates are found.
+    alignment_df : pd.DataFrame
+        Shape ``(n_fibers, 9)`` — kNN and box-filter alignment features.
+        Empty DataFrame when no candidates are found.
+    curvelet_coefficients : object
+        Raw curvelet coefficient structure returned by
+        ``extract_curvelet_fiber_candidates``.
+
+    Raises
+    ------
+    ImportError
+        When curvelops is not installed (raised by
+        ``extract_curvelet_fiber_candidates``).
+    ValueError
+        When ``image`` is not a 2-D array.
+    """
+    from .curvelet_utils import extract_curvelet_fiber_candidates
+
+    if feature_params is None:
+        feature_params = FiberFeatureParams()
+
+    fiber_structure, coefficients, _ = extract_curvelet_fiber_candidates(
+        image, keep=keep, scale=scale, radius=radius
+    )
+
+    if len(fiber_structure) == 0:
+        return fiber_structure, pd.DataFrame(), pd.DataFrame(), coefficients
+
+    density_df, alignment_df = compute_fiber_density_and_alignment(
+        fiber_structure, feature_params
+    )
+    return fiber_structure, density_df, alignment_df, coefficients
+
+
 __all__ = [
+    "build_fiber_structure_from_curvelets",
     "compute_fiber_density_and_alignment",
+    "flatten_numeric",
     "round_mlab",
 ]

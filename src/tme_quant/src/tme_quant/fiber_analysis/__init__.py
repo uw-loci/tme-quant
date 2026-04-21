@@ -14,6 +14,11 @@ from .methods.curvealign import CurveAlignOrientation
 from .tacs import classify_fiber_tacs, classify_fiber_segment_tacs_like, get_tacs_color
 from .config import ExtractionParams, ExtractionResult, OrientationParams, OrientationResult
 from .results import FiberAnalysisResult
+from .utils.fiber_dataframe_utils import (
+    build_fiber_structure_from_curvelets,
+    compute_fiber_density_and_alignment,
+    flatten_numeric,
+)
 
 # Backwards-compatible alias (examples and external code may use FiberAnalyzer)
 FiberAnalyzer = FiberExtractionAnalyzer
@@ -27,4 +32,7 @@ __all__ = [
     'ExtractionParams', 'ExtractionResult',
     'OrientationParams', 'OrientationResult',
     'FiberAnalysisResult',
+    'build_fiber_structure_from_curvelets',
+    'compute_fiber_density_and_alignment',
+    'flatten_numeric',
 ]
