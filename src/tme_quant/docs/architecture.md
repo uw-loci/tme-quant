@@ -106,7 +106,8 @@ src/tme_quant/
 │   │   ├── __init__.py                    ← re-exports analyze_tacs_zone
 │   │   ├── interaction_analysis_pipeline.py
 │   │   ├── standard_tme_pipeline.py
-│   │   └── tacs_pipeline.py               ← analyze_tacs_zone(), plot_tacs_heatmap()
+│   │   ├── tacs_pipeline.py               ← analyze_tacs_zone(), plot_tacs_heatmap()
+│   │   └── curvealign_pipeline.py         ← (planned) port of pycurvelets/process_image.py
 │   ├── utils/
 │   │   ├── __init__.py
 │   │   ├── alignment_utils.py     ← compute_fiber_alignment_to_roi

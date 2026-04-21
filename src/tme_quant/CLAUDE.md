@@ -101,8 +101,10 @@ tme-quant/
 - `results.py` — `FiberAnalysisResult`
 - `io.py` — `FiberAnalysisExporter` + re-export of `FijiBridge`
 - `methods/` — concrete method implementations:
-  - `ctfire.py` — `CTFireExtraction` (curvelet + FIRE algorithm)
-  - `curvealign.py` — `CurveAlignOrientation`
+  - `ctfire.py` — `CTFireExtraction` (curvelet preprocessing + FIRE individual fiber extraction)
+  - `curvealign.py` — `CurveAlignOrientation` (windowed curvelet orientation/coherency maps;
+    planned to use `extract_curvelet_fiber_candidates` output as orientation source once
+    `build_fiber_structure_from_curvelets` is integrated)
   - `skeleton.py` — `SkeletonExtractionMethod`
   - `ridge_detection.py` — `RidgeDetectionMethod`
   - `gradient.py` — `GradientOrientationMethod`
@@ -157,6 +159,8 @@ tme-quant/
   - `standard_tme_pipeline.py` — `StandardTMEPipeline`
   - `interaction_analysis_pipeline.py` — `InteractionAnalysisPipeline`
   - `tacs_pipeline.py` — `analyze_tacs_zone()`, `plot_tacs_heatmap()`
+  - `curvealign_pipeline.py` *(planned)* — full CurveAlign pipeline: curvelet fiber
+    extraction, density/alignment, ROI alignment, TACS; port of `pycurvelets/process_image.py`
 - `utils/` — `alignment_utils.py` (`compute_fiber_alignment_to_roi`; ported
   from `pycurvelets/get_alignment_to_roi.py`), `distance_utils.py`,
   `orientation_utils.py` (pixel-level boundary-relative orientation,

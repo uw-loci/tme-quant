@@ -141,7 +141,16 @@ Path conventions used below:
 - **Planned target:** `fiber_analysis/utils/fiber_dataframe_utils.py`
 - **Original:** `get_ct(img, curve_cp: CurveletControlParameters, feature_cp: FeatureControlParameters)`
 - **Proposed:** `build_fiber_structure_from_curvelets(image, curvelet_params, feature_params)`
-- **Notes:** Orchestrates `extract_curvelet_fiber_candidates` + `compute_fiber_density_and_alignment`; returns `(fiber_structure_df, density_df, alignment_df, coefficients)`
+- **Pipeline affiliation:** **CurveAlign orientation pipeline** (not CT-FIRE individual fiber extraction).
+  Produces population-level fiber density and alignment statistics from curvelet coefficients,
+  not individual fiber traces. CT-FIRE uses `new_curv` → FIRE algorithm → centerlines;
+  `get_ct` uses `new_curv` → `process_fibers` → density/alignment DataFrames.
+- **Notes:** Orchestrates `extract_curvelet_fiber_candidates` + `compute_fiber_density_and_alignment`;
+  returns `(fiber_structure_df, density_df, alignment_df, coefficients)`.
+  Output feeds downstream CurveAlign analysis (alignment to ROI, TACS classification).
+  Once integrated, `extract_curvelet_fiber_candidates` output is also intended to serve as
+  the orientation source for `CurveAlignOrientation.analyze_2d()` in
+  `fiber_analysis/methods/curvealign.py`, replacing the current raw windowed curvelet approach.
 
 ---
 
@@ -195,9 +204,20 @@ Path conventions used below:
 
 ---
 
-#### `process_image` — do not integrate directly
+#### `process_image` → `curvealign_pipeline.py`
 - **Source:** `src/pycurvelets/process_image.py`
-- **Notes:** 1640-line orchestrator tightly coupled to file I/O and optional GUI widgets. Decompose into sub-functions first; plan separately.
+- **Planned target:** `tme_analysis/pipelines/curvealign_pipeline.py` (new file)
+- **Notes:** 1640-line orchestrator implementing the full CurveAlign pipeline: file I/O,
+  curvelet fiber extraction, density/alignment computation, ROI alignment, TACS classification,
+  and optional visualization. Tightly coupled to file I/O and optional GUI widgets.
+  **Decomposition strategy before porting:**
+  1. Identify pure analysis sub-functions (no file I/O, no GUI) → port those first as utils
+  2. Replace file I/O with in-memory array arguments (matching existing tme_quant patterns)
+  3. Strip GUI/Qt widgets entirely (plugin layer handles those)
+  4. Assemble the cleaned sub-functions into `curvealign_pipeline.py` following the pattern
+     of `tacs_pipeline.py` (function-based, returns a result dict)
+  Alternatively, the core orchestration logic may be folded into `standard_tme_pipeline.py`
+  if the overlap is substantial.
 
 ---
 
