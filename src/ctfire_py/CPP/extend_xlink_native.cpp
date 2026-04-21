@@ -58,7 +58,9 @@ struct ExtendXLink {
         // Step 1: Find Local Maxima Points (LMP) and extend fibers
         #pragma omp parallel for
         for (int i = 0; i < (int)pts.size(); ++i) {
-            const int r_i = ceil(image[pts[i][0] * sizex + pts[i][1]]);
+            // Match MATLAB: r = max(2, ceil(d(...))) for initial radius
+            // This ensures a minimum search radius even for low distance values
+            const int r_i = std::max(2, (int)ceil(image[pts[i][0] * sizex + pts[i][1]]));
             const std::array<int, d> nucleation{pts[i][0], pts[i][1]};
             const std::array<int, d> b_min = {nucleation[0] - r_i, nucleation[1] - r_i};
             const std::array<int, d> b_max = {nucleation[0] + r_i, nucleation[1] + r_i};
@@ -99,10 +101,13 @@ struct ExtendXLink {
 
                     if (is_LMP) {
                         // Check if too close to existing fiber endpoints
+                        // Match MATLAB: use Euclidean distance norm(p1-p2) < LMPdist
                         bool too_close = false;
                         for (size_t b = 0; b < fibres[i].size(); ++b) {
-                            if (abs(fibres[i][b].link[1][0] - p[0]) < thresh_LMPdist && 
-                                abs(fibres[i][b].link[1][1] - p[1]) < thresh_LMPdist) {
+                            T dx = p[0] - fibres[i][b].link[1][0];
+                            T dy = p[1] - fibres[i][b].link[1][1];
+                            T dist = sqrt(dx*dx + dy*dy);
+                            if (dist < thresh_LMPdist) {
                                 too_close = true; 
                                 break;
                             }
@@ -451,6 +456,13 @@ py::tuple extend_xlink_native(int sizex, int sizey, int sizez,
                                py::array_t<float, py::array::c_style> image,
                                py::array_t<int32_t> pts_in,
                                py::dict p) {
+
+    // Validate input image size (matching findlocmax safety check)
+    if ((uint64_t)image.size() != (uint64_t)sizex * sizey * sizez) {
+        throw std::runtime_error("Input image size does not match dimensions. Expected " + 
+                                std::to_string(sizex * sizey * sizez) + " elements, got " + 
+                                std::to_string(image.size()));
+    }
 
     float* img_ptr = image.mutable_data();
     int nNuc = pts_in.shape(0);

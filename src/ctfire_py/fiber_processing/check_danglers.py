@@ -26,17 +26,18 @@ def check_danglers(
     fibers: List[Dict],
     vertex_info: List[Dict],
     radii: np.ndarray,
-    params: Dict
+    params: Dict,
+    faithful_matlab: bool = False,
 ) -> Tuple[np.ndarray, List[Dict], List[Dict], np.ndarray]:
     """
     Remove dangling fiber segments based on connectivity and geometry.
-    
+
     A "dangler" is a fiber that connects to only one cross-link (junction point).
     Such fibers are candidates for removal if they are:
     - Running parallel to another fiber (redundant coverage)
     - Very short and not extending a legitimate fiber
     - Short and connected to a well-established cross-link
-    
+
     Parameters
     ----------
     vertices : np.ndarray
@@ -51,7 +52,15 @@ def check_danglers(
         Parameters including:
         - threshold_dangler_angle_extension: Min dot product to consider extension (default: 0.5)
         - threshold_dangler_length: Max length for short dangler removal (default: 10.0)
-    
+    faithful_matlab : bool
+        If True, reproduce the observable behavior of MATLAB's check_danglers.m
+        exactly (i.e. do nothing but trimxfv). The MATLAB implementation has a
+        logic bug (``length(V(vi).f)>1`` gate contradicts the inner
+        ``length(fi)==1`` check, and ``setdiff(vi,vi)`` is always empty) that
+        prevents any fiber from being removed. Use this when comparing the
+        Python pipeline to the stock MATLAB pipeline. Default False, which
+        runs the Python "corrected" dangler removal.
+
     Returns
     -------
     vertices : np.ndarray
@@ -62,16 +71,22 @@ def check_danglers(
         Updated vertex info
     radii : np.ndarray
         Updated radii
-        
+
     Notes
     -----
     The original MATLAB implementation has bugs:
     - Line 12: checks `length(V(vi).f)>1` but should be `==1` for danglers
     - Line 16: uses `setdiff(vi,vi)` which always returns empty
-    
+
     This Python implementation corrects these bugs while maintaining the intended logic.
+    Pass ``faithful_matlab=True`` to disable the correction when you need
+    bit-for-bit parity with the MATLAB pipeline.
     """
     from ctfire_py.utils import trimxfv
+
+    if faithful_matlab:
+        # MATLAB's check_danglers is effectively a no-op except for trimxfv.
+        return trimxfv(vertices, fibers, vertex_info, radii)
     
     # Get parameters - use MATLAB parameter names for compatibility
     threshold_angle_parallel = params.get('thresh_dang_aextend', 0.9848)  # cos(10°)

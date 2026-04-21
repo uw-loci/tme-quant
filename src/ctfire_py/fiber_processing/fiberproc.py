@@ -236,53 +236,6 @@ def mergefiber(
     return fibers, vertex_info
 
 
-def fiberlinkgap(
-    vertices: np.ndarray,
-    fibers: List[Dict],
-    vertex_info: List[Dict],
-    image_size: Tuple,
-    sp: int,
-    thresh_dist: float,
-    thresh_angle: float
-) -> Tuple[np.ndarray, List[Dict], List[Dict]]:
-    """
-    Link fibers across small gaps (simplified version).
-    
-    Full implementation would check image intensity between gaps.
-    This simplified version just checks distance and angle.
-    
-    Parameters
-    ----------
-    vertices : np.ndarray
-        Vertex coordinates
-    fibers : List[Dict]
-        Fiber structures
-    vertex_info : List[Dict]
-        Vertex info
-    image_size : Tuple
-        Image dimensions
-    sp : int
-        Steps for direction calculation
-    thresh_dist : float
-        Maximum gap distance
-    thresh_angle : float
-        Angle threshold
-    
-    Returns
-    -------
-    vertices, fibers, vertex_info : updated structures
-    """
-    from ctfire_py.utils import trimxfv
-    
-    # Simplified implementation: mark potential links but don't create new fibers
-    # Full implementation would add intermediate vertices
-    
-    # Just clean up and return
-    vertices, fibers, vertex_info, _ = trimxfv(vertices, fibers, vertex_info, None)
-    
-    return vertices, fibers, vertex_info
-
-
 def fiberremove(
     vertices: np.ndarray,
     fibers: List[Dict],
