@@ -175,25 +175,30 @@ Also added in this batch:
 - **Target:** `fiber_analysis/utils/fiber_dataframe_utils.py`
 - **Changes:** None — direct port, signature and logic unchanged
 
+#### `draw_curvs` → `draw_curvs`  *(Batch 6)*
+- **Source:** `src/pycurvelets/utils/visualization/draw_curvs.py`
+- **Target:** `fiber_analysis/visualization/draw_utils.py` (new file + new sub-package)
+- **Original:** `draw_curvs(fiber_data, ax, length, color_flag, angles, mark_size, line_width, boundary_measurement)`
+- **New:** same signature (function name unchanged)
+- **Changes:**
+  - `center_1`/`center_2` column aliases now normalised **before both code paths** (original only normalised them for the `centers` array used in the non-boundary branch — the boundary branch would KeyError on alias input)
+  - No pycurvelets imports to replace (function never used `circ_r`)
+  - matplotlib imported at module top level (core dep in pyproject.toml line 12; Agg backend forced in tests for headless CI)
+
+---
+
+#### `draw_map` → `draw_map`  *(Batch 6)*
+- **Source:** `src/pycurvelets/utils/visualization/draw_map.py`
+- **Target:** `fiber_analysis/visualization/draw_utils.py` (same file as `draw_curvs`)
+- **Original:** `draw_map(fiber_structure, angles, img, boundary_measurement, map_params)`
+- **New:** same signature (function name unchanged); returns `(rawmap: ndarray[float64], procmap: ndarray[uint8])`
+- **Changes:**
+  - `from pycurvelets.utils.math import circ_r` → `from ..utils.geometry_utils import _circ_r` (identical call site: `_circ_r(vals * np.pi / 127.5) * 255`)
+  - All other logic, variable names, and `map_params` dict keys preserved exactly
+
 ---
 
 ## Remaining (Future Batches)
-
----
-
-#### `draw_curvs` → `draw_utils` (visualization)
-- **Source:** `src/pycurvelets/utils/visualization/draw_curvs.py`
-- **Planned target:** `fiber_analysis/visualization/draw_utils.py` (new file)
-- **Original:** `draw_curvs(fiber_data, ax, length, color_flag, angles, mark_size, line_width, boundary_measurement)`
-- **Notes:** No Qt dependency; pure matplotlib
-
----
-
-#### `draw_map` → `draw_utils` (visualization)
-- **Source:** `src/pycurvelets/utils/visualization/draw_map.py`
-- **Planned target:** `fiber_analysis/visualization/draw_utils.py` (same new file as `draw_curvs`)
-- **Original:** `draw_map(fiber_structure, angles, img, boundary_measurement, map_params)`
-- **Notes:** Uses `scipy.ndimage.gaussian_filter`; no Qt dependency
 
 ---
 
