@@ -30,7 +30,7 @@ hierarchy supporting 2D, 3D, multichannel, and dynamic images.
 tme-quant/
 ├── pyproject.toml               ← build, deps, tool config (black, ruff, mypy, pytest)
 ├── src/
-│   ├── examples/                ← runnable demo scripts (no real images needed)
+│   ├── examples/                ← runnable demo scripts (some require real image files; see Running Examples)
 │   │   ├── example_ctfire_workflow.py
 │   │   ├── example_ctfire_workflow_hierarchy.py  ← CT-FIRE workflow with TMEHierarchy
 │   │   ├── example_curvealign_workflow.py
