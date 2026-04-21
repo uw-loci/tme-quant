@@ -232,4 +232,159 @@ after Batch 1) rather than Python's built-in `round()`.
 
 ---
 
-*Last updated: 2026-04-20 — Batch 0 (REFACTORING_GUIDE and CLAUDE.md bootstrap)*
+## 8. TMEObject Model Integration
+
+### 8.1  Type mapping — pycurvelets → tme_quant
+
+When a pycurvelets function accepts or returns one of the types in the left column,
+use the tme_quant equivalent in the right column.  **Never import pycurvelets types
+into the library.**
+
+| pycurvelets type                   | tme_quant equivalent                                        | Defined in                                       |
+|------------------------------------|-------------------------------------------------------------|--------------------------------------------------|
+| `ROIList` (dataclass)              | `(N, 2) ndarray` (row, col) + explicit `img_height`/`img_width` | caller-supplied                           |
+| `ROIList.coordinates[i]`           | single `roi_coords` ndarray per call                        | caller-supplied                                  |
+| `CurveletControlParameters`        | `CurveAlignParams`                                          | `fiber_analysis/config.py`                       |
+| `FeatureControlParameters`         | `FiberFeatureParams`                                        | `fiber_analysis/config.py`                       |
+| `Fiber` dataclass (single fiber)   | `FiberObject`                                               | `core/tme_objects/fiber_objects.py`              |
+| fiber measurement dict / row       | `FiberProperties`                                           | `fiber_analysis/config.py`                       |
+| fiber DataFrame (many fibers)      | `pd.DataFrame` with canonical columns (see §8.3)            | caller-supplied                                  |
+
+### 8.2  Two-layer design: util functions vs. FiberObject methods
+
+Every ported function that operates on fibers lives at **two levels**:
+
+```
+Layer 1 — low-level utility (pure function, returns DataFrame or dict)
+    fiber_analysis/utils/<module>.py
+    → accepts plain ndarrays + DataFrames
+    → has no knowledge of TMEObject / hierarchy
+    → this is what the tests exercise directly
+
+Layer 2 — FiberObject method (wraps Layer 1, updates self)
+    core/tme_objects/fiber_objects.py  (FiberObject)
+    → calls the Layer 1 util
+    → stores results as FiberObject attributes
+    → triggers TACS re-classification when boundary angles change
+    → example: FiberObject.compute_boundary_relative_metrics()
+               calls compute_relative_fiber_angles() and stores the result
+```
+
+**Rules:**
+
+1. Always implement Layer 1 first and test it independently.
+2. Layer 2 (the FiberObject method) is added only when the analysis result
+   needs to be carried through the hierarchy (e.g., for TACS classification,
+   export, or downstream spatial queries).
+3. Layer 1 functions must never import from `core/`.  Layer 2 methods import
+   from `fiber_analysis/` using relative imports.
+4. If a pycurvelets function only computes summary statistics (density, alignment
+   scores) and writes them to a DataFrame — not to individual fiber objects —
+   Layer 2 is not needed; the DataFrame is the output.
+
+### 8.3  Canonical DataFrame column names
+
+When a ported function returns a per-fiber DataFrame, use these column names
+(already established by existing ported functions):
+
+| Column name           | Type    | Description                                        |
+|-----------------------|---------|----------------------------------------------------|
+| `center_row`          | float   | Fiber centre row coordinate (0-indexed)            |
+| `center_col`          | float   | Fiber centre col coordinate (0-indexed)            |
+| `angle`               | float   | Fiber orientation degrees [0°, 180°)               |
+| `length`              | float   | Arc length in pixels (or µm with pixel_size)       |
+| `width`               | float   | Mean fiber width                                   |
+| `straightness`        | float   | End-to-end / arc-length ∈ [0, 1]                  |
+| `angle_to_boundary_tangent` | float | Acute angle to local boundary tangent [0°, 90°] |
+| `angle_to_roi_orientation`  | float | Acute angle to global ROI orientation [0°, 90°]  |
+| `angle_to_centers_line`     | float | Acute angle to fiber-ROI centroid line [0°, 90°] |
+| `distance`            | float   | Distance to nearest boundary point (pixels)        |
+| `boundary_point_row`  | float   | Nearest boundary point row                         |
+| `boundary_point_col`  | float   | Nearest boundary point col                         |
+
+Aliases `center_1` / `center_2` (pycurvelets convention) are accepted as
+**input** only; always normalise to `center_row` / `center_col` inside the
+function (see existing pattern in `alignment_utils.py`).
+
+**Important:** `center_1` from pycurvelets maps to `center_row` (row / Y
+direction) and `center_2` maps to `center_col` (col / X direction).  In MATLAB
+CurveAlign output, `fibercenterX = center_1` (because MATLAB stores row-first
+but labels it X in its own output files).  Do not infer the mapping from the
+MATLAB column label alone — always check the actual numeric values.
+
+### 8.4  Coordinate conventions quick-reference
+
+| Context                                         | Convention       | Example                                    |
+|-------------------------------------------------|------------------|--------------------------------------------|
+| `roi_coords` array passed to util functions     | (row, col)       | skimage / numpy standard                  |
+| `obj_center` tuple passed to `compute_relative_fiber_angles` | **(col, row) = (x, y)** | `(fiber_col, fiber_row)` |
+| `FiberObject.centerline`                        | (row, col)       | from CT-FIRE / skeleton extraction        |
+| `FiberObject.center_point`                      | (x, y) = (col, row) | from `orientation_point` or midpoint   |
+| `find_nearest_boundary_index(coords, px, py)`  | px = row, py = col | both in same space as coords            |
+| KDTree queries on boundary (alignment_utils)    | (row, col)       | matches `roi_coords` format               |
+| `FiberObject.compute_boundary_relative_metrics` | passes `center_point` (x, y) directly as `obj_center` | see fiber_objects.py |
+
+**Critical:** `compute_relative_fiber_angles` takes `obj_center` as `(x, y)` =
+`(col, row)`, **not** `(row, col)`.  This differs from every other array in the
+pipeline.  The signature is consistent with the `ROI.centroid → (x, y)` output
+path used internally.  Always pass `(col_obj, row_obj)` — never `(row_obj, col_obj)`.
+
+### 8.5  FiberObject attribute target for each angle type
+
+When a ported function computes boundary-relative angles, store them on
+`FiberObject` using these attributes (do not invent new ones):
+
+| Computed value                     | FiberObject attribute                        |
+|------------------------------------|----------------------------------------------|
+| `angle_to_boundary_tangent`        | `self.relative_angle_to_boundary_tangent`    |
+| `angle_to_roi_orientation`         | `self.angle_to_roi_orientation`              |
+| `angle_to_centers_line`            | `self.angle_to_centers_line`                 |
+| distance to nearest boundary point | `self.nearest_boundary_distance`             |
+| nearest boundary point coords      | `self.nearest_boundary_point` (in µm, x/y)  |
+
+After storing `relative_angle_to_boundary_tangent`, always call
+`self._classify_tacs_from_metrics()` to keep `tacs_type` and `tacs_score` in
+sync.  `FiberObject.compute_boundary_relative_metrics` does this automatically;
+do not bypass it.
+
+### 8.6  ROIList → plain arrays: multi-ROI functions
+
+pycurvelets functions that loop over `ROIList.coordinates` (e.g.
+`get_alignment_to_roi`) become tme_quant functions that accept a **single**
+`roi_coords` array.  The caller is responsible for iterating over multiple ROIs:
+
+```python
+# pycurvelets (multi-ROI loop inside the function)
+results = get_alignment_to_roi(roi_list, fiber_structure, distance_threshold=100)
+
+# tme_quant (caller loops)
+all_results = []
+for roi_coords in roi_coords_list:
+    result_df, count = compute_fiber_alignment_to_roi(
+        roi_coords, img_height, img_width, fiber_structure, distance_threshold=100
+    )
+    all_results.append(result_df)
+```
+
+This keeps each function testable in isolation and avoids hiding iteration
+complexity inside low-level utils.
+
+---
+
+## 9. Exception Classes
+
+pycurvelets defines `FiberAnalysisError`, `ROIProcessingError`,
+`BoundaryAnalysisError`, `FeatureExtractionError`, and `ImageProcessingError`
+in `src/pycurvelets/models/models.py`.
+
+These have not yet been ported.  Until they are:
+
+- Raise standard Python exceptions (`ValueError`, `RuntimeError`, `ImportError`)
+  at tme_quant function boundaries.
+- Do not create new custom exception classes without an approved batch plan.
+- When porting, place fiber-scoped exceptions in `fiber_analysis/exceptions.py`
+  (new file) and library-wide exceptions in `core/exceptions.py` (new file).
+
+---
+
+*Last updated: 2026-04-20 — added §8 (TMEObject model integration) and §9 (exceptions)*

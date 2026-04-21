@@ -59,6 +59,7 @@ src/tme_quant/
 │       ├── __init__.py
 │       ├── ctfire_utils.py
 │       ├── curvelet_utils.py
+│       ├── fiber_dataframe_utils.py ← compute_fiber_density_and_alignment, round_mlab
 │       ├── geometry_utils.py
 │       └── _ctfire_cpp.pyd/.so    ← compiled output (not in VCS; built from _cpp/ctfire/)
 │
@@ -108,6 +109,7 @@ src/tme_quant/
 │   │   └── tacs_pipeline.py               ← analyze_tacs_zone(), plot_tacs_heatmap()
 │   ├── utils/
 │   │   ├── __init__.py
+│   │   ├── alignment_utils.py     ← compute_fiber_alignment_to_roi
 │   │   ├── distance_utils.py
 │   │   ├── orientation_utils.py
 │   │   ├── statistical_utils.py

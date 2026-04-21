@@ -49,7 +49,10 @@ tme-quant/
 │           ├── architecture.md  ← canonical file tree — auto-updated by post-commit hook
 │           └── getting_started.md
 └── tests/
-    └── test_geometry_utils.py   ← 55 unit tests (all passing)
+    ├── test_geometry_utils.py              ← geometry utils + real-dataset tests
+    ├── test_alignment_to_roi.py            ← compute_fiber_alignment_to_roi
+    ├── test_fiber_dataframe_utils.py       ← compute_fiber_density_and_alignment
+    └── test_curvelet_fiber_candidates.py   ← extract_curvelet_fiber_candidates
 ```
 
 > **Maintenance rule:** After every refactoring, file addition, or file removal,
@@ -114,6 +117,8 @@ tme-quant/
     includes `_chain_segments_at_junctions()` for iterative multi-pass segment merging
   - `curvelet_utils.py` — curvelet transform with 3-backend dispatch; fallback #3 is
     now a Frangi ridge filter (`skimage.filters.frangi`) replacing the old FFT approximation
+  - `fiber_dataframe_utils.py` — `compute_fiber_density_and_alignment`,
+    `round_mlab`; ported from `pycurvelets/process_fibers.py`
 
 ### `cell_analysis/`
 
@@ -152,9 +157,11 @@ tme-quant/
   - `standard_tme_pipeline.py` — `StandardTMEPipeline`
   - `interaction_analysis_pipeline.py` — `InteractionAnalysisPipeline`
   - `tacs_pipeline.py` — `analyze_tacs_zone()`, `plot_tacs_heatmap()`
-- `utils/` — `distance_utils.py`, `orientation_utils.py` (pixel-level
-  boundary-relative orientation, `compute_orientation_relative_to_roi`,
-  `discretize_roi_boundary`), `statistical_utils.py`, `validation.py`
+- `utils/` — `alignment_utils.py` (`compute_fiber_alignment_to_roi`; ported
+  from `pycurvelets/get_alignment_to_roi.py`), `distance_utils.py`,
+  `orientation_utils.py` (pixel-level boundary-relative orientation,
+  `compute_orientation_relative_to_roi`, `discretize_roi_boundary`),
+  `statistical_utils.py`, `validation.py`
 - `visualization/` — `interaction_visualization.py`
 
 ### `image_registration/`
@@ -383,26 +390,27 @@ print(ctfire_backend_status())   # 'cpp_available' should be True
 ## Running Examples and Tests
 
 ```bash
-# All examples are self-contained (synthetic data, no real images needed)
+# These 3 examples require real image files (place in data/ at the project root):
 PYTHONPATH=src python src/examples/example_ctfire_workflow.py
 PYTHONPATH=src python src/examples/example_ctfire_workflow_hierarchy.py
 PYTHONPATH=src python src/examples/example_curvealign_workflow.py
+# These examples are self-contained (synthetic data, no real images needed):
 PYTHONPATH=src python src/examples/example_3d_volumetric_workflow.py
 PYTHONPATH=src python src/examples/example_analyze_tacs_zone.py
 PYTHONPATH=src python src/examples/example_hierarchy_object_analysis.py
 
-# Standard test suite (121 passing as of 2026-04-20)
+# Standard test suite (155 passed, 7 skipped as of 2026-04-20)
 # Run from src/tme_quant/ — curvelops integration tests are skipped automatically
 # when curvelops is not installed.
 pytest tests/ -v
 
-# Full test suite WITH curvelops (35 additional tests; requires curvelops installed)
+# Full test suite WITH curvelops (requires curvelops installed)
 # On this machine curvelops lives in WSL miniconda — run from WSL:
 #
 #   wsl bash -c "cd /mnt/h/GitHub.06.2022/tme-quant/src/tme_quant && \
 #       ~/miniconda3/bin/python -m pytest tests/ -v"
 #
-# Expected: 121 passed, 0 skipped
+# Expected: 155 passed, 7 skipped (MATLAB parity checks disabled by default)
 
 # Strict MATLAB-reference parity assertions (needs TMEQ_VALIDATE_MATLAB=1):
 #   TMEQ_VALIDATE_MATLAB=1 pytest tests/test_curvelet_fiber_candidates.py -v

@@ -211,3 +211,9 @@ Path conventions used below:
 5. **No Qt/napari** in `src/tme_quant/` — see `REFACTORING_GUIDE.md §2`.
 
 Full rules: [`REFACTORING_GUIDE.md`](../REFACTORING_GUIDE.md)
+- Type mapping (pycurvelets → tme_quant): §8.1
+- Two-layer design (util + FiberObject method): §8.2
+- Canonical DataFrame column names: §8.3
+- Coordinate conventions: §8.4
+- FiberObject attribute targets for angles: §8.5
+- Multi-ROI → single-ROI pattern: §8.6

@@ -6,3 +6,11 @@
 
 ---
 
+## 2026-04-20T05:35:04Z
+- Branch: prototype/hierarchy-model-for-CApy
+- Commit: 8ba032d merge: sync with origin/main, preserve src/tme_quant subtree
+
+(no summary)
+
+---
+
