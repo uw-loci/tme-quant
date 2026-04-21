@@ -14,3 +14,19 @@
 
 ---
 
+## 2026-04-21T19:59:10Z
+- Branch: prototype/hierarchy-model-for-CApy
+- Commit: 4008a62 feat(curvealign): integrate curvelet fiber candidates into analyze_2d
+
+
+
+---
+
+## 2026-04-21T20:01:26Z
+- Branch: prototype/hierarchy-model-for-CApy
+- Commit: 4008a62 feat(curvealign): integrate curvelet fiber candidates into analyze_2d
+
+
+
+---
+
