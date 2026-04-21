@@ -132,25 +132,28 @@ Path conventions used below:
 
 ---
 
-## Remaining (Future Batches)
+#### `get_ct` → `build_fiber_structure_from_curvelets`  *(Batch 4, commit `d9b20dc`)*
+- **Source:** `src/pycurvelets/get_ct.py`
+- **Target:** `fiber_analysis/utils/fiber_dataframe_utils.py`
+- **Original:** `get_ct(img, curve_cp: CurveletControlParameters, feature_cp: FeatureControlParameters)`
+- **New:** `build_fiber_structure_from_curvelets(image, keep=0.05, scale=1, radius=4.0, feature_params=None)`
+- **Changes:**
+  - `CurveletControlParameters.keep/scale/radius` → explicit plain params (same pattern as `extract_curvelet_fiber_candidates`)
+  - `FeatureControlParameters` → `FiberFeatureParams`; `feature_params=None` defaults to `FiberFeatureParams()`
+  - Edge case: empty `fiber_structure` returns `(empty_df, pd.DataFrame(), pd.DataFrame(), coefficients)` instead of bare `return fiber_structure`
+  - `curvelet_coefficients` returned as 4th element (unchanged)
+- **Pipeline affiliation:** **CurveAlign orientation pipeline** (population-level density and alignment statistics); not CT-FIRE individual fiber extraction
+
+Also added in this batch:
+
+#### `flatten_numeric` → `flatten_numeric`  *(Batch 4, commit `d9b20dc`)*
+- **Source:** `src/pycurvelets/utils/math/flatten_numeric.py`
+- **Target:** `fiber_analysis/utils/fiber_dataframe_utils.py`
+- **Changes:** None — direct port, signature and logic unchanged
 
 ---
 
-#### `get_ct` → `build_fiber_structure_from_curvelets`
-- **Source:** `src/pycurvelets/get_ct.py`
-- **Planned target:** `fiber_analysis/utils/fiber_dataframe_utils.py`
-- **Original:** `get_ct(img, curve_cp: CurveletControlParameters, feature_cp: FeatureControlParameters)`
-- **Proposed:** `build_fiber_structure_from_curvelets(image, curvelet_params, feature_params)`
-- **Pipeline affiliation:** **CurveAlign orientation pipeline** (not CT-FIRE individual fiber extraction).
-  Produces population-level fiber density and alignment statistics from curvelet coefficients,
-  not individual fiber traces. CT-FIRE uses `new_curv` → FIRE algorithm → centerlines;
-  `get_ct` uses `new_curv` → `process_fibers` → density/alignment DataFrames.
-- **Notes:** Orchestrates `extract_curvelet_fiber_candidates` + `compute_fiber_density_and_alignment`;
-  returns `(fiber_structure_df, density_df, alignment_df, coefficients)`.
-  Output feeds downstream CurveAlign analysis (alignment to ROI, TACS classification).
-  Once integrated, `extract_curvelet_fiber_candidates` output is also intended to serve as
-  the orientation source for `CurveAlignOrientation.analyze_2d()` in
-  `fiber_analysis/methods/curvealign.py`, replacing the current raw windowed curvelet approach.
+## Remaining (Future Batches)
 
 ---
 
@@ -185,14 +188,6 @@ Path conventions used below:
 - **Original:** `format_df_to_excel(df, filename, sheet_name='Sheet1', mode='w')`
 - **Proposed:** `export_dataframe_to_excel(df, filename, sheet_name='Sheet1', mode='w')`
 - **Notes:** Thin `openpyxl` wrapper; check which `io.py` already has similar functionality before placing
-
----
-
-#### `flatten_numeric`
-- **Source:** `src/pycurvelets/utils/math/flatten_numeric.py`
-- **Planned target:** `fiber_analysis/utils/fiber_dataframe_utils.py` (add to existing module)
-- **Original / Proposed:** `flatten_numeric(series)` — unchanged
-- **Notes:** One-liner utility; no signature changes needed
 
 ---
 

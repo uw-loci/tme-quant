@@ -119,8 +119,9 @@ tme-quant/
     includes `_chain_segments_at_junctions()` for iterative multi-pass segment merging
   - `curvelet_utils.py` — curvelet transform with 3-backend dispatch; fallback #3 is
     now a Frangi ridge filter (`skimage.filters.frangi`) replacing the old FFT approximation
-  - `fiber_dataframe_utils.py` — `compute_fiber_density_and_alignment`,
-    `round_mlab`; ported from `pycurvelets/process_fibers.py`
+  - `fiber_dataframe_utils.py` — `build_fiber_structure_from_curvelets` (CurveAlign
+    orchestrator; ported from `pycurvelets/get_ct.py`), `compute_fiber_density_and_alignment`,
+    `flatten_numeric`, `round_mlab`; ported from `pycurvelets/process_fibers.py`
 
 ### `cell_analysis/`
 
@@ -403,7 +404,7 @@ PYTHONPATH=src python src/examples/example_3d_volumetric_workflow.py
 PYTHONPATH=src python src/examples/example_analyze_tacs_zone.py
 PYTHONPATH=src python src/examples/example_hierarchy_object_analysis.py
 
-# Standard test suite (155 passed, 7 skipped as of 2026-04-20)
+# Standard test suite (171 passed, 7 skipped as of 2026-04-20)
 # Run from src/tme_quant/ — curvelops integration tests are skipped automatically
 # when curvelops is not installed.
 pytest tests/ -v
@@ -414,7 +415,7 @@ pytest tests/ -v
 #   wsl bash -c "cd /mnt/h/GitHub.06.2022/tme-quant/src/tme_quant && \
 #       ~/miniconda3/bin/python -m pytest tests/ -v"
 #
-# Expected: 155 passed, 7 skipped (MATLAB parity checks disabled by default)
+# Expected: 171 passed, 7 skipped (MATLAB parity checks disabled by default)
 
 # Strict MATLAB-reference parity assertions (needs TMEQ_VALIDATE_MATLAB=1):
 #   TMEQ_VALIDATE_MATLAB=1 pytest tests/test_curvelet_fiber_candidates.py -v
