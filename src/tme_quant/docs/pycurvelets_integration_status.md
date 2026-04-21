@@ -187,6 +187,22 @@ Also added in this batch:
 
 ---
 
+#### `process_image` → `curvealign_pipeline`  *(Batch 9B)*
+- **Source:** `src/pycurvelets/process_image.py`
+- **Target:** `tme_analysis/pipelines/curvealign_pipeline.py` (new file)
+- **Original:** `process_image(image_params, fiber_params, output_params, boundary_params, advanced_options)`
+- **New:** `curvealign_pipeline(image, fiber_structure=None, keep, scale, radius, feature_params, coordinates, boundary_img, distance_threshold, tif_boundary, exclude_fibers_in_mask, min_dist)`
+- **Changes:**
+  - All pycurvelets dataclass params replaced by plain args
+  - File I/O, visualization calls, and `multiprocessing.Pool` stripped entirely
+  - FIRE path replaced by optional pre-built `fiber_structure` arg (caller supplies CT-FIRE result)
+  - `tif_boundary=1/2` (CSV) raises `NotImplementedError` (not yet ported)
+  - `polygon2mask` bug fixed: called with `(height, width)` + `(row, col)` coords; original had transposed shape
+  - Private helpers: `_analyze_global_boundary`, `_process_single_roi`, `_process_tif_rois`, `_concat_roi_df`, `_build_fiber_features_df`
+  - Returns result dict (no file writes); `None` when no fibers detected
+
+---
+
 #### `extract_boundary_coords_from_mask`  *(Batch 9A)*
 - **Source:** `src/pycurvelets/process_image.py` (lines 541–582)
 - **Target:** `fiber_analysis/utils/boundary_tif_utils.py`
@@ -228,20 +244,10 @@ Also added in this batch:
 
 ---
 
-#### `process_image` → `curvealign_pipeline.py`
-- **Source:** `src/pycurvelets/process_image.py`
-- **Planned target:** `tme_analysis/pipelines/curvealign_pipeline.py` (new file)
-- **Notes:** 1640-line orchestrator implementing the full CurveAlign pipeline: file I/O,
-  curvelet fiber extraction, density/alignment computation, ROI alignment, TACS classification,
-  and optional visualization. Tightly coupled to file I/O and optional GUI widgets.
-  **Decomposition strategy before porting:**
-  1. Identify pure analysis sub-functions (no file I/O, no GUI) → port those first as utils
-  2. Replace file I/O with in-memory array arguments (matching existing tme_quant patterns)
-  3. Strip GUI/Qt widgets entirely (plugin layer handles those)
-  4. Assemble the cleaned sub-functions into `curvealign_pipeline.py` following the pattern
-     of `tacs_pipeline.py` (function-based, returns a result dict)
-  Alternatively, the core orchestration logic may be folded into `standard_tme_pipeline.py`
-  if the overlap is substantial.
+#### Visualization wrappers from `process_image`  *(Batch 9C, planned)*
+- **Source:** `src/pycurvelets/process_image.py` — `generate_overlay`, `generate_heatmap`, `save_histogram`
+- **Planned target:** `fiber_analysis/visualization/draw_utils.py` or new helpers alongside it
+- **Notes:** These wrap already-ported `draw_curvs` / `draw_map`; strip file I/O (`plt.savefig`) and return figure/array objects instead
 
 ---
 

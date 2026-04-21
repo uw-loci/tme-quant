@@ -56,7 +56,8 @@ tme-quant/
     ├── test_curvelet_fiber_candidates.py   ← extract_curvelet_fiber_candidates
     ├── test_draw_utils.py                  ← draw_curvs + draw_map
     ├── test_fiber_io.py                    ← export_dataframe_to_excel
-    └── test_exceptions.py                  ← FiberAnalysisError hierarchy
+    ├── test_exceptions.py                  ← FiberAnalysisError hierarchy
+    └── test_curvealign_pipeline.py         ← curvealign_pipeline
 ```
 
 > **Maintenance rule:** After every refactoring, file addition, or file removal,
@@ -178,8 +179,9 @@ tme-quant/
   - `standard_tme_pipeline.py` — `StandardTMEPipeline`
   - `interaction_analysis_pipeline.py` — `InteractionAnalysisPipeline`
   - `tacs_pipeline.py` — `analyze_tacs_zone()`, `plot_tacs_heatmap()`
-  - `curvealign_pipeline.py` *(planned)* — full CurveAlign pipeline: curvelet fiber
-    extraction, density/alignment, ROI alignment, TACS; port of `pycurvelets/process_image.py`
+  - `curvealign_pipeline.py` — `curvealign_pipeline()`: in-memory CurveAlign pipeline
+    (curvelet extraction, density/alignment, ROI alignment, fiber feature table);
+    ported from `pycurvelets/process_image.py`; no file I/O, returns result dict
 - `utils/` — `alignment_utils.py` (`compute_fiber_alignment_to_roi`; ported
   from `pycurvelets/get_alignment_to_roi.py`), `distance_utils.py`,
   `orientation_utils.py` (pixel-level boundary-relative orientation,
@@ -422,7 +424,7 @@ PYTHONPATH=src python src/examples/example_3d_volumetric_workflow.py
 PYTHONPATH=src python src/examples/example_analyze_tacs_zone.py
 PYTHONPATH=src python src/examples/example_hierarchy_object_analysis.py
 
-# Standard test suite (197 passed, 1 skipped on Windows/no-curvelops as of 2026-04-21)
+# Standard test suite (201 passed, 2 skipped on Windows/no-curvelops as of 2026-04-21)
 # Run from src/tme_quant/ — curvelops integration tests are skipped automatically
 # when curvelops is not installed.
 pytest tests/ -v
@@ -433,7 +435,7 @@ pytest tests/ -v
 #   wsl bash -c "cd /mnt/h/GitHub.06.2022/tme-quant/src/tme_quant && \
 #       ~/miniconda3/bin/python -m pytest tests/ -v"
 #
-# Expected: 225 passed, 7 skipped (MATLAB parity checks disabled by default)
+# Expected: 230 passed, 7 skipped (MATLAB parity checks disabled by default)
 
 # Strict MATLAB-reference parity assertions (needs TMEQ_VALIDATE_MATLAB=1):
 #   TMEQ_VALIDATE_MATLAB=1 pytest tests/test_curvelet_fiber_candidates.py -v
