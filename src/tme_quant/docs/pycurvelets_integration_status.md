@@ -187,6 +187,14 @@ Also added in this batch:
 
 ---
 
+#### Exception classes → `core/exceptions.py`  *(Batch 8)*
+- **Source:** `src/pycurvelets/models/models.py`
+- **Target:** `core/exceptions.py` (new file); re-exported from `core/__init__.py` and `tme_quant/__init__.py`
+- **Classes:** `FiberAnalysisError` (base), `ROIProcessingError`, `BoundaryAnalysisError`, `FeatureExtractionError`, `ImageProcessingError`
+- **Changes:** Direct port — no logic changes; all classes are pass-through with no `__init__` or fields; scope widened to library-wide (callers can `except tme_quant.FiberAnalysisError`)
+
+---
+
 #### `format_df_to_excel` → `export_dataframe_to_excel`  *(Batch 7)*
 - **Source:** `src/pycurvelets/utils/misc/format_df_to_excel.py`
 - **Target:** `fiber_analysis/io.py` (module-level function)
@@ -208,14 +216,6 @@ Also added in this batch:
 ---
 
 ## Remaining (Future Batches)
-
----
-
-#### Exception classes
-- **Source:** `src/pycurvelets/models/models.py`
-- **Planned target:** `fiber_analysis/exceptions.py` (new) or `core/exceptions.py` (new)
-- **Classes:** `FiberAnalysisError`, `ROIProcessingError`, `BoundaryAnalysisError`, `FeatureExtractionError`, `ImageProcessingError`
-- **Notes:** Decide scope first — fiber-only → `fiber_analysis/`; library-wide → `core/`
 
 ---
 

@@ -22,6 +22,8 @@ from .core import (
     point_in_polygon, compute_convex_hull, buffer_polygon,
     TMEHierarchy, ImageEntry,
     ROIManager, ROIObject, ANNOTATION_TYPES,
+    FiberAnalysisError, ROIProcessingError, BoundaryAnalysisError,
+    FeatureExtractionError, ImageProcessingError,
 )
 from .core.project import TMEProject
 from .core.io import save_project, load_project, export_project_summary
@@ -88,4 +90,7 @@ __all__ = [
     "RegistrationManager",
     # Project IO
     "save_project", "load_project", "export_project_summary",
+    # Exceptions
+    "FiberAnalysisError", "ROIProcessingError", "BoundaryAnalysisError",
+    "FeatureExtractionError", "ImageProcessingError",
 ]

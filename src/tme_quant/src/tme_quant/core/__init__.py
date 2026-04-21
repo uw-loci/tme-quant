@@ -19,6 +19,13 @@ from .hierarchy import TMEHierarchy
 from .image_entry import ImageEntry
 from .roi_manager import ROIManager, ROIObject, ANNOTATION_TYPES
 from .io import save_project, load_project, export_project_summary
+from .exceptions import (
+    FiberAnalysisError,
+    ROIProcessingError,
+    BoundaryAnalysisError,
+    FeatureExtractionError,
+    ImageProcessingError,
+)
 
 __all__ = [
     # Base model
@@ -37,4 +44,7 @@ __all__ = [
     'ROIManager', 'ROIObject', 'ANNOTATION_TYPES',
     # IO
     'save_project', 'load_project', 'export_project_summary',
+    # Exceptions
+    'FiberAnalysisError', 'ROIProcessingError', 'BoundaryAnalysisError',
+    'FeatureExtractionError', 'ImageProcessingError',
 ]

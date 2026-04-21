@@ -55,7 +55,8 @@ tme-quant/
     ├── test_boundary_tif_utils.py          ← extract_tif_boundary + helpers
     ├── test_curvelet_fiber_candidates.py   ← extract_curvelet_fiber_candidates
     ├── test_draw_utils.py                  ← draw_curvs + draw_map
-    └── test_fiber_io.py                    ← export_dataframe_to_excel
+    ├── test_fiber_io.py                    ← export_dataframe_to_excel
+    └── test_exceptions.py                  ← FiberAnalysisError hierarchy
 ```
 
 > **Maintenance rule:** After every refactoring, file addition, or file removal,
@@ -79,6 +80,9 @@ tme-quant/
 - `project.py` — `TMEProject`: top-level coordinator; imports `fiber_analysis`
   lazily to avoid circular imports
 - `roi_manager.py` — `ROIManager`, `ROIObject`, `ANNOTATION_TYPES`
+- `exceptions.py` — library-wide exception hierarchy: `FiberAnalysisError` (base),
+  `ROIProcessingError`, `BoundaryAnalysisError`, `FeatureExtractionError`,
+  `ImageProcessingError`; all re-exported from the `tme_quant` public API
 - `geometry.py` — Shapely-backed utilities: `compute_region_centroid`,
   `point_in_polygon`, `compute_convex_hull`, `buffer_polygon`
 - `tme_objects/` — domain object subclasses (all inherit from `TMEObject`):
@@ -416,7 +420,7 @@ PYTHONPATH=src python src/examples/example_3d_volumetric_workflow.py
 PYTHONPATH=src python src/examples/example_analyze_tacs_zone.py
 PYTHONPATH=src python src/examples/example_hierarchy_object_analysis.py
 
-# Standard test suite (187 passed, 1 skipped on Windows/no-curvelops as of 2026-04-21)
+# Standard test suite (192 passed, 1 skipped on Windows/no-curvelops as of 2026-04-21)
 # Run from src/tme_quant/ — curvelops integration tests are skipped automatically
 # when curvelops is not installed.
 pytest tests/ -v
@@ -427,7 +431,7 @@ pytest tests/ -v
 #   wsl bash -c "cd /mnt/h/GitHub.06.2022/tme-quant/src/tme_quant && \
 #       ~/miniconda3/bin/python -m pytest tests/ -v"
 #
-# Expected: 215 passed, 7 skipped (MATLAB parity checks disabled by default)
+# Expected: 220 passed, 7 skipped (MATLAB parity checks disabled by default)
 
 # Strict MATLAB-reference parity assertions (needs TMEQ_VALIDATE_MATLAB=1):
 #   TMEQ_VALIDATE_MATLAB=1 pytest tests/test_curvelet_fiber_candidates.py -v
