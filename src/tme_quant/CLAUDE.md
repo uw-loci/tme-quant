@@ -110,9 +110,10 @@ tme-quant/
 - `io.py` — `FiberAnalysisExporter`, `export_dataframe_to_excel` (saves DataFrame to `.xlsx` with auto-column-widths + frozen header; ported from `pycurvelets/utils/misc/format_df_to_excel.py`), re-export of `FijiBridge`
 - `methods/` — concrete method implementations:
   - `ctfire.py` — `CTFireExtraction` (curvelet preprocessing + FIRE individual fiber extraction)
-  - `curvealign.py` — `CurveAlignOrientation` (windowed curvelet orientation/coherency maps;
-    planned to use `extract_curvelet_fiber_candidates` output as orientation source once
-    `build_fiber_structure_from_curvelets` is integrated)
+  - `curvealign.py` — `CurveAlignOrientation` (windowed curvelet orientation/coherency maps
+    plus discrete fiber candidates; `analyze_2d` calls `build_fiber_structure_from_curvelets`
+    when `return_fiber_segments=True` and curvelops is installed, populating
+    `CurveAlignResult.fiber_structure`, `.fiber_density`, and `.fiber_alignment`)
   - `skeleton.py` — `SkeletonExtractionMethod`
   - `ridge_detection.py` — `RidgeDetectionMethod`
   - `gradient.py` — `GradientOrientationMethod`

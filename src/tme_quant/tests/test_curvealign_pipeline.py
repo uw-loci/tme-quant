@@ -94,3 +94,83 @@ class TestCurvealignPipeline:
         fibers = _minimal_fiber_df(n=2)
         with pytest.raises(NotImplementedError):
             curvealign_pipeline(img, fiber_structure=fibers, tif_boundary=1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TestCurveAlignFiberCandidates  (requires curvelops — skipped on Windows)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCurveAlignFiberCandidates:
+    """Tests for analyze_2d fiber candidate integration (requires curvelops)."""
+
+    @pytest.fixture(autouse=True)
+    def _skip_without_curvelops(self):
+        pytest.importorskip("curvelops", reason="curvelops not installed")
+
+    def _make_image(self, h=64, w=64, seed=0):
+        rng = np.random.default_rng(seed)
+        return rng.random((h, w)).astype(np.float32)
+
+    def test_returns_fiber_structure_dataframe(self):
+        from tme_quant.fiber_analysis.methods.curvealign import CurveAlignOrientation
+        from tme_quant.fiber_analysis.config import CurveAlignParams
+        img = self._make_image()
+        params = CurveAlignParams(
+            window_size=32, overlap=0.5,
+            return_fiber_segments=True,
+            candidate_keep=0.05, candidate_scale=1, candidate_radius=4.0,
+        )
+        result = CurveAlignOrientation().analyze_2d(img, params)
+        assert result.fiber_structure is not None
+        assert {'angle', 'center_row', 'center_col'}.issubset(result.fiber_structure.columns)
+
+    def test_density_and_alignment_populated(self):
+        from tme_quant.fiber_analysis.methods.curvealign import CurveAlignOrientation
+        from tme_quant.fiber_analysis.config import CurveAlignParams
+        img = self._make_image()
+        params = CurveAlignParams(
+            window_size=32, overlap=0.5,
+            return_fiber_segments=True, candidate_keep=0.05,
+        )
+        result = CurveAlignOrientation().analyze_2d(img, params)
+        if result.fiber_structure is not None and not result.fiber_structure.empty:
+            assert result.fiber_density is not None
+            assert result.fiber_alignment is not None
+
+    def test_orientation_map_still_populated(self):
+        """Sliding-window orientation map must be present regardless of candidate extraction."""
+        from tme_quant.fiber_analysis.methods.curvealign import CurveAlignOrientation
+        from tme_quant.fiber_analysis.config import CurveAlignParams
+        img = self._make_image()
+        params = CurveAlignParams(window_size=32, return_fiber_segments=True)
+        result = CurveAlignOrientation().analyze_2d(img, params)
+        assert result.orientation_map is not None
+        assert result.orientation_map.shape == img.shape
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TestCurveAlignFiberCandidatesNoCurvelops  (runs on all platforms)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCurveAlignFiberCandidatesNoCurvelops:
+    """Graceful fallback when curvelops is absent — runs on all platforms."""
+
+    def _make_image(self, h=48, w=48):
+        return np.random.default_rng(1).random((h, w)).astype(np.float32)
+
+    def test_no_curvelops_returns_empty_gracefully(self, monkeypatch):
+        """When curvelops absent, fiber_structure is None; orientation maps still valid."""
+        import tme_quant.fiber_analysis.utils.fiber_dataframe_utils as fdu
+
+        def _raise(**kw):
+            raise ImportError("curvelops not installed (mocked)")
+
+        monkeypatch.setattr(fdu, "build_fiber_structure_from_curvelets", _raise)
+        from tme_quant.fiber_analysis.methods.curvealign import CurveAlignOrientation
+        from tme_quant.fiber_analysis.config import CurveAlignParams
+        img = self._make_image()
+        params = CurveAlignParams(window_size=32, return_fiber_segments=True)
+        result = CurveAlignOrientation().analyze_2d(img, params)
+        assert result.fiber_segments == []
+        assert result.fiber_structure is None
+        assert result.orientation_map is not None

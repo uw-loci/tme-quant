@@ -155,9 +155,19 @@ class CurveAlignOrientation(BaseOrientationMethod):
         )
 
         if p.return_fiber_segments:
-            result.fiber_segments = self._trace_fiber_segments(
-                orientation_map, coherency_map
+            segs, fs, fd, fa = self._trace_fiber_segments(
+                image=image,
+                orientation_map=orientation_map,
+                coherency_map=coherency_map,
+                keep=p.candidate_keep,
+                scale=p.candidate_scale,
+                radius=p.candidate_radius,
+                feature_params=p.candidate_feature_params,
             )
+            result.fiber_segments  = segs
+            result.fiber_structure = fs
+            result.fiber_density   = fd
+            result.fiber_alignment = fa
 
         # Discard arrays not requested by keep_values
         if 'all' not in p.keep_values:
@@ -337,15 +347,35 @@ class CurveAlignOrientation(BaseOrientationMethod):
 
     @staticmethod
     def _trace_fiber_segments(
+        image: np.ndarray,
         orientation_map: np.ndarray,
         coherency_map: Optional[np.ndarray],
-        min_coherency: float = 0.3,
-    ):
-        """
-        Stub: return empty list until full fiber segment tracing is integrated.
+        keep: float = 0.05,
+        scale: int = 1,
+        radius: float = 4.0,
+        feature_params=None,
+    ) -> tuple:
+        """Extract discrete fiber candidates via curvelet thresholding and grouping.
 
-        TODO: Implement orientation-guided fiber segment tracing that connects
-        high-coherency regions with consistent orientation into fiber segments.
-        This is analogous to the segment tracing in CurveAlign 4.0.
+        Calls build_fiber_structure_from_curvelets (requires curvelops).
+        Returns (segments, fiber_structure, density_df, alignment_df).
+        Returns ([], None, None, None) when curvelops is not installed.
         """
-        return []
+        from ..utils.fiber_dataframe_utils import build_fiber_structure_from_curvelets
+        try:
+            fiber_structure, density_df, alignment_df, _ = build_fiber_structure_from_curvelets(
+                image=image, keep=keep, scale=scale, radius=radius,
+                feature_params=feature_params,
+            )
+        except ImportError:
+            return [], None, None, None
+
+        if fiber_structure is None or fiber_structure.empty:
+            return [], fiber_structure, density_df, alignment_df
+
+        # Each candidate → single-point (1, 2) coordinate array for fiber_segments list format
+        segments = [
+            np.array([[row["center_row"], row["center_col"]]])
+            for _, row in fiber_structure.iterrows()
+        ]
+        return segments, fiber_structure, density_df, alignment_df

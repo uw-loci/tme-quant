@@ -737,17 +737,26 @@ class CurveAlignParams(OrientationParams):
     use_matlab_backend:    bool = False
     return_fiber_segments: bool = False
 
+    # Fiber candidate extraction (used when return_fiber_segments=True, requires curvelops)
+    candidate_keep:           float    = 0.05   # top fraction of FDCT coefficients to retain
+    candidate_scale:          int      = 1      # scale index for extract_curvelet_fiber_candidates
+    candidate_radius:         float    = 4.0    # spatial grouping radius in pixels
+    candidate_feature_params: Any      = None   # FiberFeatureParams; None → FiberFeatureParams()
+
     def to_dict(self) -> Dict[str, Any]:
         d = super().to_dict()
         d.update({
-            'window_size':         self.window_size,
-            'overlap':             self.overlap,
-            'curvelet_levels':     self.curvelet_levels,
-            'curvelet_angles':     self.curvelet_angles,
-            'compute_coherency':   self.compute_coherency,
-            'compute_energy':      self.compute_energy,
-            'use_matlab_backend':  self.use_matlab_backend,
-            'return_fiber_segments': self.return_fiber_segments,
+            'window_size':            self.window_size,
+            'overlap':                self.overlap,
+            'curvelet_levels':        self.curvelet_levels,
+            'curvelet_angles':        self.curvelet_angles,
+            'compute_coherency':      self.compute_coherency,
+            'compute_energy':         self.compute_energy,
+            'use_matlab_backend':     self.use_matlab_backend,
+            'return_fiber_segments':  self.return_fiber_segments,
+            'candidate_keep':         self.candidate_keep,
+            'candidate_scale':        self.candidate_scale,
+            'candidate_radius':       self.candidate_radius,
         })
         return d
 
@@ -1040,16 +1049,24 @@ class CurveAlignResult(OrientationResult):
     fiber_segments:        Optional[List[np.ndarray]] = None
     window_orientations:   Optional[Dict[Any, Any]]   = None
 
+    # Fiber candidate outputs (populated when return_fiber_segments=True + curvelops installed)
+    fiber_structure: Any = None   # pd.DataFrame [angle, center_row, center_col, width]
+    fiber_density:   Any = None   # pd.DataFrame density features (n_fibers × 7)
+    fiber_alignment: Any = None   # pd.DataFrame alignment features (n_fibers × 7)
+
     n_windows_analyzed: int   = 0
     mean_energy:        float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         d = super().to_dict()
         d.update({
-            'n_windows_analyzed': self.n_windows_analyzed,
-            'mean_energy':        self.mean_energy,
-            'n_fiber_segments':   (
+            'n_windows_analyzed':  self.n_windows_analyzed,
+            'mean_energy':         self.mean_energy,
+            'n_fiber_segments':    (
                 len(self.fiber_segments) if self.fiber_segments else 0
+            ),
+            'n_fiber_candidates':  (
+                len(self.fiber_structure) if self.fiber_structure is not None else 0
             ),
         })
         return d

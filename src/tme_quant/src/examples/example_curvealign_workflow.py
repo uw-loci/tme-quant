@@ -506,6 +506,9 @@ def workflow_curvealign_complete(
         compute_coherency=True,
         compute_energy=True,
         return_fiber_segments=True,
+        candidate_keep=0.05,
+        candidate_scale=1,
+        candidate_radius=4.0,
         keep_values=['angles', 'alignment', 'energy'],
         compute_statistics=True,
     )
@@ -517,14 +520,36 @@ def workflow_curvealign_complete(
     print(f'  Mean alignment  : {orientation_result.mean_alignment:.4f}')
 
     # ── [4/9] Extract fiber segments ─────────────────────────────────────────
-    print('\n[4/9] Extracting fiber segments from orientation map...')
-    fiber_segments = _extract_fiber_segments_from_curvealign(
-        orientation_map=orientation_result.orientation_map,
-        alignment_map=orientation_result.alignment_map,
-        pixel_size=pixel_size,
-        subsample=2,
-    )
-    print(f'  Extracted {len(fiber_segments):,} fiber segments')
+    print('\n[4/9] Extracting fiber segments...')
+    if (orientation_result.fiber_structure is not None
+            and not orientation_result.fiber_structure.empty):
+        # Use curvelet fiber candidates produced by analyze_2d (requires curvelops)
+        _fs = orientation_result.fiber_structure
+        _align_map = orientation_result.alignment_map
+        if _align_map is not None:
+            r_idx = _fs['center_row'].astype(int).clip(0, _align_map.shape[0] - 1)
+            c_idx = _fs['center_col'].astype(int).clip(0, _align_map.shape[1] - 1)
+            local_align = _align_map[r_idx.values, c_idx.values]
+        else:
+            local_align = np.zeros(len(_fs))
+        fiber_segments = pd.DataFrame({
+            'segment_id':                [f'seg_{i:06d}' for i in range(len(_fs))],
+            'segment_index':             np.arange(len(_fs)),
+            'position_x':                _fs['center_col'].values,
+            'position_y':                _fs['center_row'].values,
+            'orientation':               _fs['angle'].values,
+            'local_alignment_intrinsic': local_align,
+        })
+        print(f'  Extracted {len(fiber_segments):,} curvelet fiber candidates')
+    else:
+        # Fallback: subsample orientation map (curvelops not installed)
+        fiber_segments = _extract_fiber_segments_from_curvealign(
+            orientation_map=orientation_result.orientation_map,
+            alignment_map=orientation_result.alignment_map,
+            pixel_size=pixel_size,
+            subsample=2,
+        )
+        print(f'  Extracted {len(fiber_segments):,} fiber segments (subsample fallback)')
 
     # ── [5/9] Cell segmentation ──────────────────────────────────────────────
     print('\n[5/9] Segmenting cells (StarDist)...')
