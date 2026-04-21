@@ -19,6 +19,7 @@ from .utils.fiber_dataframe_utils import (
     compute_fiber_density_and_alignment,
     flatten_numeric,
 )
+from .utils.boundary_tif_utils import extract_tif_boundary
 
 # Backwards-compatible alias (examples and external code may use FiberAnalyzer)
 FiberAnalyzer = FiberExtractionAnalyzer
@@ -35,4 +36,5 @@ __all__ = [
     'build_fiber_structure_from_curvelets',
     'compute_fiber_density_and_alignment',
     'flatten_numeric',
+    'extract_tif_boundary',
 ]

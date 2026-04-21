@@ -132,6 +132,30 @@ Path conventions used below:
 
 ---
 
+#### `get_tif_boundary` → `extract_tif_boundary`  *(Batch 5)*
+- **Source:** `src/pycurvelets/get_tif_boundary.py`
+- **Target:** `fiber_analysis/utils/boundary_tif_utils.py` (new file)
+- **Original:** `get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist)`
+- **New:** `extract_tif_boundary(coordinates, img, fiber_df, dist_thresh, min_dist)`
+- **Changes:**
+  - `obj` → `fiber_df`; accepts `center_row/center_col` or `center_1/center_2` aliases
+  - `coordinates` accepts dict of arrays (same as original) or a pre-stacked ndarray
+  - Nested helpers extracted as private module-level functions:
+    - `get_segment_pixels` → `_rasterize_line_segment` (uses `round_mlab` from `fiber_dataframe_utils`)
+    - `get_points_on_line` → `_get_fiber_line_points`
+    - `get_relative_angle` → `_compute_fiber_boundary_relative_angle`
+      (uses `compute_boundary_tangent_angle` and `_circ_r` from `geometry_utils`)
+  - **Boundary coords swap fix:** boundary CSV is in MATLAB `[col, row]` = `[x, y]` order;
+    `boundary_point_row/col` output columns are now correctly labeled as actual row/col
+    (the original pycurvelets code stored them in reversed order relative to column names)
+  - `extension_point_distance` and `extension_point_angle` columns are **always NaN**;
+    the original pycurvelets code computed but never stored these values (bug preserved)
+  - `min_dist` falsy-check convention preserved (`if not min_dist:`)
+  - Result column names renamed to snake_case tme_quant convention; 7-column structure unchanged
+- **Pipeline affiliation:** CurveAlign boundary measurement pipeline; called by `process_image`
+
+---
+
 #### `get_ct` → `build_fiber_structure_from_curvelets`  *(Batch 4, commit `d9b20dc`)*
 - **Source:** `src/pycurvelets/get_ct.py`
 - **Target:** `fiber_analysis/utils/fiber_dataframe_utils.py`
@@ -154,15 +178,6 @@ Also added in this batch:
 ---
 
 ## Remaining (Future Batches)
-
----
-
-#### `get_tif_boundary` → `extract_tif_boundary`
-- **Source:** `src/pycurvelets/get_tif_boundary.py`
-- **Planned target:** `fiber_analysis/utils/boundary_tif_utils.py` (new file)
-- **Original:** `get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist)`
-- **Proposed:** `extract_tif_boundary(coordinates, img, obj, dist_thresh, min_dist)`
-- **Notes:** TIF boundary coordinate extraction + relative angle computation; also contains `get_relative_angle` and `get_points_on_line` helpers
 
 ---
 
