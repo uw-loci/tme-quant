@@ -27,6 +27,7 @@ from typing import Tuple
 
 import numpy as np
 import pandas as pd
+from skimage.measure import find_contours, label
 from sklearn.neighbors import NearestNeighbors
 
 from .geometry_utils import _circ_r, compute_boundary_tangent_angle
@@ -409,4 +410,44 @@ def extract_tif_boundary(
     return result_mat, result_mat_names, num_img_points, result_df
 
 
-__all__ = ["extract_tif_boundary"]
+def extract_boundary_coords_from_mask(
+    boundary_img: np.ndarray,
+) -> dict:
+    """Extract per-ROI boundary coordinate arrays from a binary mask.
+
+    Port of the inner helper in pycurvelets ``process_image.py``
+    (``extract_boundary_coords_from_mask``, lines 541–582).
+
+    Each connected region in *boundary_img* is labelled independently.
+    For each region, ``skimage.measure.find_contours`` may return multiple
+    contours (outer boundary + any interior holes); only the longest contour
+    — the outer perimeter — is kept.
+
+    Parameters
+    ----------
+    boundary_img : ndarray of shape (H, W)
+        Binary mask.  Non-zero pixels are treated as boundary/ROI material.
+
+    Returns
+    -------
+    dict[str, ndarray]
+        Maps ``"ROI_1"``, ``"ROI_2"``, … to ``(N, 2)`` float arrays of
+        ``[row, col]`` contour points.  Empty dict when no regions are found.
+    """
+    labeled_mask = label(boundary_img > 0)
+    num_regions = int(labeled_mask.max())
+
+    if num_regions == 0:
+        return {}
+
+    coordinates: dict = {}
+    for region_id in range(1, num_regions + 1):
+        region_mask = (labeled_mask == region_id).astype(np.uint8)
+        contours = find_contours(region_mask, 0.5)
+        if contours:
+            coordinates[f"ROI_{region_id}"] = max(contours, key=len)
+
+    return coordinates
+
+
+__all__ = ["extract_tif_boundary", "extract_boundary_coords_from_mask"]

@@ -187,6 +187,15 @@ Also added in this batch:
 
 ---
 
+#### `extract_boundary_coords_from_mask`  *(Batch 9A)*
+- **Source:** `src/pycurvelets/process_image.py` (lines 541–582)
+- **Target:** `fiber_analysis/utils/boundary_tif_utils.py`
+- **Original:** `extract_boundary_coords_from_mask(boundary_img)`
+- **New:** same signature; return type `dict[str, ndarray]`
+- **Changes:** `print()` calls dropped (library code must not write to stdout); logic preserved exactly
+
+---
+
 #### Exception classes → `core/exceptions.py`  *(Batch 8)*
 - **Source:** `src/pycurvelets/models/models.py`
 - **Target:** `core/exceptions.py` (new file); re-exported from `core/__init__.py` and `tme_quant/__init__.py`

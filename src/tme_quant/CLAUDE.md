@@ -130,8 +130,10 @@ tme-quant/
     orchestrator; ported from `pycurvelets/get_ct.py`), `compute_fiber_density_and_alignment`,
     `flatten_numeric`, `round_mlab`; ported from `pycurvelets/process_fibers.py`
   - `boundary_tif_utils.py` — `extract_tif_boundary` (boundary-fiber association and
-    angle measurement; ported from `pycurvelets/get_tif_boundary.py`); also contains
-    private helpers `_rasterize_line_segment`, `_get_fiber_line_points`,
+    angle measurement; ported from `pycurvelets/get_tif_boundary.py`);
+    `extract_boundary_coords_from_mask` (binary mask → per-ROI boundary coord arrays;
+    ported from `pycurvelets/process_image.py`); private helpers
+    `_rasterize_line_segment`, `_get_fiber_line_points`,
     `_compute_fiber_boundary_relative_angle`
 - `visualization/` — visualization sub-package (no Qt/napari):
   - `draw_utils.py` — `draw_curvs` (draws fiber center dots + orientation lines onto a
@@ -420,7 +422,7 @@ PYTHONPATH=src python src/examples/example_3d_volumetric_workflow.py
 PYTHONPATH=src python src/examples/example_analyze_tacs_zone.py
 PYTHONPATH=src python src/examples/example_hierarchy_object_analysis.py
 
-# Standard test suite (192 passed, 1 skipped on Windows/no-curvelops as of 2026-04-21)
+# Standard test suite (197 passed, 1 skipped on Windows/no-curvelops as of 2026-04-21)
 # Run from src/tme_quant/ — curvelops integration tests are skipped automatically
 # when curvelops is not installed.
 pytest tests/ -v
@@ -431,7 +433,7 @@ pytest tests/ -v
 #   wsl bash -c "cd /mnt/h/GitHub.06.2022/tme-quant/src/tme_quant && \
 #       ~/miniconda3/bin/python -m pytest tests/ -v"
 #
-# Expected: 220 passed, 7 skipped (MATLAB parity checks disabled by default)
+# Expected: 225 passed, 7 skipped (MATLAB parity checks disabled by default)
 
 # Strict MATLAB-reference parity assertions (needs TMEQ_VALIDATE_MATLAB=1):
 #   TMEQ_VALIDATE_MATLAB=1 pytest tests/test_curvelet_fiber_candidates.py -v

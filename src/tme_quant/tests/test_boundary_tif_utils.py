@@ -16,6 +16,7 @@ from tme_quant.fiber_analysis.utils.boundary_tif_utils import (
     _compute_fiber_boundary_relative_angle,
     _get_fiber_line_points,
     extract_tif_boundary,
+    extract_boundary_coords_from_mask,
 )
 
 # ─── Real-dataset gate ────────────────────────────────────────────────────────
@@ -334,3 +335,51 @@ class TestExtractTifBoundaryRealData:
         _, _, _, result_df = result
         assert result_df["extension_point_distance"].isna().all()
         assert result_df["extension_point_angle"].isna().all()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TestExtractBoundaryCoords
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestExtractBoundaryCoords:
+
+    def test_empty_mask_returns_empty_dict(self):
+        mask = np.zeros((50, 50), dtype=np.uint8)
+        result = extract_boundary_coords_from_mask(mask)
+        assert result == {}
+
+    def test_single_region_returns_roi_1(self):
+        mask = np.zeros((50, 50), dtype=np.uint8)
+        mask[10:30, 10:30] = 1
+        result = extract_boundary_coords_from_mask(mask)
+        assert set(result.keys()) == {"ROI_1"}
+        coords = result["ROI_1"]
+        assert coords.ndim == 2 and coords.shape[1] == 2
+
+    def test_two_regions_returns_two_keys(self):
+        mask = np.zeros((60, 100), dtype=np.uint8)
+        mask[5:20, 5:20] = 1    # region 1
+        mask[5:20, 70:90] = 1   # region 2 (separated by gap)
+        result = extract_boundary_coords_from_mask(mask)
+        assert set(result.keys()) == {"ROI_1", "ROI_2"}
+
+    def test_coords_within_image_bounds(self):
+        mask = np.zeros((40, 60), dtype=np.uint8)
+        mask[5:25, 10:40] = 1
+        result = extract_boundary_coords_from_mask(mask)
+        coords = result["ROI_1"]
+        assert np.all(coords[:, 0] >= 0) and np.all(coords[:, 0] < 40)
+        assert np.all(coords[:, 1] >= 0) and np.all(coords[:, 1] < 60)
+
+    def test_region_with_hole_returns_outer_contour(self):
+        # Donut: filled square with a square hole — produces two contours per region.
+        # The outer perimeter is longer; we expect only it to be returned.
+        mask = np.zeros((60, 60), dtype=np.uint8)
+        mask[5:55, 5:55] = 1   # outer filled region
+        mask[20:40, 20:40] = 0  # punch a hole
+        result = extract_boundary_coords_from_mask(mask)
+        assert "ROI_1" in result
+        outer_len = len(result["ROI_1"])
+        # Outer perimeter ~4*50=200 pts; inner hole ~4*20=80 pts.
+        # The returned contour must be the longer (outer) one.
+        assert outer_len > 100
