@@ -188,17 +188,10 @@ Known equivalences between pycurvelets and tme_quant (do NOT re-implement these)
 | `pycurvelets3D` (3D curvelets)     | `curvelet_utils.curvelet_transform_3d`           |
 | `get_fire` (FIRE algorithm)        | `ctfire_utils.fire_2d`                           |
 
-Functions that are **not yet integrated** and are suitable targets for future batches:
-
-| pycurvelets                  | Target in tme_quant                                      |
-|------------------------------|-----------------------------------------------------------|
-| `process_fibers`             | `fiber_analysis/utils/fiber_dataframe_utils.py`          |
-| `get_alignment_to_roi`       | `tme_analysis/utils/alignment_utils.py`                  |
-| `new_curv`                   | `fiber_analysis/utils/curvelet_utils.py::extract_curvelet_fiber_candidates` |
-| `get_tif_boundary`           | `fiber_analysis/utils/boundary_tif_utils.py`             |
-| `draw_curvs`                 | visualization layer (no Qt dependency)                   |
-| `draw_map`                   | visualization layer (no Qt dependency)                   |
-| `format_df_to_excel`         | `fiber_analysis/io.py` or `tme_analysis/io.py`           |
+All pycurvelets functions from the original decomposition plan have been integrated.
+See `docs/pycurvelets_integration_status.md` for the full cross-reference and
+`docs/pycurvelets_integration_status.md#remaining` for any new functions added
+as future conversion targets.
 
 ---
 
@@ -387,4 +380,4 @@ These have not yet been ported.  Until they are:
 
 ---
 
-*Last updated: 2026-04-20 — added §8 (TMEObject model integration) and §9 (exceptions)*
+*Last updated: 2026-04-21 — §5 overlap table updated: all original decomposition targets integrated (Batches 1–9C)*
