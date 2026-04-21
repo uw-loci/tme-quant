@@ -14,7 +14,13 @@ matplotlib = pytest.importorskip("matplotlib", reason="matplotlib not installed"
 matplotlib.use("Agg")   # non-interactive backend — required in headless CI
 import matplotlib.pyplot as plt
 
-from tme_quant.fiber_analysis.visualization.draw_utils import draw_curvs, draw_map
+from tme_quant.fiber_analysis.visualization.draw_utils import (
+    draw_curvs,
+    draw_map,
+    compute_angle_histogram,
+    generate_fiber_overlay,
+    generate_fiber_heatmap,
+)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -174,4 +180,116 @@ class TestDrawMap:
         df = self.fiber_df.rename(columns={"center_row": "center_1", "center_col": "center_2"})
         rawmap, procmap = draw_map(df, self.angles, self.img, True, self.MAP_PARAMS)
         assert rawmap.shape == self.img.shape
+        assert procmap.dtype == np.uint8
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TestVisualizationWrappers
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestVisualizationWrappers:
+
+    BINS = np.arange(2.5, 90, 5)
+    MAP_PARAMS = {"STDfilter_size": 8, "SQUAREmaxfilter_size": 6, "GAUSSIANdiscfilter_sigma": 2}
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.img = _make_image(h=64, w=64)
+        self.fiber_df = _make_fiber_df(n=5, img_size=50)
+        self.angles = np.array([10.0, 20.0, 30.0, 60.0, 80.0])  # within bins (2.5–90°)
+        self.in_flag = np.array([True, True, False, True, False])
+        self.out_flag = ~self.in_flag
+
+    @pytest.fixture(autouse=False)
+    def close_figs(self):
+        yield
+        plt.close("all")
+
+    # ── compute_angle_histogram ───────────────────────────────────────────────
+
+    def test_compute_angle_histogram_no_boundary(self):
+        """No boundary → all fiber angles land in histogram."""
+        result = compute_angle_histogram(
+            self.fiber_df,
+            nearest_angles=None,
+            in_curvs_flag=None,
+            boundary_measurement=False,
+            tif_boundary=0,
+            bins=np.arange(-0.5, 181, 1),  # 0–180° bins; all angles should land
+        )
+        assert set(result.keys()) == {"counts", "bin_centers", "hist_data"}
+        assert result["counts"].sum() == len(self.fiber_df)
+        assert result["hist_data"].shape[0] == 2
+
+    def test_compute_angle_histogram_boundary_mode(self):
+        """Boundary mode tif3: only in_curvs_flag fibers counted."""
+        result = compute_angle_histogram(
+            self.fiber_df,
+            nearest_angles=self.angles,
+            in_curvs_flag=self.in_flag,
+            boundary_measurement=True,
+            tif_boundary=3,
+            bins=self.BINS,
+        )
+        assert result["counts"].sum() <= len(self.fiber_df)
+        assert result["counts"].sum() == self.in_flag.sum()
+
+    # ── generate_fiber_overlay ────────────────────────────────────────────────
+
+    def test_generate_fiber_overlay_no_boundary(self, close_figs):
+        """tif_boundary=0 → (fig, ax) returned; image rendered on axes."""
+        fig, ax = generate_fiber_overlay(
+            self.img,
+            self.fiber_df,
+            coordinates=None,
+            in_curvs_flag=self.in_flag,
+            out_curvs_flag=self.out_flag,
+            nearest_angles=self.angles,
+            measured_boundary=None,
+            fiber_mode=0,
+            tif_boundary=0,
+            boundary_measurement=False,
+        )
+        assert fig is not None
+        assert ax is not None
+        assert len(ax.get_images()) > 0
+
+    def test_generate_fiber_overlay_tif3(self, close_figs):
+        """tif_boundary=3 with boundary coords → (fig, ax) returned without error."""
+        coords = {"ROI_1": np.column_stack([
+            np.linspace(5, 55, 50), np.linspace(5, 55, 50)
+        ])}
+        fig, ax = generate_fiber_overlay(
+            self.img,
+            self.fiber_df,
+            coordinates=coords,
+            in_curvs_flag=self.in_flag,
+            out_curvs_flag=self.out_flag,
+            nearest_angles=self.angles,
+            measured_boundary=None,
+            fiber_mode=0,
+            tif_boundary=3,
+            boundary_measurement=True,
+            make_associations=False,
+        )
+        assert fig is not None
+        assert len(ax.get_images()) > 0
+
+    # ── generate_fiber_heatmap ────────────────────────────────────────────────
+
+    def test_generate_fiber_heatmap_returns_arrays(self, close_figs):
+        """Returns (fig, rawmap, procmap) with correct shapes and dtype."""
+        fig, rawmap, procmap = generate_fiber_heatmap(
+            self.img,
+            self.fiber_df,
+            in_curvs_flag=self.in_flag,
+            angles=self.angles,
+            distances=None,
+            tif_boundary=0,
+            boundary_measurement=True,
+            map_params=self.MAP_PARAMS,
+        )
+        assert fig is not None
+        assert rawmap.shape == self.img.shape
+        assert procmap.shape == self.img.shape
         assert procmap.dtype == np.uint8

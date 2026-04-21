@@ -14,9 +14,13 @@ No Qt / napari dependencies.  See REFACTORING_GUIDE.md §2.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import numpy as np
+import pandas as pd
 from scipy.ndimage import gaussian_filter
 import matplotlib  # noqa: F401 — core dep; imported to confirm availability at load time
+import matplotlib.pyplot as plt
 
 from ..utils.geometry_utils import _circ_r
 
@@ -218,4 +222,292 @@ def draw_map(
     return rawmap, procmap
 
 
-__all__ = ["draw_curvs", "draw_map"]
+def compute_angle_histogram(
+    fiber_structure: pd.DataFrame,
+    nearest_angles,
+    in_curvs_flag,
+    boundary_measurement: bool,
+    tif_boundary: int,
+    bins: np.ndarray,
+) -> dict:
+    """Compute angle histogram from fiber/boundary angle data.
+
+    Port of pycurvelets ``save_histogram`` with file-save and plot stripped.
+
+    Parameters
+    ----------
+    fiber_structure : pd.DataFrame
+        Fiber data with ``angle`` column.
+    nearest_angles : array-like or None
+        Angles relative to boundary (used when available).
+    in_curvs_flag : bool ndarray or None
+        Mask selecting boundary-included fibers; applied when ``tif_boundary==3``.
+    boundary_measurement : bool
+        Whether boundary analysis was performed.
+    tif_boundary : int
+        Boundary mode (0=none, 3=TIFF mask).
+    bins : ndarray
+        Histogram bin edges.
+
+    Returns
+    -------
+    dict
+        ``{"counts": ndarray, "bin_centers": ndarray, "hist_data": ndarray (2, N)}``.
+    """
+    if boundary_measurement:
+        if tif_boundary == 3:
+            if nearest_angles is not None and in_curvs_flag is not None:
+                values = nearest_angles[in_curvs_flag]
+            elif nearest_angles is not None:
+                values = nearest_angles
+            else:
+                values = fiber_structure["angle"].values
+        else:
+            values = (
+                nearest_angles
+                if nearest_angles is not None
+                else fiber_structure["angle"].values
+            )
+    else:
+        values = (
+            nearest_angles
+            if nearest_angles is not None
+            else fiber_structure["angle"].values
+        )
+
+    n, bin_edges = np.histogram(values, bins=bins)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    hist_data = np.vstack([n, bin_centers])
+    return {"counts": n, "bin_centers": bin_centers, "hist_data": hist_data}
+
+
+def generate_fiber_overlay(
+    img: np.ndarray,
+    fiber_structure: pd.DataFrame,
+    coordinates,
+    in_curvs_flag,
+    out_curvs_flag,
+    nearest_angles,
+    measured_boundary,
+    fiber_mode: int,
+    tif_boundary: int,
+    boundary_measurement: bool,
+    make_associations: bool = False,
+) -> tuple:
+    """Create fiber overlay figure on a grayscale image.
+
+    Port of pycurvelets ``generate_overlay`` with ``plt.savefig``/``plt.close``
+    and all ``print()`` calls stripped.  The caller is responsible for closing
+    the returned figure when done.
+
+    Parameters
+    ----------
+    img : ndarray of shape (H, W)
+        Grayscale background image.
+    fiber_structure : pd.DataFrame
+        Fiber data (``center_row``, ``center_col``, ``angle`` columns).
+    coordinates : dict or None
+        Boundary coordinate dict ``{key: (N, 2) ndarray [row, col]}``.
+    in_curvs_flag : bool ndarray
+        Mask selecting boundary-included fibers.
+    out_curvs_flag : bool ndarray
+        Mask selecting boundary-excluded fibers.
+    nearest_angles : array-like or None
+        Fiber angles relative to boundary.
+    measured_boundary : pd.DataFrame or None
+        Boundary point measurements (``boundary_point_row/col`` columns).
+    fiber_mode : int
+        Fiber extraction mode; controls orientation-line half-length:
+        0 → 4 px (curvelet), 1 → 2.5 px (CT-FIRE segment), ≥2 → 10 px (CT-FIRE fiber).
+    tif_boundary : int
+        Boundary mode (0=none, 3=TIFF mask; 1/2 not yet ported).
+    boundary_measurement : bool
+        Whether boundary analysis was performed.
+    make_associations : bool
+        When ``True`` and ``tif_boundary==3``, draws lines from each included
+        fiber centre to its nearest boundary point.
+
+    Returns
+    -------
+    (fig, ax) : tuple
+        Matplotlib Figure and Axes with the overlay rendered.
+    """
+    if fiber_mode == 0:
+        fiber_len = 4.0
+    elif fiber_mode == 1:
+        fiber_len = 2.5
+    else:
+        fiber_len = 10.0
+
+    fig, ax = plt.subplots(
+        figsize=(img.shape[1] / 100, img.shape[0] / 100), dpi=100
+    )
+    ax.imshow(img, cmap="gray")
+    ax.axis("off")
+
+    if boundary_measurement:
+        if tif_boundary < 3:
+            if coordinates:
+                coords_array = np.array(list(coordinates.values())[0])
+                ax.plot(coords_array[:, 1], coords_array[:, 0], "y-")
+                ax.plot(coords_array[:, 1], coords_array[:, 0], "*y", markersize=3)
+        elif tif_boundary == 3:
+            for roi_coords in coordinates.values():
+                roi_coords_array = np.array(roi_coords)
+                ax.plot(
+                    roi_coords_array[:, 1],
+                    roi_coords_array[:, 0],
+                    "y-",
+                    linewidth=1,
+                )
+
+    marksize = 3
+    linewidth = 1
+
+    if tif_boundary == 3:
+        if np.any(in_curvs_flag):
+            draw_curvs(
+                fiber_structure[in_curvs_flag],
+                ax,
+                fiber_len,
+                color_flag=0,
+                angles=nearest_angles[in_curvs_flag],
+                mark_size=marksize,
+                line_width=linewidth,
+                boundary_measurement=boundary_measurement,
+            )
+        if np.any(out_curvs_flag):
+            draw_curvs(
+                fiber_structure[out_curvs_flag],
+                ax,
+                fiber_len,
+                color_flag=1,
+                angles=nearest_angles[out_curvs_flag],
+                mark_size=marksize,
+                line_width=linewidth,
+                boundary_measurement=boundary_measurement,
+            )
+        if boundary_measurement and make_associations and measured_boundary is not None:
+            fiber_centers = (
+                fiber_structure[["center_row", "center_col"]].values
+                if "center_row" in fiber_structure.columns
+                else fiber_structure[["center_1", "center_2"]].values
+            )
+            in_curvs = fiber_centers[in_curvs_flag]
+            in_bndry = measured_boundary[
+                ["boundary_point_row", "boundary_point_col"]
+            ].values[in_curvs_flag]
+            for center, bndry_pt in zip(in_curvs, in_bndry):
+                if not np.isnan(bndry_pt[0]) and not np.isnan(bndry_pt[1]):
+                    ax.plot(
+                        [center[1], bndry_pt[1]],
+                        [center[0], bndry_pt[0]],
+                        "b-",
+                        linewidth=0.5,
+                    )
+    elif tif_boundary == 0:
+        draw_curvs(
+            fiber_structure,
+            ax,
+            fiber_len,
+            color_flag=0,
+            angles=nearest_angles,
+            mark_size=marksize,
+            line_width=linewidth,
+            boundary_measurement=boundary_measurement,
+        )
+    # tif_boundary 1/2: not yet ported
+
+    return fig, ax
+
+
+def generate_fiber_heatmap(
+    img: np.ndarray,
+    fiber_structure: pd.DataFrame,
+    in_curvs_flag,
+    angles,
+    distances,
+    tif_boundary: int,
+    boundary_measurement: bool,
+    map_params: Optional[dict] = None,
+) -> tuple:
+    """Create fiber angle heatmap overlaid on a grayscale image.
+
+    Port of pycurvelets ``generate_heatmap`` with ``plt.savefig``, CSV save,
+    and all ``print()`` calls stripped.  The caller is responsible for closing
+    the returned figure when done.
+
+    Parameters
+    ----------
+    img : ndarray of shape (H, W)
+        Grayscale background image.
+    fiber_structure : pd.DataFrame
+        Fiber data; filtered by ``in_curvs_flag`` before map generation.
+    in_curvs_flag : bool ndarray
+        Mask selecting fibers to include in the map.
+    angles : ndarray
+        Fiber angles corresponding to rows of ``fiber_structure``.
+    distances : ndarray or None
+        Distances to nearest boundary point (retained for caller use; not
+        used in figure rendering after CSV save was removed).
+    tif_boundary : int
+        Boundary mode (0=none, 3=TIFF mask; 1/2 not yet ported).
+    boundary_measurement : bool
+        Controls angle scaling (0–90° when ``True``; 0–180° when ``False``)
+        and colormap thresholds.
+    map_params : dict or None
+        Filter parameters passed to ``draw_map``:
+        ``STDfilter_size`` (default 24), ``SQUAREmaxfilter_size`` (default 12),
+        ``GAUSSIANdiscfilter_sigma`` (default 4).  ``None`` uses all defaults.
+
+    Returns
+    -------
+    (fig, rawmap, procmap) : tuple
+        Matplotlib Figure with heatmap overlay, raw angle map (float64, NaN
+        outside fiber centres), and processed map (uint8, smoothed).
+    """
+    from matplotlib.colors import ListedColormap
+
+    if map_params is None:
+        map_params = {}
+
+    map_fibers = fiber_structure[in_curvs_flag]
+    map_angles = angles[in_curvs_flag]
+
+    raw_map, proc_map = draw_map(
+        map_fibers, map_angles, img, boundary_measurement, map_params
+    )
+
+    fig, ax = plt.subplots(
+        figsize=(img.shape[1] / 100, img.shape[0] / 100), dpi=100
+    )
+    ax.imshow(img, cmap="gray")
+
+    if boundary_measurement:
+        tg = int(10 * 255 / 90)
+        ty = int(45 * 255 / 90)
+        tr = int(60 * 255 / 90)
+    else:
+        tg = 32
+        ty = 64
+        tr = 128
+
+    colors = np.zeros((256, 3))
+    colors[tg:ty, 1] = 1.0
+    colors[ty:tr, 0:2] = 1.0
+    colors[tr:, 0] = 1.0
+    cmap = ListedColormap(colors)
+
+    ax.imshow(proc_map, cmap=cmap, alpha=0.5)
+    ax.axis("off")
+
+    return fig, raw_map, proc_map
+
+
+__all__ = [
+    "draw_curvs",
+    "draw_map",
+    "compute_angle_histogram",
+    "generate_fiber_overlay",
+    "generate_fiber_heatmap",
+]

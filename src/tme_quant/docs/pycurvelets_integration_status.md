@@ -240,14 +240,25 @@ Also added in this batch:
 
 ---
 
+#### Visualization wrappers from `process_image`  *(Batch 9C)*
+- **Source:** `src/pycurvelets/process_image.py` — `generate_overlay`, `generate_heatmap`, `save_histogram`
+- **Target:** `fiber_analysis/visualization/draw_utils.py`
+- **Port names:** `generate_fiber_overlay`, `generate_fiber_heatmap`, `compute_angle_histogram`
+- **Changes:**
+  - All `plt.savefig`/`plt.close`, CSV saves, and `print()` calls stripped
+  - `generate_fiber_overlay` and `generate_fiber_heatmap` return `(fig, ax)` / `(fig, rawmap, procmap)` — caller controls figure lifecycle
+  - `compute_angle_histogram` returns `{"counts", "bin_centers", "hist_data"}` dict; `np.roll` (MATLAB circshift for CSV save) dropped
+  - `num_sections` param dropped (unused in all three function bodies)
+  - `advanced_options` (pycurvelets `AdvancedAnalysisOptions` isinstance branch) replaced by plain dict with `None` default
+  - `tif_boundary=1/2` in overlay left as no-op comment `# tif_boundary 1/2: not yet ported`
+
+---
+
 ## Remaining (Future Batches)
 
 ---
 
-#### Visualization wrappers from `process_image`  *(Batch 9C, planned)*
-- **Source:** `src/pycurvelets/process_image.py` — `generate_overlay`, `generate_heatmap`, `save_histogram`
-- **Planned target:** `fiber_analysis/visualization/draw_utils.py` or new helpers alongside it
-- **Notes:** These wrap already-ported `draw_curvs` / `draw_map`; strip file I/O (`plt.savefig`) and return figure/array objects instead
+*(No known remaining items — all pycurvelets analysis and visualization functions identified in the decomposition plan have been ported)*
 
 ---
 
