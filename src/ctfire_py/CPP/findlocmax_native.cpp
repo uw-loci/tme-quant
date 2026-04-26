@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 #include <array>
+#include <random>
 #include <omp.h>
 #include <stdexcept>
 
@@ -12,12 +13,6 @@ namespace py = pybind11;
 template<typename T, int d>
 struct FindLocalMax {
     static constexpr T epsilon = 1e-3;
-
-    // Match original: signed int seed, signed int return — preserves overflow behavior
-    inline int fastrand(int& g_seed) {
-        g_seed = (214013 * g_seed + 2531011);
-        return (g_seed >> 16) & 0x7FFF;
-    }
 
     // 2D constructor — matches original MEX logic exactly
     FindLocalMax(int sizey, int sizez, T* image,
@@ -28,22 +23,51 @@ struct FindLocalMax {
         printf("sizey=%d sizez=%d total=%llu\n", sizey, sizez, (uint64_t)sizey * sizez);
         fflush(stdout);
 
-        // FIX 1: Use actual thread count, not hardcoded 1
-        // (hardcoded 1 only sized the seeds/buffer vectors, but OMP still spawned many threads)
         const int nThreads = omp_get_max_threads();
 
-        // Seed per thread
-        std::vector<int> seeds(nThreads, 0);
-        for (int i = 1; i < nThreads; ++i)
-            seeds[i] = fastrand(seeds[i-1]);
-
-        // Phase 1: add epsilon perturbation
-        #pragma omp parallel for num_threads(nThreads)
-        for (int i = 0; i < sizez; ++i) {
-            const int tid = omp_get_thread_num();
-            for (int j = 0; j < sizey; ++j) {
-                const uint64_t offset = (uint64_t)sizey * i + j; 
-                image[offset] += epsilon * T(fastrand(seeds[tid])) / T(0x7FFF);
+        // Phase 1: add epsilon perturbation using MT19937 seeded at 100.
+        //
+        // MATLAB's findlocmax.m does:
+        //   s = RandStream('twister','Seed',100);  % mt19937ar, seed 100
+        //   RandStream.setGlobalStream(s);
+        //   d = d + 1e-3 * rand(size(d));          % fills in COLUMN-MAJOR order
+        //
+        // Two subtleties must be reproduced exactly:
+        //
+        // 1. MATLAB rand() uses genrand_res53 (Matsumoto & Nishimura reference):
+        //      a = mt_out1 >> 5;  b = mt_out2 >> 6;
+        //      value = (a * 67108864.0 + b) / 9007199254740992.0;
+        //    This consumes TWO uint32 outputs per draw, producing a double.
+        //    Using uniform_real_distribution<float> (one uint32 per draw) gives
+        //    a completely different sequence from the second draw onward.
+        //
+        // 2. MATLAB fills in COLUMN-MAJOR order for a [K=height, J=width] matrix:
+        //      outer loop = col  (slower, varies last)
+        //      inner loop = row  (faster, varies first)
+        //    So pixel (row, col) receives draw number (col * height + row + 1).
+        //
+        //    The flat array passed from Python is ROW-MAJOR (numpy C-order), so
+        //    the correct flat index for pixel (row, col) is:
+        //      flat_idx = row * sizez + col     (sizez = I = width)
+        //    NOT   sizey * i + j  (which would index the TRANSPOSED pixel for a
+        //    non-square image, or swap draw assignments for a square image because
+        //    it visits pixels in row-major order while MATLAB fills column-major).
+        {
+            std::mt19937 rng(100);
+            // Outer loop over columns (MATLAB's slower/outer dimension for a
+            // [height, width] matrix stored column-major).
+            for (int col = 0; col < sizez; ++col) {   // sizez = I = width
+                // Inner loop over rows (MATLAB's faster/inner dimension).
+                for (int row = 0; row < sizey; ++row) {   // sizey = J = height
+                    // Row-major flat index for Python's C-contiguous dsm array.
+                    const uint64_t flat_idx = (uint64_t)row * sizez + col;
+                    // genrand_res53: two uint32 outputs → double in [0,1),
+                    // matching MATLAB's rand() output exactly for seed 100.
+                    const uint32_t a = rng() >> 5;   // top 27 bits
+                    const uint32_t b = rng() >> 6;   // top 26 bits
+                    const double draw = (a * 67108864.0 + b) * (1.0 / 9007199254740992.0);
+                    image[flat_idx] += static_cast<T>(epsilon * draw);
+                }
             }
         }
 

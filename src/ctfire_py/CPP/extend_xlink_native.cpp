@@ -8,6 +8,7 @@
 #include <array>
 #include <omp.h>
 #include <iostream>
+#include <unordered_set>
 #include "link_fibre.h" 
 
 namespace py = pybind11;
@@ -27,6 +28,37 @@ struct ExtendXLink {
         T val = 0;
         for (int i = 0; i < d; ++i) val += v1[i] * v2[i];
         return val;
+    }
+
+    // Straight-line continuity check matching MATLAB's ind_btw_nodes +
+    // findLMP.m line 55-60:
+    //   for k=size(LMP,1):-1:1
+    //       ind = ind_btw_nodes(u, LMP(k,:), size(d));
+    //       if any(d(ind) < LMPthresh); LMP(k,:) = []; end
+    //   end
+    // ind_btw_nodes samples one pixel per unit length between p and q
+    // (len = max(1, ||p-q||); x = 0:1/len:1; P = round((1-x)*p + x*q)).
+    // Returns true iff every sampled pixel has image[pixel] >= thresh.
+    // Previously the C++ extend_xlink LMP search skipped this check,
+    // letting LMPs across low-distance valleys become fibers and inflate
+    // the network on both initial and continuation passes.
+    static bool line_clear_above_thresh(const std::array<int, 2>& p,
+                                        const std::array<int, 2>& q,
+                                        const T* image, int sizex, int sizey,
+                                        T thresh) {
+        const T dr = T(p[0] - q[0]);
+        const T dc = T(p[1] - q[1]);
+        T len = std::sqrt(dr * dr + dc * dc);
+        if (len < T(1)) len = T(1);
+        const int nsteps = (int)std::floor(len); // x = 0, 1/len, ..., floor(len)/len
+        for (int k = 0; k <= nsteps; ++k) {
+            const T t = T(k) / len;
+            const int r = (int)std::floor((T(1) - t) * p[0] + t * q[0] + T(0.5));
+            const int c = (int)std::floor((T(1) - t) * p[1] + t * q[1] + T(0.5));
+            if (r < 0 || r >= sizey || c < 0 || c >= sizex) continue;
+            if (image[r * sizex + c] < thresh) return false;
+        }
+        return true;
     }
 
     // 2D Constructor - pts in {y, x} format
@@ -80,7 +112,28 @@ struct ExtendXLink {
                     const T d_value = image[p[0] * sizex + p[1]];
                     if (d_value < thresh_LMP) continue;
 
-                    // Check if this is a local maximum
+                    // Check if this is a local maximum among boundary neighbors only.
+                    //
+                    // MATLAB's getdB pads d with zpad=3 zeros, making the volume
+                    // [7, J+6, I+6].  For 2D images the nucleation sits at z=4
+                    // (the image plane); the search box extends ±r in z, giving
+                    // z1≤1 and z2≥7 for r≥3.  The z-face "side" pixels land in
+                    // zero-padded planes (fail thresh_LMP), so only the x-face and
+                    // y-face pixels at z=4 contribute LMPs.
+                    //
+                    // For an x-face pixel (col=x1 or x2), getdB's dBxn contains
+                    // offsets only in the y (±ys=±7) and z (±zs=±1) directions —
+                    // NOT in x.  So the pixel is compared against its SAME-FACE
+                    // y-neighbors, not against interior (col±1) pixels.  The z±1
+                    // neighbors are in zero-padded planes and never beat it.
+                    //
+                    // This is equivalent to: compare each boundary candidate only
+                    // against its neighbours that are ALSO on the same boundary face.
+                    // For a square box that means the same-col neighbors (for left/
+                    // right faces) or same-row neighbors (for top/bottom faces), which
+                    // is exactly what the boundary-only restriction below achieves for
+                    // all practical radii (r≥2, so faces are ≥4 px apart and other-face
+                    // pixels never appear in the 8-neighbourhood).
                     bool is_LMP = true;
                     for (int iii = -1; iii <= 1 && is_LMP; ++iii) {
                         for (int jjj = -1; jjj <= 1; ++jjj) {
@@ -100,6 +153,14 @@ struct ExtendXLink {
                     }
 
                     if (is_LMP) {
+                        // MATLAB findLMP.m:55-60 continuity check: discard
+                        // any LMP separated from the center by a sub-
+                        // threshold valley.
+                        if (!line_clear_above_thresh(nucleation, p, image,
+                                                     sizex, sizey, thresh_LMP)) {
+                            continue;
+                        }
+
                         // Check if too close to existing fiber endpoints
                         // Match MATLAB: use Euclidean distance norm(p1-p2) < LMPdist
                         bool too_close = false;
@@ -167,7 +228,8 @@ struct ExtendXLink {
                                     const T d_val = image[offset];
                                     if (d_val < thresh_LMP) continue;
 
-                                    // Check if it's a local maximum
+                                    // Check if it's a local maximum among boundary neighbors only.
+                                    // Same face-local logic as the initial LMP search above.
                                     bool is_LMP_cand = true;
                                     for (int iii = -1; iii <= 1 && is_LMP_cand; ++iii) {
                                         for (int jjj = -1; jjj <= 1; ++jjj) {
@@ -188,6 +250,18 @@ struct ExtendXLink {
                                     }
 
                                     if (is_LMP_cand) {
+                                        // MATLAB findLMP.m:55-60 continuity
+                                        // check also runs in continuation
+                                        // (findLMP is called with LMPdist=0
+                                        // so the line-trace gate is always
+                                        // active). Skip candidates whose
+                                        // straight line from p_current
+                                        // crosses a sub-threshold region.
+                                        if (!line_clear_above_thresh(p_current, p_cand, image,
+                                                                     sizex, sizey, thresh_LMP)) {
+                                            continue;
+                                        }
+
                                         // Compute direction for this candidate
                                         std::array<T, d> new_dir{T(p_cand[0] - p_current[0]), 
                                                                  T(p_cand[1] - p_current[1])};
@@ -254,63 +328,52 @@ struct ExtendXLink {
             }
         }
 
-        // Step 2: Remove duplicate fibers using link_map
-        const int nNucleation = pts.size();
-        std::vector<std::vector<uint64_t>> link_map(nNucleation);
-
-        // Populate link_map
-        #pragma omp parallel for
+        // Step 2: Remove duplicate fibers that share the same unordered
+        // endpoint pixel-pair.
+        //
+        // MATLAB equivalent (extend_xlink.m:143-156):
+        //     A = spalloc(n,n,10*n);
+        //     for fi=1:length(F)
+        //         v1 = F(fi).v(1);  v2 = F(fi).v(end);
+        //         if A(v1,v2)==1, fremove(fi) = 1; end
+        //         A(v1,v2) = 1;  A(v2,v1) = 1;   % symmetric
+        //     end
+        //
+        // The previous C++ used two parallel passes (forward /
+        // offset_begin<offset_end, reverse / offset_begin>offset_end) that
+        // had three divergences from MATLAB:
+        //   1. The reverse pass never wrote to link_map, so two fibers
+        //      both running in the reverse direction with the same
+        //      (begin, end) pair were never deduped.
+        //   2. Self-loops (offset_begin == offset_end) fell through both
+        //      branches and were never deduped.
+        //   3. The nucleation_map[offset_end] gate over-restricted dedup:
+        //      this C++ collapses non-nucleation vertices at shared pixel
+        //      offsets via index_map, so MATLAB's unconditional A(v1,v2)
+        //      dedup should map to an unconditional pixel-offset dedup.
+        // Fix: single serial pass with a symmetric hashed-pair key that
+        // also handles self-loops.
+        std::unordered_set<uint64_t> seen_pairs;
+        seen_pairs.reserve(fibres.size() * 2);
+        const uint64_t pack_shift = 32;  // pixel offsets fit in 32 bits for
+                                          // any realistic image (sizex<=2^16)
         for (int f = 0; f < (int)fibres.size(); ++f) {
             for (int branch = 0; branch < (int)fibres[f].size(); ++branch) {
-                if (fibres[f][branch].link.size() < 2) continue;
-                
-                uint64_t offset_begin = fibres[f][branch].link[0][0] * sizex + fibres[f][branch].link[0][1];
-                uint64_t offset_end = fibres[f][branch].link.back()[0] * sizex + fibres[f][branch].link.back()[1];
-                
-                if (nucleation_map[offset_end]) {
-                    if (offset_begin < offset_end) {
-                        bool found = false;
-                        #pragma omp critical
-                        {
-                            for (size_t i = 0; i < link_map[nucleation_map[offset_begin] - 1].size(); ++i) {
-                                if (link_map[nucleation_map[offset_begin] - 1][i] == offset_end) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (found) {
-                                fibres[f][branch].link.clear();
-                            } else {
-                                link_map[nucleation_map[offset_begin] - 1].push_back(offset_end);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+                auto& br = fibres[f][branch];
+                if (br.link.size() < 2) continue;
 
-        // Use link_map to delete duplicated fibers (reverse direction)
-        #pragma omp parallel for
-        for (int f = 0; f < (int)fibres.size(); ++f) {
-            for (int branch = 0; branch < (int)fibres[f].size(); ++branch) {
-                if (fibres[f][branch].link.size() < 2) continue;
-                
-                uint64_t offset_begin = fibres[f][branch].link[0][0] * sizex + fibres[f][branch].link[0][1];
-                uint64_t offset_end = fibres[f][branch].link.back()[0] * sizex + fibres[f][branch].link.back()[1];
-                
-                if (nucleation_map[offset_end]) {
-                    if (offset_begin > offset_end) {
-                        bool found = false;
-                        for (size_t i = 0; i < link_map[nucleation_map[offset_end] - 1].size(); ++i) {
-                            if (link_map[nucleation_map[offset_end] - 1][i] == offset_begin) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (found) {
-                            fibres[f][branch].link.clear();
-                        }
-                    }
+                const uint64_t ob = static_cast<uint64_t>(br.link[0][0]) * sizex +
+                                    static_cast<uint64_t>(br.link[0][1]);
+                const uint64_t oe = static_cast<uint64_t>(br.link.back()[0]) * sizex +
+                                    static_cast<uint64_t>(br.link.back()[1]);
+                const uint64_t lo = ob < oe ? ob : oe;  // symmetric key
+                const uint64_t hi = ob < oe ? oe : ob;
+                const uint64_t key = (lo << pack_shift) | hi;
+
+                if (seen_pairs.count(key)) {
+                    br.link.clear();  // duplicate pair -> drop this fiber
+                } else {
+                    seen_pairs.insert(key);
                 }
             }
         }
@@ -341,6 +404,7 @@ struct ExtendXLink {
         }
 
         // Step 5: Prepare nucleation points for linking (0-based indexing)
+        const int nNucleation = (int)pts.size();
         std::vector<int> nucleation_pts(nNucleation);
         #pragma omp parallel for
         for (int i = 0; i < nNucleation; ++i) {
@@ -379,11 +443,29 @@ struct ExtendXLink {
             }
         }
 
-        // Step 7: Link fibers at nucleation points
-        LinkFibreAtNucleationPoint<T, d>(X.size(), nucleation_pts, F_init, F, thresh_linka, sp);
+        // Step 7: MATLAB-faithful: no orientation-based linking here.
+        // MATLAB's extend_xlink.m only emits the individual F_init branches
+        // (after the (v_start, v_end) pair dedup applied above) -- fiber
+        // linking at shared nucleation points is handled later by fiberlink
+        // inside fiberproc. See /src/FIRE/xlink/extend_xlink.m lines 142-167.
+        // Previous code ran LinkFibreAtNucleationPoint here, which double-
+        // merged fibers and produced far fewer, longer fibers than MATLAB,
+        // leaving fiberremove with too little short-fiber work to do.
+        F.clear();
+        F.reserve(F_init.size());
+        for (int f = 0; f < (int)F_init.size(); ++f) {
+            if (F_init[f].link_index.size() < 2) continue; // trimxfv analogue
+            std::vector<int> v;
+            v.reserve(F_init[f].link_index.size());
+            for (int idx : F_init[f].link_index) {
+                v.push_back(idx + 1); // 0-based -> 1-based for MATLAB output
+            }
+            F.push_back(std::move(v));
+        }
+        (void)thresh_linka; (void)sp; (void)nucleation_pts;
 
         std::cout << "Fiber segments: " << F_init.size() << std::endl;
-        std::cout << "Linked fibers: " << F.size() << std::endl;
+        std::cout << "Fibers (no link, MATLAB-faithful): " << F.size() << std::endl;
 
         // Step 8: Build auxiliary data structures (Xfe, Xf, Xvall, Ff)
         Xfe.resize(X.size());

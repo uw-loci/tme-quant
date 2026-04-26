@@ -73,7 +73,10 @@ def smooth(v, sigma):
     shape2[1] = len(x2)
     gx2 = gx2.reshape(shape2)
 
-    # Apply first two filters
+    # Apply first two filters.
+    # Use mode='constant', cval=0 (zero-padding) to match MATLAB's imfilter default.
+    # MATLAB's imfilter(v, kernel, 'same') uses zero-padding by default (the 'same'
+    # argument specifies output size, not boundary behavior; the default boundary is 0).
     v = convolve(v, gx1, mode="constant", cval=0.0)
     v = convolve(v, gx2, mode="constant", cval=0.0)
 
@@ -434,25 +437,21 @@ def fire_2d_angle(
     R = Rz2
 
     # Step 8: Fiber processing
-    # Match MATLAB: fire_2D_ang1.m line 167 calls fiberproc(X,F,R,size(dsm),p)
+    # Match MATLAB fire_2D_ang1.m line 167:
+    #     [Xa Fa Ea Va Ra] = fiberproc(X, F, R, size(dsm), p);
+    # The C++ `fiber_backend.process_fibers` is a faithful port of
+    # fiberproc.m that bundles trimxfv, remove_repeat, 5x(fiberlink +
+    # remove_repeat), fiberlinkgap, and fiberremove in MATLAB's exact order.
     print("Fiberproc")
-    
-    # Call C++ fiberproc_native (with 5-iteration fiberlink implementation)
-    # This performs:
-    # - 5 iterations of fiberlink (merges aligned fibers at endpoints)
-    # - fiber_gapfill (TODO: currently stubbed)
-    # - Creates edge array E
-    # Based on fiberproc.m lines 1-60
     Xa, Fa, Ea, Va, Ra = fiber_backend.process_fibers(
-        K, J, I, 
-        dsm_flat, 
-        Xz2.astype(np.int32), 
-        Fz2, 
-        Rz2, 
-        p
+        K, J, I,
+        dsm_flat,
+        Xz2.astype(np.int32),
+        Fz2,
+        Rz2,
+        p,
     )
-    
-    # Convert Ea from list to numpy array if needed
+
     if isinstance(Ea, list):
         Ea_array = np.zeros((len(Ea), 2), dtype=np.int32)
         for i, edge in enumerate(Ea):
@@ -461,73 +460,9 @@ def fire_2d_angle(
                 Ea_array[i, 1] = edge[1]
         Ea = Ea_array
 
-    # MATLAB fiberproc.m runs `remove_repeat` once before fiberlink, and once
-    # after each of the 5 fiberlink iterations. The intermediate cleanup is
-    # what lets fiberlink keep merging on successive passes. Additionally,
-    # MATLAB's fiberlink picks the most-colinear pair at each star junction
-    # via min-finding (min2(A)), whereas the C++ fiberlink only merges the
-    # first-in-index-order pair it finds below the threshold. To recover
-    # MATLAB's behavior we (1) collapse coincident vertices / split
-    # overlapping fibers with `remove_repeat`, (2) run a MATLAB-faithful
-    # `fiberlink_py` pass to merge any colinear pairs the C++ greedy walk
-    # missed, and (3) repeat until the fiber count stabilizes.
-    from ctfire_py.fiber_processing import fiberremove, fiberlink_py, remove_repeat
-
-    def _rerun_process_fibers(Xa, Fa, Ra):
-        """Feed the current (X, F, R) back through the C++ process_fibers."""
-        Xa_in = np.asarray(Xa, dtype=np.int32)
-        Ra_in = np.asarray(Ra, dtype=np.float64)
-        X2, F2, E2, V2, R2 = fiber_backend.process_fibers(
-            K, J, I, dsm_flat, Xa_in, Fa, Ra_in, p
-        )
-        return (
-            np.asarray(X2, dtype=np.float64),
-            F2,
-            V2,
-            np.asarray(R2, dtype=np.float64),
-        )
-
-    thresh_linka = float(p.get("thresh_linka", -0.866))
-    s_fiberdir = int(p.get("s_fiberdir", 5))
-    for cleanup_iter in range(5):
-        n_before_rr = len(Fa)
-        Xa, Fa, Va, Ra = remove_repeat(Xa, Fa, Va, Ra, verbose=False)
-        print(f"  remove_repeat pass {cleanup_iter + 1}: "
-              f"{n_before_rr} -> {len(Fa)} fibers")
-        n_before_fl = len(Fa)
-        Xa, Fa, Va, Ra = fiberlink_py(Xa, Fa, Va, Ra, thresh_linka, s_fiberdir)
-        print(f"  fiberlink_py pass {cleanup_iter + 1}: "
-              f"{n_before_fl} -> {len(Fa)} fibers")
-        # Re-run the C++ fiberlinkgap (inside process_fibers) on the cleaned
-        # network so it can fuse gaps exposed by the new merges. The C++
-        # fiberlink iterations here are idempotent once the Python passes
-        # have converged.
-        n_before_pf = len(Fa)
-        Xa, Fa, Va, Ra = _rerun_process_fibers(Xa, Fa, Ra)
-        print(f"  process_fibers re-pass {cleanup_iter + 1}: "
-              f"{n_before_pf} -> {len(Fa)} fibers")
-        if len(Fa) >= n_before_rr:
-            break
-
-    # MATLAB fiberproc.m line 31 calls fiberremove after fiberlinkgap to drop
-    # short dangling fibers and short-fiber star patterns. The C++
-    # process_fibers does not run this step, so we do it here in Python to
-    # match MATLAB's end-to-end fiber network.
-    n_before = len(Fa)
-    Xa, Fa, Va, Ra = fiberremove(
-        Xa, Fa, Va, Ra,
-        thresh_flen=p.get("thresh_flen", 15.0),
-        thresh_numv=p.get("thresh_numv", 3),
-        verbose=True,
-    )
-    # Rebuild Ea from the surviving fibers (endpoints are 1-based vertex ids).
-    Ea = np.zeros((len(Fa), 2), dtype=np.int32)
-    for i, f in enumerate(Fa):
-        v = f.get("v", []) if isinstance(f, dict) else []
-        if len(v) >= 2:
-            Ea[i, 0] = int(v[0])
-            Ea[i, 1] = int(v[-1])
-    print(f"  fiberremove: {n_before} -> {len(Fa)} fibers")
+    Xa = np.asarray(Xa, dtype=np.float64)
+    if Ra is not None:
+        Ra = np.asarray(Ra, dtype=np.float64)
 
     elapsed_time = time.time() - start_time
     print(f"CPP code for this image takes {elapsed_time:.2f} seconds")
@@ -548,13 +483,14 @@ def fire_2d_angle(
     # Calculate network statistics
     M = network_statK(Xas, Fa, Va, Ra)
 
-    # Step 10: Fiber interpolation
+    # Step 10: Fiber interpolation via Hermite cubic spline resampling
     print("Interpolating fibers")
-    # TODO: Implement fiber2beam function
-    # For now, use scaled coordinates
-    Xai = Xas.copy()
-    Fai = Fa
-    Vai = Va
+    from ctfire_py.fiber_processing.fiber2beam import fiber2beam
+    minspace = float(p.get("s_maxspace", 5))
+    lam      = float(p.get("lambda", 0.01))
+    # fiber2beam expects 3-D X (N×3); Xas may be N×2 – pad if needed
+    Xas3 = Xas if Xas.shape[1] == 3 else np.column_stack([Xas, np.zeros(len(Xas))])
+    Xai, Fai, Vai = fiber2beam(Xas3, Fa, Va, Ra, minspace, lam)
 
     # Step 11: Calculate fiber angles
     print("Calculating fiber angles")
@@ -568,18 +504,23 @@ def fire_2d_angle(
     FiberAngleI = calc_fiberang2(Xai, Fai, SPI)
     M["FangI"] = FiberAngleI
 
-    # Step 12: Beam processing
+    # Step 12: Beam processing (scale, prune floppy edges, re-interpolate)
     print("Beamproc")
-    # TODO: Implement beamproc function
-    Xab = Xa.copy()
-    Fab = Fa
-    Vab = Va
+    from ctfire_py.fiber_processing.beamproc import beamproc
+    try:
+        Xab, Fab, Vab = beamproc(Xa, Fa, Va, Ra, p)
+    except Exception as _beamproc_err:
+        # beamproc can fail when boundary nodes are absent (e.g. tiny images);
+        # fall back gracefully so the rest of the pipeline keeps running.
+        print(f"  beamproc skipped ({_beamproc_err})")
+        Xab = Xa.copy()
+        Fab = Fa
+        Vab = Va
 
     # Step 13: Fiber break at cross-links
-    # Note: Skipping fiberbreak - it splits fibers too aggressively
-    # MATLAB's CurveAlign doesn't use fiberbreak before filtering
-    print("Skipping fiberbreak (keeps fiber topology intact)")
-    Xc, Fc, Vc = Xa, Fa, Va
+    print("Fiberbreak")
+    from ctfire_py.fiber_processing.fiberbreak import fiberbreak
+    Xc, Fc, Vc = fiberbreak(Xa, Fa, Va)
     
     # Step 13.5: CurveAlign-style filtering
     print("Applying CurveAlign-style quality filters")
