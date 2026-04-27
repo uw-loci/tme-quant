@@ -240,10 +240,9 @@ def _curvelops_curvelet_2d(
         # is the number of directions at the coarsest detail scale.
         # curvelops doubles angles at each finer scale (parabolic scaling).
         fdct = curvelops.FDCT2D(
-            n=(h, w),
-            nscales=n_levels,
-            angles_coarse=n_angles,
-            real=True,
+            dims=(h, w),
+            nbscales=n_levels,
+            nbangles_coarse=n_angles,
         )
 
         # Forward transform: returns a list-of-lists of coefficient patches
@@ -270,8 +269,8 @@ def _curvelops_curvelet_2d(
                 zero_struct[scale_idx][wedge_idx] = wedge_coeffs
 
                 # Reconstruct spatial image for this wedge
-                reconstructed = fdct.H * fdct.unravel(zero_struct)
-                spatial = reconstructed.reshape(h, w).astype(np.float32)
+                reconstructed = fdct.H * fdct.vect(zero_struct)
+                spatial = reconstructed.reshape(h, w).real.astype(np.float32)
 
                 # Accumulate energy
                 result[:, :, angle_bin] += spatial ** 2
@@ -313,10 +312,9 @@ def _curvelops_curvelet_3d(
         z, h, w = vol.shape
 
         fdct = curvelops.FDCT3D(
-            n=(z, h, w),
-            nscales=n_levels,
-            angles_coarse=n_angles,
-            real=True,
+            dims=(z, h, w),
+            nbscales=n_levels,
+            nbangles_coarse=n_angles,
         )
 
         coeffs_struct = fdct.struct(fdct * vol.ravel())
@@ -335,8 +333,8 @@ def _curvelops_curvelet_3d(
                                for band in coeffs_struct]
                 zero_struct[scale_idx][wedge_idx] = wedge_coeffs
 
-                reconstructed = fdct.H * fdct.unravel(zero_struct)
-                spatial = reconstructed.reshape(z, h, w).astype(np.float32)
+                reconstructed = fdct.H * fdct.vect(zero_struct)
+                spatial = reconstructed.reshape(z, h, w).real.astype(np.float32)
                 result[:, :, :, angle_bin] += spatial ** 2
 
         return result

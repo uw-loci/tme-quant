@@ -506,7 +506,7 @@ def workflow_curvealign_complete(
         compute_coherency=True,
         compute_energy=True,
         return_fiber_segments=True,
-        candidate_keep=0.05,
+        candidate_keep=0.005,
         candidate_scale=1,
         candidate_radius=4.0,
         keep_values=['angles', 'alignment', 'energy'],
