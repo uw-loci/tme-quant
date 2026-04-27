@@ -371,15 +371,15 @@ class TestExtractBoundaryCoords:
         assert np.all(coords[:, 0] >= 0) and np.all(coords[:, 0] < 40)
         assert np.all(coords[:, 1] >= 0) and np.all(coords[:, 1] < 60)
 
-    def test_region_with_hole_returns_outer_contour(self):
+    def test_region_with_hole_returns_both_contours(self):
         # Donut: filled square with a square hole — produces two contours per region.
-        # The outer perimeter is longer; we expect only it to be returned.
+        # Both the outer perimeter and the inner hole boundary are valid and returned.
         mask = np.zeros((60, 60), dtype=np.uint8)
         mask[5:55, 5:55] = 1   # outer filled region
         mask[20:40, 20:40] = 0  # punch a hole
         result = extract_boundary_coords_from_mask(mask)
-        assert "ROI_1" in result
-        outer_len = len(result["ROI_1"])
-        # Outer perimeter ~4*50=200 pts; inner hole ~4*20=80 pts.
-        # The returned contour must be the longer (outer) one.
-        assert outer_len > 100
+        # Both outer perimeter (~200 pts) and inner hole (~80 pts) exceed min_contour_len=20.
+        assert len(result) == 2
+        lengths = sorted(len(v) for v in result.values())
+        assert lengths[0] > 20   # inner hole boundary
+        assert lengths[1] > 100  # outer perimeter

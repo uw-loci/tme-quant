@@ -412,6 +412,7 @@ def extract_tif_boundary(
 
 def extract_boundary_coords_from_mask(
     boundary_img: np.ndarray,
+    min_contour_len: int = 20,
 ) -> dict:
     """Extract per-ROI boundary coordinate arrays from a binary mask.
 
@@ -420,13 +421,29 @@ def extract_boundary_coords_from_mask(
 
     Each connected region in *boundary_img* is labelled independently.
     For each region, ``skimage.measure.find_contours`` may return multiple
-    contours (outer boundary + any interior holes); only the longest contour
-    — the outer perimeter — is kept.
+    contours.  All contours with at least *min_contour_len* points are kept
+    and assigned sequential ``ROI_N`` keys.
+
+    Background
+    ----------
+    The original pycurvelets implementation kept only the *longest* contour
+    per labeled region, which was correct for *filled-polygon* masks (where
+    ``find_contours`` returns one outer perimeter and one shorter inner-edge
+    artifact at the 0.5 iso-value).  However, *boundary-trace* masks — where
+    the white pixels are painted boundary strokes rather than filled areas —
+    can produce multiple equally-valid contours within a single connected
+    component (e.g. two boundary paths that share a pixel).  Discarding all
+    but the longest silently dropped those paths.  The ``min_contour_len``
+    threshold replaces the longest-only filter: genuine boundary paths are
+    long; sub-pixel iso-value artifacts are typically very short (< 20 pts).
 
     Parameters
     ----------
     boundary_img : ndarray of shape (H, W)
         Binary mask.  Non-zero pixels are treated as boundary/ROI material.
+    min_contour_len : int
+        Contours shorter than this are discarded (iso-value artifacts).
+        Default 20 is well below any real boundary path length.
 
     Returns
     -------
@@ -441,11 +458,14 @@ def extract_boundary_coords_from_mask(
         return {}
 
     coordinates: dict = {}
+    roi_idx = 1
     for region_id in range(1, num_regions + 1):
         region_mask = (labeled_mask == region_id).astype(np.uint8)
-        contours = find_contours(region_mask, 0.5)
-        if contours:
-            coordinates[f"ROI_{region_id}"] = max(contours, key=len)
+        contours = sorted(find_contours(region_mask, 0.5), key=len, reverse=True)
+        for contour in contours:
+            if len(contour) >= min_contour_len:
+                coordinates[f"ROI_{roi_idx}"] = contour
+                roi_idx += 1
 
     return coordinates
 
