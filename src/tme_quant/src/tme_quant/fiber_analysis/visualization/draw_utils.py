@@ -399,9 +399,11 @@ def generate_fiber_overlay(
             ].values[in_curvs_flag]
             for center, bndry_pt in zip(in_curvs, in_bndry):
                 if not np.isnan(bndry_pt[0]) and not np.isnan(bndry_pt[1]):
+                    # boundary_point_row/col are stored in MATLAB (x,y) convention:
+                    # bndry_pt[0] = boundary_point_row = col (x), bndry_pt[1] = boundary_point_col = row (y)
                     ax.plot(
-                        [center[1], bndry_pt[1]],
-                        [center[0], bndry_pt[0]],
+                        [center[1], bndry_pt[0]],
+                        [center[0], bndry_pt[1]],
                         "b-",
                         linewidth=0.5,
                     )
