@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tme_quant.tme_analysis.pipelines.curvealign_pipeline import curvealign_pipeline
+from tme_quant.tme_analysis.pipelines import curvealign_pipeline
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
