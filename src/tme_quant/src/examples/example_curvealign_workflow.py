@@ -51,7 +51,7 @@ from tme_quant.image_registration.config import RegistrationParams, TransformTyp
 
 # ── Fiber analysis ────────────────────────────────────────────────────────────
 from tme_quant.fiber_analysis import FiberOrientationAnalyzer
-from tme_quant.fiber_analysis.config import CurveAlignParams
+from tme_quant.fiber_analysis.config import CurveAlignParams, CurveAlignAnalysisMode
 from tme_quant.fiber_analysis.utils import available_backends
 from tme_quant.fiber_analysis.utils.geometry_utils import compute_angle_to_boundary_normal
 from tme_quant.fiber_analysis.tacs import classify_fiber_segment_tacs_like, get_tacs_color
@@ -498,14 +498,18 @@ def workflow_curvealign_complete(
     # ── [3/9] CurveAlign orientation analysis ───────────────────────────────
     print('\n[3/9] CurveAlign orientation analysis...')
     orientation_params = CurveAlignParams(
+        # CURVELETS mode: groups curvelet coefficients to estimate dominant local
+        # fiber orientations (one global FDCT pass — no sliding-window loop).
+        # Each position in fiber_structure represents a curvelet-grouped local region,
+        # not an individually extracted fiber.
+        analysis_mode=CurveAlignAnalysisMode.CURVELETS,
         pixel_size=pixel_size,
-        window_size=64,
+        window_size=64,        # used by WINDOWED/FULL modes; kept for reference
         overlap=0.5,
         curvelet_levels=4,
         curvelet_angles=8,
         compute_coherency=True,
         compute_energy=True,
-        return_fiber_segments=True,
         candidate_keep=0.005,
         candidate_scale=1,
         candidate_radius=4.0,

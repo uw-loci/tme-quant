@@ -187,11 +187,12 @@ Also added in this batch:
 
 ---
 
-#### `process_image` → `curvealign_pipeline`  *(Batch 9B)*
+#### `process_image` → `curvealign_curvelets_mode_pipeline`  *(Batch 9B, renamed in post-9C refactor)*
 - **Source:** `src/pycurvelets/process_image.py`
-- **Target:** `tme_analysis/pipelines/curvealign_pipeline.py` (new file)
+- **Target:** `tme_analysis/pipelines/curvealign_curveletsMode_pipeline.py`
 - **Original:** `process_image(image_params, fiber_params, output_params, boundary_params, advanced_options)`
-- **New:** `curvealign_pipeline(image, fiber_structure=None, keep, scale, radius, feature_params, coordinates, boundary_img, distance_threshold, tif_boundary, exclude_fibers_in_mask, min_dist)`
+- **New:** `curvealign_curvelets_mode_pipeline(image, fiber_structure=None, keep, scale, radius, feature_params, coordinates, boundary_img, distance_threshold, tif_boundary, exclude_fibers_in_mask, min_dist)`
+- **Alias:** `curvealign_pipeline` is a deprecated backward-compatible alias
 - **Changes:**
   - All pycurvelets dataclass params replaced by plain args
   - File I/O, visualization calls, and `multiprocessing.Pool` stripped entirely

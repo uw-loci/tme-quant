@@ -674,6 +674,41 @@ class OrientationParams:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CurveAlign analysis mode
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CurveAlignAnalysisMode(str, Enum):
+    """Controls which computations ``CurveAlignOrientation.analyze_2d`` performs.
+
+    All modes require the **curvelops** package.
+
+    CURVELETS  — *default*. Groups curvelet coefficients spatially and
+                 angularly to estimate the dominant fiber orientation in each
+                 local region (one global FDCT pass — no sliding-window loop).
+                 Populates ``fiber_structure`` (curvelet orientation
+                 representatives), ``fiber_density``, ``fiber_alignment``,
+                 ``fiber_segments``, and sparse ``orientation_map`` /
+                 ``alignment_map`` rasterized from those orientation estimates.
+                 Fast: a single full-image FDCT pass replaces N windowed passes.
+                 Note: does *not* extract individual fibers — each position
+                 represents the dominant orientation of a curvelet-grouped
+                 local region.
+
+    WINDOWED   — Sliding-window curvelet orientation analysis only. No
+                 curvelet grouping step. Produces dense per-pixel
+                 ``orientation_map``, ``alignment_map``, and ``energy_map``.
+                 Use when full spatial coverage (including non-fiber areas)
+                 is needed.
+
+    FULL       — Runs both CURVELETS and WINDOWED. All result fields are
+                 populated.
+    """
+    CURVELETS = "curvelets"
+    WINDOWED  = "windowed"
+    FULL      = "full"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Mode-specific parameter subclasses
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -682,19 +717,21 @@ class CurveAlignParams(OrientationParams):
     """
     Parameters for CurveAlign curvelet-based orientation analysis.
 
-    CurveAlign decomposes the image with a multi-scale curvelet transform
-    inside a sliding window, then picks the dominant angular energy bin as
-    the local fiber orientation.  It is the reference method for SHG
-    collagen images and the default in TMEQuant.
-
     Attributes
     ----------
+    analysis_mode : CurveAlignAnalysisMode
+        Controls which computations are performed.  See
+        ``CurveAlignAnalysisMode`` for the three options.
+        Default: ``CURVELETS`` (grouped curvelet orientation estimation,
+        no sliding-window loop).
     window_size : int
         Side length (pixels) of the sliding analysis window.
+        Used by WINDOWED and FULL modes only.
         Smaller → finer spatial resolution but noisier estimates.
         Typical range: 32–128 pixels.
     overlap : float
         Fractional overlap between adjacent windows (0–1).
+        Used by WINDOWED and FULL modes only.
         ``0.5`` = 50 % overlap.  Higher overlap gives smoother maps
         but proportionally longer run time.
     curvelet_levels : int
@@ -706,22 +743,35 @@ class CurveAlignParams(OrientationParams):
         Must be a power of 2 ≥ 4.  More angles → finer angular
         resolution.  Typical: 8–16.
     compute_coherency : bool
-        Whether to fill a per-pixel coherency (energy concentration)
-        map in the result.
+        Whether to compute a per-pixel coherency (angular energy
+        concentration) map.  Used by WINDOWED and FULL modes.
     compute_energy : bool
-        Whether to fill a per-pixel total curvelet energy map.
+        Whether to compute a per-pixel total curvelet energy map.
+        Used by WINDOWED and FULL modes.
     use_matlab_backend : bool
-        If ``True``, attempt to call the original MATLAB CT-FIRE /
-        CurveAlign via the MATLAB Engine for Python.  Falls back to
-        the NumPy FFT approximation when the engine is unavailable.
+        If ``True``, attempt to call the original MATLAB CurveAlign via
+        the MATLAB Engine for Python.  Only applies to WINDOWED/FULL
+        modes.  curvelops is always used when available.
     return_fiber_segments : bool
-        If ``True``, trace and return individual fiber segment
-        coordinates from the curvelet maxima.  Only meaningful for
-        CurveAlign; ignored by other modes.
+        Deprecated.  Use ``analysis_mode=CurveAlignAnalysisMode.CURVELETS``
+        instead.  Kept for backward compatibility only.
+    candidate_keep : float
+        Top fraction of FDCT coefficients to retain when grouping
+        curvelets.  Used by CURVELETS and FULL modes.
+    candidate_scale : int
+        Curvelet scale index used for orientation grouping.
+    candidate_radius : float
+        Spatial grouping radius in pixels for curvelet orientation
+        estimates.
+    candidate_feature_params : FiberFeatureParams or None
+        Feature computation parameters.  ``None`` → ``FiberFeatureParams()``.
     """
     mode: OrientationMode = OrientationMode.CURVEALIGN
 
-    # Sliding-window settings
+    # Analysis mode — controls which computations run
+    analysis_mode: CurveAlignAnalysisMode = CurveAlignAnalysisMode.CURVELETS
+
+    # Sliding-window settings (WINDOWED / FULL modes)
     window_size: int   = 64
     overlap:     float = 0.5
 
@@ -729,23 +779,26 @@ class CurveAlignParams(OrientationParams):
     curvelet_levels: int = 4
     curvelet_angles: int = 8
 
-    # Output flags
+    # Output flags (WINDOWED / FULL modes)
     compute_coherency: bool = True
     compute_energy:    bool = True
 
-    # Backend and optional outputs
-    use_matlab_backend:    bool = False
+    # Backend
+    use_matlab_backend: bool = False
+
+    # Deprecated: use analysis_mode=CurveAlignAnalysisMode.CURVELETS instead
     return_fiber_segments: bool = False
 
-    # Fiber candidate extraction (used when return_fiber_segments=True, requires curvelops)
-    candidate_keep:           float    = 0.05   # top fraction of FDCT coefficients to retain
-    candidate_scale:          int      = 1      # scale index for extract_curvelet_fiber_candidates
-    candidate_radius:         float    = 4.0    # spatial grouping radius in pixels
-    candidate_feature_params: Any      = None   # FiberFeatureParams; None → FiberFeatureParams()
+    # Curvelet orientation grouping settings (CURVELETS / FULL modes)
+    candidate_keep:           float = 0.05   # top fraction of FDCT coefficients to retain
+    candidate_scale:          int   = 1      # curvelet scale index for orientation grouping
+    candidate_radius:         float = 4.0    # spatial grouping radius in pixels
+    candidate_feature_params: Any   = None   # FiberFeatureParams; None → FiberFeatureParams()
 
     def to_dict(self) -> Dict[str, Any]:
         d = super().to_dict()
         d.update({
+            'analysis_mode':          self.analysis_mode.value,
             'window_size':            self.window_size,
             'overlap':                self.overlap,
             'curvelet_levels':        self.curvelet_levels,

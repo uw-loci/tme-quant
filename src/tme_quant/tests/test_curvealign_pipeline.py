@@ -159,7 +159,13 @@ class TestCurveAlignFiberCandidatesNoCurvelops:
         return np.random.default_rng(1).random((h, w)).astype(np.float32)
 
     def test_no_curvelops_returns_empty_gracefully(self, monkeypatch):
-        """When curvelops absent, fiber_structure is None; orientation maps still valid."""
+        """When grouping fails, CURVELETS mode returns empty fiber fields and None maps.
+
+        In CURVELETS mode the orientation_map is sparse (populated only at grouped
+        curvelet positions). When build_fiber_structure_from_curvelets raises ImportError,
+        no positions are available so both orientation_map and alignment_map remain None.
+        Use WINDOWED mode when a dense orientation_map is required regardless of grouping.
+        """
         import tme_quant.fiber_analysis.utils.fiber_dataframe_utils as fdu
 
         def _raise(**kw):
@@ -167,10 +173,15 @@ class TestCurveAlignFiberCandidatesNoCurvelops:
 
         monkeypatch.setattr(fdu, "build_fiber_structure_from_curvelets", _raise)
         from tme_quant.fiber_analysis.methods.curvealign import CurveAlignOrientation
-        from tme_quant.fiber_analysis.config import CurveAlignParams
+        from tme_quant.fiber_analysis.config import CurveAlignParams, CurveAlignAnalysisMode
         img = self._make_image()
-        params = CurveAlignParams(window_size=32, return_fiber_segments=True)
+        params = CurveAlignParams(
+            window_size=32,
+            analysis_mode=CurveAlignAnalysisMode.CURVELETS,
+        )
         result = CurveAlignOrientation().analyze_2d(img, params)
         assert result.fiber_segments == []
         assert result.fiber_structure is None
-        assert result.orientation_map is not None
+        # Sparse maps have no grouped positions to paint — both are None
+        assert result.orientation_map is None
+        assert result.alignment_map is None

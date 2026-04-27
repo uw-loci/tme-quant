@@ -277,19 +277,17 @@ to `~/.bashrc` to suppress permanently.
 
 **`curvelops` build failure**
 
-Skip Step 2. The NumPy FFT fallback activates automatically. You will see:
+`CurveAlignOrientation.analyze_2d` (all modes: CURVELETS, WINDOWED, FULL) requires
+curvelops and will raise `ImportError` if it is absent.  Other methods (CT-FIRE
+curvelet preprocessing, curvelet_utils fallback) will use the Frangi ridge-filter
+fallback automatically and emit a `UserWarning`.
 
-```
-UserWarning: curvelops not installed — NumPy FFT fallback in use.
-             Out-of-plane fibers will NOT be detected in 3-D mode.
-```
+Install curvelops by repeating Step 2 once build tools are available.
 
-Install curvelops later by repeating Step 2 once build tools are available.
+**`WARNING: Using Frangi ridge-filter fallback`** during CT-FIRE preprocessing
 
-**`WARNING: Using NumPy FFT fallback`** during CurveAlign / CT-FIRE
-
-Install curvelops (Step 2) to eliminate this and enable the full 3-D
-volumetric curvelet transform.
+This appears when curvelops is absent.  Install curvelops (Step 2) to eliminate it
+and enable the full FDCT2D/FDCT3D volumetric curvelet transform.
 
 **`python-louvain` install fails**
 

@@ -31,11 +31,12 @@ organization in the ECM. https://loci.wisc.edu/software/curvealign
 from __future__ import annotations
 
 import numpy as np
-from typing import Optional, Tuple
+from typing import Tuple
 
 from ..orientation import BaseOrientationMethod
 from ..config import (
     OrientationParams, CurveAlignParams, CurveAlignResult,
+    CurveAlignAnalysisMode as _Mode,
 )
 from ..utils.curvelet_utils import curvelet_transform_2d, curvelet_transform_3d
 
@@ -86,11 +87,17 @@ class CurveAlignOrientation(BaseOrientationMethod):
         image : ndarray, shape (H, W)
             2-D grayscale image.
         params : CurveAlignParams or OrientationParams
-            Analysis parameters.
+            Analysis parameters.  See ``CurveAlignParams.analysis_mode``
+            for the three available modes.
 
         Returns
         -------
         CurveAlignResult
+
+        Raises
+        ------
+        ImportError
+            If curvelops is not installed (required for all modes).
         """
         if image.ndim != 2:
             raise ValueError(
@@ -98,84 +105,105 @@ class CurveAlignOrientation(BaseOrientationMethod):
                 "For volumetric data use analyze_3d."
             )
 
-        p = self._coerce_params(params)
+        from ..utils.curvelet_utils import _has_curvelops
+        if not _has_curvelops():
+            raise ImportError(
+                "curvelops is required for CurveAlignOrientation. "
+                "Install via: pip install curvelops  (see docs/getting_started.md)"
+            )
 
-        h, w   = image.shape
-        stride = max(1, int(p.window_size * (1.0 - p.overlap)))
+        p    = self._coerce_params(params)
+        mode = p.analysis_mode
+        result = CurveAlignResult(pixel_size=p.pixel_size)
 
-        orientation_map = np.full((h, w), np.nan, dtype=np.float32)
-        coherency_map   = np.zeros((h, w), dtype=np.float32) if p.compute_coherency else None
-        energy_map      = np.zeros((h, w), dtype=np.float32) if p.compute_energy    else None
-
-        n_windows    = 0
-        total_energy = 0.0
-
-        for y in range(0, h - p.window_size + 1, stride):
-            for x in range(0, w - p.window_size + 1, stride):
-                window = image[y : y + p.window_size, x : x + p.window_size]
-
-                coeffs = curvelet_transform_2d(
-                    window,
-                    n_levels=p.curvelet_levels,
-                    n_angles=p.curvelet_angles,
-                    use_matlab=p.use_matlab_backend,
-                )
-
-                orientation, coherency, energy = self._window_orientation(
-                    coeffs, p.curvelet_angles
-                )
-
-                ys = slice(y, y + p.window_size)
-                xs = slice(x, x + p.window_size)
-                orientation_map[ys, xs] = orientation
-                if coherency_map is not None:
-                    coherency_map[ys, xs] = coherency
-                if energy_map is not None:
-                    energy_map[ys, xs] = energy
-
-                n_windows    += 1
-                total_energy += energy
-
-        mean_energy = total_energy / max(n_windows, 1)
-        valid       = orientation_map[~np.isnan(orientation_map)]
-        stats       = self._compute_statistics(valid, coherency_map)
-
-        result = CurveAlignResult(
-            orientation_map          = orientation_map,
-            alignment_map            = coherency_map,
-            mean_orientation         = stats['mean_orientation'],
-            alignment_score          = stats['alignment_score'],
-            mean_alignment           = stats['alignment_score'],
-            std_orientation          = stats['std_orientation'],
-            orientation_distribution = stats['orientation_distribution'],
-            pixel_size               = p.pixel_size,
-            energy_map               = energy_map,
-            n_windows_analyzed       = n_windows,
-            mean_energy              = mean_energy,
-        )
-
-        if p.return_fiber_segments:
-            segs, fs, fd, fa = self._trace_fiber_segments(
+        # ── CURVELETS mode: group curvelet coefficients to estimate dominant
+        #    local fiber orientations (one global FDCT pass, no windowed loop).
+        #    Does not extract individual fibers — each position in fiber_structure
+        #    represents the dominant orientation of a curvelet-grouped local region.
+        if mode in (_Mode.CURVELETS, _Mode.FULL):
+            groups, fs, fd, fa, o_map, a_map = self._group_curvelet_orientations(
                 image=image,
-                orientation_map=orientation_map,
-                coherency_map=coherency_map,
                 keep=p.candidate_keep,
                 scale=p.candidate_scale,
                 radius=p.candidate_radius,
                 feature_params=p.candidate_feature_params,
             )
-            result.fiber_segments  = segs
-            result.fiber_structure = fs
+            result.fiber_segments  = groups   # (N,2) position arrays for napari
+            result.fiber_structure = fs       # curvelet orientation representatives
             result.fiber_density   = fd
             result.fiber_alignment = fa
+            result.orientation_map = o_map    # sparse: angle at each grouped position
+            result.alignment_map   = a_map    # sparse: 1.0 at each grouped position
+            if fs is not None and not fs.empty:
+                angles = fs['angle'].values
+                stats  = self._compute_statistics(angles, None)
+                result.mean_orientation         = stats['mean_orientation']
+                result.alignment_score          = stats['alignment_score']
+                result.mean_alignment           = stats['alignment_score']
+                result.std_orientation          = stats['std_orientation']
+                result.orientation_distribution = stats['orientation_distribution']
 
-        # Discard arrays not requested by keep_values
-        if 'all' not in p.keep_values:
-            if 'energy' not in p.keep_values:
-                result.energy_map = None
-            if 'alignment' not in p.keep_values:
-                result.alignment_map = None
-                result.coherency_map = None
+        # ── WINDOWED mode: sliding-window curvelet analysis producing dense
+        #    per-pixel orientation / coherency / energy maps.
+        if mode in (_Mode.WINDOWED, _Mode.FULL):
+            h, w   = image.shape
+            stride = max(1, int(p.window_size * (1.0 - p.overlap)))
+
+            orientation_map = np.full((h, w), np.nan, dtype=np.float32)
+            coherency_map   = np.zeros((h, w), dtype=np.float32) if p.compute_coherency else None
+            energy_map      = np.zeros((h, w), dtype=np.float32) if p.compute_energy    else None
+
+            n_windows    = 0
+            total_energy = 0.0
+
+            for y in range(0, h - p.window_size + 1, stride):
+                for x in range(0, w - p.window_size + 1, stride):
+                    window = image[y : y + p.window_size, x : x + p.window_size]
+
+                    coeffs = curvelet_transform_2d(
+                        window,
+                        n_levels=p.curvelet_levels,
+                        n_angles=p.curvelet_angles,
+                        use_matlab=p.use_matlab_backend,
+                    )
+
+                    orientation, coherency, energy = self._window_orientation(
+                        coeffs, p.curvelet_angles
+                    )
+
+                    ys = slice(y, y + p.window_size)
+                    xs = slice(x, x + p.window_size)
+                    orientation_map[ys, xs] = orientation
+                    if coherency_map is not None:
+                        coherency_map[ys, xs] = coherency
+                    if energy_map is not None:
+                        energy_map[ys, xs] = energy
+
+                    n_windows    += 1
+                    total_energy += energy
+
+            mean_energy = total_energy / max(n_windows, 1)
+            valid       = orientation_map[~np.isnan(orientation_map)]
+            stats       = self._compute_statistics(valid, coherency_map)
+
+            # In FULL mode windowed maps overwrite the sparse CURVELETS maps
+            result.orientation_map          = orientation_map
+            result.alignment_map            = coherency_map
+            result.mean_orientation         = stats['mean_orientation']
+            result.alignment_score          = stats['alignment_score']
+            result.mean_alignment           = stats['alignment_score']
+            result.std_orientation          = stats['std_orientation']
+            result.orientation_distribution = stats['orientation_distribution']
+            result.energy_map               = energy_map
+            result.n_windows_analyzed       = n_windows
+            result.mean_energy              = mean_energy
+
+            # Discard windowed arrays not requested by keep_values
+            if 'all' not in p.keep_values:
+                if 'energy' not in p.keep_values:
+                    result.energy_map = None
+                if 'alignment' not in p.keep_values:
+                    result.alignment_map = None
 
         return result
 
@@ -346,36 +374,59 @@ class CurveAlignOrientation(BaseOrientationMethod):
         return orientation, coherency, total
 
     @staticmethod
-    def _trace_fiber_segments(
+    def _group_curvelet_orientations(
         image: np.ndarray,
-        orientation_map: np.ndarray,
-        coherency_map: Optional[np.ndarray],
         keep: float = 0.05,
         scale: int = 1,
         radius: float = 4.0,
         feature_params=None,
     ) -> tuple:
-        """Extract discrete fiber candidates via curvelet thresholding and grouping.
+        """Group curvelet coefficients to estimate dominant local fiber orientations.
 
-        Calls build_fiber_structure_from_curvelets (requires curvelops).
-        Returns (segments, fiber_structure, density_df, alignment_df).
-        Returns ([], None, None, None) when curvelops is not installed.
+        Calls ``build_fiber_structure_from_curvelets`` (requires curvelops).
+        Each position in ``fiber_structure`` represents the dominant orientation
+        of a curvelet-grouped local region — not an individually extracted fiber.
+
+        Returns
+        -------
+        (orientation_groups, fiber_structure, density_df, alignment_df,
+         orientation_map, alignment_map)
+
+        orientation_groups : list of (1, 2) ndarrays
+            Grouped curvelet positions as single-point arrays (for napari).
+        orientation_map : (H, W) float32
+            Dominant orientation angle at each grouped position; NaN elsewhere.
+        alignment_map : (H, W) float32
+            1.0 at each grouped position (high local coherency confirmed), 0 elsewhere.
+
+        Returns ``([], None, None, None, None, None)`` when curvelops is absent.
         """
         from ..utils.fiber_dataframe_utils import build_fiber_structure_from_curvelets
+        h, w = image.shape
+        orientation_map = np.full((h, w), np.nan, dtype=np.float32)
+        alignment_map   = np.zeros((h, w), dtype=np.float32)
+
         try:
             fiber_structure, density_df, alignment_df, _ = build_fiber_structure_from_curvelets(
                 image=image, keep=keep, scale=scale, radius=radius,
                 feature_params=feature_params,
             )
         except ImportError:
-            return [], None, None, None
+            return [], None, None, None, None, None
 
         if fiber_structure is None or fiber_structure.empty:
-            return [], fiber_structure, density_df, alignment_df
+            return [], fiber_structure, density_df, alignment_df, orientation_map, alignment_map
 
-        # Each candidate → single-point (1, 2) coordinate array for fiber_segments list format
-        segments = [
-            np.array([[row["center_row"], row["center_col"]]])
+        # Rasterize grouped-curvelet orientation estimates onto pixel maps
+        for _, row in fiber_structure.iterrows():
+            r, c = int(round(row['center_row'])), int(round(row['center_col']))
+            if 0 <= r < h and 0 <= c < w:
+                orientation_map[r, c] = row['angle']  # dominant orientation of this group
+                alignment_map[r, c]   = 1.0           # high local coherency confirmed
+
+        # Each grouped position → single-point (1, 2) array for napari Points/Shapes layers
+        orientation_groups = [
+            np.array([[row['center_row'], row['center_col']]])
             for _, row in fiber_structure.iterrows()
         ]
-        return segments, fiber_structure, density_df, alignment_df
+        return orientation_groups, fiber_structure, density_df, alignment_df, orientation_map, alignment_map

@@ -39,7 +39,7 @@ src/tme_quant/
 │   │       ├── fire.cpp           ← FIRE algorithm implementation (TODO)
 │   │       └── fire_bindings.cpp  ← pybind11 bindings → _ctfire_cpp.pyd/.so
 │   ├── __init__.py                ← public API; re-exports all key symbols
-│   ├── config.py                  ← ExtractionParams, OrientationParams + all sub-params
+│   ├── config.py                  ← ExtractionParams, OrientationParams, CurveAlignAnalysisMode (CURVELETS/WINDOWED/FULL), CurveAlignParams + all sub-params
 │   ├── extraction.py              ← BaseExtractionMethod + FiberExtractionAnalyzer
 │   ├── orientation.py             ← BaseOrientationMethod + FiberOrientationAnalyzer
 │   ├── io.py                      ← FiberAnalysisExporter (+ FijiBridge re-export)
@@ -107,7 +107,7 @@ src/tme_quant/
 │   │   ├── interaction_analysis_pipeline.py
 │   │   ├── standard_tme_pipeline.py
 │   │   ├── tacs_pipeline.py               ← analyze_tacs_zone(), plot_tacs_heatmap()
-│   │   └── curvealign_pipeline.py         ← (planned) port of pycurvelets/process_image.py
+│   │   └── curvealign_curveletsMode_pipeline.py  ← curvealign_curvelets_mode_pipeline(): in-memory CurveAlign curvelets-mode pipeline (curvealign_pipeline is a deprecated alias)
 │   ├── utils/
 │   │   ├── __init__.py
 │   │   ├── alignment_utils.py     ← compute_fiber_alignment_to_roi

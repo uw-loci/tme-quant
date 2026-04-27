@@ -57,7 +57,7 @@ tme-quant/
     ├── test_draw_utils.py                  ← draw_curvs + draw_map + visualization wrappers
     ├── test_fiber_io.py                    ← export_dataframe_to_excel
     ├── test_exceptions.py                  ← FiberAnalysisError hierarchy
-    └── test_curvealign_pipeline.py         ← curvealign_pipeline
+    └── test_curvealign_pipeline.py         ← curvealign_curvelets_mode_pipeline (alias: curvealign_pipeline)
 ```
 
 > **Maintenance rule:** After every refactoring, file addition, or file removal,
@@ -184,9 +184,13 @@ tme-quant/
   - `standard_tme_pipeline.py` — `StandardTMEPipeline`
   - `interaction_analysis_pipeline.py` — `InteractionAnalysisPipeline`
   - `tacs_pipeline.py` — `analyze_tacs_zone()`, `plot_tacs_heatmap()`
-  - `curvealign_pipeline.py` — `curvealign_pipeline()`: in-memory CurveAlign pipeline
-    (curvelet extraction, density/alignment, ROI alignment, fiber feature table);
-    ported from `pycurvelets/process_image.py`; no file I/O, returns result dict
+  - `curvealign_curveletsMode_pipeline.py` — `curvealign_curvelets_mode_pipeline()`:
+    in-memory CurveAlign curvelets-mode pipeline using grouped curvelet orientation
+    estimates (not individual fiber extraction) as the fiber representation;
+    (curvelet orientation grouping, density/alignment, ROI alignment, fiber feature table);
+    ported from `pycurvelets/process_image.py`; no file I/O, returns result dict.
+    `curvealign_pipeline` is a deprecated backward-compatible alias.
+    Future: `curvealign_ctfireMode_pipeline.py` for CT-FIRE individual fiber extraction.
 - `utils/` — `alignment_utils.py` (`compute_fiber_alignment_to_roi`; ported
   from `pycurvelets/get_alignment_to_roi.py`), `distance_utils.py`,
   `orientation_utils.py` (pixel-level boundary-relative orientation,

@@ -1,10 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-CurveAlign fiber-orientation pipeline.
+CurveAlign curvelets-mode fiber-orientation pipeline.
+
+Uses grouped curvelet orientation estimates (via ``build_fiber_structure_from_curvelets``)
+as the fiber representation.  Each position in the output ``fiber_structure`` represents
+the dominant orientation of a curvelet-grouped local region — not an individually
+extracted fiber.
 
 Port of the orchestration logic from pycurvelets ``process_image.py``.
 All analysis sub-functions are already ported; this module assembles them
 into a clean in-memory pipeline that returns a result dict (no file I/O).
+
+When CT-FIRE-based individual fiber extraction becomes available, it will be
+exposed via a separate ``curvealign_ctfireMode_pipeline`` module.
 
 No Qt / napari dependencies.  See REFACTORING_GUIDE.md §2.
 """
@@ -285,7 +293,7 @@ def _build_fiber_features_df(
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def curvealign_pipeline(
+def curvealign_curvelets_mode_pipeline(
     image: np.ndarray,
     fiber_structure: Optional[pd.DataFrame] = None,
     keep: float = 0.05,
@@ -299,7 +307,12 @@ def curvealign_pipeline(
     exclude_fibers_in_mask: bool = False,
     min_dist=None,
 ) -> Optional[dict]:
-    """Run the CurveAlign fiber-orientation pipeline on a single image.
+    """Run the CurveAlign curvelets-mode fiber-orientation pipeline on a single image.
+
+    Uses grouped curvelet orientation estimates as the fiber representation.
+    Each row of the returned ``fiber_structure`` DataFrame represents the
+    dominant orientation of a curvelet-grouped local region — not an
+    individually extracted fiber.
 
     Port of pycurvelets ``process_image``.  All file I/O, GUI calls, and
     multiprocessing have been removed; visualization is deferred to
@@ -310,8 +323,9 @@ def curvealign_pipeline(
     image : ndarray of shape (H, W)
         Greyscale image to analyse.
     fiber_structure : pd.DataFrame or None
-        Pre-computed fiber DataFrame (``center_row``, ``center_col``, ``angle``
-        columns).  When ``None``, curvelet extraction is run automatically via
+        Pre-computed curvelet orientation DataFrame (``center_row``,
+        ``center_col``, ``angle`` columns).  When ``None``, grouped curvelet
+        orientation estimation is run automatically via
         ``build_fiber_structure_from_curvelets``.
     keep : float
         Fraction of curvelet coefficients to keep (used only when
@@ -437,4 +451,4 @@ def curvealign_pipeline(
     }
 
 
-__all__ = ["curvealign_pipeline"]
+__all__ = ["curvealign_curvelets_mode_pipeline"]
