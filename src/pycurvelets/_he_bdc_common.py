@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 from scipy import ndimage
 from skimage import color, filters, io, morphology
+from sklearn.cluster import KMeans
 
 from ._matlab_imresize import matlab_imresize
 
@@ -407,6 +408,136 @@ def make_collagen_mask(
 
     no_background = hsv[..., saturation_channel] >= sat_thresh
     return collagen.astype(bool), no_background.astype(bool), sat_thresh
+
+
+def decorrelation_stretch(rgb: np.ndarray, tol: float = 0.01) -> np.ndarray:
+    """
+    Approximate MATLAB ``decorrstretch`` for RGB images in ``[0, 1]``.
+
+    A PCA whitening transform decorrelates channels, then each channel is
+    contrast-stretched using percentile clipping controlled by ``tol``.
+    """
+    arr = ensure_rgb(np.asarray(rgb, dtype=np.float64))
+    arr = np.clip(arr, 0.0, 1.0)
+    flat = arr.reshape(-1, 3)
+    mean = flat.mean(axis=0, keepdims=True)
+    centered = flat - mean
+
+    cov = np.cov(centered, rowvar=False)
+    evals, evecs = np.linalg.eigh(cov)
+    evals = np.clip(evals, 1e-12, None)
+    whiten = evecs @ np.diag(1.0 / np.sqrt(evals))
+    decor = centered @ whiten
+
+    out = np.zeros_like(decor)
+    lo_q = float(np.clip(tol, 0.0, 0.49))
+    hi_q = 1.0 - lo_q
+    for c in range(3):
+        ch = decor[:, c]
+        lo = float(np.quantile(ch, lo_q))
+        hi = float(np.quantile(ch, hi_q))
+        if hi <= lo:
+            out[:, c] = 0.0
+        else:
+            out[:, c] = np.clip((ch - lo) / (hi - lo), 0.0, 1.0)
+    return out.reshape(arr.shape)
+
+
+def _rgb_threshold_masks(he_decorr_rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return (nuclei_mask, eosin_mask) from BDcreation_reg RGB thresholds."""
+    u8 = np.clip(he_decorr_rgb, 0.0, 1.0)
+    u8 = np.round(u8 * 255.0).astype(np.uint8)
+    r = u8[..., 0]
+    g = u8[..., 1]
+    b = u8[..., 2]
+
+    nuclei = (r < 120) & (g > 150) & (b < 120)
+    eosin = (r > 200) & (g < 100) & (b > 100)
+    return nuclei.astype(bool), eosin.astype(bool)
+
+
+def make_nuclei_mask_rgb(
+    he_decorr_rgb: np.ndarray,
+    pix_per_mic: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Nuclei mask from BDcreation_reg-style RGB thresholds on decorrelated RGB.
+
+    Returns ``(nuclei_opened, masked_nuclei_rgb)`` analogous to
+    :func:`make_nuclei_mask`.
+    """
+    nuclei, _ = _rgb_threshold_masks(he_decorr_rgb)
+    nuclei = remove_small_components(nuclei, NUCLEI_MIN_AREA)
+    nuclei_opened = morphology.opening(nuclei, disk_se(np.ceil(pix_per_mic / 2.0)))
+
+    masked = np.asarray(he_decorr_rgb, dtype=np.float64).copy()
+    masked[~nuclei_opened] = 0.0
+    return nuclei_opened, masked
+
+
+def make_ecm_mask_rgb(
+    he_decorr_rgb: np.ndarray,
+    pix_per_mic: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    ECM candidate image from BDcreation_reg-style RGB eosin threshold.
+
+    Returns ``(ecm_gray, eosin_mask)`` where ``ecm_gray`` is continuous in
+    ``[0, 1]`` and suitable as a moving image for MI registration.
+    """
+    _, eosin = _rgb_threshold_masks(he_decorr_rgb)
+    eosin = remove_small_components(eosin, COLLAGEN_MIN_AREA)
+    if pix_per_mic > 0:
+        eosin = morphology.opening(eosin, disk_se(np.ceil(pix_per_mic / 2.0)))
+
+    masked = np.zeros_like(he_decorr_rgb, dtype=np.float64)
+    masked[eosin] = np.asarray(he_decorr_rgb, dtype=np.float64)[eosin]
+    ecm_gray = matlab_rgb2gray(masked)
+    return ecm_gray.astype(np.float64), eosin.astype(bool)
+
+
+def make_ecm_mask_lab(
+    he_source_rgb: np.ndarray,
+    he_decorr_rgb: np.ndarray,
+    pix_per_mic: float,
+    *,
+    random_state: int = 0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    ECM candidate from BDcreation_reg LAB k-means refinement.
+
+    1) RGB eosin threshold gate in decorrelated RGB.
+    2) K-means on LAB (a*, b*) for eosin pixels.
+    3) Select cluster with maximum mean(a*, b*).
+    4) Return grayscale ECM from the selected cluster on source RGB.
+    """
+    _, eosin = _rgb_threshold_masks(he_decorr_rgb)
+    eosin = remove_small_components(eosin, COLLAGEN_MIN_AREA)
+    if int(np.count_nonzero(eosin)) < 3:
+        return make_ecm_mask_rgb(he_decorr_rgb, pix_per_mic)
+
+    lab = color.rgb2lab(np.clip(he_decorr_rgb, 0.0, 1.0))
+    ab = lab[..., 1:3][eosin]
+    if ab.shape[0] < 3:
+        return make_ecm_mask_rgb(he_decorr_rgb, pix_per_mic)
+
+    kmeans = KMeans(n_clusters=3, n_init=3, random_state=int(random_state))
+    labels = kmeans.fit_predict(ab)
+    centers = np.asarray(kmeans.cluster_centers_, dtype=np.float64)
+    target_cluster = int(np.argmax(np.mean(centers, axis=1)))
+
+    selected = np.zeros(eosin.shape, dtype=bool)
+    selected_indices = np.flatnonzero(eosin)
+    selected.flat[selected_indices[labels == target_cluster]] = True
+    selected = remove_small_components(selected, COLLAGEN_MIN_AREA)
+    if pix_per_mic > 0:
+        selected = morphology.opening(selected, disk_se(np.ceil(pix_per_mic / 2.0)))
+
+    source = np.asarray(he_source_rgb, dtype=np.float64)
+    masked = np.zeros_like(source, dtype=np.float64)
+    masked[selected] = source[selected]
+    ecm_gray = matlab_rgb2gray(masked)
+    return ecm_gray.astype(np.float64), selected.astype(bool)
 
 
 def matlab_imwarp_bilinear(

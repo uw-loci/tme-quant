@@ -9,12 +9,14 @@ Run from repo root: ``uv run python tests/visualize_bdc_regression_discrepancies
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from skimage import io
 
+from pycurvelets._registration_quality import compute_registration_quality_metrics
 from pycurvelets.SHG_HE_registration import SHGHERegistrationParameters, shg_he_registration
 from pycurvelets.tumor_annotation_from_HE import TumorAnnotationFromHEParameters, tumor_annotation_from_he
 
@@ -29,6 +31,10 @@ def _ensure_out() -> None:
 
 def _plot_registration() -> None:
     base = _FIXTURE
+    method_env = os.environ.get("VIZ_METHODS", "mi_ncc")
+    ecm_env = os.environ.get("VIZ_ECMS", "hsv")
+    methods = [m.strip() for m in method_env.split(",") if m.strip()]
+    ecms = [e.strip() for e in ecm_env.split(",") if e.strip()]
     cases = [
         ("test1", 1.5, "HE_registered_test1"),
         ("test2", 2.0, "HE_registered_test2"),
@@ -37,42 +43,54 @@ def _plot_registration() -> None:
     for cid, ppm, folder in cases:
         gpath = base / "HE" / folder / "patient_001.tif"
         golden = io.imread(gpath).astype(np.float64) / 255.0
-        p = SHGHERegistrationParameters(
-            HEfilepath=str(base / "HE"),
-            HEfilename="patient_001.tif",
-            pixelpermicron=ppm,
-            SHGfilepath=str(base / "SHG"),
-            areaThreshold=5000.0,
-        )
-        reg = shg_he_registration(p, save_output=False).astype(np.float64)
-        diff = reg - golden
-        mae = float(np.mean(np.abs(diff)))
-        rmse = float(np.sqrt(np.mean(diff**2)))
+        for method in methods:
+            for ecm in ecms:
+                p = SHGHERegistrationParameters(
+                    HEfilepath=str(base / "HE"),
+                    HEfilename="patient_001.tif",
+                    pixelpermicron=ppm,
+                    SHGfilepath=str(base / "SHG"),
+                    areaThreshold=5000.0,
+                    registration_method=method,
+                    ecm_method=ecm,
+                )
+                reg = shg_he_registration(p, save_output=False).astype(np.float64)
+                diff = reg - golden
+                metrics = compute_registration_quality_metrics(reg, golden)
+                mae = float(metrics["mae_uint8"])
+                rmse = float(metrics["rmse_uint8"])
+                psnr = float(metrics["psnr"])
+                ssim = float(metrics["ssim"])
+                exact = float(metrics["exact_frac"])
 
-        fig, axes = plt.subplots(3, 3, figsize=(11, 10))
-        fig.suptitle(
-            f"Registration {cid} ppm={ppm}  MAE={mae:.6f}  RMSE={rmse:.6f}",
-            fontsize=12,
-        )
-        ch_names = ("R", "G", "B")
-        for c in range(3):
-            axes[0, c].imshow(np.clip(golden[..., c], 0, 1), cmap="gray", vmin=0, vmax=1)
-            axes[0, c].set_title(f"MATLAB golden {ch_names[c]}")
-            axes[0, c].axis("off")
-            axes[1, c].imshow(np.clip(reg[..., c], 0, 1), cmap="gray", vmin=0, vmax=1)
-            axes[1, c].set_title(f"Python {ch_names[c]}")
-            axes[1, c].axis("off")
-            e = np.abs(diff[..., c])
-            vmax = max(0.02, float(e.max()))
-            im = axes[2, c].imshow(e, cmap="magma", vmin=0, vmax=vmax)
-            axes[2, c].set_title(f"|Δ| {ch_names[c]}")
-            axes[2, c].axis("off")
-            plt.colorbar(im, ax=axes[2, c], fraction=0.046)
-        fig.tight_layout()
-        out = _OUT / f"registration_{cid}_ppm{ppm}.png"
-        fig.savefig(out, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        print(f"Wrote {out}")
+                fig, axes = plt.subplots(3, 3, figsize=(11, 10))
+                fig.suptitle(
+                    (
+                        f"Registration {cid} ppm={ppm} method={method} ecm={ecm}  "
+                        f"MAE={mae:.2f}/255  RMSE={rmse:.2f}/255  "
+                        f"PSNR={psnr:.2f}dB  SSIM={ssim:.4f}  Exact={exact*100:.1f}%"
+                    ),
+                    fontsize=12,
+                )
+                ch_names = ("R", "G", "B")
+                for c in range(3):
+                    axes[0, c].imshow(np.clip(golden[..., c], 0, 1), cmap="gray", vmin=0, vmax=1)
+                    axes[0, c].set_title(f"MATLAB golden {ch_names[c]}")
+                    axes[0, c].axis("off")
+                    axes[1, c].imshow(np.clip(reg[..., c], 0, 1), cmap="gray", vmin=0, vmax=1)
+                    axes[1, c].set_title(f"Python {ch_names[c]}")
+                    axes[1, c].axis("off")
+                    e = np.abs(diff[..., c])
+                    vmax = max(0.02, float(e.max()))
+                    im = axes[2, c].imshow(e, cmap="magma", vmin=0, vmax=vmax)
+                    axes[2, c].set_title(f"|Δ| {ch_names[c]}")
+                    axes[2, c].axis("off")
+                    plt.colorbar(im, ax=axes[2, c], fraction=0.046)
+                fig.tight_layout()
+                out = _OUT / f"registration_{cid}_ppm{ppm}_{method}_{ecm}.png"
+                fig.savefig(out, dpi=150, bbox_inches="tight")
+                plt.close(fig)
+                print(f"Wrote {out}")
 
 
 def _plot_annotation() -> None:

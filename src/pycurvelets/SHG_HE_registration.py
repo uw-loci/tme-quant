@@ -26,6 +26,14 @@ Other ``registration_method`` values (kept for debugging / fallback):
   TRF pipeline. No SimpleITK dependency, but mask<->grayscale NCC is
   non-convex without MI-style histogram matching, so it tends to land in
   worse local minima. Used automatically if SimpleITK is missing.
+* ``"oneplusone"`` - Multiresolution Mattes MI with a stochastic (1+1)
+  evolutionary optimizer inspired by the original MATLAB/paper workflow.
+
+ECM extraction is controlled separately by ``ecm_method``:
+
+* ``"hsv"`` - default BDcreation_reg2.m HSV thresholding.
+* ``"rgb"`` - BDcreation_reg.m-style decorrelation stretch + fixed RGB cuts.
+* ``"lab"`` - BDcreation_reg.m-style RGB eosin gate + LAB k-means refinement.
 
 The pipeline requires no MATLAB licence at runtime.
 
@@ -48,10 +56,14 @@ from skimage import io, morphology, registration
 
 from ._he_bdc_common import (
     adjust_rgb_mean_std,
+    decorrelation_stretch,
     disk_se,
     gaussian_filter_matlab_like,
+    make_ecm_mask_lab,
+    make_ecm_mask_rgb,
     make_collagen_mask,
     make_nuclei_mask,
+    make_nuclei_mask_rgb,
     matlab_imwarp_bilinear,
     matlab_rgb2gray,
     prepare_registration_pair,
@@ -90,7 +102,17 @@ class SHGHERegistrationParameters:
     #                     mask<->grayscale NCC is non-convex without MI-style
     #                     histogram matching; used as a fallback when SITK
     #                     is unavailable.
+    # "oneplusone"      : Multiresolution Mattes MI with a stochastic (1+1)
+    #                     evolutionary optimizer (paper/MATLAB-inspired path).
     registration_method: str = "mi_ncc"
+    # ECM extraction method:
+    # "hsv" (default): BDcreation_reg2.m-style HSV thresholding.
+    # "rgb"          : BDcreation_reg.m-style decorrelation stretch + fixed
+    #                  RGB thresholds for nuclei/eosin.
+    # "lab"          : BDcreation_reg.m-style RGB eosin gate then LAB k-means.
+    ecm_method: str = "hsv"
+    # Used by stochastic methods (e.g. oneplusone optimizer / LAB k-means).
+    random_state: int = 0
 
 
 def _to_params(
@@ -876,6 +898,102 @@ def _register_mi(
     return forward_2x3, debug
 
 
+def _register_oneplusone_mi(
+    he_moving: np.ndarray,
+    fixed_shg: np.ndarray,
+    *,
+    random_state: int = 0,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """
+    Multiresolution Mattes-MI registration with a (1+1)-evolutionary optimizer.
+
+    This mirrors the paper's optimization strategy more closely than the legacy
+    grid + Nelder-Mead path.
+    """
+    if not _HAS_SITK:  # pragma: no cover - guarded by call site
+        raise RuntimeError(
+            "registration_method='oneplusone' requires SimpleITK; "
+            "install it or choose 'ncc'."
+        )
+
+    fixed = fixed_shg.astype(np.float64)
+    moving = he_moving.astype(np.float64)
+    fixed_sitk = sitk.Cast(sitk.GetImageFromArray(fixed), sitk.sitkFloat64)
+    moving_sitk = sitk.Cast(sitk.GetImageFromArray(moving), sitk.sitkFloat64)
+
+    seed = max(1, int(random_state))
+    # Match the MATLAB code intent: InitialRadius is reduced by /3.5.
+    initial_radius = 1.0 / 3.5
+    shrink_factors = [4, 2, 1]
+    smoothing_sigmas = [2, 1, 0]
+
+    def _affine_m_t0_from_transform(tx: Any) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Extract fixed->moving affine ``x' = Mx + t0`` from any SITK transform.
+
+        Works for Affine/Similarity and CompositeTransform chains by probing the
+        transformed basis points.
+        """
+        p00 = np.array(tx.TransformPoint((0.0, 0.0)), dtype=np.float64)
+        p10 = np.array(tx.TransformPoint((1.0, 0.0)), dtype=np.float64)
+        p01 = np.array(tx.TransformPoint((0.0, 1.0)), dtype=np.float64)
+        m = np.column_stack((p10 - p00, p01 - p00))
+        t0 = p00
+        return m, t0
+
+    def _configure_registration(seed_value: int) -> Any:
+        reg = sitk.ImageRegistrationMethod()
+        reg.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
+        reg.SetMetricSamplingStrategy(reg.NONE)
+        reg.SetInterpolator(sitk.sitkLinear)
+        reg.SetOptimizerAsOnePlusOneEvolutionary(
+            numberOfIterations=700,
+            epsilon=1.5e-6,
+            initialRadius=initial_radius,
+            growthFactor=1.05,
+            shrinkFactor=0.95,
+            seed=seed_value,
+        )
+        reg.SetShrinkFactorsPerLevel(shrink_factors)
+        reg.SetSmoothingSigmasPerLevel(smoothing_sigmas)
+        reg.SmoothingSigmasAreSpecifiedInPhysicalUnitsOff()
+        return reg
+
+    # Use legacy MI solution as basin initializer, then run oneplusone affine
+    # refinement from that seed (paper-inspired optimizer, robust start).
+    mi_seed_forward, mi_seed_debug = _register_mi(he_moving, fixed_shg)
+    A_seed_inv = _affine_fixed_to_moving_from_forward(mi_seed_forward)
+
+    aff_init = sitk.AffineTransform(2)
+    aff_init.SetCenter([0.0, 0.0])
+    aff_init.SetMatrix(A_seed_inv[:2, :2].reshape(-1).tolist())
+    aff_init.SetTranslation(A_seed_inv[:2, 2].tolist())
+
+    aff_reg = _configure_registration(seed)
+    aff_reg.SetInitialTransform(aff_init, inPlace=False)
+    aff_t = aff_reg.Execute(fixed_sitk, moving_sitk)
+    best_aff_metric = float(aff_reg.GetMetricValue())
+    best_aff_matrix, best_aff_t0 = _affine_m_t0_from_transform(aff_t)
+
+    A_inv = np.eye(3, dtype=np.float64)
+    A_inv[:2, :2] = best_aff_matrix
+    A_inv[:2, 2] = best_aff_t0
+    forward_2x3 = _forward_from_fixed_to_moving(A_inv)
+    debug = {
+        "oneplusone_random_state": int(random_state),
+        "oneplusone_seed": int(seed),
+        "oneplusone_initial_radius": float(initial_radius),
+        "oneplusone_shrink_factors": tuple(shrink_factors),
+        "oneplusone_smoothing_sigmas": tuple(smoothing_sigmas),
+        "oneplusone_affine_metric": float(best_aff_metric),
+        "oneplusone_mi_seed_forward_2x3": mi_seed_forward.tolist(),
+        "oneplusone_mi_seed_debug": mi_seed_debug,
+        "oneplusone_affine_matrix": best_aff_matrix.tolist(),
+        "oneplusone_affine_t0": best_aff_t0.tolist(),
+    }
+    return forward_2x3, debug
+
+
 # ---------------------------------------------------------------------------
 # Core pipeline.
 # ---------------------------------------------------------------------------
@@ -886,7 +1004,9 @@ def _shg_he_registration_core(
     he_filename: str,
     shg_filepath: str,
     pixelpermicron: float,
-    registration_method: str = "dice",
+    registration_method: str = "mi_ncc",
+    ecm_method: str = "hsv",
+    random_state: int = 0,
 ) -> tuple[np.ndarray, str, dict[str, Any]]:
     """
     Core registration (same algorithm description as the module docstring).
@@ -913,11 +1033,27 @@ def _shg_he_registration_core(
         he_img, shg_img, float(pixelpermicron)
     )
 
+    ecm_mode = (ecm_method or "hsv").lower()
     he_adjusted = adjust_rgb_mean_std(he_scaled)
-    _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask(he_adjusted, pixpermic)
-    bw_collagen, _bw_no_background, _sat_thresh = make_collagen_mask(
-        he_adjusted, pixpermic, enhanced_postprocessing=False
-    )
+    he_decorr = decorrelation_stretch(he_adjusted, tol=0.01)
+
+    if ecm_mode == "hsv":
+        _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask(he_adjusted, pixpermic)
+        bw_collagen, _bw_no_background, _sat_thresh = make_collagen_mask(
+            he_adjusted, pixpermic, enhanced_postprocessing=False
+        )
+    elif ecm_mode == "rgb":
+        _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask_rgb(he_decorr, pixpermic)
+        he_collagen_gray, bw_collagen = make_ecm_mask_rgb(he_decorr, pixpermic)
+    elif ecm_mode == "lab":
+        _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask_rgb(he_decorr, pixpermic)
+        he_collagen_gray, bw_collagen = make_ecm_mask_lab(
+            he_scaled, he_decorr, pixpermic, random_state=random_state
+        )
+    else:
+        raise ValueError(
+            f"Unknown ecm_method={ecm_method!r}; expected one of 'hsv', 'rgb', 'lab'."
+        )
 
     gray_nuclei = matlab_rgb2gray(masked_nuclei_image)
     ksize = max(1, int(np.floor(pixpermic)))
@@ -933,11 +1069,19 @@ def _shg_he_registration_core(
     )
     bw_nuclei_filled = binary_fill_holes(bw_nuclei_dilated)
 
-    he_collagen_bw = bw_collagen & (~bw_nuclei_filled)
-    he_collagen_bw = remove_small_components(
-        he_collagen_bw, int(np.ceil(pixpermic**2))
-    )
-    he_moving = he_collagen_bw.astype(np.float64)
+    if ecm_mode == "hsv":
+        he_collagen_bw = bw_collagen & (~bw_nuclei_filled)
+        he_collagen_bw = remove_small_components(
+            he_collagen_bw, int(np.ceil(pixpermic**2))
+        )
+        he_moving = he_collagen_bw.astype(np.float64)
+    else:
+        he_collagen_exclude = he_collagen_gray * (~bw_nuclei_filled).astype(np.float64)
+        he_collagen_bw = he_collagen_exclude > 0.01
+        he_collagen_bw = remove_small_components(
+            he_collagen_bw, int(np.ceil(pixpermic**2))
+        )
+        he_moving = he_collagen_exclude * he_collagen_bw.astype(np.float64)
 
     fixed = fixed_shg.astype(np.float64)
     if fixed.ndim == 3:
@@ -945,11 +1089,12 @@ def _shg_he_registration_core(
 
     debug: dict[str, Any] = {
         "registration_method_requested": registration_method,
+        "ecm_method_requested": ecm_mode,
         "pixpermic_working": float(pixpermic),
         "fixed_shape": tuple(int(x) for x in fixed.shape),
     }
 
-    method = (registration_method or "mi").lower()
+    method = (registration_method or "mi_ncc").lower()
 
     forward_2x3: np.ndarray | None = None
     backend: str
@@ -958,6 +1103,12 @@ def _shg_he_registration_core(
         forward_2x3, mi_debug = _register_mi(he_moving, fixed)
         debug.update(mi_debug)
         backend = "simpleitk_mattes"
+    elif method == "oneplusone" and _HAS_SITK:
+        forward_2x3, one_debug = _register_oneplusone_mi(
+            he_moving, fixed, random_state=random_state
+        )
+        debug.update(one_debug)
+        backend = "oneplusone_mattes"
     elif method in ("ncc", "dice"):
         forward_2x3, ncc_debug = _register_dice(he_moving, fixed)
         debug.update(ncc_debug)
@@ -975,7 +1126,7 @@ def _shg_he_registration_core(
         debug.update(refine_debug)
         backend = "mi_then_ncc"
 
-    if forward_2x3 is None and method == "mi" and not _HAS_SITK:
+    if forward_2x3 is None and method in ("mi", "oneplusone") and not _HAS_SITK:
         forward_2x3, ncc_debug = _register_dice(he_moving, fixed)
         debug.update(ncc_debug)
         backend = "ncc_trf"
@@ -1026,6 +1177,8 @@ def shg_he_registration(
         p.SHGfilepath,
         p.pixelpermicron,
         registration_method=p.registration_method,
+        ecm_method=p.ecm_method,
+        random_state=p.random_state,
     )
 
     if save_output:

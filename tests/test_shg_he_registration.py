@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 from skimage import io
 
+from pycurvelets._registration_quality import compute_registration_quality_metrics
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
     has_simpleitk,
@@ -65,6 +66,20 @@ _MIN_EXACT_FRAC_UINT8: dict[str, float] = {
     "test1": 0.35,
     "test2": 0.40,
     "test3": 0.32,
+}
+
+# PSNR/SSIM are against the MATLAB golden registered RGB image. These are
+# intentionally lenient floor checks: optimizer stochasticity and cross-platform
+# float differences can move them slightly, but sharp drops flag real drift.
+_MIN_PSNR_DB: dict[str, float] = {
+    "test1": 20.0,
+    "test2": 24.0,
+    "test3": 16.0,
+}
+_MIN_SSIM: dict[str, float] = {
+    "test1": 0.75,
+    "test2": 0.80,
+    "test3": 0.68,
 }
 
 
@@ -125,12 +140,16 @@ def test_shg_he_registration_matches_matlab_golden_patient001(
         f"[{case_id}] Shape mismatch: python {python_uint8.shape} vs golden {matlab_golden.shape}"
     )
 
-    diff = np.abs(python_uint8.astype(np.float64) - matlab_golden.astype(np.float64))
-    mae = float(np.mean(diff))
-    exact_frac = float(np.mean(python_uint8 == matlab_golden))
+    metrics = compute_registration_quality_metrics(python_uint8, matlab_golden)
+    mae = float(metrics["mae_uint8"])
+    exact_frac = float(metrics["exact_frac"])
+    psnr = float(metrics["psnr"])
+    ssim = float(metrics["ssim"])
 
     max_mae = _MAX_MAE_UINT8[case_id]
     min_exact = _MIN_EXACT_FRAC_UINT8[case_id]
+    min_psnr = _MIN_PSNR_DB[case_id]
+    min_ssim = _MIN_SSIM[case_id]
     assert mae <= max_mae, (
         f"[{case_id}] ppm={pixelpermicron}: MAE={mae:.2f} exceeds bound {max_mae} "
         f"(uint8 scale, Python vs MATLAB golden). Exact match: {exact_frac*100:.1f}%."
@@ -138,4 +157,51 @@ def test_shg_he_registration_matches_matlab_golden_patient001(
     assert exact_frac >= min_exact, (
         f"[{case_id}] ppm={pixelpermicron}: exact-pixel match {exact_frac*100:.1f}% "
         f"is below required {min_exact*100:.1f}% (Python vs MATLAB golden, MAE={mae:.2f})."
+    )
+    assert psnr >= min_psnr, (
+        f"[{case_id}] ppm={pixelpermicron}: PSNR={psnr:.2f} dB "
+        f"is below required {min_psnr:.2f} dB."
+    )
+    assert ssim >= min_ssim, (
+        f"[{case_id}] ppm={pixelpermicron}: SSIM={ssim:.4f} "
+        f"is below required {min_ssim:.4f}."
+    )
+
+
+@pytest.mark.skipif(not has_simpleitk(), reason="oneplusone path requires SimpleITK")
+def test_shg_he_registration_oneplusone_backend_is_reasonable() -> None:
+    """
+    Ensure the oneplusone backend runs end-to-end and stays in a sensible
+    quality range against the MATLAB golden output.
+    """
+    case_id, pixelpermicron, he_registered_folder = REGRESSION_CASES[1]  # test2
+    golden_path = _require_registration_fixtures(he_registered_folder)
+    matlab_golden = _load_tif_uint8(golden_path)
+
+    params = SHGHERegistrationParameters(
+        HEfilepath=str(_HE_INPUT.parent),
+        HEfilename="patient_001.tif",
+        pixelpermicron=pixelpermicron,
+        SHGfilepath=str(_SHG_INPUT.parent),
+        areaThreshold=5000.0,
+        registration_method="oneplusone",
+        random_state=0,
+    )
+    python_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
+    python_uint8 = (np.clip(python_float, 0, 1) * 255).astype(np.uint8)
+
+    assert python_uint8.shape == matlab_golden.shape
+    assert debug.get("registration_backend") == "oneplusone_mattes"
+
+    metrics = compute_registration_quality_metrics(python_uint8, matlab_golden)
+    # Loose guardrails: we only require "reasonable quality", not parity with
+    # the default mi_ncc backend.
+    assert float(metrics["mae_uint8"]) <= 20.0, (
+        f"[{case_id}] oneplusone MAE too high: {metrics['mae_uint8']:.2f}"
+    )
+    assert float(metrics["psnr"]) >= 15.0, (
+        f"[{case_id}] oneplusone PSNR too low: {metrics['psnr']:.2f} dB"
+    )
+    assert float(metrics["ssim"]) >= 0.55, (
+        f"[{case_id}] oneplusone SSIM too low: {metrics['ssim']:.4f}"
     )
