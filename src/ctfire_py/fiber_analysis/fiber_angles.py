@@ -45,10 +45,19 @@ def calc_fiberang2(
     
     For longer fibers, angles are calculated at intervals of k vertices,
     and the last k points use the same angle as the previous calculation.
+    
+    Angles are computed as atan(dy/dx) — single-argument arctangent,
+    range [-π/2, π/2] — matching MATLAB's `atan(...)` in calc_fiberang2.m.
+    This differs from atan2 which returns [-π, π]: fibers are undirected
+    so the sign of direction should not affect the angle.
     """
     Fang = []
     eps = np.finfo(float).eps
-    
+
+    def _atan_ratio(dy: float, dx: float) -> float:
+        """atan(dy / (dx + eps)), matching MATLAB atan((x2-x1)/(x1-x2+eps))."""
+        return float(np.arctan(dy / (dx + eps)))
+
     for fi in range(len(F)):
         fv = F[fi]['v']
         Lf = len(fv)
@@ -60,25 +69,15 @@ def calc_fiberang2(
         
         if Lf <= k:
             # Fiber is too short, use start and end points
-            v1 = fv[0] - 1  # Convert to 0-based
-            v2 = fv[-1] - 1
+            v1 = fv[0]
+            v2 = fv[-1]
             
             x1 = X[v1, :]
             x2 = X[v2, :]
             
-            # Calculate angles
-            if X.shape[1] >= 3:
-                angxz = np.arctan2(
-                    x2[2] - x1[2],
-                    x2[0] - x1[0] + eps
-                )
-            else:
-                angxz = 0.0
-            
-            angxy = np.arctan2(
-                x2[1] - x1[1],
-                x2[0] - x1[0] + eps
-            )
+            # MATLAB: atan((x2(:,3)-x1(:,3)) ./ (x2(:,1)-x1(:,1)+eps))
+            angxz = _atan_ratio(x2[2] - x1[2], x2[0] - x1[0]) if X.shape[1] >= 3 else 0.0
+            angxy = _atan_ratio(x2[1] - x1[1], x2[0] - x1[0])
             
             # Replicate angle for all points
             fang['angle_xz'] = np.full(k, angxz)
@@ -91,30 +90,21 @@ def calc_fiberang2(
             
             for j in range(Lf - k):
                 # Calculate angle orientation at point j
-                v1 = fv[j] - 1      # Convert to 0-based
-                v2 = fv[j + k] - 1
+                v1 = fv[j]
+                v2 = fv[j + k]
                 
                 x1 = X[v1, :]
                 x2 = X[v2, :]
                 
-                # Calculate angles
-                if X.shape[1] >= 3:
-                    angxz = np.arctan2(
-                        x2[2] - x1[2],
-                        x2[0] - x1[0] + eps
-                    )
-                else:
-                    angxz = 0.0
-                
-                angxy = np.arctan2(
-                    x2[1] - x1[1],
-                    x2[0] - x1[0] + eps
-                )
+                # MATLAB: atan((x2(:,3)-x1(:,3)) ./ (x2(:,1)-x1(:,1)+eps))
+                angxz = _atan_ratio(x2[2] - x1[2], x2[0] - x1[0]) if X.shape[1] >= 3 else 0.0
+                angxy = _atan_ratio(x2[1] - x1[1], x2[0] - x1[0])
                 
                 angle_xz.append(angxz)
                 angle_xy.append(angxy)
             
             # The last k points have the same angle as the last calculation
+            # MATLAB: Fang(fi).angle_xz(j+1:Lf) = repmat(Fang(fi).angle_xz(j), 1, k)
             if len(angle_xz) > 0:
                 angle_xz.extend([angle_xz[-1]] * k)
                 angle_xy.extend([angle_xy[-1]] * k)

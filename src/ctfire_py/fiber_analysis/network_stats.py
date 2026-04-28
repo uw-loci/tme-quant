@@ -106,9 +106,9 @@ def network_statK(
     v1 = E[:, 0]
     v2 = E[:, 1]
     
-    # Convert to 0-based indexing for array access
-    v1_idx = v1 - 1
-    v2_idx = v2 - 1
+    # Indices are already 0-based
+    v1_idx = v1
+    v2_idx = v2
     
     # Handle invalid indices
     valid_mask = (v1_idx >= 0) & (v1_idx < len(X)) & (v2_idx >= 0) & (v2_idx < len(X))
@@ -116,19 +116,19 @@ def network_statK(
     x1 = X[v1_idx[valid_mask], :]
     x2 = X[v2_idx[valid_mask], :]
     
-    # Calculate angles
+    # Calculate angles.
+    # MATLAB: atan((x2(:,3)-x1(:,3)) ./ (x2(:,1)-x1(:,1)+eps))
+    # Using single-argument arctan (range [-π/2, π/2]) to match MATLAB's `atan`.
+    eps = np.finfo(float).eps
     if X.shape[1] >= 3:
-        # 3D data
-        M['angle_xz'] = np.arctan2(
-            x2[:, 2] - x1[:, 2],
-            x2[:, 0] - x1[:, 0] + np.finfo(float).eps
+        M['angle_xz'] = np.arctan(
+            (x2[:, 2] - x1[:, 2]) / (x2[:, 0] - x1[:, 0] + eps)
         )
     else:
         M['angle_xz'] = np.zeros(len(x1))
     
-    M['angle_xy'] = np.arctan2(
-        x2[:, 1] - x1[:, 1],
-        x2[:, 0] - x1[:, 0] + np.finfo(float).eps
+    M['angle_xy'] = np.arctan(
+        (x2[:, 1] - x1[:, 1]) / (x2[:, 0] - x1[:, 0] + eps)
     )
     
     # Calculate coordination number
@@ -137,11 +137,14 @@ def network_statK(
         coord = np.zeros(max(len(X), 1), dtype=int)
         
         if len(E_edges) > 0:
+            # MATLAB: `LenE = length(E)-1` in both if/else branches, so the
+            # loop runs 1:LenE = 1:n_edges-1 and skips the last edge row.
+            # This is a MATLAB quirk preserved here for faithfulness.
             for k in range(len(E_edges) - 1):
                 v = E_edges[k, :]
                 for vi in v:
-                    if 0 <= vi - 1 < len(coord):
-                        coord[vi - 1] += 1
+                    if 0 <= vi < len(coord):
+                        coord[vi] += 1
         
         M['coord'] = coord
         M['avgcoord'] = np.mean(coord != 0) if len(coord) > 0 else 0.0
@@ -165,7 +168,7 @@ def network_statK(
     
     for fi in range(len(F)):
         v = F[fi]['v']
-        ind = [i for i, vi in enumerate(v) if vflag[vi - 1]]
+        ind = [i for i, vi in enumerate(v) if vflag[vi]]
         
         if len(ind) > 1:
             # There is more than one cross-link in this fiber
@@ -176,8 +179,8 @@ def network_statK(
                 # Calculate length between cross-links
                 length = 0.0
                 for ii in range(i1, i2):
-                    v1_idx = v[ii] - 1
-                    v2_idx = v[ii + 1] - 1
+                    v1_idx = v[ii]
+                    v2_idx = v[ii + 1]
                     if v1_idx < len(X) and v2_idx < len(X):
                         length += np.linalg.norm(X[v2_idx] - X[v1_idx])
                 
