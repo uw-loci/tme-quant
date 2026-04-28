@@ -43,14 +43,18 @@ def fiberbreak(X: np.ndarray, F: List[Dict], V: List[Dict]) -> tuple:
             F_new.append(new_fiber)
             continue
             
-        # Split fiber at internal crosslinks
+        # Split fiber at crosslinks.
+        # MATLAB: `for j = 2:length(v-1)` — in MATLAB, `v-1` is element-wise
+        # subtraction so length(v-1) == length(v), making the range 2:length(v)
+        # (1-based), i.e. 0-based range(1, len(v)). The original Python used
+        # range(1, len(v)-1) which silently excluded the last vertex.
+        # If the last vertex is a crosslink, MATLAB would emit a trivial
+        # single-vertex tail fiber; trimxfv discards it. We replicate that.
         vstart = 0
-        
-        # Check internal vertices (not endpoints)
-        for j in range(1, len(v) - 1):
-            vj = int(v[j])
-            
-            # Check if this vertex is a crosslink (has multiple fibers)
+        for j in range(1, len(v)):
+            vj = int(v[j])               # 0-based vertex ID
+
+            # Check if this vertex is a crosslink (has multiple fibers).
             if vj < len(V) and len(V[vj]['f']) > 1:
                 # Split here - add fiber segment from vstart to current vertex
                 new_fiber = {

@@ -92,20 +92,10 @@ def check_danglers(
     threshold_angle_parallel = params.get('thresh_dang_aextend', 0.9848)  # cos(10°)
     threshold_short_length = params.get('thresh_dang_L', 15.0)
     
-    # Determine if fiber indices are 0-based or 1-based
-    max_fiber_idx = -1
-    for vertex in vertex_info:
-        if 'f' in vertex and len(vertex['f']) > 0:
-            max_fiber_idx = max(max_fiber_idx, max(vertex['f']))
-    indices_are_one_based = (max_fiber_idx >= len(fibers))
-    
-    # Also check if vertex indices in fibers are 1-based
-    max_vertex_idx = -1
-    for fiber in fibers:
-        if 'v' in fiber and len(fiber['v']) > 0:
-            max_vertex_idx = max(max_vertex_idx, max(fiber['v']))
-    vertex_indices_are_one_based = (max_vertex_idx >= len(vertex_info))
-    
+    # Indices are 0-based throughout
+    indices_are_one_based = False
+    vertex_indices_are_one_based = False
+
     # Step 1: For each fiber, count the number of crosslinks it has
     num_crosslinks_per_fiber = np.zeros(len(fibers), dtype=int)
     crosslink_vertex_per_fiber = np.full(len(fibers), -1, dtype=int)  # Store the crosslink vertex for danglers

@@ -107,14 +107,7 @@ def getvect(vertices: np.ndarray, vertex_idx: int, fiber_vertices: List[int], sp
     np.ndarray
         Unit direction vector
     """
-    # Convert to 0-based if needed
-    max_idx = max(fiber_vertices) if fiber_vertices else 0
-    is_one_based = (max_idx >= len(vertices))
-    
-    if is_one_based:
-        fiber_vertices = [v - 1 for v in fiber_vertices]
-        vertex_idx = vertex_idx - 1 if vertex_idx >= len(vertices) else vertex_idx
-    
+    # Indices are 0-based
     if fiber_vertices[0] == vertex_idx:
         # Fiber starts at this vertex
         ii = min(sp, len(fiber_vertices) - 1)
