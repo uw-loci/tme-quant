@@ -46,12 +46,12 @@ struct FindLocalMax {
         //      inner loop = row  (faster, varies first)
         //    So pixel (row, col) receives draw number (col * height + row + 1).
         //
-        //    The flat array passed from Python is ROW-MAJOR (numpy C-order), so
-        //    the correct flat index for pixel (row, col) is:
-        //      flat_idx = row * sizez + col     (sizez = I = width)
-        //    NOT   sizey * i + j  (which would index the TRANSPOSED pixel for a
-        //    non-square image, or swap draw assignments for a square image because
-        //    it visits pixels in row-major order while MATLAB fills column-major).
+        //    The flat array passed from Python is COLUMN-MAJOR (numpy Fortran-order,
+        //    dsm.flatten(order='F')), so pixel (row, col) is at flat position:
+        //      flat_idx = col * sizey + row     (sizey = J = height)
+        //    This matches MATLAB's column-major layout exactly: both Phase 1 and
+        //    Phase 2 address the same memory position for pixel (row, col), and
+        //    both agree with MATLAB's rand() draw-to-pixel assignment.
         {
             std::mt19937 rng(100);
             // Outer loop over columns (MATLAB's slower/outer dimension for a
@@ -60,7 +60,7 @@ struct FindLocalMax {
                 // Inner loop over rows (MATLAB's faster/inner dimension).
                 for (int row = 0; row < sizey; ++row) {   // sizey = J = height
                     // Row-major flat index for Python's C-contiguous dsm array.
-                    const uint64_t flat_idx = (uint64_t)row * sizez + col;
+                    const uint64_t flat_idx = (uint64_t)col * sizey + row;
                     // genrand_res53: two uint32 outputs → double in [0,1),
                     // matching MATLAB's rand() output exactly for seed 100.
                     const uint32_t a = rng() >> 5;   // top 27 bits
@@ -78,7 +78,7 @@ struct FindLocalMax {
         for (int i = 0; i < sizez; ++i) {
             const int tid = omp_get_thread_num();
             for (int j = 0; j < sizey; ++j) {
-                const uint64_t offset = (uint64_t)sizey * i + j; // FIX: was sizey * j + i
+                const uint64_t offset = (uint64_t)sizey * i + j; // column-major: col*J + row, matches Fortran-order dsm_flat
                 if (image[offset] < dmin) continue;
 
                 bool local_max = true;
@@ -98,7 +98,7 @@ struct FindLocalMax {
                 }
                 // +1 for 1-based indexing (matches MATLAB MEX output)
                 if (local_max)
-                    thread_buffer[tid].push_back({i + 1, j + 1});
+                    thread_buffer[tid].push_back({i, j});
             }
         }
 
@@ -139,9 +139,9 @@ py::array_t<int32_t> findlocmax_native(
 
         #pragma omp parallel for
         for (int i = 0; i < N; ++i) {
-            out_ptr[i * 3 + 0] = pts[i][0]; // z index (1-based)
-            out_ptr[i * 3 + 1] = pts[i][1]; // y index (1-based)
-            out_ptr[i * 3 + 2] = 1;         // x = 1 (since sizex == 1)
+            out_ptr[i * 3 + 0] = pts[i][0]; // z index (0-based)
+            out_ptr[i * 3 + 1] = pts[i][1]; // y index (0-based)
+            out_ptr[i * 3 + 2] = 0;         // x = 0 (since sizex == 1)
         }
         return result;
     } else {

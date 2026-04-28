@@ -768,17 +768,17 @@ py::tuple fiberproc_native(
     float thresh_flen = p.contains("thresh_flen") ? p["thresh_flen"].cast<float>() : 15.0f;
     int thresh_numv = p.contains("thresh_numv") ? p["thresh_numv"].cast<int>() : 3;
 
-    // Convert X to internal format (0-based float coords).
+    // Convert X to internal format (input is already 0-based).
     std::vector<std::array<float, 3>> X(nX);
     for (int i = 0; i < nX; ++i) {
         X[i] = {
-            (float)(X_in.at(i, 0) - 1),
-            (float)(X_in.at(i, 1) - 1),
-            (float)(X_in.at(i, 2) - 1)
+            (float)(X_in.at(i, 0)),
+            (float)(X_in.at(i, 1)),
+            (float)(X_in.at(i, 2))
         };
     }
 
-    // Convert F from Python to internal format (0-based vertex indices).
+    // Convert F from Python to internal format (vertex indices are already 0-based).
     std::vector<Fiber> F;
     F.reserve(F_in.size());
     for (int i = 0; i < (int)F_in.size(); ++i) {
@@ -787,7 +787,7 @@ py::tuple fiberproc_native(
         if (fiber_dict.contains("v")) {
             std::vector<int> v_list = fiber_dict["v"].cast<std::vector<int>>();
             fib.v.reserve(v_list.size());
-            for (int vi : v_list) fib.v.push_back(vi - 1);
+            for (int vi : v_list) fib.v.push_back(vi);
         }
         F.push_back(std::move(fib));
     }
@@ -835,13 +835,13 @@ py::tuple fiberproc_native(
         }
     }
 
-    // --- Build output arrays (convert back to 1-based). ---
+    // --- Build output arrays (0-based throughout). ---
     auto py_X = py::array_t<int32_t>({nX, 3});
     auto X_ptr = py_X.mutable_data();
     for (int i = 0; i < nX; ++i) {
-        X_ptr[i*3 + 0] = (int32_t)(X[i][0] + 1);
-        X_ptr[i*3 + 1] = (int32_t)(X[i][1] + 1);
-        X_ptr[i*3 + 2] = (int32_t)(X[i][2] + 1);
+        X_ptr[i*3 + 0] = (int32_t)(X[i][0]);
+        X_ptr[i*3 + 1] = (int32_t)(X[i][1]);
+        X_ptr[i*3 + 2] = (int32_t)(X[i][2]);
     }
 
     py::list py_F;
@@ -850,7 +850,7 @@ py::tuple fiberproc_native(
         py::dict f_struct;
         std::vector<int> v_out;
         v_out.reserve(fiber.v.size());
-        for (int vi : fiber.v) v_out.push_back(vi + 1);
+        for (int vi : fiber.v) v_out.push_back(vi);
         f_struct["v"] = py::cast(v_out);
         py_F.append(f_struct);
     }
@@ -859,8 +859,8 @@ py::tuple fiberproc_native(
     for (const auto& fiber : F) {
         if (fiber.v.size() >= 2) {
             py::list edge;
-            edge.append(fiber.v.front() + 1);
-            edge.append(fiber.v.back() + 1);
+            edge.append(fiber.v.front());
+            edge.append(fiber.v.back());
             py_E.append(edge);
         }
     }
@@ -872,9 +872,9 @@ py::tuple fiberproc_native(
         fe_out.reserve(v.fe.size());
         f_out.reserve(v.f.size());
         vall_out.reserve(v.vall.size());
-        for (int fi : v.fe) fe_out.push_back(fi + 1);
-        for (int fi : v.f) f_out.push_back(fi + 1);
-        for (int vi : v.vall) vall_out.push_back(vi + 1);
+        for (int fi : v.fe) fe_out.push_back(fi);
+        for (int fi : v.f) f_out.push_back(fi);
+        for (int vi : v.vall) vall_out.push_back(vi);
         v_struct["fe"] = py::cast(fe_out);
         v_struct["f"] = py::cast(f_out);
         v_struct["vall"] = py::cast(vall_out);

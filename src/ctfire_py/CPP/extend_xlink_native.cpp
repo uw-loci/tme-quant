@@ -387,9 +387,9 @@ struct ExtendXLink {
                                            fibres[f][branch].link[node][1];
                     if (!index_map[offset]) {
                         index_map[offset] = ++ncounter;
-                        // Convert to 1-based indexing for output
-                        X.push_back(std::array<int, d>{fibres[f][branch].link[node][0] + 1, 
-                                                       fibres[f][branch].link[node][1] + 1});
+                        // Store 0-based pixel coords
+                        X.push_back(std::array<int, d>{fibres[f][branch].link[node][0],
+                                                       fibres[f][branch].link[node][1]});
                     }
                 }
             }
@@ -399,8 +399,8 @@ struct ExtendXLink {
         R.resize(X.size());
         #pragma omp parallel for
         for (int i = 0; i < (int)X.size(); ++i) {
-            // Store actual DSM value, not ceil (ceil is only for search radius during extension)
-            R[i] = image[(X[i][0] - 1) * sizex + (X[i][1] - 1)];
+            // Store actual DSM value, not ceil (X coords are 0-based)
+            R[i] = image[X[i][0] * sizex + X[i][1]];
         }
 
         // Step 5: Prepare nucleation points for linking (0-based indexing)
@@ -458,7 +458,7 @@ struct ExtendXLink {
             std::vector<int> v;
             v.reserve(F_init[f].link_index.size());
             for (int idx : F_init[f].link_index) {
-                v.push_back(idx + 1); // 0-based -> 1-based for MATLAB output
+                v.push_back(idx); // 0-based vertex indices
             }
             F.push_back(std::move(v));
         }
@@ -477,19 +477,19 @@ struct ExtendXLink {
                 const int index_begin = F[f][0];
                 const int index_end = F[f].back();
                 
-                if (index_begin - 1 >= (int)X.size() || index_end - 1 >= (int)X.size()) {
+                if (index_begin >= (int)X.size() || index_end >= (int)X.size()) {
                     std::cerr << "Error: Index out of bounds in Xfe" << std::endl;
                     continue;
                 }
                 
-                Xfe[index_begin - 1].push_back(f + 1);
-                Xfe[index_end - 1].push_back(f + 1);
+                Xfe[index_begin].push_back(f);
+                Xfe[index_end].push_back(f);
             }
             
             for (int node = 0; node < (int)F[f].size(); ++node) {
-                Xf[F[f][node] - 1].push_back(f + 1);
+                Xf[F[f][node]].push_back(f);
                 for (int node2 = 0; node2 < (int)F[f].size(); ++node2) {
-                    Xvall[F[f][node] - 1].push_back(F[f][node2] - 1);
+                    Xvall[F[f][node]].push_back(F[f][node2]);
                 }
             }
         }
@@ -499,16 +499,16 @@ struct ExtendXLink {
         #pragma omp parallel for
         for (int f = 0; f < (int)F.size(); ++f) {
             for (int node = 0; node < (int)F[f].size(); ++node) {
-                for (int f2 = 0; f2 < (int)Xf[F[f][node] - 1].size(); ++f2) {
-                    if (Xf[F[f][node] - 1][f2] != f + 1) {
+                for (int f2 = 0; f2 < (int)Xf[F[f][node]].size(); ++f2) {
+                    if (Xf[F[f][node]][f2] != f) {
                         bool unique = true;
                         for (int ff = 0; ff < (int)Ff[f].size(); ++ff) {
-                            if (Ff[f][ff] == Xf[F[f][node] - 1][f2]) {
+                            if (Ff[f][ff] == Xf[F[f][node]][f2]) {
                                 unique = false;
                                 break;
                             }
                         }
-                        if (unique) Ff[f].push_back(Xf[F[f][node] - 1][f2]);
+                        if (unique) Ff[f].push_back(Xf[F[f][node]][f2]);
                     }
                 }
             }
@@ -550,9 +550,9 @@ py::tuple extend_xlink_native(int sizex, int sizey, int sizez,
     int nNuc = pts_in.shape(0);
     
     std::vector<std::array<int, 2>> pts(nNuc);
-    // Convert from 1-based (MATLAB) to 0-based (C++) indexing
+    // Input pts are already 0-based
     for (int i = 0; i < nNuc; ++i) {
-        pts[i] = {pts_in.at(i, 0) - 1, pts_in.at(i, 1) - 1};
+        pts[i] = {pts_in.at(i, 0), pts_in.at(i, 1)};
     }
 
     std::vector<std::array<int, 2>> X;
