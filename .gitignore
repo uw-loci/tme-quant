@@ -182,3 +182,10 @@ tests/test_images/CA_Out/
 
 # referenced MATLAB files
 *.m
+
+# compiled CPP files
+*.so  
+*.dSYM          
+
+# runtime output CSVs
+src/ctfire_py/ctFIREout/  
