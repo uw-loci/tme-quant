@@ -179,15 +179,33 @@ pycurvelets/opt/*.*
 
 # ── Output / generated data ───────────────────────────────────────────────────
 src/tme_quant/output/
+src/tme_quant/src/examples/output/
+src/examples/
 
 # test tmp folder
 tests/test_images/CA_Out/
 src/tme_quant/.../pyproject.toml
 src/tme_quant/.../tme_quant_structure.txt
 src/tme_quant/.../docs/architecture.md
+src/tme_quant/.../
 *.bak0
 
 # CT-FIRE C++ compiled extension output
 */_ctfire_cpp*.pyd
 */_ctfire_cpp*.so
 build/ctfire_cpp/
+
+# ── Python caches (any location) ─────────────────────────────────────────────
+__pycache__/
+.pytest_cache/
+
+# ── Virtual environments (tme_quant package) ─────────────────────────────────
+src/tme_quant/.venv/
+src/tme_quant/.venv-*/
+src/tme_quant/.venv_*/
+
+# ── Local tool settings ───────────────────────────────────────────────────────
+src/tme_quant/.claude/settings.local.json
+
+# ── Local data directory ──────────────────────────────────────────────────────
+src/tme_quant/data/
