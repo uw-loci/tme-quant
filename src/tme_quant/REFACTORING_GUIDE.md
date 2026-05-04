@@ -214,6 +214,12 @@ Note: `angle_to_boundary_edge` in pycurvelets equals `90° − angle_to_boundary
 in tme_quant TACS convention (pycurvelets returns the complement angle).  Always apply
 the conversion; never silently carry over the pycurvelets value with the tme_quant name.
 
+Note: `nearest_relative_boundary_angle` (output of `extract_tif_boundary` /
+`_compute_fiber_boundary_relative_angle`) equals `angle_to_boundary_tangent` **directly**
+— no conversion needed.  `compute_boundary_tangent_angle` uses `atan2(Δcol, Δrow)`,
+which is 90° offset from the fiber-angle convention; this offset cancels the expected
+complement, so the raw column value is already the TACS-ready angle_to_tangent.
+
 ---
 
 ## 7. MATLAB Rounding and Numerical Parity

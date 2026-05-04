@@ -305,13 +305,14 @@ def _tacs_hierarchy_integration(
                 nb_dist = float(raw_dist)
             if raw_epict is not None:
                 in_epictr = bool(raw_epict)
-            # nearest_relative_boundary_angle is in pycurvelets convention:
-            #   value = arcsin(circ_r([2*fiber_deg, 2*tangent_deg]))
-            #         = 90° − |fiber_angle − boundary_tangent_angle|
-            #         = 90° − angle_to_boundary_tangent
-            # classify_fiber_tacs() expects angle_to_boundary_tangent, so convert:
+            # nearest_relative_boundary_angle is used directly as angle_to_tangent.
+            # compute_boundary_tangent_angle() uses atan(Δcol/Δrow) — a 90°-rotated
+            # convention vs the fiber angle (0°=horizontal). This offset inverts the
+            # circ_r result so that nearest_relative_boundary_angle is already the
+            # angle to the boundary tangent (0°=parallel, 90°=perpendicular), NOT its
+            # complement.  No conversion needed.
             if raw_angle is not None and not pd.isna(raw_angle):
-                angle_to_tangent = 90.0 - float(raw_angle)
+                angle_to_tangent = float(raw_angle)
             if (raw_bpt_r is not None and not pd.isna(raw_bpt_r)
                     and raw_bpt_c is not None and not pd.isna(raw_bpt_c)):
                 bdry_pt = np.array([float(raw_bpt_r), float(raw_bpt_c)])  # (row, col)
@@ -386,20 +387,17 @@ def _tacs_hierarchy_integration(
         print("  No boundary — TACS classification skipped.")
 
     # ── Angle diagnostic (verify convention) ─────────────────────────────────
-    # nearest_relative_boundary_angle: high value (→90°) = fiber parallel to boundary tangent
-    #                                  low  value (→ 0°) = fiber perpendicular (invasive)
-    # angle_to_tangent = 90 - nearest_relative_boundary_angle
-    #   high angle_to_tangent (60-90°) → TACS-3 (perpendicular)
-    #   low  angle_to_tangent ( 0-30°) → TACS-2 (parallel)
+    # nearest_relative_boundary_angle = angle_to_tangent directly (no conversion).
+    #   high value (60-90°) → TACS-3 (perpendicular / invasive)
+    #   low  value ( 0-30°) → TACS-2 (parallel)
     if has_boundary:
         print("\n  Angle diagnostic — 5 sample fibers in TACS zone:")
-        print(f"    {'nearest_relative_boundary_angle':>35}  {'angle_to_tangent':>17}  TACS")
+        print(f"    {'nearest_relative_boundary_angle (=angle_to_tangent)':>52}  TACS")
         n_shown = 0
         for i, (_, frow) in enumerate(fs.iterrows()):
             f = fiber_objects[i]
             if f.relative_angle_to_boundary_tangent is not None and f.nearest_boundary_distance is not None:
-                raw = 90.0 - f.relative_angle_to_boundary_tangent   # recover raw stored value
-                print(f"    {raw:>35.1f}  {f.relative_angle_to_boundary_tangent:>17.1f}  {f.tacs_type}")
+                print(f"    {f.relative_angle_to_boundary_tangent:>52.1f}  {f.tacs_type}")
                 n_shown += 1
                 if n_shown >= 5:
                     break
@@ -482,8 +480,8 @@ def _launch_tacs_viewer(
 
     # Pre-draw each TACS group; accumulate artists per type key
     groups: dict[str | None, list] = {k: [] for k in TACS_STYLE}
-    # Association lines (fiber center → nearest boundary point), hidden by default
-    assoc_lines: list = []
+    # Association lines per TACS key — hidden by default
+    assoc_by_key: dict[str | None, list] = {k: [] for k in TACS_STYLE}
 
     for fobj in fiber_objects:
         key = fobj.tacs_type if fobj.tacs_type in groups else None
@@ -495,7 +493,7 @@ def _launch_tacs_viewer(
             dx = line_length * np.cos(angle_rad)
             dy = line_length * np.sin(angle_rad)
             line, = ax.plot(
-                [col - dx, col + dx], [row - dy, row + dy],
+                [col - dx, col + dx], [row + dy, row - dy],
                 color=color, lw=0.8, alpha=0.85,
             )
             dot, = ax.plot(col, row, ".", color=color, ms=2.5)
@@ -510,7 +508,7 @@ def _launch_tacs_viewer(
                     [col, bdry_col], [row, bdry_row],
                     color=color, lw=0.5, alpha=0.6, ls="--", visible=False,
                 )
-                assoc_lines.append(aline)
+                assoc_by_key[key].append(aline)
 
     # Legend with per-type counts
     counts = {k: len(v) // 2 for k, v in groups.items()}
@@ -545,9 +543,7 @@ def _launch_tacs_viewer(
             visible = _current_vis.get(key, False)
             for artist in artists:
                 artist.set_visible(visible)
-        # Keep association lines in sync with current filter if they are shown
-        if check.get_status()[0]:
-            _update_assoc_visibility()
+        _update_assoc_visibility()
         ax.set_title(f"{tag} — TACS viewer  [{label}]", fontsize=9)
         fig.canvas.draw_idle()
 
@@ -559,12 +555,10 @@ def _launch_tacs_viewer(
 
     def _update_assoc_visibility() -> None:
         show = check.get_status()[0]
-        for aline in assoc_lines:
-            # Only show if the fiber's TACS group is currently visible
-            aline.set_visible(show and _current_vis.get(aline.get_color(), True))
-        # Simpler: just toggle all; color already matches the TACS type filter
-        for aline in assoc_lines:
-            aline.set_visible(show)
+        for key, alines in assoc_by_key.items():
+            visible = show and _current_vis.get(key, False)
+            for aline in alines:
+                aline.set_visible(visible)
 
     def _on_check(_: str) -> None:
         _update_assoc_visibility()

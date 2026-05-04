@@ -153,10 +153,16 @@ def _compute_fiber_boundary_relative_angle(
     ``compute_boundary_tangent_angle`` (port of ``find_outline_slope``) and
     ``_circ_r`` (port of ``circ_r``).
 
-    **Angle convention (pycurvelets):**  The returned angle is
-    ``arcsin(circ_r([2·fiber_angle_rad, 2·boundary_angle_rad]))`` in degrees,
-    which equals ``90° − |fiber_angle − boundary_tangent_angle|``.  This is the
-    *complement* of the TACS ``angle_to_boundary_tangent`` convention.
+    **Angle convention:**  The returned angle is
+    ``arcsin(circ_r([2·fiber_angle_rad, 2·boundary_angle_rad]))`` in degrees.
+
+    ``compute_boundary_tangent_angle`` (used internally) returns
+    ``atan2(Δcol, Δrow) % 180``, so its 0° is a *vertical* boundary and its 90° is
+    a *horizontal* boundary — a 90° offset from the fiber-angle convention
+    (0° = horizontal).  This offset inverts the circ_r result so that the returned
+    value equals the TACS ``angle_to_boundary_tangent`` directly:
+    0° = parallel, 90° = perpendicular/invasive.  **No conversion is needed before
+    passing to** ``classify_fiber_tacs()``.
 
     Parameters
     ----------

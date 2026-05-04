@@ -593,6 +593,14 @@ def compute_boundary_tangent_angle(
     float
         Tangent angle in degrees [0°, 180°), or NaN when fewer than *num*
         connected pixels are found around *idx*.
+
+    .. warning::
+        This function returns ``atan2(Δcol, Δrow) % 180`` — a 90°-rotated convention
+        relative to standard fiber angles (which use 0° = horizontal/col-aligned).
+        Here 0° = vertical boundary, 90° = horizontal boundary.  When used in
+        ``_compute_fiber_boundary_relative_angle``, this offset causes
+        ``nearest_relative_boundary_angle`` to equal ``angle_to_boundary_tangent``
+        directly (no 90° complement conversion needed).
     """
     con_pts = _find_connected_pts(np.asarray(coords, dtype=int), idx, num)
     if np.any(np.isnan(con_pts)):
