@@ -461,11 +461,29 @@ black src/ && ruff check src/ && mypy src/tme_quant/
 
 **General install instructions:** `docs/getting_started.md` Step 2 and Step 6.
 
-**On this machine:** curvelops 0.23 is installed in WSL at
-`/home/yuming/miniconda3/`.  FFTW 2.1.5 and CurveLab 2.1.3 are pre-built
-(ELF/Linux) under `H:/GitHub.06.2022/utils/` — the Windows `.venv` cannot
-link against them.  Always use the WSL miniconda Python for curvelops-dependent
-tests (see the WSL command above).
+**On this machine (Windows — primary):** curvelops 0.23.4 is installed in the
+MSYS2 UCRT64 venv at `H:\GitHub.06.2022\tme-quant\src\tme_quant\.venv-curvelops`
+(Python 3.14, UCRT64 GCC).  **Must be activated from the MSYS2 UCRT64 shell** —
+MSYS2 Python uses the `mingw_x86_64_ucrt_gnu` platform tag (incompatible with
+standard win_amd64 PyPI wheels; core deps installed via pacman instead).
+
+```bash
+# From MSYS2 UCRT64 shell:
+cd /h/GitHub.06.2022/tme-quant/src/tme_quant
+source .venv-curvelops/bin/activate
+python -m pytest tests/ -v        # 239 passed, 7 skipped
+```
+
+Build notes (if rebuilding curvelops):
+- Core deps: `pacman -S mingw-w64-ucrt-x86_64-python-{numpy,scipy,scikit-image,opencv,pandas,matplotlib,shapely,tifffile,openpyxl,imageio,pillow,networkx,scikit-learn}`
+- Venv: `python3.14 -m venv --system-site-packages .venv-curvelops`
+- curvelops build: `FFTW=H:/GitHub.06.2022/utils/fftw-2.1.5 FDCT=H:/GitHub.06.2022/utils/CurveLab-2.1.3 CXXFLAGS="-fpermissive -Wno-error -Wno-class-memaccess -std=gnu++14 -D_USE_MATH_DEFINES" pip install --no-build-isolation "curvelops @ git+https://github.com/PyLops/curvelops@0.23.4"`
+  (`-D_USE_MATH_DEFINES` needed: GCC 15 does not expose `M_PI` in strict C++ mode)
+- tme_quant: `pip install -e . --no-deps` (deps already provided by pacman/system-site-packages)
+
+**On this machine (WSL — legacy):** curvelops 0.23 may be at `/home/yuming/miniconda3/`
+(not verified).  The Windows `.venv` (Python 3.11.9 Windows Store) cannot build C
+extensions; use `.venv-curvelops` from MSYS2 shell instead.
 
 ---
 
