@@ -1,12 +1,13 @@
 # tme_quant — Package Architecture
 
 ```
-src/examples/                          ← runnable demo scripts
+examples/                              ← runnable demo scripts
 ├── example_3d_volumetric_workflow.py  ← 3-D z-stack volumetric analysis
 ├── example_analyze_tacs_zone.py       ← standalone TACS zone analysis demo
 ├── example_ctfire_workflow.py         ← CT-FIRE individual fiber + TACS workflow
 ├── example_ctfire_workflow_hierarchy.py ← CT-FIRE workflow with TMEHierarchy
 ├── example_curvealign_workflow.py     ← CurveAlign segment orientation + TACS workflow
+├── example_curvealign_curvelets_mode_pipeline.py ← curvealign curvelets-mode + TACS + hierarchy
 ├── example_hierarchy_object_analysis.py
 └── roi_curvealign_orientation_example.py
 

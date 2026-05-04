@@ -34,8 +34,8 @@ classifiers = [
 
 # ── Core dependencies ─────────────────────────────────────────────────────────
 # Everything required to import tme_quant and run both target examples:
-#   src/examples/example_hierarchy_object_analysis.py
-#   src/examples/examples_tmequant_complete_cl_usage_ctfire_curvealign.py
+#   examples/example_hierarchy_object_analysis.py
+#   examples/examples_tmequant_complete_cl_usage_ctfire_curvealign.py
 #
 # Version floors are set to the earliest release known to be compatible with
 # Python 3.10 and the specific APIs we use, not the latest available version.
@@ -213,7 +213,7 @@ include = ["tme_quant*"]
 [tool.uv]
 # Install the project itself in editable mode so that
 #   from tme_quant.core.base_models import TMEObject
-# resolves from src/ in every script, including those in src/examples/,
+# resolves from src/ in every script, including those in examples/,
 # without any sys.path manipulation.
 #
 # The core dependencies list above is sufficient to run both target examples.

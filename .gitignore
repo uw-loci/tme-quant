@@ -179,7 +179,7 @@ pycurvelets/opt/*.*
 
 # ── Output / generated data ───────────────────────────────────────────────────
 src/tme_quant/output/
-src/tme_quant/src/examples/output/
+src/tme_quant/examples/output/
 
 # test tmp folder
 tests/test_images/CA_Out/

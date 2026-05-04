@@ -12,12 +12,10 @@ tme-quant/src/tme_quant/       ← project root (pyproject.toml lives here)
 ├── pyproject.toml
 ├── docs/
 │   └── getting_started.md     ← this file
+├── examples/                  ← runnable demo scripts
+│   └── example_hierarchy_object_analysis.py
 └── src/
-    ├── tme_quant/             ← library source
-    └── examples/
-        ├── example_hierarchy_object_analysis.py
-        ├── examples_tmequant_complete_cl_usage_ctfire_curvealign.py
-        └── smoke_test_ctfire_curvealign.py
+    └── tme_quant/             ← library source
 ```
 
 All commands below assume the project root as the working directory:
@@ -136,7 +134,7 @@ After the editable install, `PYTHONPATH` is no longer needed.
 No image files required — all objects are constructed programmatically.
 
 ```bash
-python src/examples/example_hierarchy_object_analysis.py
+python examples/example_hierarchy_object_analysis.py
 ```
 
 Expected output: 11 demo sections print to stdout, ending with
@@ -157,7 +155,7 @@ Workflow 3 (3-D volumetric) generates a synthetic volume internally and
 requires no data files.
 
 ```bash
-python src/examples/examples_tmequant_complete_cl_usage_ctfire_curvealign.py
+python examples/examples_tmequant_complete_cl_usage_ctfire_curvealign.py
 ```
 
 ### Smoke test (no image files needed)
@@ -166,7 +164,7 @@ Verifies all import chains, param construction, FiberAnalyzer 2-D/3-D, and
 TACS classification without real images:
 
 ```bash
-python src/examples/smoke_test_ctfire_curvealign.py
+python examples/smoke_test_ctfire_curvealign.py
 ```
 
 Expected output: `PASSED : 41/41 — All checks passed.`
@@ -267,7 +265,7 @@ pip install -e ".[examples]"
 Or fall back to the explicit path approach:
 
 ```bash
-PYTHONPATH=src python src/examples/example_hierarchy_object_analysis.py
+PYTHONPATH=src python examples/example_hierarchy_object_analysis.py
 ```
 
 **`libdevice not found at ./libdevice.10.bc`** (TensorFlow warning)

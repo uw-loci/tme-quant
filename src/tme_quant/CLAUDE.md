@@ -29,15 +29,16 @@ hierarchy supporting 2D, 3D, multichannel, and dynamic images.
 ```
 tme-quant/
 ├── pyproject.toml               ← build, deps, tool config (black, ruff, mypy, pytest)
+├── examples/                    ← runnable demo scripts (some require real image files; see Running Examples)
+│   ├── example_ctfire_workflow.py
+│   ├── example_ctfire_workflow_hierarchy.py  ← CT-FIRE workflow with TMEHierarchy
+│   ├── example_curvealign_workflow.py
+│   ├── example_curvealign_curvelets_mode_pipeline.py
+│   ├── example_3d_volumetric_workflow.py
+│   ├── example_analyze_tacs_zone.py
+│   ├── example_hierarchy_object_analysis.py
+│   └── roi_curvealign_orientation_example.py
 ├── src/
-│   ├── examples/                ← runnable demo scripts (some require real image files; see Running Examples)
-│   │   ├── example_ctfire_workflow.py
-│   │   ├── example_ctfire_workflow_hierarchy.py  ← CT-FIRE workflow with TMEHierarchy
-│   │   ├── example_curvealign_workflow.py
-│   │   ├── example_3d_volumetric_workflow.py
-│   │   ├── example_analyze_tacs_zone.py
-│   │   ├── example_hierarchy_object_analysis.py
-│   │   └── roi_curvealign_orientation_example.py
 │   └── tme_quant/
 │       ├── __init__.py          ← flat public API (~36 exported names)
 │       ├── core/
@@ -425,13 +426,13 @@ print(ctfire_backend_status())   # 'cpp_available' should be True
 
 ```bash
 # These 3 examples require real image files (place in data/ at the project root):
-PYTHONPATH=src python src/examples/example_ctfire_workflow.py
-PYTHONPATH=src python src/examples/example_ctfire_workflow_hierarchy.py
-PYTHONPATH=src python src/examples/example_curvealign_workflow.py
+PYTHONPATH=src python examples/example_ctfire_workflow.py
+PYTHONPATH=src python examples/example_ctfire_workflow_hierarchy.py
+PYTHONPATH=src python examples/example_curvealign_workflow.py
 # These examples are self-contained (synthetic data, no real images needed):
-PYTHONPATH=src python src/examples/example_3d_volumetric_workflow.py
-PYTHONPATH=src python src/examples/example_analyze_tacs_zone.py
-PYTHONPATH=src python src/examples/example_hierarchy_object_analysis.py
+PYTHONPATH=src python examples/example_3d_volumetric_workflow.py
+PYTHONPATH=src python examples/example_analyze_tacs_zone.py
+PYTHONPATH=src python examples/example_hierarchy_object_analysis.py
 
 # Standard test suite (206 passed, 2 skipped on Windows/no-curvelops as of 2026-04-21)
 # Run from src/tme_quant/ — curvelops integration tests are skipped automatically
