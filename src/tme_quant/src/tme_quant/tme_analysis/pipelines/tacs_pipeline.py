@@ -8,7 +8,7 @@ single workflow that runs both paths on the same ROI and merges the results.
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 
@@ -21,16 +21,22 @@ from tme_quant.tme_analysis.utils.orientation_utils import (
 )
 
 
+def _report(cb: Optional[Callable], step: int, total: int, msg: str) -> None:
+    if cb is not None:
+        cb(step, total, msg)
+
+
 def analyze_tacs_zone(
-    orientation_map:  np.ndarray,
-    alignment_map:    Optional[np.ndarray],
-    roi:              ROIObject,
-    fiber_objects:    Optional[List] = None,
-    pixel_size:       float = 1.0,
-    tacs_zone_width:  float = 100.0,
-    subsample:        int   = 2,
-    dense_boundary:   bool  = False,
-    image_size:       Optional[Tuple[int, int]] = None,
+    orientation_map:   np.ndarray,
+    alignment_map:     Optional[np.ndarray],
+    roi:               ROIObject,
+    fiber_objects:     Optional[List] = None,
+    pixel_size:        float = 1.0,
+    tacs_zone_width:   float = 100.0,
+    subsample:         int   = 2,
+    dense_boundary:    bool  = False,
+    image_size:        Optional[Tuple[int, int]] = None,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
 ) -> dict:
     """
     Run both the pixel-map and per-object TACS analyses on the same ROI.
@@ -128,12 +134,14 @@ def analyze_tacs_zone(
     >>> print(result['combined_mean_angle_to_tangent'])
     """
     # ── 1. Discretize polygon once if dense_boundary is requested ─────────
+    _report(progress_callback, 1, 3, "Discretizing ROI boundary…")
     dense_coords: Optional[np.ndarray] = None
     if dense_boundary and roi.coordinates is not None and len(roi.coordinates) >= 3:
         poly_rc = roi.coordinates[:, ::-1]   # (x,y) → (row,col)
         dense_coords = discretize_roi_boundary(poly_rc, step=1.0)
 
     # ── 2. Pixel-map analysis ─────────────────────────────────────────────
+    _report(progress_callback, 2, 3, "Computing pixel-level orientation map…")
     pixel_result = compute_orientation_relative_to_roi(
         orientation_map = orientation_map,
         alignment_map   = alignment_map,
@@ -146,6 +154,8 @@ def analyze_tacs_zone(
     )
 
     # ── 3. Per-object fiber analysis ──────────────────────────────────────
+    n_fibers = len(fiber_objects) if fiber_objects else 0
+    _report(progress_callback, 3, 3, f"Classifying {n_fibers} fibers in TACS zone…")
     fiber_results: list[dict] = []
     if fiber_objects and roi.coordinates is not None and len(roi.coordinates) >= 3:
         # roi_coords for compute_relative_fiber_angles must be (row, col)

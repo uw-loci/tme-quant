@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -112,6 +112,11 @@ class PipelineResult:
 
 
 # ---------------------------------------------------------------------------
+def _report(cb: Optional[Callable], step: int, total: int, msg: str) -> None:
+    if cb is not None:
+        cb(step, total, msg)
+
+
 # Pipeline
 # ---------------------------------------------------------------------------
 
@@ -141,6 +146,7 @@ class InteractionAnalysisPipeline:
         tumors: Optional[List[TumorRegion]] = None,
         region_area: Optional[float] = None,
         image_id: str = 'image',
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
     ) -> PipelineResult:
         """
         Run the full pipeline for a single image / region.
@@ -165,6 +171,7 @@ class InteractionAnalysisPipeline:
         cfg = self.config
 
         # ---- Step 1: detect interactions ----
+        _report(progress_callback, 1, 3, "Detecting cell-fiber and fiber-tumor interactions…")
         all_pairs: List[InteractionPair] = []
 
         if cfg.verbose:
@@ -198,7 +205,8 @@ class InteractionAnalysisPipeline:
             tacs_zone_width=cfg.tacs_zone_width,
         )
 
-        # ---- Step 3: extract aggregate features ----
+        # ---- Step 2: extract aggregate features ----
+        _report(progress_callback, 2, 3, "Extracting aggregate interaction features…")
         features: Dict[str, Any] = {}
 
         if cfg.compute_tacs and all_pairs:
@@ -234,7 +242,8 @@ class InteractionAnalysisPipeline:
                 )
             )
 
-        # ---- Step 4: composite prognostic scores ----
+        # ---- Step 3: composite prognostic scores ----
+        _report(progress_callback, 3, 3, "Computing composite prognostic scores…")
         prognostic: Dict[str, float] = {}
         if cfg.compute_prognostic:
             prognostic.update(

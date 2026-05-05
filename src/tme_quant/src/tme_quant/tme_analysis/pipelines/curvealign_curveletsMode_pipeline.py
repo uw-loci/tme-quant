@@ -19,7 +19,7 @@ No Qt / napari dependencies.  See REFACTORING_GUIDE.md §2.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import pandas as pd
@@ -35,6 +35,11 @@ from tme_quant.fiber_analysis.utils.fiber_dataframe_utils import (
     build_fiber_structure_from_curvelets,
 )
 from tme_quant.tme_analysis.utils.alignment_utils import compute_fiber_alignment_to_roi
+
+
+def _report(cb: Optional[Callable], step: int, total: int, msg: str) -> None:
+    if cb is not None:
+        cb(step, total, msg)
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -306,6 +311,7 @@ def curvealign_curvelets_mode_pipeline(
     tif_boundary: int = 0,
     exclude_fibers_in_mask: bool = False,
     min_dist=None,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
 ) -> Optional[dict]:
     """Run the CurveAlign curvelets-mode fiber-orientation pipeline on a single image.
 
@@ -381,6 +387,7 @@ def curvealign_curvelets_mode_pipeline(
         min_dist = []
 
     # ── 1. Fiber extraction ───────────────────────────────────────────────────
+    _report(progress_callback, 1, 4, "Extracting curvelet fiber structure…")
     density_df = pd.DataFrame()
     alignment_df = pd.DataFrame()
 
@@ -393,6 +400,7 @@ def curvealign_curvelets_mode_pipeline(
         return None
 
     # ── 2. Boundary mode decision ─────────────────────────────────────────────
+    _report(progress_callback, 2, 4, "Preparing boundary analysis…")
     boundary_measurement = bool(coordinates) or (
         tif_boundary == 3 and boundary_img is not None
     )
@@ -403,6 +411,7 @@ def curvealign_curvelets_mode_pipeline(
         )
 
     # ── 3. Boundary analysis ──────────────────────────────────────────────────
+    _report(progress_callback, 3, 4, "Analyzing ROI boundaries…")
     in_curvs_flag: Optional[np.ndarray] = None
     nearest_angles: Optional[pd.Series] = None
     roi_measurements_df: Optional[pd.DataFrame] = None
@@ -434,6 +443,7 @@ def curvealign_curvelets_mode_pipeline(
         in_curvs_flag = np.ones(len(fiber_structure), dtype=bool)
 
     # ── 4. Consolidated feature table ─────────────────────────────────────────
+    _report(progress_callback, 4, 4, "Assembling fiber feature table…")
     fiber_features_df = _build_fiber_features_df(
         fiber_structure, density_df, alignment_df, measured_boundary, boundary_measurement
     )

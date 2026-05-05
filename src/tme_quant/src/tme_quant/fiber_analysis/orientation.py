@@ -5,11 +5,16 @@ Fiber orientation: base protocol and analyzer coordinator.
 """Base class for fiber orientation analysis methods."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
 from .config import OrientationParams, OrientationResult
+
+
+def _report(cb: Optional[Callable], step: int, total: int, msg: str) -> None:
+    if cb is not None:
+        cb(step, total, msg)
 
 
 class BaseOrientationMethod(ABC):
@@ -149,6 +154,7 @@ class FiberOrientationAnalyzer:
         self,
         image: np.ndarray,
         params: OrientationParams,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
     ) -> OrientationResult:
         """
         Analyse fiber orientation in a 2-D image.
@@ -160,6 +166,8 @@ class FiberOrientationAnalyzer:
         params : OrientationParams subclass
             Use ``OrientationParams.for_mode()`` or instantiate a subclass
             directly (``CurveAlignParams``, ``OrientationJParams``, etc.).
+        progress_callback : callable or None
+            Optional ``(current, total, message)`` callback for progress reporting.
 
         Returns
         -------
@@ -170,11 +178,13 @@ class FiberOrientationAnalyzer:
 
         method = self._get_method(params.mode)
 
+        _report(progress_callback, 1, 2, f"Analyzing fiber orientation ({params.mode.value})…")
         start = time.perf_counter()
         result = method.analyze_2d(image, params)
         elapsed = time.perf_counter() - start
 
         # Write provenance metadata (overwrite anything the method set)
+        _report(progress_callback, 2, 2, "Finalizing orientation result…")
         result.dimension        = "2D"
         result.mode             = params.mode
         result.processing_time  = elapsed
@@ -186,6 +196,7 @@ class FiberOrientationAnalyzer:
         self,
         image: np.ndarray,
         params: OrientationParams,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
     ) -> OrientationResult:
         """
         Analyse fiber orientation in a 3-D image.
@@ -194,6 +205,8 @@ class FiberOrientationAnalyzer:
         ----------
         image : ndarray, shape (Z, H, W)
         params : OrientationParams subclass
+        progress_callback : callable or None
+            Optional ``(current, total, message)`` callback for progress reporting.
 
         Returns
         -------
@@ -209,10 +222,12 @@ class FiberOrientationAnalyzer:
                 f"Mode '{params.mode.value}' does not support 3-D analysis"
             )
 
+        _report(progress_callback, 1, 2, f"Analyzing fiber orientation 3D ({params.mode.value})…")
         start = time.perf_counter()
         result = method.analyze_3d(image, params)
         elapsed = time.perf_counter() - start
 
+        _report(progress_callback, 2, 2, "Finalizing orientation result…")
         result.dimension       = "3D"
         result.mode            = params.mode
         result.processing_time = elapsed

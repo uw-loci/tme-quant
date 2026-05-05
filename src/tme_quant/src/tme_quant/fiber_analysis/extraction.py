@@ -5,13 +5,18 @@ Fiber extraction: base protocol and analyzer coordinator.
 """Base class for fiber extraction methods."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import numpy as np
 
 from .config import (
     ExtractionParams, ExtractionResult, FiberProperties,
 )
+
+
+def _report(cb: Optional[Callable], step: int, total: int, msg: str) -> None:
+    if cb is not None:
+        cb(step, total, msg)
 
 
 class BaseExtractionMethod(ABC):
@@ -140,6 +145,7 @@ class FiberExtractionAnalyzer:
         self,
         image: np.ndarray,
         params: ExtractionParams,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
     ) -> ExtractionResult:
         """
         Extract individual fibers from a 2-D image.
@@ -151,6 +157,8 @@ class FiberExtractionAnalyzer:
         params : ExtractionParams subclass
             Use ``ExtractionParams.for_mode()`` or a subclass directly
             (``CTFireParams``, ``RidgeDetectionParams``, ``SkeletonParams``).
+        progress_callback : callable or None
+            Optional ``(current, total, message)`` callback for progress reporting.
 
         Returns
         -------
@@ -161,6 +169,7 @@ class FiberExtractionAnalyzer:
 
         method = self._get_method(params.mode)
 
+        _report(progress_callback, 1, 2, f"Extracting fibers ({params.mode.value})…")
         start = time.perf_counter()
         result = method.extract_2d(image, params)
         elapsed = time.perf_counter() - start
@@ -170,6 +179,7 @@ class FiberExtractionAnalyzer:
         result.processing_time = elapsed
         result.parameters      = params.to_dict()   # JSON-safe dict
 
+        _report(progress_callback, 2, 2, "Computing fiber statistics and converting objects…")
         self._compute_summary_statistics(result)
 
         # Convert FiberProperties → FiberObject so downstream TME analysis
@@ -193,6 +203,7 @@ class FiberExtractionAnalyzer:
         self,
         image: np.ndarray,
         params: ExtractionParams,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
     ) -> ExtractionResult:
         """
         Extract individual fibers from a 3-D image.
@@ -201,6 +212,8 @@ class FiberExtractionAnalyzer:
         ----------
         image : ndarray, shape (Z, H, W)
         params : ExtractionParams subclass
+        progress_callback : callable or None
+            Optional ``(current, total, message)`` callback for progress reporting.
 
         Returns
         -------
@@ -216,6 +229,7 @@ class FiberExtractionAnalyzer:
                 f"Mode '{params.mode.value}' does not support 3-D extraction"
             )
 
+        _report(progress_callback, 1, 2, f"Extracting fibers 3D ({params.mode.value})…")
         start = time.perf_counter()
         result = method.extract_3d(image, params)
         elapsed = time.perf_counter() - start
@@ -225,6 +239,7 @@ class FiberExtractionAnalyzer:
         result.processing_time = elapsed
         result.parameters      = params.to_dict()
 
+        _report(progress_callback, 2, 2, "Computing fiber statistics and converting objects…")
         self._compute_summary_statistics(result)
 
         # Convert FiberProperties → FiberObject so downstream TME analysis
