@@ -11,10 +11,13 @@ Demonstrates the ``curvealign_curvelets_mode_pipeline`` in three scenarios:
 Scenario 3 additionally demonstrates:
   • TACS classification of curvelet orientation regions using pre-computed
     boundary angles from the pipeline (TACS-1 / TACS-2 / TACS-3).
-  • TME hierarchy construction: ImageEntry → FiberObject nodes.
+  • TME hierarchy construction: ImageEntry → ROIObject → FiberObject nodes.
   • Representative hierarchy queries (type lookup, ID lookup, ancestry).
-  • Interactive TACS viewer: matplotlib figure with RadioButtons to
-    selectively display TACS-1 / TACS-2 / TACS-3 / all / outside-zone fibers.
+  • Interactive TACS viewer: matplotlib figure with
+      - ROI selector    (filter by boundary contour)
+      - TACS selector   (filter by TACS type)
+      - Fiber table     (per-fiber measurements, bidirectional selection)
+      - Association     (dashed lines from fiber center to boundary point)
 
 Scenarios 1 and 2 save figures to disk only.
 Scenario 3 saves figures, prints TACS + hierarchy summary, then opens
@@ -24,7 +27,7 @@ Output files are written to an ``output/`` folder next to this script.
 
 Usage
 -----
-  python src/examples/example_curvealign_curvelets_mode_pipeline.py
+  python examples/example_curvealign_curvelets_mode_pipeline.py
 
 Requirements
 ------------
@@ -44,6 +47,7 @@ import matplotlib
 matplotlib.use("TkAgg")   # interactive; change to "Agg" for headless
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
 from matplotlib.widgets import CheckButtons, RadioButtons
 import numpy as np
 import pandas as pd
@@ -60,8 +64,9 @@ from tme_quant.fiber_analysis.utils.boundary_tif_utils import (
 )
 from tme_quant import TMEHierarchy
 from tme_quant.core.image_entry import ImageEntry
-from tme_quant.core.base_models import TMEType
+from tme_quant.core.base_models import Geometry, GeometryType, TMEType
 from tme_quant.core.tme_objects.fiber_objects import FiberObject
+from tme_quant.core.roi_manager import ROIObject
 from tme_quant.fiber_analysis.tacs import classify_fiber_tacs
 
 OUT_DIR = Path(__file__).parent / "output"
@@ -239,6 +244,37 @@ def _save_figures_and_xlsx(
     print(f"  Results saved  -> {xlsx_path}\n")
 
 
+# ── ROI assignment helper ──────────────────────────────────────────────────────
+
+def _assign_fibers_to_rois(
+    fiber_objects: list[FiberObject],
+    coordinates: dict,
+) -> dict[str, object]:
+    """Return {fobj.object_id: roi_key} by assigning each fiber to its nearest boundary contour.
+
+    Uses minimum Euclidean distance from the fiber's center_point to any vertex
+    on each contour.  Fibers in the stroma (outside all polygons) are correctly
+    handled because distance-to-contour works regardless of containment.
+    """
+    roi_keys   = list(coordinates.keys())
+    roi_arrays = [np.asarray(coordinates[k]) for k in roi_keys]
+    result: dict[str, object] = {}
+    for fobj in fiber_objects:
+        if fobj.centerline is None or len(fobj.centerline) == 0:
+            result[fobj.object_id] = roi_keys[0] if roi_keys else None
+            continue
+        # centerline stores (row, col); boundary coords also store (row, col)
+        fiber_row = float(fobj.centerline[0, 0])
+        fiber_col = float(fobj.centerline[0, 1])
+        best_key, best_dist = None, float("inf")
+        for key, arr in zip(roi_keys, roi_arrays):
+            d = float(np.sqrt((arr[:, 0] - fiber_row) ** 2 + (arr[:, 1] - fiber_col) ** 2).min())
+            if d < best_dist:
+                best_dist, best_key = d, key
+        result[fobj.object_id] = best_key
+    return result
+
+
 # ── TACS + hierarchy integration ──────────────────────────────────────────────
 
 def _tacs_hierarchy_integration(
@@ -247,18 +283,26 @@ def _tacs_hierarchy_integration(
     result: dict | None,
     distance_threshold: float = 50.0,
     pixel_size: float = 1.0,
-) -> TMEHierarchy | None:
+    coordinates: dict | None = None,
+) -> tuple[TMEHierarchy, dict] | None:
     """Convert curvealign results into FiberObject nodes, classify TACS, build TMEHierarchy.
 
     Each row in ``fiber_structure`` becomes one ``FiberObject`` node whose
     ``tacs_type`` is set from the pre-computed boundary angle stored in
     ``fiber_features_df["nearest_relative_boundary_angle"]``.
 
+    When ``coordinates`` is provided, an ``ROIObject`` node is created for each
+    boundary contour and fibers are parented under their nearest ROI in the tree:
+    ``ImageEntry → ROIObject → FiberObject``.
+
     Angle convention note
     ---------------------
-    ``nearest_relative_boundary_angle`` is stored in the pycurvelets complement
-    convention (90° - angle_to_boundary_tangent).  It is converted here before
-    passing to ``classify_fiber_tacs()``, which expects angle_to_tangent in [0, 90°].
+    ``nearest_relative_boundary_angle`` equals ``angle_to_boundary_tangent``
+    directly (no conversion needed).  ``compute_boundary_tangent_angle`` uses
+    ``atan2(Δcol, Δrow)`` — a 90°-rotated convention vs the fiber angle
+    (0° = horizontal).  This offset inverts the ``circ_r`` formula result so
+    that the raw column value is already the TACS-ready angle_to_tangent:
+    0° = parallel (TACS-2), 90° = perpendicular / invasive (TACS-3).
 
     Parameters
     ----------
@@ -267,6 +311,15 @@ def _tacs_hierarchy_integration(
         in the pipeline call so fibers beyond the zone are correctly marked None.
     pixel_size :
         Micrometres per pixel; used for ``FiberObject.length`` / ``width`` units.
+    coordinates :
+        Boundary contour dict from ``extract_boundary_coords_from_mask``.
+        When supplied, ROIObject nodes are created and fibers are assigned to
+        their nearest contour.
+
+    Returns
+    -------
+    (hierarchy, fiber_roi_map) or None
+        ``fiber_roi_map`` maps each FiberObject.object_id to its ROI contour key.
     """
     if result is None:
         print(f"  [{tag}] No result — skipping hierarchy integration.\n")
@@ -306,7 +359,7 @@ def _tacs_hierarchy_integration(
             if raw_epict is not None:
                 in_epictr = bool(raw_epict)
             # nearest_relative_boundary_angle is used directly as angle_to_tangent.
-            # compute_boundary_tangent_angle() uses atan(Δcol/Δrow) — a 90°-rotated
+            # compute_boundary_tangent_angle() uses atan2(Δcol, Δrow) — a 90°-rotated
             # convention vs the fiber angle (0°=horizontal). This offset inverts the
             # circ_r result so that nearest_relative_boundary_angle is already the
             # angle to the boundary tangent (0°=parallel, 90°=perpendicular), NOT its
@@ -353,7 +406,14 @@ def _tacs_hierarchy_integration(
 
     print(f"  FiberObject nodes built : {len(fiber_objects)}")
 
-    # ── 2. Build TMEHierarchy ─────────────────────────────────────────────────
+    # ── 2. Assign fibers to ROI contours ──────────────────────────────────────
+    fiber_roi_map: dict[str, object] = {}
+    if coordinates:
+        fiber_roi_map = _assign_fibers_to_rois(fiber_objects, coordinates)
+        for fobj in fiber_objects:
+            fobj.metadata["roi_key"] = fiber_roi_map.get(fobj.object_id)
+
+    # ── 3. Build TMEHierarchy ─────────────────────────────────────────────────
     hierarchy = TMEHierarchy()
 
     img_entry = ImageEntry(
@@ -365,13 +425,37 @@ def _tacs_hierarchy_integration(
     )
     hierarchy.add_object(img_entry)
 
+    # Create ROIObject nodes for each boundary contour
+    roi_nodes: dict[object, ROIObject] = {}
+    if coordinates:
+        for roi_key, coords_arr in coordinates.items():
+            roi_node = ROIObject(
+                object_id=f"{tag}_roi_{roi_key}",
+                label=f"ROI {roi_key}",
+                shape_type=GeometryType.POLYGON,
+                geometry=Geometry(
+                    type=GeometryType.POLYGON,
+                    coordinates=np.asarray(coords_arr),
+                ),
+                annotation_type="tumor_boundary",
+            )
+            hierarchy.add_object(roi_node, parent=img_entry)
+            roi_nodes[roi_key] = roi_node
+
+    # Add FiberObjects under their respective ROI node (or ImageEntry if no ROI)
     for fobj in fiber_objects:
-        hierarchy.add_object(fobj, parent=img_entry)
+        rk = fobj.metadata.get("roi_key")
+        parent_node = roi_nodes.get(rk, img_entry) if rk is not None else img_entry
+        hierarchy.add_object(fobj, parent=parent_node)
 
     n_fiber_nodes = len(hierarchy.get_objects_by_type(TMEType.FIBER))
-    print(f"  Hierarchy nodes total   : {n_fiber_nodes + 1}  (1 ImageEntry + {n_fiber_nodes} FiberObjects)")
+    n_roi_nodes   = len(hierarchy.get_objects_by_type(TMEType.ANNOTATION))
+    print(
+        f"  Hierarchy nodes total   : {1 + n_roi_nodes + n_fiber_nodes}"
+        f"  (1 ImageEntry + {n_roi_nodes} ROIObjects + {n_fiber_nodes} FiberObjects)"
+    )
 
-    # ── 3. TACS summary ───────────────────────────────────────────────────────
+    # ── 4. TACS summary ───────────────────────────────────────────────────────
     if has_boundary:
         tacs_counts: dict[str | None, int] = {"TACS-1": 0, "TACS-2": 0, "TACS-3": 0, None: 0}
         for f in fiber_objects:
@@ -402,7 +486,7 @@ def _tacs_hierarchy_integration(
                 if n_shown >= 5:
                     break
 
-    # ── 4. Hierarchy queries ──────────────────────────────────────────────────
+    # ── 5. Hierarchy queries ──────────────────────────────────────────────────
     print("\n  Hierarchy queries:")
 
     all_fibers = hierarchy.get_objects_by_type(TMEType.FIBER)
@@ -427,7 +511,7 @@ def _tacs_hierarchy_integration(
     print(f"    {first.object_id}.get_ancestors() -> {[a.object_id for a in ancestors]}")
 
     print()
-    return hierarchy
+    return hierarchy, fiber_roi_map
 
 
 # ── Interactive TACS viewer ────────────────────────────────────────────────────
@@ -438,20 +522,24 @@ def _launch_tacs_viewer(
     fiber_objects: list[FiberObject],
     coordinates: dict | None,
     line_length: float = 5.0,
+    fiber_roi_map: dict | None = None,
 ) -> None:
-    """Interactive TACS overlay viewer with matplotlib RadioButtons.
-
-    Pre-draws one group of matplotlib line/dot artists per TACS type, then
-    toggles their visibility based on radio-button selection.  No redraw is
-    needed on each click, keeping interaction fast even for large fiber counts.
+    """Interactive TACS overlay viewer with ROI filter, TACS filter, and fiber table.
 
     Controls
     --------
-    Radio buttons (left panel):
+    ROI radio buttons (bottom left):
+      All ROIs | ROI 0 | ROI 1 | …  — filter fibers by boundary contour.
+    TACS radio buttons (bottom centre):
       All fibers | TACS-3 only | TACS-2 only | TACS-1 only | Outside zone
-    Check button:
-      Show associations — draws a dashed line from each fiber center to
-      its nearest boundary point (colored by TACS type).
+    Check button (bottom right):
+      Show associations — draws a dashed line from each fiber center to its
+      nearest boundary point (colored by TACS type).
+    Fiber table (right panel):
+      Lists measurements for currently visible fibers.  Click a row to
+      highlight the fiber in the image.  Click a fiber dot to scroll the
+      table to and highlight the corresponding row.  Scroll wheel scrolls
+      the table.
 
     Color coding
     ------------
@@ -467,63 +555,45 @@ def _launch_tacs_viewer(
         None:     {"color": "lightgray",    "label": "Outside zone / no boundary"},
     }
 
-    fig, ax = plt.subplots(figsize=(9, 9))
-    fig.subplots_adjust(left=0.22)
+    # ── Figure layout ─────────────────────────────────────────────────────────
+    fig = plt.figure(figsize=(16, 9))
+    ax       = fig.add_axes([0.02, 0.12, 0.54, 0.83])   # image (left ~56%)
+    ax_table = fig.add_axes([0.59, 0.12, 0.40, 0.83])   # fiber table (right ~40%)
+
+    roi_keys_sorted: list = sorted(coordinates.keys()) if coordinates else []
+    roi_labels: list[str] = ["All ROIs"] + [f"ROI {k}" for k in roi_keys_sorted]
+    n_roi_labels = len(roi_labels)
+
+    ax_roi_radio  = fig.add_axes([0.02, 0.01, 0.16, 0.09])
+    ax_tacs_radio = fig.add_axes([0.20, 0.01, 0.22, 0.09])
+    ax_check      = fig.add_axes([0.44, 0.01, 0.13, 0.09])
+
+    # ── Image axes ────────────────────────────────────────────────────────────
     ax.imshow(img, cmap="gray", origin="upper")
-    ax.set_title(f"{tag} — TACS viewer  (use radio buttons to filter)", fontsize=9)
+    ax.set_title(f"{tag} — TACS viewer", fontsize=9)
     ax.axis("off")
 
-    # Draw boundary contours
+    # Draw boundary contours (color-coded by ROI key); store artists for highlight
+    _roi_colors: list[str] = ["yellow", "cyan", "orange", "magenta", "lime"]
+    _roi_contour_artists: dict[object, object] = {}
     if coordinates:
-        for roi_coords in coordinates.values():
-            ax.plot(roi_coords[:, 1], roi_coords[:, 0], "y-", lw=0.8, alpha=0.6)
+        for idx, (roi_key, roi_coords) in enumerate(coordinates.items()):
+            c = _roi_colors[idx % len(_roi_colors)]
+            roi_line, = ax.plot(roi_coords[:, 1], roi_coords[:, 0], "-",
+                                lw=0.8, alpha=0.7, color=c)
+            _roi_contour_artists[roi_key] = roi_line
 
-    # Pre-draw each TACS group; accumulate artists per type key
-    groups: dict[str | None, list] = {k: [] for k in TACS_STYLE}
-    # Association lines per TACS key — hidden by default
-    assoc_by_key: dict[str | None, list] = {k: [] for k in TACS_STYLE}
+    # ── Table axes ────────────────────────────────────────────────────────────
+    ax_table.set_xlim(0, 1)
+    ax_table.set_ylim(0, 1)
+    ax_table.axis("off")
 
-    for fobj in fiber_objects:
-        key = fobj.tacs_type if fobj.tacs_type in groups else None
-        color = TACS_STYLE[key]["color"]
-        if fobj.centerline is not None and len(fobj.centerline) > 0:
-            row = float(fobj.centerline[0, 0])
-            col = float(fobj.centerline[0, 1])
-            angle_rad = np.deg2rad(fobj.angle)
-            dx = line_length * np.cos(angle_rad)
-            dy = line_length * np.sin(angle_rad)
-            line, = ax.plot(
-                [col - dx, col + dx], [row + dy, row - dy],
-                color=color, lw=0.8, alpha=0.85,
-            )
-            dot, = ax.plot(col, row, ".", color=color, ms=2.5)
-            groups[key].extend([line, dot])
+    TABLE_MAX_ROWS = 18
+    TABLE_COLS     = ["#", "(r,c)", "Ang°", "Rel∠", "Len", "Wid", "Str", "TACS", "ROI", "Dist"]
+    COL_X          = [0.01, 0.07, 0.21, 0.30, 0.39, 0.45, 0.52, 0.59, 0.70, 0.83]
+    ROW_H          = 0.045
 
-            # Association line: fiber center → nearest boundary point
-            if (fobj.nearest_boundary_point is not None
-                    and not np.any(np.isnan(fobj.nearest_boundary_point))):
-                bdry_row = float(fobj.nearest_boundary_point[0])
-                bdry_col = float(fobj.nearest_boundary_point[1])
-                aline, = ax.plot(
-                    [col, bdry_col], [row, bdry_row],
-                    color=color, lw=0.5, alpha=0.6, ls="--", visible=False,
-                )
-                assoc_by_key[key].append(aline)
-
-    # Legend with per-type counts
-    counts = {k: len(v) // 2 for k, v in groups.items()}
-    legend_handles = [
-        Line2D([0], [0], color=s["color"], lw=2,
-               label=f"{s['label']}  (n={counts[k]})")
-        for k, s in TACS_STYLE.items()
-    ]
-    ax.legend(handles=legend_handles, loc="lower right", fontsize=7, framealpha=0.7)
-
-    # ── Radio buttons (TACS type filter) ─────────────────────────────────────
-    ax_radio = plt.axes([0.01, 0.42, 0.19, 0.30])
-    radio_labels = ("All fibers", "TACS-3 only", "TACS-2 only", "TACS-1 only", "Outside zone")
-    radio = RadioButtons(ax_radio, labels=radio_labels, active=0)
-
+    # ── Visibility state ──────────────────────────────────────────────────────
     _ALL_ON  = {k: True  for k in TACS_STYLE}
     _ALL_OFF = {k: False for k in TACS_STYLE}
     VISIBILITY: dict[str, dict] = {
@@ -533,38 +603,315 @@ def _launch_tacs_viewer(
         "TACS-1 only":  {**_ALL_OFF, "TACS-1": True},
         "Outside zone": {**_ALL_OFF, None: True},
     }
-
-    # Track currently visible TACS keys so association-line toggle respects the filter
     _current_vis: dict[str | None, bool] = dict(_ALL_ON)
+    _roi_state: list[object] = ["ALL"]   # "ALL" or a coordinates key (list for mutation)
 
-    def _on_select(label: str) -> None:
-        _current_vis.update(VISIBILITY[label])
-        for key, artists in groups.items():
-            visible = _current_vis.get(key, False)
-            for artist in artists:
-                artist.set_visible(visible)
-        _update_assoc_visibility()
-        ax.set_title(f"{tag} — TACS viewer  [{label}]", fontsize=9)
-        fig.canvas.draw_idle()
+    # Fast artist lookups (built during pre-draw loop)
+    _dot_to_id:     dict[int, str]    = {}   # id(dot)  → fobj.object_id
+    _id_to_artists: dict[str, tuple]  = {}   # fobj.object_id → (line, dot) or (None, None)
+    _id_to_assoc:   dict[str, object] = {}   # fobj.object_id → assoc Line2D | None
 
-    radio.on_clicked(_on_select)
+    # Table selection state
+    _selected_id:   list[str | None] = [None]
+    _table_offset:  list[int]        = [0]
 
-    # ── Check button (association lines toggle) ───────────────────────────────
-    ax_check = plt.axes([0.01, 0.32, 0.19, 0.08])
-    check = CheckButtons(ax_check, labels=["Show associations"], actives=[False])
+    # ── Table value formatter ─────────────────────────────────────────────────
+    def _fmt(v: object, fmt: str = ".1f") -> str:
+        if v is None:
+            return "—"
+        try:
+            if pd.isna(v):  # type: ignore[arg-type]
+                return "—"
+        except Exception:
+            pass
+        try:
+            return format(float(v), fmt)
+        except Exception:
+            return str(v)
+
+    # ── Pre-draw fiber artists ─────────────────────────────────────────────────
+    groups: dict[str | None, list] = {k: [] for k in TACS_STYLE}   # for legend counts
+
+    for fobj in fiber_objects:
+        key   = fobj.tacs_type if fobj.tacs_type in TACS_STYLE else None
+        color = TACS_STYLE[key]["color"]
+        _id_to_assoc[fobj.object_id] = None
+
+        if fobj.centerline is None or len(fobj.centerline) == 0:
+            _id_to_artists[fobj.object_id] = (None, None)
+            continue
+
+        row_f     = float(fobj.centerline[0, 0])
+        col_f     = float(fobj.centerline[0, 1])
+        angle_rad = np.deg2rad(fobj.angle)
+        dx        = line_length * np.cos(angle_rad)
+        dy        = line_length * np.sin(angle_rad)
+
+        line, = ax.plot(
+            [col_f - dx, col_f + dx], [row_f + dy, row_f - dy],
+            color=color, lw=0.8, alpha=0.85,
+        )
+        dot, = ax.plot(col_f, row_f, ".", color=color, ms=2.5, picker=6)
+
+        groups[key].extend([line, dot])
+        _dot_to_id[id(dot)]              = fobj.object_id
+        _id_to_artists[fobj.object_id]   = (line, dot)
+
+        # Association line: fiber center → nearest boundary point
+        if (fobj.nearest_boundary_point is not None
+                and not np.any(np.isnan(fobj.nearest_boundary_point))):
+            bdry_row_f = float(fobj.nearest_boundary_point[0])
+            bdry_col_f = float(fobj.nearest_boundary_point[1])
+            aline, = ax.plot(
+                [col_f, bdry_col_f], [row_f, bdry_row_f],
+                color=color, lw=0.5, alpha=0.6, ls="--", visible=False,
+            )
+            _id_to_assoc[fobj.object_id] = aline
+
+    # Highlight overlay — single artist repositioned on selection; sized to ring the dot
+    _highlight_dot, = ax.plot([], [], "o", ms=9, mfc="none",
+                              mec="white", mew=1.5, zorder=10)
+
+    # Legend
+    counts = {k: len(v) // 2 for k, v in groups.items()}
+    legend_handles = [
+        Line2D([0], [0], color=s["color"], lw=2,
+               label=f"{s['label']}  (n={counts[k]})")
+        for k, s in TACS_STYLE.items()
+    ]
+    ax.legend(handles=legend_handles, loc="lower right", fontsize=7, framealpha=0.7)
+
+    # ── Helper functions ──────────────────────────────────────────────────────
+
+    def _visible_fiber_ids() -> list[str]:
+        """Return object_ids passing both the ROI filter and the TACS filter."""
+        ids = []
+        for fobj in fiber_objects:
+            key = fobj.tacs_type if fobj.tacs_type in TACS_STYLE else None
+            if not _current_vis.get(key, False):
+                continue
+            if _roi_state[0] != "ALL":
+                rk = (fiber_roi_map or {}).get(fobj.object_id)
+                if rk != _roi_state[0]:
+                    continue
+            ids.append(fobj.object_id)
+        return ids
+
+    def _move_highlight(fid: str | None) -> None:
+        if fid is None:
+            _highlight_dot.set_data([], [])
+            return
+        fobj = next((f for f in fiber_objects if f.object_id == fid), None)
+        if fobj is None or fobj.centerline is None or len(fobj.centerline) == 0:
+            _highlight_dot.set_data([], [])
+            return
+        # centerline stores (row, col); matplotlib plot takes (x=col, y=row)
+        row_h = float(fobj.centerline[0, 0])
+        col_h = float(fobj.centerline[0, 1])
+        _highlight_dot.set_data([col_h], [row_h])
+
+    def _rebuild_table() -> None:
+        ax_table.cla()
+        ax_table.set_xlim(0, 1)
+        ax_table.set_ylim(0, 1)
+        ax_table.axis("off")
+
+        visible_ids = _visible_fiber_ids()
+        n = len(visible_ids)
+        offset = min(_table_offset[0], max(0, n - TABLE_MAX_ROWS))
+        _table_offset[0] = offset
+
+        # Title
+        ax_table.text(
+            0.5, 0.988, f"Fiber table  [{n} visible]",
+            ha="center", va="top", fontsize=8, fontweight="bold",
+            transform=ax_table.transAxes,
+        )
+        # Column headers
+        for ci, col_label in enumerate(TABLE_COLS):
+            ax_table.text(
+                COL_X[ci], 0.958, col_label,
+                ha="left", va="top", fontsize=7, fontweight="bold",
+                transform=ax_table.transAxes, color="#333333",
+            )
+        ax_table.plot([0, 1], [0.948, 0.948], color="#cccccc", lw=0.5,
+                      transform=ax_table.transAxes)
+
+        # Data rows
+        _id_lookup = {fobj.object_id: fobj for fobj in fiber_objects}
+        for ri in range(TABLE_MAX_ROWS):
+            fi = offset + ri
+            if fi >= n:
+                break
+            fid  = visible_ids[fi]
+            fobj = _id_lookup.get(fid)
+            if fobj is None:
+                continue
+
+            y_top = 0.935 - ri * ROW_H
+
+            is_sel   = (fid == _selected_id[0])
+            bg_color = "#cce5ff" if is_sel else ("#f5f5f5" if ri % 2 else "white")
+
+            rect = Rectangle(
+                (0.0, y_top - ROW_H * 0.95),
+                1.0, ROW_H * 0.95,
+                facecolor=bg_color, edgecolor="none",
+                transform=ax_table.transAxes, clip_on=True,
+            )
+            ax_table.add_patch(rect)
+
+            # Center coordinates from centerline (row, col)
+            if fobj.centerline is not None and len(fobj.centerline) > 0:
+                rc_str = f"{int(round(fobj.centerline[0, 0]))},{int(round(fobj.centerline[0, 1]))}"
+            else:
+                rc_str = "—"
+            # ROI label from fiber_roi_map
+            rk_f = (fiber_roi_map or {}).get(fobj.object_id)
+            roi_str = f"ROI {rk_f}" if rk_f is not None else "—"
+            # Len/Wid/Str are not meaningful for curvelet orientation regions
+            is_curvelet = (fobj.extraction_mode == "curvelets")
+            vals = [
+                str(fi + 1),
+                rc_str,
+                _fmt(fobj.angle),
+                _fmt(fobj.relative_angle_to_boundary_tangent),
+                "—" if is_curvelet else _fmt(fobj.length),
+                "—" if is_curvelet else _fmt(fobj.width, ".2f"),
+                "—" if is_curvelet else _fmt(fobj.straightness, ".2f"),
+                fobj.tacs_type or "—",
+                roi_str,
+                _fmt(fobj.nearest_boundary_distance),
+            ]
+            tacs_color = TACS_STYLE.get(fobj.tacs_type, TACS_STYLE[None])["color"]
+            for ci, val in enumerate(vals):
+                text_color = tacs_color if ci == 7 else "black"
+                ax_table.text(
+                    COL_X[ci], y_top - ROW_H * 0.05,
+                    val, ha="left", va="top", fontsize=6.5,
+                    transform=ax_table.transAxes, color=text_color,
+                )
+
+        # Scroll hint
+        if n > TABLE_MAX_ROWS:
+            ax_table.text(
+                0.5, 0.012,
+                f"↑↓ scroll  rows {offset + 1}–{min(offset + TABLE_MAX_ROWS, n)} / {n}",
+                ha="center", va="bottom", fontsize=6.5, color="#888888",
+                transform=ax_table.transAxes,
+            )
+        ax_table.figure.canvas.draw_idle()
 
     def _update_assoc_visibility() -> None:
         show = check.get_status()[0]
-        for key, alines in assoc_by_key.items():
-            visible = show and _current_vis.get(key, False)
-            for aline in alines:
-                aline.set_visible(visible)
+        visible_set = set(_visible_fiber_ids()) if show else set()
+        for fobj in fiber_objects:
+            aline = _id_to_assoc.get(fobj.object_id)
+            if aline is not None:
+                aline.set_visible(fobj.object_id in visible_set)
+
+    def _apply_visibility() -> None:
+        visible_set = set(_visible_fiber_ids())
+        for fobj in fiber_objects:
+            line, dot = _id_to_artists.get(fobj.object_id, (None, None))
+            if line is not None:
+                vis = fobj.object_id in visible_set
+                line.set_visible(vis)
+                dot.set_visible(vis)
+        _update_assoc_visibility()
+        _rebuild_table()
+        fig.canvas.draw_idle()
+
+    # ── Callbacks ─────────────────────────────────────────────────────────────
+
+    def _on_select(label: str) -> None:
+        _current_vis.update(VISIBILITY[label])
+        ax.set_title(f"{tag} — TACS viewer  [{label}]", fontsize=9)
+        _apply_visibility()
+
+    def _on_roi_select(label: str) -> None:
+        if label == "All ROIs":
+            _roi_state[0] = "ALL"
+        else:
+            idx = roi_labels.index(label) - 1
+            _roi_state[0] = roi_keys_sorted[idx]
+        # Highlight the selected ROI contour; dim the others
+        for rk, rline in _roi_contour_artists.items():
+            if _roi_state[0] == "ALL":
+                rline.set_linewidth(0.8)
+                rline.set_alpha(0.7)
+            elif rk == _roi_state[0]:
+                rline.set_linewidth(2.5)
+                rline.set_alpha(1.0)
+            else:
+                rline.set_linewidth(0.4)
+                rline.set_alpha(0.25)
+        _apply_visibility()
 
     def _on_check(_: str) -> None:
         _update_assoc_visibility()
         fig.canvas.draw_idle()
 
+    def _on_table_click(event) -> None:
+        if event.inaxes is not ax_table or event.ydata is None:
+            return
+        row_idx = int((0.935 - event.ydata) / ROW_H)
+        if row_idx < 0:
+            return
+        visible_ids = _visible_fiber_ids()
+        fi = _table_offset[0] + row_idx
+        if 0 <= fi < len(visible_ids):
+            _selected_id[0] = visible_ids[fi]
+            _move_highlight(_selected_id[0])
+            _rebuild_table()
+
+    def _on_scroll(event) -> None:
+        if event.inaxes is not ax_table:
+            return
+        delta = -1 if event.button == "up" else 1
+        n = len(_visible_fiber_ids())
+        _table_offset[0] = max(0, min(_table_offset[0] + delta,
+                                       max(0, n - TABLE_MAX_ROWS)))
+        _rebuild_table()
+
+    def _on_pick(event) -> None:
+        fid = _dot_to_id.get(id(event.artist))
+        if fid is None:
+            return
+        _selected_id[0] = fid
+        _move_highlight(fid)
+        visible_ids = _visible_fiber_ids()
+        if fid in visible_ids:
+            fi = visible_ids.index(fid)
+            if not (_table_offset[0] <= fi < _table_offset[0] + TABLE_MAX_ROWS):
+                _table_offset[0] = max(0, fi - TABLE_MAX_ROWS // 2)
+        _rebuild_table()
+
+    # ── Widgets ───────────────────────────────────────────────────────────────
+
+    # ROI selector (hidden if only one or no ROI)
+    if n_roi_labels > 1:
+        radio_roi = RadioButtons(ax_roi_radio, roi_labels, active=0)
+        radio_roi.on_clicked(_on_roi_select)
+    else:
+        ax_roi_radio.axis("off")
+
+    # TACS selector
+    tacs_labels = ("All fibers", "TACS-3 only", "TACS-2 only", "TACS-1 only", "Outside zone")
+    radio = RadioButtons(ax_tacs_radio, labels=tacs_labels, active=0)
+    radio.on_clicked(_on_select)
+
+    # Associations toggle
+    check = CheckButtons(ax_check, labels=["Show associations"], actives=[False])
     check.on_clicked(_on_check)
+
+    # ── Event connections ─────────────────────────────────────────────────────
+    fig.canvas.mpl_connect("button_press_event", _on_table_click)
+    fig.canvas.mpl_connect("scroll_event",        _on_scroll)
+    fig.canvas.mpl_connect("pick_event",          _on_pick)
+
+    # Initial table render
+    _rebuild_table()
 
     plt.show(block=True)
 
@@ -630,10 +977,10 @@ def scenario_3_real_image() -> None:
         image=img,
         boundary_img=mask,
         tif_boundary=3,
-        distance_threshold=50.0,
-        keep=0.01,
+        distance_threshold=100.0,
+        keep=0.05,
         scale=1,
-        radius=4.0,
+        radius=8.0,
     )
     _print_result("real image + boundary", result)
 
@@ -651,16 +998,18 @@ def scenario_3_real_image() -> None:
         print()
 
     # ── TACS classification + TME hierarchy ───────────────────────────────────
-    hierarchy = _tacs_hierarchy_integration(
+    hier_result = _tacs_hierarchy_integration(
         tag="scenario3_real_image",
         img=img,
         result=result,
         distance_threshold=50.0,   # must match pipeline call above
         pixel_size=1.0,
+        coordinates=coordinates,
     )
 
     # ── Interactive TACS viewer ───────────────────────────────────────────────
-    if hierarchy is not None:
+    if hier_result is not None:
+        hierarchy, fiber_roi_map = hier_result
         fiber_objects = hierarchy.get_objects_by_type(TMEType.FIBER)
         _launch_tacs_viewer(
             tag="scenario3_real_image",
@@ -668,6 +1017,7 @@ def scenario_3_real_image() -> None:
             fiber_objects=fiber_objects,
             coordinates=coordinates,
             line_length=5.0,
+            fiber_roi_map=fiber_roi_map,
         )
 
 
