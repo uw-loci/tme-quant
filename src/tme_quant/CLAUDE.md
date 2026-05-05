@@ -293,6 +293,50 @@ change it without reviewing `tacs.py` and `measurement_engine.py` together.
 
 ---
 
+## Fiber Position Convention  ⚠️ Critical
+
+**All position-bearing attributes in `FiberObject` use `(row, col)` = `(y, x)` in
+image pixel coordinates.** This matches the NumPy / skimage array convention.
+
+| Attribute | Shape | Convention | Notes |
+|-----------|-------|-----------|-------|
+| `centerline` | `(N, 2)` or `(N, 3)` | `(row, col)` per row | `(z, row, col)` in 3-D |
+| `orientation_point` | `(2,)` or `(3,)` | `(row, col)` | Set explicitly for pixel/windowed modes |
+| `center_point` *(property)* | `(2,)` or `(3,)` | `(row, col)` | Returns `orientation_point` or centerline midpoint |
+| `get_position()` *(method)* | `(2,)` or `(3,)` | `(row, col)` | **Canonical entry point — use this in new code** |
+| `nearest_boundary_point` | `(2,)` | `(row, col)` | Nearest boundary pixel |
+
+### Four position modes and their representation
+
+| Extraction mode | `position_type` | Recommended access | Construction |
+|----------------|----------------|-------------------|-------------|
+| CurveAlign curvelets group | `"point"` | `fobj.get_position()` | `centerline=[[row, col]]` (1×2 array) |
+| Pixel-level orientation (gradient, structure tensor, OrientationJ, windowed) | `"point"` | `fobj.get_position()` | `orientation_point=[row, col]` |
+| Extracted fiber midpoint (CT-FIRE, skeleton, ridge) | `"segment"` | `fobj.get_position()` | `centerline` is (N≥2, 2) ordered path |
+| Extracted fiber endpoints | `"segment"` | `fobj.centerline[0]`, `fobj.centerline[-1]` | Same `centerline` |
+
+**Rule: always call `fobj.get_position()` to get a single representative location.**
+Never inline `fobj.centerline[mid_idx]` or treat `center_point` as `(col, row)`.
+
+### Converting for matplotlib (origin="upper")
+
+```python
+pos = fobj.get_position()       # [row, col]
+ax.plot(pos[1], pos[0], ".")    # x=col, y=row
+```
+
+### Passing to `compute_relative_fiber_angles`
+
+This utility has a legacy `obj_center` parameter in `(col, row)` = `(x, y)` order
+(opposite of all other conventions). Always convert explicitly:
+
+```python
+pos = fobj.get_position()                          # [row, col]
+obj_center = (float(pos[1]), float(pos[0]))        # (col, row) for this function only
+```
+
+---
+
 ## Architecture Rules
 
 > **When integrating MATLAB-converted functions or performing library-wide refactors,

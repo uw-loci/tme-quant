@@ -362,8 +362,8 @@ class FiberObject(TMEObject):
         parent: Optional["TMEObject"] = None,
         metadata: Optional[Dict[str, Any]] = None,
         # Geometric properties (from fiber extraction)
-        centerline: Optional[np.ndarray] = None,   # Nx2 or Nx3 coordinates
-        orientation_point: Optional[np.ndarray] = None, # explicit measurement location
+        centerline: Optional[np.ndarray] = None,   # Nx2 (row,col) or Nx3 (z,row,col)
+        orientation_point: Optional[np.ndarray] = None, # (row,col) single measurement location
         length: float = 0.0,                        # microns
         width: float = 0.0,                         # microns
         # Orientation
@@ -496,27 +496,31 @@ class FiberObject(TMEObject):
     def center_point(self) -> Optional[np.ndarray]:
         """Representative spatial coordinate for this fiber object.
 
+        .. note::
+            **Convention: returns ``(row, col)`` = ``(y, x)`` in image pixel
+            coordinates** — the same convention as ``centerline`` and
+            ``nearest_boundary_point``.  Do NOT interpret the result as
+            ``(x, y)`` or ``(col, row)``.  Prefer ``get_position()`` in new
+            code, which makes this convention explicit and raises on missing data.
+
         Two source types are supported:
 
         **Orientation-map measurement** (CurveAlign curvelet group, OrientationJ
         window, pixel-wise gradient, structure-tensor window):
-            There is no geometric centerline.  ``orientation_point`` is the
-            pixel coordinate or window centre at which the orientation was
-            computed and IS the only meaningful location.  Set it explicitly
-            when constructing the object or assigning analysis results.
+            ``orientation_point`` stores the pixel coordinate at which the
+            orientation was computed.  Set it explicitly as ``[row, col]``
+            when constructing the object.
 
         **Extracted individual fiber** (CT-FIRE, ridge detection, skeleton):
-            ``orientation_point`` may be set to the specific point along the
-            fiber where orientation was sampled (e.g. the curvelet-group centre
-            for a curve segment).  If not set, the centerline midpoint is used
-            as a convenient fallback.
+            The centerline midpoint (``centerline[len//2]``) is returned.
+            ``centerline`` stores points as ``[row, col]`` per row.
 
         Returns
         -------
         ndarray or None
             ``orientation_point`` if explicitly set, otherwise the centerline
-            midpoint for extracted fibers, or ``None`` when neither is
-            available.
+            midpoint, or ``None`` when neither is available.
+            Shape: ``(2,)`` for 2-D, ``(3,)`` for 3-D.
         """
         if self.orientation_point is not None:
             return self.orientation_point
@@ -525,11 +529,86 @@ class FiberObject(TMEObject):
         return None
 
     def get_center_coordinates(self) -> np.ndarray:
-        """Get center coordinates as numpy array [x, y] or [x, y, z]."""
+        """Return the centerline midpoint as ``(row, col)`` or ``(z, row, col)``.
+
+        .. deprecated::
+            Prefer ``get_position()``, which also handles ``orientation_point``
+            and raises a clear error when no position is available.
+        """
         if len(self.centerline) == 0:
             raise ValueError("Fiber has no points")
         mid_idx = len(self.centerline) // 2
         return self.centerline[mid_idx]
+
+    def get_position(self) -> np.ndarray:
+        """Canonical position of this fiber as a ``(row, col)`` array.
+
+        Convention: ``(row, col)`` = ``(y, x)`` in image pixel coordinates,
+        matching ``centerline`` and ``nearest_boundary_point``.
+
+        Priority
+        --------
+        1. ``orientation_point`` if explicitly set — the measurement location
+           for pixel-level or windowed orientation modes.
+        2. ``centerline`` midpoint — for multi-point extracted fibers
+           (CT-FIRE, skeleton, ridge detection).
+
+        Raises
+        ------
+        ValueError
+            If neither ``orientation_point`` nor ``centerline`` is available.
+
+        Notes
+        -----
+        Matplotlib plotting (x = col, y = row with ``origin="upper"``)::
+
+            pos = fobj.get_position()
+            ax.plot(pos[1], pos[0], ".")   # x=col, y=row
+
+        NumPy / skimage spatial operations (use as-is)::
+
+            pos = fobj.get_position()
+            dist = np.linalg.norm(pos - boundary_point)
+        """
+        pt = self.center_point
+        if pt is None:
+            raise ValueError(
+                f"FiberObject {self.object_id!r} has no position: "
+                "set orientation_point or provide a non-empty centerline."
+            )
+        return np.asarray(pt, dtype=float)
+
+    @property
+    def position_type(self) -> str:
+        """Whether this fiber is a single-point measurement or a geometric segment.
+
+        Returns
+        -------
+        ``"point"``
+            Single location only — no geometric extent along a path.
+            Occurs when ``orientation_point`` is explicitly set, or when
+            ``centerline`` has exactly one point.
+
+            Modes: CurveAlign curvelets group, pixel-level orientation
+            (gradient, structure tensor, OrientationJ), windowed analysis.
+
+        ``"segment"``
+            Multi-point centerline with geometric extent (start → path → end).
+            ``len(centerline) >= 2``.
+
+            Modes: CT-FIRE, skeleton, ridge detection.
+
+        ``"none"``
+            No position data is available.
+        """
+        if self.orientation_point is not None:
+            return "point"
+        n = len(self.centerline) if self.centerline is not None else 0
+        if n == 1:
+            return "point"
+        if n >= 2:
+            return "segment"
+        return "none"
     
     def get_bounding_box(self) -> BoundingBox:
         """Get bounding box of fiber."""

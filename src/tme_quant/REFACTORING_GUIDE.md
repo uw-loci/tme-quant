@@ -316,17 +316,24 @@ MATLAB column label alone — always check the actual numeric values.
 | Context                                         | Convention       | Example                                    |
 |-------------------------------------------------|------------------|--------------------------------------------|
 | `roi_coords` array passed to util functions     | (row, col)       | skimage / numpy standard                  |
-| `obj_center` tuple passed to `compute_relative_fiber_angles` | **(col, row) = (x, y)** | `(fiber_col, fiber_row)` |
+| `obj_center` tuple passed to `compute_relative_fiber_angles` | **(col, row) = (x, y)** | `(fiber_col, fiber_row)` — legacy exception |
 | `FiberObject.centerline`                        | (row, col)       | from CT-FIRE / skeleton extraction        |
-| `FiberObject.center_point`                      | (x, y) = (col, row) | from `orientation_point` or midpoint   |
+| `FiberObject.center_point` / `get_position()`  | **(row, col)**   | same as `centerline` — **not** (col, row) |
 | `find_nearest_boundary_index(coords, px, py)`  | px = row, py = col | both in same space as coords            |
 | KDTree queries on boundary (alignment_utils)    | (row, col)       | matches `roi_coords` format               |
-| `FiberObject.compute_boundary_relative_metrics` | passes `center_point` (x, y) directly as `obj_center` | see fiber_objects.py |
+| `FiberObject.compute_boundary_relative_metrics` | receives `get_position()` → (row, col); converts internally before calling `compute_relative_fiber_angles` | see fiber_objects.py |
 
-**Critical:** `compute_relative_fiber_angles` takes `obj_center` as `(x, y)` =
-`(col, row)`, **not** `(row, col)`.  This differs from every other array in the
-pipeline.  The signature is consistent with the `ROI.centroid → (x, y)` output
-path used internally.  Always pass `(col_obj, row_obj)` — never `(row_obj, col_obj)`.
+**`compute_relative_fiber_angles` legacy exception:** this utility takes `obj_center`
+as `(col, row)` = `(x, y)` — the **opposite** of every other convention in the
+library.  Always convert explicitly when calling it:
+
+```python
+pos = fobj.get_position()                      # [row, col]
+obj_center = (float(pos[1]), float(pos[0]))    # (col, row) for this function only
+```
+
+Use `fobj.get_position()` (not `center_point` or inline `centerline[mid_idx]`)
+as the single authoritative source of fiber position in all new code.
 
 ### 8.5  FiberObject attribute target for each angle type
 
