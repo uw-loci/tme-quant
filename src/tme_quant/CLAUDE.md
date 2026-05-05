@@ -40,7 +40,8 @@ tme-quant/
 │   └── roi_curvealign_orientation_example.py
 ├── src/
 │   └── tme_quant/
-│       ├── __init__.py          ← flat public API (~36 exported names)
+│       ├── __init__.py          ← flat public API (~130 exported names)
+│       ├── integrations/        ← external tool bridges (Fiji/ImageJ; future: QuPath, MATLAB)
 │       ├── core/
 │       ├── fiber_analysis/
 │       ├── cell_analysis/
@@ -70,6 +71,17 @@ tme-quant/
 ---
 
 ## Module Map
+
+### `integrations/`
+
+External tool bridges — tme_quant calls **outward** to these tools.
+Napari is NOT here: napari calls INTO tme_quant (see Core / Plugin separation).
+
+- `fiji_bridge.py` — `FijiBridge`, `FijiBackendMixin`, `OrientationJBridge`,
+  `RidgeDetectionBridge` (Fiji/ImageJ subprocess + pyimagej bridge; used by
+  `OrientationJMethod` and `RidgeDetectionMethod` as a backend)
+- *(planned)* `qupath_bridge.py` — GeoJSON batch export for QuPath annotation import
+- *(planned)* `matlab_bridge.py` — MATLAB Engine bridge (legacy curvelet support)
 
 ### `core/`
 
@@ -108,7 +120,7 @@ tme-quant/
 - `tacs.py` — `classify_fiber_tacs()`, `classify_fiber_segment_tacs_like()`,
   `get_tacs_color()`
 - `results.py` — `FiberAnalysisResult`
-- `io.py` — `FiberAnalysisExporter`, `export_dataframe_to_excel` (saves DataFrame to `.xlsx` with auto-column-widths + frozen header; ported from `pycurvelets/utils/misc/format_df_to_excel.py`), re-export of `FijiBridge`
+- `io.py` — `FiberAnalysisExporter`, `export_dataframe_to_excel` (saves DataFrame to `.xlsx` with auto-column-widths + frozen header; ported from `pycurvelets/utils/misc/format_df_to_excel.py`)
 - `methods/` — concrete method implementations:
   - `ctfire.py` — `CTFireExtraction` (curvelet preprocessing + FIRE individual fiber extraction)
   - `curvealign.py` — `CurveAlignOrientation` (windowed curvelet orientation/coherency maps
@@ -120,7 +132,7 @@ tme-quant/
   - `gradient.py` — `GradientOrientationMethod`
   - `structure_tensor.py` — `StructureTensorMethod`
   - `orientationj.py` — `OrientationJMethod`
-  - `fiji_bridge.py` — `FijiBridge`, `FijiBackendMixin` (shared Fiji/ImageJ bridge)
+  - `fiji_bridge.py` — backward-compat shim; re-exports from `integrations/fiji_bridge.py`
 - `utils/` — shared low-level utilities:
   - `geometry_utils.py` — `compute_angle_to_boundary_normal`,
     `compute_boundary_tangent_angle`, `compute_fiber_properties`,

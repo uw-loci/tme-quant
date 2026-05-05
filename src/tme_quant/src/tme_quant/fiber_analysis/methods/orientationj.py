@@ -6,7 +6,7 @@ from ..orientation import BaseOrientationMethod
 from ..config import (
     OrientationParams, OrientationJParams, OrientationJResult,
 )
-from .fiji_bridge import FijiBridge
+from tme_quant.integrations.fiji_bridge import FijiBridge
 
 
 class OrientationJMethod(BaseOrientationMethod):

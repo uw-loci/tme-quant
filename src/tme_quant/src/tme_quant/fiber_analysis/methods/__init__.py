@@ -20,7 +20,8 @@ OrientationJMethod       — Fiji OrientationJ plugin (NumPy fallback)
 
 External-tool bridge
 --------------------
-FijiBridge               — unified Fiji / ImageJ subprocess bridge
+FijiBridge has moved to ``tme_quant.integrations.fiji_bridge``.
+Import it from there: ``from tme_quant.integrations import FijiBridge``.
 """
 
 from .ctfire import CTFireExtraction
@@ -30,7 +31,6 @@ from .gradient import GradientOrientationMethod
 from .structure_tensor import StructureTensorMethod
 from .orientationj import OrientationJMethod
 from .ridge_detection import RidgeDetectionMethod
-from .fiji_bridge import FijiBridge
 
 __all__ = [
     'CTFireExtraction',
@@ -40,5 +40,4 @@ __all__ = [
     'StructureTensorMethod',
     'OrientationJMethod',
     'RidgeDetectionMethod',
-    'FijiBridge',
 ]

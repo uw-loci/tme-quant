@@ -26,6 +26,9 @@ from .exceptions import (
     FeatureExtractionError,
     ImageProcessingError,
 )
+from .tme_objects.cell_objects import CellType
+from .tme_objects.fiber_objects import FiberPopulation
+from .tme_objects.tumor_objects import TumorGrade
 
 __all__ = [
     # Base model
@@ -47,4 +50,6 @@ __all__ = [
     # Exceptions
     'FiberAnalysisError', 'ROIProcessingError', 'BoundaryAnalysisError',
     'FeatureExtractionError', 'ImageProcessingError',
+    # Domain object types
+    'CellType', 'FiberPopulation', 'TumorGrade',
 ]
