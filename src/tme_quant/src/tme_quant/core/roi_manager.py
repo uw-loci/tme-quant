@@ -345,6 +345,7 @@ class ROIObject(TMEObject):
             "id": self.object_id,
             "geometry": geom_json,
             "properties": {
+                "objectType":      "annotation",
                 "name":            self.label,
                 "classification":  {"name": self.annotation_type},
                 "isLocked":        self.locked,

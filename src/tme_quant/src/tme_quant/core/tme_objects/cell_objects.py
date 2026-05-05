@@ -709,6 +709,60 @@ class CellObject(TMEObject):
             segmentation_confidence=props.confidence
         )
     
+    def to_geojson_feature(self, pixel_size: float = 1.0) -> dict:
+        """Return a QuPath-compatible GeoJSON Feature for this cell.
+
+        Geometry is a ``Point`` at the cell centroid.
+        ``centroid`` is stored as ``(x, y)`` (Shapely convention) so no
+        axis swap is needed; coordinates are scaled by *pixel_size*.
+
+        Parameters
+        ----------
+        pixel_size : float
+            µm per pixel.  Use 1.0 to keep pixel coordinates.
+
+        Returns
+        -------
+        dict — a GeoJSON Feature ready for a FeatureCollection.
+        """
+        _cell_colors = {
+            CellType.TUMOR:       -65536,
+            CellType.IMMUNE:      -16711936,
+            CellType.T_CELL:      -16711936,
+            CellType.B_CELL:      -8355712,
+            CellType.MACROPHAGE:  -26368,
+            CellType.FIBROBLAST:  -3670016,
+        }
+
+        cx, cy = self.centroid
+        geometry = {"type": "Point",
+                    "coordinates": [cx * pixel_size, cy * pixel_size]}
+
+        classification = None
+        if self.cell_type is not None:
+            classification = {"name": self.cell_type.value,
+                              "colorRGB": _cell_colors.get(self.cell_type, -1)}
+
+        measurements = [
+            {"name": "Area µm²",             "value": self.area},
+            {"name": "Circularity",          "value": self.circularity},
+            {"name": "Eccentricity",         "value": self.eccentricity},
+            {"name": "Cell Type Confidence", "value": self.cell_type_confidence},
+        ]
+        measurements = [m for m in measurements if m["value"] is not None]
+
+        return {
+            "type":     "Feature",
+            "id":       self.object_id,
+            "geometry": geometry,
+            "properties": {
+                "objectType":     "detection",
+                "name":           self.name or self.object_id,
+                "classification": classification,
+                "measurements":   measurements,
+            },
+        }
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for export."""
         return {

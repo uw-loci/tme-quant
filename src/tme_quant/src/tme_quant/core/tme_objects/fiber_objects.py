@@ -626,9 +626,79 @@ class FiberObject(TMEObject):
         )
     
     # ============================================================
+    # QUPATH / GEOJSON EXPORT
+    # ============================================================
+
+    def to_geojson_feature(self, pixel_size: float = 1.0) -> dict:
+        """Return a QuPath-compatible GeoJSON Feature for this fiber.
+
+        Geometry is a ``LineString`` when the centerline has ≥ 2 points,
+        or a ``Point`` for single-point orientation measurements (curvelet
+        group centroids, pixel-wise orientations).
+
+        Coordinate convention
+        ---------------------
+        ``centerline`` stores ``(row, col)`` = ``(y, x)`` per the tme_quant
+        convention.  GeoJSON / QuPath expect ``[x, y]`` = ``[col, row]``.
+        This method converts automatically: ``[col * pixel_size, row * pixel_size]``.
+
+        Parameters
+        ----------
+        pixel_size : float
+            µm per pixel.  Use 1.0 to keep pixel coordinates.
+
+        Returns
+        -------
+        dict — a GeoJSON Feature ready for a FeatureCollection.
+        """
+        _tacs_colors = {"TACS-1": -26368, "TACS-2": -16776961, "TACS-3": -65536}
+
+        cl = self.centerline
+        if cl is not None and len(cl) >= 2:
+            coords = [[float(p[1]) * pixel_size, float(p[0]) * pixel_size]
+                      for p in cl]
+            geometry: Optional[dict] = {"type": "LineString", "coordinates": coords}
+        else:
+            pos = self.center_point
+            if pos is not None:
+                geometry = {"type": "Point",
+                            "coordinates": [float(pos[1]) * pixel_size,
+                                            float(pos[0]) * pixel_size]}
+            else:
+                geometry = None
+
+        classification = None
+        if self.tacs_type:
+            classification = {"name": self.tacs_type,
+                              "colorRGB": _tacs_colors.get(self.tacs_type, -1)}
+
+        measurements = [
+            {"name": "Length µm",                "value": self.length},
+            {"name": "Width µm",                 "value": self.width},
+            {"name": "Straightness",             "value": self.straightness},
+            {"name": "Angle °",                  "value": self.angle},
+            {"name": "TACS Score",               "value": self.tacs_score},
+            {"name": "Distance to Boundary µm",  "value": self.nearest_boundary_distance},
+            {"name": "Angle to Tangent °",       "value": self.relative_angle_to_boundary_tangent},
+        ]
+        measurements = [m for m in measurements if m["value"] is not None]
+
+        return {
+            "type":     "Feature",
+            "id":       self.object_id,
+            "geometry": geometry,
+            "properties": {
+                "objectType":     "detection",
+                "name":           self.name or self.object_id,
+                "classification": classification,
+                "measurements":   measurements,
+            },
+        }
+
+    # ============================================================
     # BOUNDARY-RELATIVE ANALYSIS METHODS
     # ============================================================
-    
+
     def compute_boundary_relative_metrics(
         self,
         tumor_boundary: 'ROI',

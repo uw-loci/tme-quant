@@ -136,6 +136,7 @@ def save_project(
     project: TMEProject,
     output_dir: Union[str, Path],
     overwrite: bool = False,
+    save_arrays: bool = False,
 ) -> Path:
     """Save a TMEProject to a directory of JSON files.
 
@@ -146,6 +147,12 @@ def save_project(
     overwrite : bool
         When False (default), raises FileExistsError if a snapshot already
         exists at *output_dir*.
+    save_arrays : bool
+        When True, write per-pixel orientation and coherency map arrays as
+        ``.npy`` sidecar files under ``<output_dir>/arrays/``.  The JSON
+        schema is unchanged; sidecars are resolved by naming convention
+        ``arrays/{map_id}_orientation.npy`` / ``arrays/{map_id}_coherency.npy``.
+        Use ``load_project(..., load_arrays=True)`` to restore them.
 
     Returns
     -------
@@ -194,6 +201,21 @@ def save_project(
         for pop_id, pop in project.fiber_populations.items()
     })
 
+    # 6. Optional: orientation map pixel arrays as .npy sidecars
+    if save_arrays:
+        arrays_dir = out / "arrays"
+        arrays_dir.mkdir(exist_ok=True)
+        for map_id, om in project.orientation_maps.items():
+            result = getattr(om, "orientation_result", None)
+            if result is None:
+                continue
+            arr = getattr(result, "orientation_map", None)
+            if arr is not None and isinstance(arr, np.ndarray):
+                np.save(arrays_dir / f"{map_id}_orientation.npy", arr)
+            coh = getattr(result, "coherency_map", None)
+            if coh is not None and isinstance(coh, np.ndarray):
+                np.save(arrays_dir / f"{map_id}_coherency.npy", coh)
+
     return out
 
 
@@ -204,6 +226,7 @@ def save_project(
 def load_project(
     project_dir: Union[str, Path],
     reload_images: bool = False,
+    load_arrays: bool = False,
 ) -> TMEProject:
     """Reconstruct a TMEProject from a saved snapshot directory.
 
@@ -214,6 +237,10 @@ def load_project(
     reload_images : bool
         When True, attempt to reload pixel data for every ImageEntry whose
         stored path still exists on disk.
+    load_arrays : bool
+        When True and an ``arrays/`` subdirectory exists, restore orientation
+        and coherency map arrays from the ``.npy`` sidecar files written by
+        ``save_project(..., save_arrays=True)``.
 
     Returns
     -------
@@ -260,6 +287,21 @@ def load_project(
     pops_raw = _read_json(d / "fiber_populations.json")
     for pop_id, pop_d in pops_raw.items():
         project.fiber_populations[pop_id] = FiberPopulation.from_dict(pop_d)
+
+    # Optional: restore orientation map arrays from .npy sidecars
+    if load_arrays:
+        arrays_dir = d / "arrays"
+        if arrays_dir.is_dir():
+            for map_id, om in project.orientation_maps.items():
+                result = getattr(om, "orientation_result", None)
+                if result is None:
+                    continue
+                p_orient = arrays_dir / f"{map_id}_orientation.npy"
+                if p_orient.exists():
+                    result.orientation_map = np.load(p_orient)
+                p_coh = arrays_dir / f"{map_id}_coherency.npy"
+                if p_coh.exists():
+                    result.coherency_map = np.load(p_coh)
 
     return project
 
