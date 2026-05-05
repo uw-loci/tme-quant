@@ -10,8 +10,57 @@ from __future__ import annotations
 # ========================================================
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Union, get_origin, get_args
 from enum import Enum
+
+
+def _to_dict_generic(obj) -> dict:
+    import dataclasses
+    result = {}
+    for f in dataclasses.fields(obj):
+        val = getattr(obj, f.name)
+        if isinstance(val, Enum):
+            result[f.name] = val.value
+        elif dataclasses.is_dataclass(val) and not isinstance(val, type):
+            result[f.name] = val.to_dict() if hasattr(val, 'to_dict') else dataclasses.asdict(val)
+        elif isinstance(val, list):
+            result[f.name] = [v.value if isinstance(v, Enum) else v for v in val]
+        else:
+            result[f.name] = val
+    return result
+
+
+def _from_dict_generic(cls, d: dict):
+    import dataclasses, sys
+    from typing import get_type_hints
+    module = sys.modules.get(cls.__module__)
+    globalns = getattr(module, '__dict__', {}) if module else {}
+    try:
+        hints = get_type_hints(cls, globalns=globalns)
+    except Exception:
+        hints = {}
+    kwargs = {}
+    for f in dataclasses.fields(cls):
+        if f.name not in d:
+            continue
+        val = d[f.name]
+        ft = hints.get(f.name)
+        if ft is not None and val is not None:
+            origin = get_origin(ft)
+            if origin is Union:
+                args = [a for a in get_args(ft) if a is not type(None)]
+                ft = args[0] if args else None
+            if ft is not None:
+                if isinstance(ft, type) and issubclass(ft, Enum):
+                    val = ft(val)
+                elif dataclasses.is_dataclass(ft) and isinstance(val, dict):
+                    val = ft.from_dict(val) if hasattr(ft, 'from_dict') else ft(**val)
+                elif get_origin(ft) is list:
+                    inner = get_args(ft)
+                    if inner and isinstance(inner[0], type) and issubclass(inner[0], Enum):
+                        val = [inner[0](v) for v in val]
+        kwargs[f.name] = val
+    return cls(**kwargs)
 
 
 class AnalysisMode(Enum):
@@ -80,14 +129,11 @@ class TMEAnalysisParams:
     return_distance_maps: bool = True
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            'mode': self.mode.value,
-            'interaction_strategy': self.interaction_strategy.value,
-            'interaction_distance': self.interaction_distance,
-            'compute_tacs': self.compute_tacs,
-            'compute_prognostic': self.compute_prognostic,
-        }
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'TMEAnalysisParams':
+        return _from_dict_generic(cls, d)
 
 
 @dataclass
@@ -119,12 +165,11 @@ class TumorDetectionParams:
     smoothing_sigma: float = 10.0         # Gaussian smoothing
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            'method': self.method.value,
-            'clustering_algorithm': self.clustering_algorithm,
-            'min_tumor_area': self.min_tumor_area,
-        }
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'TumorDetectionParams':
+        return _from_dict_generic(cls, d)
 
 
 @dataclass

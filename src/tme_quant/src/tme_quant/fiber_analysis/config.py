@@ -12,6 +12,59 @@ import numpy as np
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Round-trip serialization helpers (used by all *Params classes)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _to_dict_generic(obj) -> dict:
+    import dataclasses
+    result = {}
+    for f in dataclasses.fields(obj):
+        val = getattr(obj, f.name)
+        if isinstance(val, Enum):
+            result[f.name] = val.value
+        elif dataclasses.is_dataclass(val) and not isinstance(val, type):
+            result[f.name] = val.to_dict() if hasattr(val, 'to_dict') else dataclasses.asdict(val)
+        elif isinstance(val, list):
+            result[f.name] = [v.value if isinstance(v, Enum) else v for v in val]
+        else:
+            result[f.name] = val
+    return result
+
+
+def _from_dict_generic(cls, d: dict):
+    import dataclasses, sys
+    from typing import get_type_hints, Union, get_origin, get_args
+    module = sys.modules.get(cls.__module__)
+    globalns = getattr(module, '__dict__', {}) if module else {}
+    try:
+        hints = get_type_hints(cls, globalns=globalns)
+    except Exception:
+        hints = {}
+    kwargs = {}
+    for f in dataclasses.fields(cls):
+        if f.name not in d:
+            continue
+        val = d[f.name]
+        ft = hints.get(f.name)
+        if ft is not None and val is not None:
+            origin = get_origin(ft)
+            if origin is Union:
+                args = [a for a in get_args(ft) if a is not type(None)]
+                ft = args[0] if args else None
+            if ft is not None:
+                if isinstance(ft, type) and issubclass(ft, Enum):
+                    val = ft(val)
+                elif dataclasses.is_dataclass(ft) and isinstance(val, dict):
+                    val = ft.from_dict(val) if hasattr(ft, 'from_dict') else ft(**val)
+                elif get_origin(ft) is list:
+                    inner = get_args(ft)
+                    if inner and isinstance(inner[0], type) and issubclass(inner[0], Enum):
+                        val = [inner[0](v) for v in val]
+        kwargs[f.name] = val
+    return cls(**kwargs)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Mode enum
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -184,20 +237,11 @@ class ExtractionParams:
         return _map.get(mode, cls)(mode=mode, **kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            'mode':              self.mode.value,
-            'pixel_size':        self.pixel_size,
-            'min_fiber_length':  self.min_fiber_length,
-            'max_fiber_length':  self.max_fiber_length,
-            'min_fiber_width':   self.min_fiber_width,
-            'max_fiber_width':   self.max_fiber_width,
-            'measure_length':    self.measure_length,
-            'measure_width':     self.measure_width,
-            'measure_straightness': self.measure_straightness,
-            'measure_angle':     self.measure_angle,
-            'measure_curvature': self.measure_curvature,
-            'extract_centerlines': self.extract_centerlines,
-        }
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'ExtractionParams':
+        return _from_dict_generic(cls, d)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -270,18 +314,11 @@ class CTFireParams(ExtractionParams):
     z_spacing:              float = 1.0  # inter-slice spacing in µm (3-D only)
 
     def to_dict(self) -> Dict[str, Any]:
-        d = super().to_dict()
-        d.update({
-            'ctfire_threshold':       self.ctfire_threshold,
-            'ctfire_n_levels':        self.ctfire_n_levels,
-            'ctfire_n_angles':        self.ctfire_n_angles,
-            'straightness_threshold': self.straightness_threshold,
-            'mask_closing_radius':    self.mask_closing_radius,
-            'spur_length_px':         self.spur_length_px,
-            'use_matlab_backend':     self.use_matlab_backend,
-            'z_spacing':              self.z_spacing,
-        })
-        return d
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'CTFireParams':
+        return _from_dict_generic(cls, d)
 
 
 @dataclass
@@ -321,15 +358,11 @@ class RidgeDetectionParams(ExtractionParams):
     correct_position:  bool  = False
 
     def to_dict(self) -> Dict[str, Any]:
-        d = super().to_dict()
-        d.update({
-            'ridge_sigma':      self.ridge_sigma,
-            'lower_threshold':  self.lower_threshold,
-            'upper_threshold':  self.upper_threshold,
-            'extend_line':      self.extend_line,
-            'correct_position': self.correct_position,
-        })
-        return d
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'RidgeDetectionParams':
+        return _from_dict_generic(cls, d)
 
 
 @dataclass
@@ -366,15 +399,11 @@ class SkeletonParams(ExtractionParams):
     smooth_skeleton:   bool            = True
 
     def to_dict(self) -> Dict[str, Any]:
-        d = super().to_dict()
-        d.update({
-            'skeleton_method':   self.skeleton_method,
-            'threshold_method':  self.threshold_method,
-            'manual_threshold':  self.manual_threshold,
-            'min_branch_length': self.min_branch_length,
-            'smooth_skeleton':   self.smooth_skeleton,
-        })
-        return d
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'SkeletonParams':
+        return _from_dict_generic(cls, d)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -665,12 +694,11 @@ class OrientationParams:
         return _map.get(mode, cls)(mode=mode, **kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            'mode':               self.mode.value,
-            'pixel_size':         self.pixel_size,
-            'compute_statistics': self.compute_statistics,
-            'keep_values':        list(self.keep_values),
-        }
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'OrientationParams':
+        return _from_dict_generic(cls, d)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -796,22 +824,24 @@ class CurveAlignParams(OrientationParams):
     candidate_feature_params: Any   = None   # FiberFeatureParams; None → FiberFeatureParams()
 
     def to_dict(self) -> Dict[str, Any]:
-        d = super().to_dict()
-        d.update({
-            'analysis_mode':          self.analysis_mode.value,
-            'window_size':            self.window_size,
-            'overlap':                self.overlap,
-            'curvelet_levels':        self.curvelet_levels,
-            'curvelet_angles':        self.curvelet_angles,
-            'compute_coherency':      self.compute_coherency,
-            'compute_energy':         self.compute_energy,
-            'use_matlab_backend':     self.use_matlab_backend,
-            'return_fiber_segments':  self.return_fiber_segments,
-            'candidate_keep':         self.candidate_keep,
-            'candidate_scale':        self.candidate_scale,
-            'candidate_radius':       self.candidate_radius,
-        })
+        d = _to_dict_generic(self)
+        # candidate_feature_params is typed Any — serialize explicitly
+        cfp = self.candidate_feature_params
+        if cfp is not None and hasattr(cfp, 'to_dict'):
+            d['candidate_feature_params'] = cfp.to_dict()
+        elif cfp is None:
+            d['candidate_feature_params'] = None
         return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'CurveAlignParams':
+        obj = _from_dict_generic(cls, d)
+        # candidate_feature_params is typed Any — reconstruct explicitly
+        if isinstance(obj.candidate_feature_params, dict):
+            obj.candidate_feature_params = FiberFeatureParams.from_dict(
+                obj.candidate_feature_params
+            )
+        return obj
 
 
 @dataclass
@@ -853,15 +883,11 @@ class OrientationJParams(OrientationParams):
     compute_color_survey: bool  = False
 
     def to_dict(self) -> Dict[str, Any]:
-        d = super().to_dict()
-        d.update({
-            'gradient_method':      self.gradient_method,
-            'coherency_threshold':  self.coherency_threshold,
-            'energy_threshold':     self.energy_threshold,
-            'sigma_tensor':         self.sigma_tensor,
-            'compute_color_survey': self.compute_color_survey,
-        })
-        return d
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'OrientationJParams':
+        return _from_dict_generic(cls, d)
 
 
 @dataclass
@@ -896,13 +922,11 @@ class GradientParams(OrientationParams):
     min_gradient_magnitude: float = 0.01
 
     def to_dict(self) -> Dict[str, Any]:
-        d = super().to_dict()
-        d.update({
-            'gradient_operator':      self.gradient_operator,
-            'smoothing_sigma':        self.smoothing_sigma,
-            'min_gradient_magnitude': self.min_gradient_magnitude,
-        })
-        return d
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'GradientParams':
+        return _from_dict_generic(cls, d)
 
 
 @dataclass
@@ -941,14 +965,11 @@ class StructureTensorParams(OrientationParams):
     compute_eigenvalues: bool  = False
 
     def to_dict(self) -> Dict[str, Any]:
-        d = super().to_dict()
-        d.update({
-            'sigma_derivative':    self.sigma_derivative,
-            'sigma_spatial':       self.sigma_spatial,
-            'compute_anisotropy':  self.compute_anisotropy,
-            'compute_eigenvalues': self.compute_eigenvalues,
-        })
-        return d
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'StructureTensorParams':
+        return _from_dict_generic(cls, d)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1305,11 +1326,11 @@ class FiberFeatureParams:
     fiber_midpoint_estimate: int = 1
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            'minimum_nearest_fibers': self.minimum_nearest_fibers,
-            'minimum_box_size':       self.minimum_box_size,
-            'fiber_midpoint_estimate': self.fiber_midpoint_estimate,
-        }
+        return _to_dict_generic(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'FiberFeatureParams':
+        return _from_dict_generic(cls, d)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
