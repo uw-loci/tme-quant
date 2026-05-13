@@ -282,13 +282,50 @@ Nothing is attached until this button is pressed.
 
 - Input image: locked to `ImageType.FIBER` or `ImageType.TWO_CHANNEL` (ch1).
   Selector shows only valid images from the project.
-- Method selector: `CT-FIRE | CurveAlign | Skeleton | Ridge Detection`
-- **CT-FIRE inline params (~8):** threshold, min/max fiber length, pixel size,
+- Method selector: `CT-FIRE | CurveAlign (curvelets mode)`
+  Switching the selector shows/hides the matching `QGroupBox` of controls.
+
+##### CT-FIRE section (default)
+
+- **Inline params (~8):** threshold, min/max fiber length, pixel size,
   spur prune length, mask closing radius, n levels, n angles
-- **CT-FIRE Advanced dialog groups:** Transform, Tracing, Filters, Measurements
+- **Advanced dialog groups:** Transform / Tracing / Filters / Measurements
 - 3D CT-FIRE toggle: disabled (greyed) until `ctfire_backend_status()` returns
   `cpp_available=True` and `3d_supported=True`
 - Covers workflow step 3: CT-FIRE fiber extraction
+
+##### CurveAlign (curvelets mode) section
+
+Runs `curvealign_curvelets_mode_pipeline()` and stores a
+`CurveAlignPipelineResult` in `PluginState.curvealign_pipeline_results`.
+
+```
+┌─ CurveAlign (curvelets mode) ──────────────────────────────────┐
+│  ☐ Use pre-computed fiber_structure  [Load CSV/XLSX...]        │
+│                                                                │
+│  ☐ Analyze boundary alignment                                  │
+│     Mask layer: [ Select mask layer ▾ ]                        │
+│     Zone width: [50.0  µm]                                     │
+│                                                                │
+│  ─── Curvelet params ───────────────────────────────────────── │
+│  Keep:      [0.05 ]   Scale:  [1   ]   Radius:   [4.0  ]      │
+│  Pixel size:[1.0  ]   Dist threshold:  [50.0 ]                 │
+│  Min fiber weight: [0.0]   ☐ Exclude fibers inside mask        │
+│                                                                │
+│                            [ Advanced... ]  [ Run CurveAlign ] │
+└────────────────────────────────────────────────────────────────┘
+```
+
+- `☐ Use pre-computed fiber_structure` — when checked, the Load button becomes
+  active and the resulting DataFrame is passed as `fiber_structure=` to the
+  pipeline, bypassing `curvelops` extraction (covers the optional pre-computed
+  input pattern, generalisation rule G6).
+- `☐ Analyze boundary alignment` — enables mask selector + zone width; when
+  unchecked, `boundary_img=None` and `tif_boundary=0` are passed and the TACS
+  sub-section in the visualisation panel stays hidden.
+- **Advanced dialog groups:** Transform / Boundary / Features / Output
+- Covers the CurveAlign pipeline workflow (see workflow table in §Workflow Step
+  Coverage below).
 
 #### Cell Analysis sub-tab
 
@@ -412,6 +449,64 @@ Exported figures:
 it toggles `layer.visible`. A `ColorStrategy` enum controls layer colour:
 `BY_OBJECT_TYPE | BY_TACS_TYPE | BY_ROI | UNIFORM`.
 
+#### CurveAlign TACS View
+
+Shown only when `PluginState.curvealign_pipeline_results` is non-empty for the
+active image. Docked below the main overlay controls.
+
+```
+┌─ CurveAlign TACS View ─────────────────────────────────────────┐
+│  ROI:   [ All ROIs              ▾ ]                            │
+│  TACS:  [ All zones             ▾ ]                            │
+│          All zones                                             │
+│          TACS-3 (high alignment)                               │
+│          TACS-2 (intermediate)                                 │
+│          TACS-1 (low alignment)                                │
+│          Outside zone                                          │
+│  ☐ Show boundary association lines                             │
+│                                                                │
+│  ┌─────────┬──────────┬───────────┬───────────┬──────────┐    │
+│  │fiber_key│center_row│center_col │abs_angle  │tacs_class│    │
+│  ├─────────┼──────────┼───────────┼───────────┼──────────┤    │
+│  │    0    │  127.4   │   88.1    │  43.2°    │  TACS-3  │    │
+│  │   ...   │   ...    │    ...    │   ...     │   ...    │    │
+│  └─────────┴──────────┴───────────┴───────────┴──────────┘    │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**ROI filter** — dropdown populated from the `roi_summary_df` index of the
+active `CurveAlignPipelineResult`. "All ROIs" passes `roi_id=None` to the
+visualisation helper.
+
+**TACS filter** — filters the fiber table and updates the layer immediately.
+No re-run of the pipeline.
+
+**Fiber table** — reads `fiber_features_df` columns directly (not
+`FiberObject.to_dict()`; the CurveAlign result may not yet be committed to the
+hierarchy). Bidirectional row ↔ layer selection applies:
+- Clicking a table row selects the corresponding point in the
+  `[image_id] :: Fibers :: curvealign` Points layer.
+- Clicking a point in the layer scrolls the table to the matching row.
+
+**TACS color coding:**
+
+| TACS class | napari color |
+|------------|-------------|
+| TACS-3 (high alignment, inside zone) | `red` |
+| TACS-2 (intermediate) | `limegreen` |
+| TACS-1 (low alignment) | `dodgerblue` |
+| Outside zone | `lightgray` |
+
+Color is computed from `in_curvs_flag` + alignment statistics in
+`fiber_features_df` using the same thresholds as `_tacs_hierarchy_integration`
+in the example script.
+
+**`☐ Show boundary association lines`** — lazily creates a
+`[image_id] :: Associations :: boundary` Shapes layer with dashed lines
+connecting each fiber centroid to its nearest boundary point
+(`boundary_point_col`, `boundary_point_row` columns of `fiber_features_df`).
+The layer is hidden (not removed) when the checkbox is unchecked.
+
 #### I/O sub-widget
 
 **File:** `widgets/io_widget.py`
@@ -501,6 +596,11 @@ yield occasionally (`time.sleep(0.001)`) to keep the Qt event loop responsive.
 `PluginState` (`controllers/state.py`) is the single source of truth:
 
 ```python
+# controllers/state.py imports
+from tme_quant.tme_analysis.pipelines.curvealign_curveletsMode_pipeline import (
+    CurveAlignPipelineResult,
+)
+
 @dataclass
 class PluginState:
     project: Optional[TMEProject] = None
@@ -510,6 +610,9 @@ class PluginState:
     fiber_results: Dict[str, FiberAnalysisResult] = field(default_factory=dict)
     cell_results:  Dict[str, CellAnalysisResult]  = field(default_factory=dict)
     tme_results:   Dict[str, TMEAnalysisResult]   = field(default_factory=dict)
+
+    # CurveAlign full-pipeline results (separate slot — typed result, not FiberAnalysisResult)
+    curvealign_pipeline_results: Dict[str, CurveAlignPipelineResult] = field(default_factory=dict)
 
     # Image metadata
     image_pairs:   Dict[str, str]    = field(default_factory=dict)  # fiber_id → cell_id
@@ -595,6 +698,85 @@ Nothing in step B or C happens without the user pressing "Commit to Hierarchy".
 
 ---
 
+## Analysis Widget Generalization Rules
+
+These rules govern how any new analysis method is added to the plugin. They
+apply uniformly across all sub-tabs of Tab 4 (Analysis) and ensure that adding
+a new method does not require changes to any other layer.
+
+**G1 — Taxonomy: Extraction vs. Pipeline**
+Analysis widgets fall into two families:
+- *Extraction* widgets (e.g. CT-FIRE, StarDist) call a single-step library
+  function and produce one result type (`FiberAnalysisResult`,
+  `CellAnalysisResult`). Result stored in `PluginState.fiber_results` or
+  `cell_results`.
+- *Pipeline* widgets (e.g. CurveAlign curvelets mode) call a multi-step
+  library function and produce a composite result type. Result stored in a
+  dedicated slot (e.g. `PluginState.curvealign_pipeline_results`). Never mix
+  Pipeline results into Extraction slots.
+
+**G2 — Param layout: ≤8 inline + lazy Advanced QDialog**
+Each method exposes at most 8 parameters inline (enough to fit the sub-tab
+without scrolling at 1080 p). All remaining params live in a `QDialog` opened
+by an `[ Advanced... ]` button. The dialog is built lazily on first open.
+Group advanced params into named `QGroupBox` sections (e.g.
+Transform / Boundary / Features / Output).
+
+**G3 — Method selector → QGroupBox show/hide**
+The method `QComboBox` (or `QButtonGroup`) must map each selection to a single
+`QGroupBox` that is shown/hidden with `setVisible()`. No other widget outside
+that group box changes visibility on method switch.
+
+**G4 — Result Type Map**
+
+| Method | Library call | PluginState slot | Result type |
+|--------|-------------|-----------------|-------------|
+| CT-FIRE | `run_ctfire_analysis()` | `fiber_results` | `FiberAnalysisResult` |
+| CurveAlign (curvelets mode) | `curvealign_curvelets_mode_pipeline()` | `curvealign_pipeline_results` | `CurveAlignPipelineResult` |
+| Cell methods (StarDist, etc.) | `run_cell_analysis()` | `cell_results` | `CellAnalysisResult` |
+| TME pipeline | `StandardTMEPipeline.run()` | `tme_results` | `TMEAnalysisResult` |
+
+**G5 — `progress_callback` binding pattern**
+
+```python
+@thread_worker(connect={"returned": self._on_result, "errored": self._on_error})
+def _worker(self, **kwargs):
+    def _cb(step, total, msg):
+        worker.signals.progressed.emit(int(step / total * 100))
+        LogController.append(msg)
+    return library_pipeline_function(**kwargs, progress_callback=_cb)
+```
+
+The `progress_callback` always has the signature `(step: int, total: int,
+msg: str) -> None`. The worker updates both the progress bar and the log from
+the same callback.
+
+**G6 — Optional pre-computed input**
+When a pipeline accepts a pre-computed intermediate (e.g. `fiber_structure=`
+in `curvealign_curvelets_mode_pipeline`), the widget exposes:
+```
+☐ Use pre-computed <input_name>   [Load CSV/XLSX...]
+```
+The checkbox enables the Load button; the loaded DataFrame is validated
+against the expected schema before passing it to the pipeline.
+
+**G7 — Result adapter: never store raw dicts in PluginState**
+If a library function returns a raw `dict`, wrap it in a typed dataclass
+before storing (see `CurveAlignPipelineResult`). The PluginState contract
+requires that all result slots are typed; untyped dicts in slots are a
+maintenance hazard and break downstream serialisation.
+
+**G8 — Visualisation hints per result type**
+
+| Result type | Auto-created layers on commit |
+|-------------|-------------------------------|
+| `FiberAnalysisResult` | `Shapes` (fibers), `Image` (orientation map, optional) |
+| `CurveAlignPipelineResult` | `Points` (fiber centroids), `Image` (density/alignment heatmap), optional TACS color-coded Points |
+| `CellAnalysisResult` | `Labels` (cell mask) |
+| `TMEAnalysisResult` | `Shapes` (interaction lines), `Labels` (TACS zones) |
+
+---
+
 ## Workflow Step Coverage
 
 The following maps all 12 steps of `example_ctfire_workflow_hierarchy.py` to
@@ -614,6 +796,22 @@ the widget(s) that provide them:
 | 10. Generate heatmaps | Results → Visualization (docked matplotlib + "View in window") |
 | 11. Create TACS overlay | Results → Visualization (napari Shapes layers) |
 | 12. Export results | Results → I/O |
+
+### CurveAlign curvelets-mode pipeline coverage
+
+The following maps all steps of `example_curvealign_curvelets_mode_pipeline.py`
+to the widget(s) that provide them:
+
+| Pipeline step | progress_callback call | Widget(s) |
+|---------------|----------------------|-----------|
+| 1. Curvelet fiber extraction (or pre-computed load) | `"Extracting curvelet fiber structure…"` | Analysis → Fiber sub-tab (`☐ Use pre-computed fiber_structure`) |
+| 2. Density + alignment statistics | *(internal, no progress msg)* | Analysis → Fiber sub-tab (inline params: keep, scale, radius) |
+| 3. ROI boundary coordinate extraction | `"Extracting boundary coordinates…"` | Analysis → Fiber sub-tab (`☐ Analyze boundary alignment`, mask selector) |
+| 4. Global boundary alignment analysis | `"Computing boundary alignment…"` | Analysis → Fiber sub-tab (zone width / dist threshold) |
+| 4b. Feature table assembly | `"Assembling fiber feature table…"` | *(automatic, no widget)* |
+| FiberObject node creation | — | Results → Commit to Hierarchy button |
+| TMEHierarchy commit | — | Results → Commit to Hierarchy button |
+| TACS visualisation | — | Results → Visualization → CurveAlign TACS View |
 
 ---
 

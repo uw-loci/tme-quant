@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tme_quant.tme_analysis.pipelines import curvealign_pipeline
+from tme_quant.tme_analysis.pipelines import curvealign_pipeline, CurveAlignPipelineResult
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -49,11 +49,11 @@ class TestCurvealignPipeline:
         result = curvealign_pipeline(img)
         if result is None:
             pytest.skip("No fibers detected in synthetic image")
-        assert isinstance(result, dict)
-        assert result["boundary_measurement"] is False
-        assert isinstance(result["fiber_structure"], pd.DataFrame)
-        assert isinstance(result["fiber_features_df"], pd.DataFrame)
-        assert "fiber_absolute_angle" in result["fiber_features_df"].columns
+        assert isinstance(result, CurveAlignPipelineResult)
+        assert result.boundary_measurement is False
+        assert isinstance(result.fiber_structure, pd.DataFrame)
+        assert isinstance(result.fiber_features_df, pd.DataFrame)
+        assert "fiber_absolute_angle" in result.fiber_features_df.columns
 
     def test_empty_fiber_structure_returns_none(self):
         """Pre-built empty fiber_structure → pipeline returns None immediately."""
@@ -67,10 +67,10 @@ class TestCurvealignPipeline:
         fibers = _minimal_fiber_df(n=3)
         result = curvealign_pipeline(img, fiber_structure=fibers)
         assert result is not None
-        assert len(result["fiber_structure"]) == 3
-        assert result["boundary_measurement"] is False
-        assert result["in_curvs_flag"] is not None
-        assert len(result["in_curvs_flag"]) == 3
+        assert len(result.fiber_structure) == 3
+        assert result.boundary_measurement is False
+        assert result.in_curvs_flag is not None
+        assert len(result.in_curvs_flag) == 3
 
     def test_tif3_boundary_mode(self):
         """tif_boundary=3 with a mask → boundary_measurement=True, nearest_angles set."""
@@ -85,8 +85,8 @@ class TestCurvealignPipeline:
             distance_threshold=50.0,
         )
         assert result is not None
-        assert result["boundary_measurement"] is True
-        assert result["nearest_angles"] is not None
+        assert result.boundary_measurement is True
+        assert result.nearest_angles is not None
 
     def test_notimplemented_for_csv_boundary(self):
         """tif_boundary=1 raises NotImplementedError (CSV mode not yet ported)."""

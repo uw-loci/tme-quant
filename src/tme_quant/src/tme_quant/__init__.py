@@ -75,7 +75,7 @@ from .tme_analysis import (
     TMEAnalyzer, InteractionDetector, InteractionNetworkAnalyzer,
     RegionManager, MeasurementEngine,
     StandardTMEPipeline, InteractionAnalysisPipeline,
-    curvealign_curvelets_mode_pipeline, analyze_tacs_zone,
+    CurveAlignPipelineResult, curvealign_curvelets_mode_pipeline, analyze_tacs_zone,
     TMEAnalysisParams, TMEAnalysisResult, AnalysisMode,
     compute_fiber_alignment_to_roi, compute_orientation_relative_to_roi,
 )
@@ -131,7 +131,7 @@ __all__ = [
     "TMEAnalyzer", "InteractionDetector", "InteractionNetworkAnalyzer",
     "RegionManager", "MeasurementEngine",
     "StandardTMEPipeline", "InteractionAnalysisPipeline",
-    "curvealign_curvelets_mode_pipeline", "analyze_tacs_zone",
+    "CurveAlignPipelineResult", "curvealign_curvelets_mode_pipeline", "analyze_tacs_zone",
     "TMEAnalysisParams", "TMEAnalysisResult", "AnalysisMode",
     "compute_fiber_alignment_to_roi", "compute_orientation_relative_to_roi",
     # ── Registration ──────────────────────────────────────────────────────────

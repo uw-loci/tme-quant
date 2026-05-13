@@ -10,6 +10,7 @@ from .measurement_engine import MeasurementEngine
 from .pipelines import (
     StandardTMEPipeline,
     InteractionAnalysisPipeline,
+    CurveAlignPipelineResult,
     curvealign_curvelets_mode_pipeline,
     analyze_tacs_zone,
 )
@@ -29,6 +30,7 @@ __all__ = [
     # Pipelines
     'StandardTMEPipeline',
     'InteractionAnalysisPipeline',
+    'CurveAlignPipelineResult',
     'curvealign_curvelets_mode_pipeline',
     'analyze_tacs_zone',
     # Config

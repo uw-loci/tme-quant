@@ -120,18 +120,18 @@ def _load_binary_mask(path: Path) -> np.ndarray:
     return (mask > 0).astype(np.uint8)
 
 
-def _print_result(label_str: str, result: dict | None) -> None:
+def _print_result(label_str: str, result) -> None:
     if result is None:
         print(f"  {label_str}: pipeline returned None (no fibers detected)\n")
         return
-    fs  = result["fiber_structure"]
-    ffd = result["fiber_features_df"]
-    ia  = result["in_curvs_flag"]
-    na  = result["nearest_angles"]
+    fs  = result.fiber_structure
+    ffd = result.fiber_features_df
+    ia  = result.in_curvs_flag
+    na  = result.nearest_angles
     print(f"  {label_str}:")
     print(f"    fiber_structure rows  : {len(fs)}")
     print(f"    fiber_features_df cols: {list(ffd.columns)}")
-    print(f"    boundary_measurement  : {result['boundary_measurement']}")
+    print(f"    boundary_measurement  : {result.boundary_measurement}")
     print(
         f"    in_curvs_flag         : "
         f"{ia.sum() if ia is not None else 'None'} / "
@@ -153,11 +153,11 @@ def _save_figures_and_xlsx(
         print(f"  [{tag}] No result — skipping figures and xlsx.\n")
         return
 
-    fs                   = result["fiber_structure"]
-    boundary_measurement = result["boundary_measurement"]
-    in_curvs_flag        = result["in_curvs_flag"]
-    nearest_angles       = result["nearest_angles"]
-    fiber_features_df    = result["fiber_features_df"]
+    fs                   = result.fiber_structure
+    boundary_measurement = result.boundary_measurement
+    in_curvs_flag        = result.in_curvs_flag
+    nearest_angles       = result.nearest_angles
+    fiber_features_df    = result.fiber_features_df
     tif_boundary         = 3 if boundary_measurement else 0
 
     angles = fs["angle"].values
@@ -238,7 +238,7 @@ def _save_figures_and_xlsx(
     # ── xlsx export ───────────────────────────────────────────────────────────
     xlsx_path = str(OUT_DIR / f"{tag}_results.xlsx")
     export_dataframe_to_excel(fiber_features_df, xlsx_path, sheet_name="fiber_features")
-    roi_summary = result.get("roi_summary_df")
+    roi_summary = result.roi_summary_df
     if roi_summary is not None and not roi_summary.empty:
         export_dataframe_to_excel(roi_summary, xlsx_path, sheet_name="roi_summary", mode="a")
     print(f"  Results saved  -> {xlsx_path}\n")
@@ -329,9 +329,9 @@ def _tacs_hierarchy_integration(
     print(f"[{tag}] TACS + hierarchy integration")
     print(f"{'─' * 60}")
 
-    fs          = result["fiber_structure"]
-    ffd         = result["fiber_features_df"]
-    has_boundary = result["boundary_measurement"]
+    fs          = result.fiber_structure
+    ffd         = result.fiber_features_df
+    has_boundary = result.boundary_measurement
 
     # ── 1. Build FiberObject nodes ────────────────────────────────────────────
     fiber_objects: list[FiberObject] = []
@@ -381,8 +381,8 @@ def _tacs_hierarchy_integration(
             )
 
         in_flag = None
-        if result["in_curvs_flag"] is not None and i < len(result["in_curvs_flag"]):
-            in_flag = bool(result["in_curvs_flag"][i])
+        if result.in_curvs_flag is not None and i < len(result.in_curvs_flag):
+            in_flag = bool(result.in_curvs_flag[i])
 
         fobj = FiberObject(
             object_id=f"{tag}_curvelet_{i:04d}",
@@ -993,9 +993,9 @@ def scenario_3_real_image() -> None:
         "scenario3_real_image", img, result, coordinates=coordinates, show=False
     )
 
-    if result is not None and result["roi_summary_df"] is not None:
+    if result is not None and result.roi_summary_df is not None:
         print("  roi_summary_df:")
-        print(result["roi_summary_df"].to_string(index=False))
+        print(result.roi_summary_df.to_string(index=False))
         print()
 
     # ── TACS classification + TME hierarchy ───────────────────────────────────

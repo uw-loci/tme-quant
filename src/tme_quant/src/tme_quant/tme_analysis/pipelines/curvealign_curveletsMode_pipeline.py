@@ -19,6 +19,7 @@ No Qt / napari dependencies.  See REFACTORING_GUIDE.md §2.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 import numpy as np
@@ -40,6 +41,60 @@ from tme_quant.tme_analysis.utils.alignment_utils import compute_fiber_alignment
 def _report(cb: Optional[Callable], step: int, total: int, msg: str) -> None:
     if cb is not None:
         cb(step, total, msg)
+
+
+# ── Public result type ────────────────────────────────────────────────────────
+
+@dataclass
+class CurveAlignPipelineResult:
+    """Typed return value of :func:`curvealign_curvelets_mode_pipeline`.
+
+    Replaces the raw ``dict`` previously returned so callers can access fields
+    by attribute rather than by string key, and so the plugin can import a
+    concrete type instead of unwrapping a dict.
+
+    All attribute names match the former dict keys exactly, preserving
+    backward-compatible access patterns (``result.fiber_structure`` replaces
+    ``result["fiber_structure"]``).
+
+    Attributes
+    ----------
+    fiber_structure : pd.DataFrame
+        Per-fiber curvelet orientation DataFrame with columns
+        ``center_row``, ``center_col``, ``angle``, ``weight``.
+    fiber_features_df : pd.DataFrame
+        Consolidated per-fiber feature table (position, angle, density,
+        alignment, boundary metrics when available).
+    density_df : pd.DataFrame
+        Density statistics computed by ``build_fiber_structure_from_curvelets``.
+    alignment_df : pd.DataFrame
+        Alignment statistics computed by ``build_fiber_structure_from_curvelets``.
+    roi_measurements_df : pd.DataFrame or None
+        Per-fiber angle measurements per ROI (``None`` when no boundary).
+    roi_summary_df : pd.DataFrame or None
+        Per-ROI summary statistics (``None`` when no boundary).
+    in_curvs_flag : ndarray[bool] or None
+        Boolean mask selecting fibers within the TACS boundary zone.
+        ``None`` when no boundary analysis was performed.
+    nearest_angles : ndarray or None
+        Per-fiber angle relative to the nearest boundary tangent.
+        ``None`` when no boundary analysis was performed.
+    boundary_measurement : bool
+        ``True`` when boundary analysis was performed; ``False`` otherwise.
+    params : dict
+        Serialised pipeline parameters (image shape, keep, scale, radius,
+        distance_threshold, tif_boundary, exclude_fibers_in_mask, min_dist).
+    """
+    fiber_structure:    pd.DataFrame
+    fiber_features_df:  pd.DataFrame
+    density_df:         pd.DataFrame
+    alignment_df:       pd.DataFrame
+    roi_measurements_df: Optional[pd.DataFrame]
+    roi_summary_df:     Optional[pd.DataFrame]
+    in_curvs_flag:      Optional[np.ndarray]
+    nearest_angles:     Optional[np.ndarray]
+    boundary_measurement: bool
+    params:             dict = field(default_factory=dict)
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -312,7 +367,7 @@ def curvealign_curvelets_mode_pipeline(
     exclude_fibers_in_mask: bool = False,
     min_dist=None,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
-) -> Optional[dict]:
+) -> Optional[CurveAlignPipelineResult]:
     """Run the CurveAlign curvelets-mode fiber-orientation pipeline on a single image.
 
     Uses grouped curvelet orientation estimates as the fiber representation.
@@ -364,18 +419,13 @@ def curvealign_curvelets_mode_pipeline(
 
     Returns
     -------
-    dict or None
-        ``None`` when no fibers are detected.  Otherwise a dict with keys:
-
-        - ``fiber_structure`` — per-fiber DataFrame
-        - ``density_df`` — density statistics
-        - ``alignment_df`` — alignment statistics
-        - ``fiber_features_df`` — consolidated per-fiber feature table
-        - ``roi_measurements_df`` — per-fiber angle measurements per ROI (or ``None``)
-        - ``roi_summary_df`` — per-ROI summary statistics (or ``None``)
-        - ``in_curvs_flag`` — bool array selecting boundary-included fibers (or ``None``)
-        - ``nearest_angles`` — fiber angles relative to boundary (or ``None``)
-        - ``boundary_measurement`` — whether boundary analysis was performed
+    CurveAlignPipelineResult or None
+        ``None`` when no fibers are detected.  Otherwise a
+        :class:`CurveAlignPipelineResult` with attributes mirroring the
+        former dict keys (``fiber_structure``, ``density_df``,
+        ``alignment_df``, ``fiber_features_df``, ``roi_measurements_df``,
+        ``roi_summary_df``, ``in_curvs_flag``, ``nearest_angles``,
+        ``boundary_measurement``, ``params``).
 
     Notes
     -----
@@ -448,17 +498,29 @@ def curvealign_curvelets_mode_pipeline(
         fiber_structure, density_df, alignment_df, measured_boundary, boundary_measurement
     )
 
-    return {
-        "fiber_structure": fiber_structure,
-        "density_df": density_df,
-        "alignment_df": alignment_df,
-        "fiber_features_df": fiber_features_df,
-        "roi_measurements_df": roi_measurements_df,
-        "roi_summary_df": roi_summary_df,
-        "in_curvs_flag": in_curvs_flag,
-        "nearest_angles": nearest_angles,
-        "boundary_measurement": boundary_measurement,
+    _params = {
+        "image_shape": list(image.shape),
+        "keep": keep,
+        "scale": scale,
+        "radius": radius,
+        "distance_threshold": distance_threshold,
+        "tif_boundary": tif_boundary,
+        "exclude_fibers_in_mask": exclude_fibers_in_mask,
+        "min_dist": min_dist if min_dist else [],
     }
 
+    return CurveAlignPipelineResult(
+        fiber_structure=fiber_structure,
+        density_df=density_df,
+        alignment_df=alignment_df,
+        fiber_features_df=fiber_features_df,
+        roi_measurements_df=roi_measurements_df,
+        roi_summary_df=roi_summary_df,
+        in_curvs_flag=in_curvs_flag,
+        nearest_angles=nearest_angles,
+        boundary_measurement=boundary_measurement,
+        params=_params,
+    )
 
-__all__ = ["curvealign_curvelets_mode_pipeline"]
+
+__all__ = ["CurveAlignPipelineResult", "curvealign_curvelets_mode_pipeline"]
