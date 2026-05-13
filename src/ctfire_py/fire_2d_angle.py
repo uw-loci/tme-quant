@@ -311,7 +311,7 @@ def fire_2d_angle(
         print(f"  Smoothed image shape: {ims.shape}")
 
     # Step 2: Threshold image
-    if len(p.get("thresh_im")) != 0:
+    if np.asarray(p.get("thresh_im", [])).size != 0:
         imt = ims > p["thresh_im"] * np.max(ims)
     else:
         imt = ims > p.get("thresh_im2")
