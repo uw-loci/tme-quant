@@ -36,8 +36,8 @@ def compute_fiber_straightness(data: Dict[str, Any], FN: np.ndarray) -> np.ndarr
         if len(v) < 2:
             dse[i] = 0.0
         else:
-            start = Xa[v[0], :]
-            end = Xa[v[-1], :]
+            start = Xa[v[0] - 1, :]   # 1-based → 0-based
+            end = Xa[v[-1] - 1, :]
             dse[i] = np.linalg.norm(end - start)
 
     # Guard against zero-length fibers
@@ -102,7 +102,7 @@ def compute_fiber_widths(
 
     for idx, fiber_idx in enumerate(FN):
         v = Fa[fiber_idx]["v"]
-        widall = 2.0 * Ra[v]
+        widall = 2.0 * Ra[np.array(v) - 1]   # 1-based → 0-based
 
         passing = widall[widall <= wid_th]
         if len(passing) == 0:

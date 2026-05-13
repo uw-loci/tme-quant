@@ -72,12 +72,13 @@ def find_boundary(
         bmax = float(X[:, col].max())
 
         for fiber in F:
-            for v_idx in [fiber['v'][0], fiber['v'][-1]]:  # endpoints only
-                b = X[v_idx, col]                           # 0-based
+            for v_idx in [fiber['v'][0], fiber['v'][-1]]:  # endpoints only (1-based)
+                v_idx0 = v_idx - 1                          # 1-based → 0-based
+                b = X[v_idx0, col]
                 if b < bmin + db:
-                    boundary1.add(v_idx)
+                    boundary1.add(v_idx0)
                 elif b > bmax - db:
-                    boundary2.add(v_idx)
+                    boundary2.add(v_idx0)
 
     # Mark vertices
     b1_list = sorted(boundary1)
@@ -444,8 +445,8 @@ def add_angle(
         if len(v) < 2:
             A[fi] = 0.0
             continue
-        x0, y0 = X[v[0],  0], X[v[0],  1]
-        x1, y1 = X[v[-1], 0], X[v[-1], 1]
+        x0, y0 = X[v[0]  - 1, 0], X[v[0]  - 1, 1]   # 1-based → 0-based
+        x1, y1 = X[v[-1] - 1, 0], X[v[-1] - 1, 1]
         A[fi] = float(np.degrees(np.arctan2(y1 - y0, x1 - x0)))
         fiber['a'] = A[fi]
 

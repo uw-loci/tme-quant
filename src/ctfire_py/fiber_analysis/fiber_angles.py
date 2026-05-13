@@ -69,9 +69,9 @@ def calc_fiberang2(
         
         if Lf <= k:
             # Fiber is too short, use start and end points
-            v1 = fv[0]
-            v2 = fv[-1]
-            
+            v1 = fv[0] - 1   # 1-based → 0-based
+            v2 = fv[-1] - 1
+
             x1 = X[v1, :]
             x2 = X[v2, :]
             
@@ -90,9 +90,9 @@ def calc_fiberang2(
             
             for j in range(Lf - k):
                 # Calculate angle orientation at point j
-                v1 = fv[j]
-                v2 = fv[j + k]
-                
+                v1 = fv[j] - 1      # 1-based → 0-based
+                v2 = fv[j + k] - 1
+
                 x1 = X[v1, :]
                 x2 = X[v2, :]
                 
