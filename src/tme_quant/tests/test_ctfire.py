@@ -19,7 +19,7 @@ from tme_quant.fiber_analysis.config import CTFireParams
 
 # Gaussian sigma for smoothing 1-px skeletons before computing soft IoU.
 # sigma=5 → ~10-px FWHM, appropriate for fiber-level (not pixel-level) matching.
-_SMOOTH_SIGMA = 2.0
+_SMOOTH_SIGMA = 5.0
 
 
 def _smooth_mask(mask, smooth_sigma=_SMOOTH_SIGMA):
