@@ -528,7 +528,7 @@ def fire_2d_angle(
     
     # Apply filters with MATLAB-derived thresholds
     min_length = p.get("min_fiber_length", 30.0)  # MATLAB LL1 parameter
-    min_straightness = p.get("min_straightness", 0.8)  # Straightness threshold
+    min_straightness = p.get("min_straightness", 0.5)  # Straightness threshold
     
     print_fiber_statistics(Xc, Fc)
     Xf, Ff, Vf = curvealign_filter(Xc, Fc, Vc, min_length=min_length, min_straightness=min_straightness)
@@ -541,6 +541,8 @@ def fire_2d_angle(
         "R": R,
         "Xa": Xa,
         "Fa": Fa,
+        "Xas": Xas,
+        "Fas": Fa,
         "Va": Va,
         "Ea": Ea,
         "Ra": Ra,

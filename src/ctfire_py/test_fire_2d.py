@@ -3,11 +3,106 @@ Test script for FIRE 2D fiber extraction
 """
 
 import numpy as np
-import sys
+import matplotlib.pyplot as plt
+from skimage.draw import line as draw_line
+from ctfire_py.fire_2d_angle import fire_2d_angle
 
-sys.path.insert(0, "CPP")
 
-from fire_2d_ang1 import fire_2d_ang1, create_default_params
+def plot_fiber_overlay(im, X, F, title="Fiber Overlay", save_path=None):
+    """
+    Overlay fiber centerlines on the original image.
+
+    Each fiber is a 1-pixel-thick polyline in a unique HSV color drawn with
+    Bresenham's line algorithm.
+
+    Args:
+        im: 2D grayscale image array (H×W)
+        X: (N, 2+) vertex array; X[:, 0] = row, X[:, 1] = col (0-based)
+        F: list of fiber dicts with key 'v' = list of 0-based vertex indices
+        title: axes title
+        save_path: optional path to save the figure
+
+    Returns:
+        (fig, ax)
+    """
+    img2d = im[0] if im.ndim == 3 else im
+    H, W = img2d.shape
+
+    img_norm = img2d.astype(np.float32)
+    peak = img_norm.max()
+    if peak > 0:
+        img_norm /= peak
+    canvas = np.stack([img_norm, img_norm, img_norm], axis=-1)
+
+    n_fibers = len(F)
+    if n_fibers > 0:
+        cmap = plt.get_cmap("hsv", n_fibers)
+        colors = [cmap(i)[:3] for i in range(n_fibers)]
+        X_arr = np.asarray(X)
+
+        for fi, fiber in enumerate(F):
+            v_list = fiber.get("v", []) if isinstance(fiber, dict) else list(fiber)
+            if len(v_list) < 2:
+                continue
+            rc, gc, bc = colors[fi]
+            for seg in range(len(v_list) - 1):
+                v0, v1 = v_list[seg], v_list[seg + 1]
+                if v0 < 0 or v0 >= len(X_arr) or v1 < 0 or v1 >= len(X_arr):
+                    continue
+                r0 = int(round(float(X_arr[v0, 0])))
+                c0 = int(round(float(X_arr[v0, 1])))
+                r1 = int(round(float(X_arr[v1, 0])))
+                c1 = int(round(float(X_arr[v1, 1])))
+                r0, c0 = np.clip(r0, 0, H - 1), np.clip(c0, 0, W - 1)
+                r1, c1 = np.clip(r1, 0, H - 1), np.clip(c1, 0, W - 1)
+                rr, cc = draw_line(r0, c0, r1, c1)
+                mask = (rr >= 0) & (rr < H) & (cc >= 0) & (cc < W)
+                canvas[rr[mask], cc[mask]] = (rc, gc, bc)
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.imshow(canvas, origin="upper")
+    ax.set_title(f"{title} ({n_fibers} fibers)")
+    ax.axis("off")
+    plt.tight_layout()
+
+    if save_path is not None:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"   Saved overlay to: {save_path}")
+
+    return fig, ax
+
+
+def create_default_params():
+    """Fallback dictionary providing the legacy parameter keys expected by fire_2d_angle"""
+    return {
+        "sigma_im": 0,
+        "sigma_d": 0.3,
+        "dtype": "cityblock",
+        "thresh_im": [],
+        "thresh_im2": 5,
+        "thresh_Dxlink": 1.5,
+        "s_xlinkbox": 8,
+        "thresh_LMP": 0.2,
+        "thresh_LMPdist": 2,
+        "thresh_ext": 0.342,
+        "lam_dirdecay": 0.5,
+        "s_minstep": 2,
+        "s_maxstep": 6,
+        "thresh_dang_aextend": 0.9848,
+        "thresh_dang_L": 15,
+        "thresh_short_L": 15,
+        "s_fiberdir": 4,
+        "thresh_linkd": 15,
+        "thresh_linka": -0.866,
+        "thresh_flen": 15,
+        "thresh_numv": 3,
+        "scale": [1.0, 1.0, 1.0],
+        "s_boundthick": 10,
+        "blist": 1,
+        "s_maxspace": 5,
+        "lambda": 0.01,
+        "ang_interval": 3,
+    }
 
 
 def create_synthetic_fiber_image(size=(256, 256), num_fibers=5):
@@ -86,7 +181,7 @@ def test_fire_2d_basic():
     # Run FIRE
     print("\n3. Running FIRE extraction...")
     try:
-        data = fire_2d_ang1(params, image, plotflag=0)
+        data = fire_2d_angle(params, image, plotflag=0)
 
         print("\n4. Results:")
         print(f"   - Nucleation points: {data['xlink'].shape[0]}")
@@ -101,6 +196,15 @@ def test_fire_2d_basic():
                 if isinstance(data["Fa"][i], dict) and "v" in data["Fa"][i]:
                     v_list = data["Fa"][i]["v"]
                     print(f"   - Fiber {i}: {len(v_list)} vertices")
+
+        print("\n4b. Generating fiber overlay...")
+        plot_fiber_overlay(
+            image,
+            data["Xas"],#["Xf"],
+            data["Fas"],#["Ff"],
+            title= "processed extraction",#"Synthetic — filtered fibers",
+            save_path="fiber_overlay_synthetic.png",
+        )
 
         print("\n✓ Test completed successfully!")
         return True
@@ -152,12 +256,21 @@ def test_fire_2d_with_real_image():
 
         # Run FIRE
         print("\nRunning FIRE extraction on real image...")
-        data = fire_2d_ang1(params, image, plotflag=0)
+        data = fire_2d_angle(params, image, plotflag=0)
 
         print("\nResults:")
         print(f"   - Nucleation points: {data['xlink'].shape[0]}")
         print(f"   - Vertices: {data['Xa'].shape[0]}")
         print(f"   - Fibers: {len(data['Fa'])}")
+
+        print("\nGenerating fiber overlay...")
+        plot_fiber_overlay(
+            image,
+            data["Xf"],
+            data["Ff"],
+            title="Real image — filtered fibers",
+            save_path="fiber_overlay_real.png",
+        )
 
         print("\n✓ Real image test completed!")
         return True
