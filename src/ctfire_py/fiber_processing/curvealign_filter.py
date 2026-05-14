@@ -28,10 +28,10 @@ def calculate_fiber_length(X: np.ndarray, fiber_vertices: List[int]) -> float:
     for i in range(len(fiber_vertices) - 1):
         v1_idx = int(fiber_vertices[i])
         v2_idx = int(fiber_vertices[i+1])
-
+        
         if v1_idx < 0 or v1_idx >= len(X) or v2_idx < 0 or v2_idx >= len(X):
             continue
-
+            
         p1 = X[v1_idx]
         p2 = X[v2_idx]
         segment_length = np.linalg.norm(p2 - p1)
@@ -57,10 +57,10 @@ def calculate_fiber_straightness(X: np.ndarray, fiber_vertices: List[int]) -> fl
     # End-to-end distance
     v_start_idx = int(fiber_vertices[0])
     v_end_idx = int(fiber_vertices[-1])
-
+    
     if v_start_idx < 0 or v_start_idx >= len(X) or v_end_idx < 0 or v_end_idx >= len(X):
         return 0.0
-
+    
     end_to_end_dist = np.linalg.norm(X[v_end_idx] - X[v_start_idx])
     
     # Total path length

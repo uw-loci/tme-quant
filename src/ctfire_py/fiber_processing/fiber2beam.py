@@ -300,34 +300,32 @@ def fiber2beam(
     Fred: List[Dict] = []                   # reduced fiber list (pinned only)
 
     for i, fiber in enumerate(F):
-        vi = list(fiber['v'])               # 1-based vertex indices (MATLAB convention)
-        vi0 = [v - 1 for v in vi]          # 0-based for X indexing
+        vi = list(fiber['v'])               # 0-based vertex indices
 
         # Identify pinned vertex positions within vi
         # The first and last vertices are always pinned.
         pin_local_idx = [0]                 # local index into vi (0-based)
         for jj in range(1, len(vi) - 1):
-            vj = vi[jj]                     # 1-based global vertex index
-            vj0 = vj - 1                    # 0-based for V indexing
-            if 0 <= vj0 < len(V) and len(V[vj0]['f']) > 1:
+            vj = vi[jj]                     # 0-based global vertex index
+            if vj < len(V) and len(V[vj]['f']) > 1:
                 pin_local_idx.append(jj)
         pin_local_idx.append(len(vi) - 1)
 
-        # Build reduced fiber with only pinned vertices (keep 1-based for trimxfv)
+        # Build reduced fiber with only pinned vertices
         fred_v = [vi[j] for j in pin_local_idx]
         fred_dict: Dict = {'v': fred_v}
         if 'r' in fiber:
             fred_dict['r'] = fiber['r']
         Fred.append(fred_dict)
 
-        # X positions for this fiber (convert to 0-based for indexing)
-        Xi = X[vi0, :]
+        # X positions for this fiber (indices are already 0-based)
+        Xi = X[vi, :]
         pins_arr = np.array(pin_local_idx, dtype=int)
 
         AL, AR = bestcurv(Xi, pins_arr, lam)
         AL_list.append(AL)
         AR_list.append(AR)
-        Xcrit_list.append(X[[v - 1 for v in fred_v], :])   # pinned coords
+        Xcrit_list.append(X[fred_v, :])   # pinned coords
 
     # ---- Pass 2: add interpolation nodes to X ----
     N_verts = len(X)
@@ -368,7 +366,7 @@ def fiber2beam(
                         y_pts[1: n + 1],
                         z_pts[1: n + 1],
                     ])
-                    new_start = N_verts              # 0-based: first new row is at X[N_verts]
+                    new_start = N_verts              # 0-based
                     new_end   = N_verts + n - 1
 
                     # Insert new 0-based indices into Fred[i].v

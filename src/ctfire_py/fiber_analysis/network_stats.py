@@ -106,13 +106,13 @@ def network_statK(
     v1 = E[:, 0]
     v2 = E[:, 1]
     
-    # F['v'] uses 1-based vertex indices (MATLAB convention); convert to 0-based
-    v1_idx = v1 - 1
-    v2_idx = v2 - 1
-
+    # Indices are already 0-based
+    v1_idx = v1
+    v2_idx = v2
+    
     # Handle invalid indices
     valid_mask = (v1_idx >= 0) & (v1_idx < len(X)) & (v2_idx >= 0) & (v2_idx < len(X))
-
+    
     x1 = X[v1_idx[valid_mask], :]
     x2 = X[v2_idx[valid_mask], :]
     
@@ -143,9 +143,8 @@ def network_statK(
             for k in range(len(E_edges) - 1):
                 v = E_edges[k, :]
                 for vi in v:
-                    vi0 = vi - 1  # 1-based → 0-based
-                    if 0 <= vi0 < len(coord):
-                        coord[vi0] += 1
+                    if 0 <= vi < len(coord):
+                        coord[vi] += 1
         
         M['coord'] = coord
         M['avgcoord'] = np.mean(coord != 0) if len(coord) > 0 else 0.0
@@ -155,7 +154,7 @@ def network_statK(
     
     # Cross-link density and number
     xlink = 0
-    vflag = np.zeros(len(X), dtype=bool)
+    vflag = np.zeros(len(V), dtype=bool)
     
     for i in range(len(V)):
         if len(V[i]['f']) > 1:
@@ -169,7 +168,7 @@ def network_statK(
     
     for fi in range(len(F)):
         v = F[fi]['v']
-        ind = [i for i, vi in enumerate(v) if vflag[vi - 1]]  # 1-based → 0-based
+        ind = [i for i, vi in enumerate(v) if vflag[vi]]
         
         if len(ind) > 1:
             # There is more than one cross-link in this fiber
@@ -180,9 +179,9 @@ def network_statK(
                 # Calculate length between cross-links
                 length = 0.0
                 for ii in range(i1, i2):
-                    v1_idx = v[ii] - 1      # 1-based → 0-based
-                    v2_idx = v[ii + 1] - 1
-                    if 0 <= v1_idx < len(X) and 0 <= v2_idx < len(X):
+                    v1_idx = v[ii]
+                    v2_idx = v[ii + 1]
+                    if v1_idx < len(X) and v2_idx < len(X):
                         length += np.linalg.norm(X[v2_idx] - X[v1_idx])
                 
                 xlinkspace.append(length)
