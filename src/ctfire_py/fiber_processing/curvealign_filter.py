@@ -26,8 +26,8 @@ def calculate_fiber_length(X: np.ndarray, fiber_vertices: List[int]) -> float:
     
     total_length = 0.0
     for i in range(len(fiber_vertices) - 1):
-        v1_idx = int(fiber_vertices[i]) - 1      # 1-based → 0-based
-        v2_idx = int(fiber_vertices[i+1]) - 1
+        v1_idx = int(fiber_vertices[i])
+        v2_idx = int(fiber_vertices[i+1])
 
         if v1_idx < 0 or v1_idx >= len(X) or v2_idx < 0 or v2_idx >= len(X):
             continue
@@ -55,8 +55,8 @@ def calculate_fiber_straightness(X: np.ndarray, fiber_vertices: List[int]) -> fl
         return 0.0
     
     # End-to-end distance
-    v_start_idx = int(fiber_vertices[0]) - 1    # 1-based → 0-based
-    v_end_idx = int(fiber_vertices[-1]) - 1
+    v_start_idx = int(fiber_vertices[0])
+    v_end_idx = int(fiber_vertices[-1])
 
     if v_start_idx < 0 or v_start_idx >= len(X) or v_end_idx < 0 or v_end_idx >= len(X):
         return 0.0

@@ -368,8 +368,8 @@ def fiber2beam(
                         y_pts[1: n + 1],
                         z_pts[1: n + 1],
                     ])
-                    new_start = N_verts + 1          # 1-based (matches trimxfv convention)
-                    new_end   = N_verts + n
+                    new_start = N_verts              # 0-based: first new row is at X[N_verts]
+                    new_end   = N_verts + n - 1
 
                     # Insert new 0-based indices into Fred[i].v
                     fred_v = Fred[i]['v']

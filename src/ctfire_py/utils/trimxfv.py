@@ -55,6 +55,10 @@ def trimxfv(
     This function handles the conversion between MATLAB's 1-based indexing
     and Python's 0-based indexing internally.
     """
+    X = np.asarray(X)
+    if R is not None:
+        R = np.asarray(R)
+
     # Remove empty fibers (fibers with no vertices)
     F_trimmed = []
     for fi, fiber in enumerate(F):
@@ -97,28 +101,28 @@ def trimxfv(
         else:
             return empty_X, empty_F
     
-    # Create mapping from old vertex indices to new indices
-    # Note: vertices_used are 1-based from MATLAB
+    # Vertex v is stored at X[v] throughout the pipeline (the C++ trimxfv_cpp
+    # never renumbers, so indices are direct numpy indices into X).
+    # Output uses 0-based new indices (new_idx = position in sorted vertices_used).
     old_to_new = {}
     for new_idx, old_idx in enumerate(vertices_used):
-        old_to_new[old_idx] = new_idx + 1  # Keep 1-based for consistency
-    
-    # Trim X array
-    # Convert 1-based indices to 0-based for array indexing
-    X_trimmed = X[[v - 1 for v in vertices_used], :]
-    
+        old_to_new[old_idx] = new_idx  # 0-based output
+
+    # Trim X: vertex old_idx lives at X[old_idx] (direct 0-based numpy index).
+    X_trimmed = X[list(vertices_used), :]
+
     # Renumber fiber vertices
     F_renumbered = []
     for fiber in F_trimmed:
         fiber_new = fiber.copy()
         fiber_new['v'] = [old_to_new[v] for v in fiber['v']]
         F_renumbered.append(fiber_new)
-    
+
     # Trim and renumber R if provided
     R_trimmed = None
     if R is not None:
-        R_trimmed = R[[v - 1 for v in vertices_used]]
-    
+        R_trimmed = R[list(vertices_used)]
+
     # Reconstruct V if provided
     V_reconstructed = None
     if V is not None:
@@ -130,22 +134,19 @@ def trimxfv(
                 'vall': []
             }
             V_reconstructed.append(v_new)
-        
-        # Populate V based on F
+
+        # Populate V based on F; vertex and fiber indices are both 0-based.
         for fi, fiber in enumerate(F_renumbered):
-            fiber_idx = fi + 1  # 1-based
             vertices = fiber['v']
-            
-            # All vertices in this fiber
+
             for vi in vertices:
-                V_reconstructed[vi - 1]['f'].append(fiber_idx)
-                V_reconstructed[vi - 1]['vall'].extend(vertices)
-            
-            # Endpoint vertices
+                V_reconstructed[vi]['f'].append(fi)
+                V_reconstructed[vi]['vall'].extend(vertices)
+
             if len(vertices) > 0:
-                V_reconstructed[vertices[0] - 1]['fe'].append(fiber_idx)
-                V_reconstructed[vertices[-1] - 1]['fe'].append(fiber_idx)
-        
+                V_reconstructed[vertices[0]]['fe'].append(fi)
+                V_reconstructed[vertices[-1]]['fe'].append(fi)
+
         # Remove duplicates and sort
         for v in V_reconstructed:
             v['f'] = sorted(list(set(v['f'])))
