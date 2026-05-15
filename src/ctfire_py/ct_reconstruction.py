@@ -41,9 +41,11 @@ def ct_reconstruction(
     reconstructed_image : np.ndarray
         2D array of the reconstructed image with denoising and edge enhancement applied
     """
-    # 1. Setup paths and filenames
-    # Replaces CTR_ with CTRimg_ and .mat with .tif
-    ct_img_name = output_filename.replace("CTR_", "CTRimg_").replace(".mat", ".tif")
+    # Derive a safe output filename for the optional plot save.
+    # Prefix with "CTRimg_" and force a .tif extension so the saved figure
+    # never shares a name with the source image (which would overwrite it).
+    base = os.path.splitext(os.path.basename(output_filename))[0]
+    ct_img_name = f"CTRimg_{base}.tiff"
 
     # Ensure input is a float64 for transform precision
     is_img = np.asanyarray(img, dtype=np.float64)
@@ -82,9 +84,16 @@ def ct_reconstruction(
             # Apply hard thresholding
             c[scale][wedge] = c[scale][wedge] * (np.abs(c[scale][wedge]) > cutoff)
 
-    # Equivalent to MATLAB's s = length(C)-SS : length(C)-1
+    # MATLAB: s = length(C)-SS : length(C)-1  (1-based inclusive, excludes finest scale)
+    # Python 0-based equivalent: subtract 1 from each bound, use exclusive stop.
+    #   start = (num_scales - SS) - 1 = num_scales - SS - 1
+    #   stop  = (num_scales - 1)       = num_scales - 1  (exclusive → includes up to index num_scales-2)
+    # This selects exactly SS scales and deliberately omits the very finest scale
+    # (index num_scales-1), which typically contains high-frequency noise.
     num_scales = len(c)
-    selected_scale_indices = range(num_scales - specific_scales, num_scales - 1)
+    selected_scale_indices = range(
+        max(0, num_scales - specific_scales - 1), num_scales - 1
+    )
 
     # Create an empty coefficient structure (zeros)
     curvelet_coefficients = []
@@ -105,40 +114,20 @@ def ct_reconstruction(
 
     # 7. Plotting and Saving
     if plot_flag:
-        plt.figure(figsize=(img_width / 128, img_height / 128))
-        plt.imshow(reconstructed_image, cmap="gray")
-        plt.axis("image")
-        plt.title(
-            f"CT partial reconstruction scales {selected_scale_indices[0]} - {selected_scale_indices[-1]}"
-        )
+        # Save raw pixel data (no matplotlib borders) so the file can be
+        # re-loaded as an image without any framing artifacts.
+        plt.imsave(ct_img_name, reconstructed_image, cmap="gray")
 
-        # Save the image
-        plt.savefig(ct_img_name, dpi=128)
+        fig, ax = plt.subplots(
+            figsize=(img_width / 128, img_height / 128), tight_layout=True
+        )
+        ax.imshow(reconstructed_image, cmap="gray")
+        ax.axis("off")
+        ax.set_title(
+            f"CT partial reconstruction scales {list(selected_scale_indices)[0]}"
+            f" - {list(selected_scale_indices)[-1]}"
+        )
         plt.show()
 
     print("Curvelet transform based reconstruction is done")
     return reconstructed_image
-
-
-if __name__ == "__main__":
-    plot_flag = 1
-    SS = 4
-    pct = 0.2
-    import os
-    import matplotlib.pyplot as plt
-
-    img = plt.imread(
-        os.path.join(
-            os.path.dirname(__file__),
-            "2B_D9_ROI1.tif",
-        ),
-        format="TIF",
-    )
-
-    ct_rec(
-        plot_flag=plot_flag,
-        specific_scales=SS,
-        coefficient_percentile=pct,
-        img=img,
-        output_filename="2B_D9_ROI1.tif",
-    )

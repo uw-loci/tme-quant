@@ -112,6 +112,8 @@ class FiberAnalysisParameters:
     fiber_mode: int = 0  # 0=curvelet, 1/2/3=FIRE
     keep: float = 0.05  # Percentage of curvelets to keep
     fire_directory: Optional[str] = None
+    image_path: Optional[str] = None  # Directory containing the image (for CT-FIRE)
+    ctfire_params: Optional[Dict] = None  # CT-FIRE algorithm parameters
 
 
 @dataclass
