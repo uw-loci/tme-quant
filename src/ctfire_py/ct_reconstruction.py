@@ -5,8 +5,6 @@ import math
 from scipy.stats import scoreatpercentile
 from pycurvelets.utils.math import round_mlab
 
-from curvelops import fdct2d_wrapper
-
 
 def ct_reconstruction(
     img, output_filename, coefficient_percentile, specific_scales, plot_flag=False
@@ -41,6 +39,14 @@ def ct_reconstruction(
     reconstructed_image : np.ndarray
         2D array of the reconstructed image with denoising and edge enhancement applied
     """
+    try:
+        from curvelops import fdct2d_wrapper
+    except ImportError as e:
+        raise ImportError(
+            "curvelops is required for ct_reconstruction. "
+            "Install it with: pip install 'tme-quant[curvelops]'"
+        ) from e
+
     # Derive a safe output filename for the optional plot save.
     # Prefix with "CTRimg_" and force a .tif extension so the saved figure
     # never shares a name with the source image (which would overwrite it).
