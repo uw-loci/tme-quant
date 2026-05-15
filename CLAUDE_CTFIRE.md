@@ -6,6 +6,10 @@ Critical conventions and hard-won lessons for working on `src/ctfire_py/`.
 
 ## Vertex Index Convention
 
+**Policy: the entire codebase uses 0-based vertex indices. No module should subtract 1
+before indexing into X, R, or V. If an upstream stage appears to output 1-based indices,
+fix that stage — do not patch the callers.**
+
 **Vertex `v` is stored at `X[v]` — direct 0-based numpy index, no subtraction.**
 
 The C++ backend (`extend_xlink_native`, `fiberproc_native`) uses 0-based vertex indices throughout, exactly matching numpy array positions. `extend_xlink` outputs vertices starting from index 0 with `min_v=0`.
@@ -21,12 +25,10 @@ After the Python `trimxfv` compacts the array, new indices are also 0-based (pos
 | `fiber_processing/fiber2beam.py` | new vertex start = `N_verts` (not `N_verts + 1`) |
 | `test_fire_2d.py::plot_fiber_overlay` | `X_arr[v0]` (no `- 1`) |
 
-### Modules with a pre-existing off-by-one (not yet fixed)
+### All modules now use correct 0-based indexing (as of b5f81f3)
 
-These modules subtract 1 before indexing — they were written assuming 1-based indices and have worked only because vertex 0 is a phantom in the `process_fibers` output. They affect statistics and angle calculations, not the overlay:
-
-- `fiber_analysis/network_stats.py` — `v1_idx = v1 - 1`
-- `fiber_analysis/fiber_angles.py` — `v1 = fv[0] - 1`
+Every module that reads vertex coordinates from X, R, or V uses direct 0-based access —
+no `v - 1` offsets remain anywhere. See the incident record below.
 
 ---
 
@@ -67,6 +69,45 @@ curvealign_filter → trimxfv →  Xf/Ff  (0-based, final filtered set)
 ```
 
 `Xf`/`Ff` are the correct inputs for the fiber overlay.
+
+---
+
+## Incident Record: The 91b7218 Wrong-Direction Fix
+
+### What happened
+
+Commit 91b7218 observed that six downstream modules were crashing or producing wrong
+coordinates. The diagnosis was that `trimxfv` was outputting 1-based indices. Instead of
+fixing trimxfv, the commit added `v - 1` before every array lookup in all six modules:
+`fiber_angles.py`, `fiber_stats.py`, `network_stats.py`, `beamproc.py`,
+`curvealign_filter.py`, `fiber2beam.py`.
+
+Commit f1191cf (same day, later) correctly fixed trimxfv (the actual source of the
+wrong indices) and simultaneously removed the `v - 1` patch from two of those six files
+(`curvealign_filter.py` and `fiber2beam.py`). The other four files were not cleaned up
+at that time, leaving them with an incorrect `-1` offset relative to the now-fixed pipeline.
+
+Commit b5f81f3 (Dong Woo Lee, next day) completed the cleanup by removing the remaining
+`v - 1` offsets from the other four files. The pipeline is now fully 0-based.
+
+### Why this should not have happened
+
+The six-file patch in 91b7218 adapted callers to a broken upstream instead of fixing the
+source. Any time a pipeline stage outputs unexpected index values, the correct response is
+to fix that stage — not to add offset arithmetic in downstream callers. Patching callers
+instead of the source:
+
+- hides the true bug behind compensating hacks
+- creates a mixed state where some callers expect corrected behavior and others expect broken behavior
+- requires a second cleanup pass (b5f81f3) after the real fix (f1191cf)
+
+### Rule for future changes
+
+Before adding `v - 1` (or any index offset) to array lookups:
+
+1. Verify what the upstream stage actually outputs — read its code, not its commit message.
+2. If the upstream is wrong, fix it there.
+3. Do not add compensating offsets in downstream callers.
 
 ---
 
