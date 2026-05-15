@@ -118,6 +118,8 @@ def process_image(
     fiber_mode = fiber_params.fiber_mode
     keep = fiber_params.keep
     fire_directory = fiber_params.fire_directory
+    image_path = fiber_params.image_path
+    ctfire_params = fiber_params.ctfire_params
 
     output_directory = output_params.output_directory
     make_associations = output_params.make_associations
@@ -188,10 +190,16 @@ def process_image(
         )
     else:
         print("Reading CT-FIRE database.")
-        # Call getFIRE
-        # Add slice name used in CT-FIRE output
+        # Call getFIRE — runs ct_fire() then converts output to DataFrame
         fiber_structure, density_df, alignment_df = get_fire(
-            img_name_plain, fire_directory, fiber_mode, feature_cp
+            img_name_plain,
+            fire_directory,
+            fiber_mode,
+            feature_cp,
+            image_path=image_path,
+            ctfire_params=ctfire_params,
+            img=img,
+            show_plots=make_overlay,
         )
     t_fiber_end = time.perf_counter()
     print(f"⏱️  Fiber extraction took: {t_fiber_end - t_fiber_start:.2f}s")
@@ -1155,9 +1163,17 @@ def generate_overlay(
     else:  # fiber_mode 2 or 3
         fiber_len = 10  # CT-FIRE minimum fiber length
 
+    # Normalize image to [0, 1] for display — float32 images in [0, 255] are
+    # clipped to white by Matplotlib without this step, making the background
+    # invisible and fiber positions impossible to verify.
+    img_display = np.asarray(img, dtype=np.float32)
+    _imin, _imax = img_display.min(), img_display.max()
+    if _imax > _imin:
+        img_display = (img_display - _imin) / (_imax - _imin)
+
     # Create figure
     fig, ax = plt.subplots(figsize=(img.shape[1] / 100, img.shape[0] / 100), dpi=100)
-    ax.imshow(img, cmap="gray")
+    ax.imshow(img_display, cmap="gray")
     ax.axis("off")
 
     # Plot boundaries if present
