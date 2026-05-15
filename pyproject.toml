@@ -52,3 +52,6 @@ napari_curvealign = ["napari.yaml"]
 testpaths = [
   "tests",
 ]
+markers = [
+  "matlab: tests requiring MATLAB reference .mat files (skip if absent)",
+]
