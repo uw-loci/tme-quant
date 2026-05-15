@@ -127,8 +127,10 @@ def network_statK(
     else:
         M['angle_xz'] = np.zeros(len(x1))
     
+    # Python X is [row, col] = [y, x]; MATLAB X is [x, y].
+    # MATLAB: atan(Δy/Δx) = atan(Δrow/Δcol) → numerator is index 0, denominator index 1.
     M['angle_xy'] = np.arctan(
-        (x2[:, 1] - x1[:, 1]) / (x2[:, 0] - x1[:, 0] + eps)
+        (x2[:, 0] - x1[:, 0]) / (x2[:, 1] - x1[:, 1] + eps)
     )
     
     # Calculate coordination number

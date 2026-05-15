@@ -48,22 +48,22 @@ def calc_fiberlen(
         
         if len(vertices) < 2:
             L[fi] = 0.0
-            RF[fi] = 0.0 if len(vertices) == 0 else R[vertices[0] - 1]
+            RF[fi] = 0.0 if len(vertices) == 0 else R[vertices[0]]
             continue
-        
+
         # Calculate length as sum of segment lengths
         length = 0.0
         for i in range(len(vertices) - 1):
-            v1_idx = vertices[i] - 1  # Convert to 0-based
-            v2_idx = vertices[i + 1] - 1
-            
+            v1_idx = vertices[i]      # already 0-based
+            v2_idx = vertices[i + 1]
+
             segment_length = np.linalg.norm(X[v2_idx] - X[v1_idx])
             length += segment_length
-        
+
         L[fi] = length
-        
+
         # Calculate average radius for this fiber
-        fiber_radii = [R[v - 1] for v in vertices]
+        fiber_radii = [R[v] for v in vertices]
         RF[fi] = np.mean(fiber_radii)
         
         # Add length to fiber structure
