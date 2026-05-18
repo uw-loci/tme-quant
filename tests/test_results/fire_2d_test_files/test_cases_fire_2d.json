@@ -2,15 +2,15 @@
   "description": "Test cases for fire_2D_ang1 Python implementation vs MATLAB reference",
   "test_cases": [
     {
-      "name": "2B_D9_ROI1_default_params",
-      "image": "2B_D9_ROI1.tif",
-      "description": "Standard test image with default ctFIRE parameters",
+      "name": "syn1_20fibers_th98_params",
+      "image": "syn1_20fibers.png",
+      "description": "Standard syn1 image with  background threshold of 98",
       "params": {
         "sigma_im": 0,
         "sigma_d": 0.3,
         "dtype": "cityblock",
         "thresh_im": [],
-        "thresh_im2": 5,
+        "thresh_im2": 98,
         "thresh_Dxlink": 1.5,
         "s_xlinkbox": 8,
         "thresh_LMP": 0.2,
@@ -41,18 +41,18 @@
         "max_avg_length": 150,
         "note": "High fiber count expected: Python bypasses check_danglers (see CTFIRE_CONVERSION.md)"
       },
-      "matlab_reference_mat": "test_fire_2d_2B_D9_ROI1_default.mat"
+      "matlab_reference_mat": "test_fire_2d_syn1_20fibers_th98.mat"
     },
     {
-      "name": "2B_D9_ROI1_high_threshold",
-      "image": "2B_D9_ROI1.tif",
-      "description": "Test with higher threshold to reduce fiber count",
+      "name": "syn2_35fibers_th98_params",
+      "image": "syn2_35fibers.png",
+      "description": "Standard syn2 image with background threshold of 98",
       "params": {
         "sigma_im": 0,
         "sigma_d": 0.3,
         "dtype": "cityblock",
         "thresh_im": [],
-        "thresh_im2": 10,
+        "thresh_im2": 98,
         "thresh_Dxlink": 2.0,
         "s_xlinkbox": 8,
         "thresh_LMP": 0.3,
@@ -83,10 +83,10 @@
         "max_avg_length": 150,
         "note": "High fiber count expected: Python bypasses check_danglers"
       },
-      "matlab_reference_mat": "test_fire_2d_2B_D9_ROI1_high_threshold.mat"
+      "matlab_reference_mat": "test_fire_2d_syn2_35fibers_th98.mat"
     },
     {
-      "name": "real1_ctfire_params",
+      "name": "real1_fire_params",
       "image": "real1.tif",
       "description": "Test with real1 image used in curvelet tests",
       "params": {
