@@ -136,3 +136,49 @@ Before adding `v - 1` (or any index offset) to array lookups:
 ## Parameters
 
 `thresh_im2=5` gives dense extraction (142 filtered fibers for real1.tif). `thresh_im2=50` is more selective (~25–73 fibers). Very low thresholds include background noise as fiber-like structures.
+
+---
+
+## Running the GUI (`tests/example_process_image.py`) from WSL
+
+### Problem: cv2 import fails with missing `g_pointer_bit_unlock_and_set`
+
+`opencv 4.10.0` (conda-forge Qt5 build) loads `libgobject` at runtime. When
+`LD_LIBRARY_PATH` is empty the system's older `libgobject` (`/usr/lib/x86_64-linux-gnu/`)
+loads first and lacks the glib 2.79+ symbol. The conda env has glib 2.82.2 which provides
+it, but it is never reached.
+
+**Root cause**: `conda activate` in `bash -c` (non-interactive, no TTY) with conda 23.5.2
+does **not** source `activate.d/env_vars.sh`, so `LD_LIBRARY_PATH` is never set.
+
+### Fix
+
+Export `LD_LIBRARY_PATH` explicitly before calling python:
+
+```bash
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate curvelops03a
+export LD_LIBRARY_PATH=/home/yuming/miniconda3/envs/curvelops03a/lib
+cd /mnt/h/GitHub.06.2022/tmequant_ctfire/tme-quant
+python tests/example_process_image.py
+```
+
+### Qt GUI requires a real display
+
+The script opens a `QMainWindow`. It **must** be run directly in a WSL terminal (with
+WSLg providing `DISPLAY`). Running via `wsl -e bash -c "..."` from PowerShell has no
+display and the process exits silently with code 1.
+
+### Correct workflow
+
+1. Open a WSL terminal (e.g. Windows Terminal → Ubuntu tab, or wt with WSL profile).
+2. Run the four commands above.
+3. The GUI window opens. Set **Background Threshold (thresh_im2)** in the "CT-FIRE
+   Parameters" group; default is `5` (fluorescence), use `98` for bright-field images.
+
+### `run_example()` (non-GUI headless path)
+
+`run_example()` inside the script uses `thresh_im2=98` by default (hardcoded). To invoke
+it without the GUI, comment out `app.exec()` and call `run_example()` directly, or run
+from a headless environment where `QApplication` can still be constructed (e.g., with
+`QT_QPA_PLATFORM=offscreen`).

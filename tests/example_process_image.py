@@ -1,3 +1,4 @@
+import copy
 import os
 import sys
 import tempfile
@@ -116,6 +117,7 @@ except ImportError:
 
             QT_VERSION = 5
 
+from pycurvelets.get_fire import DEFAULT_CTFIRE_PARAMS
 from pycurvelets.process_image import process_image
 from pycurvelets.models import (
     AdvancedAnalysisOptions,
@@ -498,6 +500,14 @@ class ProcessImageGUI(QMainWindow):
         self.fiber_midpoint_estimate.setRange(0, 1)
         self.fiber_midpoint_estimate.setValue(1)
 
+        # CT-FIRE parameters
+        self.thresh_im2 = QSpinBox()
+        self.thresh_im2.setRange(0, 255)
+        self.thresh_im2.setValue(5)
+        self.thresh_im2.setToolTip(
+            "Background intensity threshold for fiber tracing (default 5; use ~98 for bright-field images)"
+        )
+
     def create_widgets(self):
         """Create all GUI widgets."""
         # Create central widget and main layout
@@ -603,6 +613,14 @@ class ProcessImageGUI(QMainWindow):
         layout6.addWidget(self.fiber_midpoint_estimate, 8, 1)
         group6.setLayout(layout6)
         scroll_layout.addWidget(group6)
+
+        # === CT-FIRE Parameters ===
+        group7 = QGroupBox("CT-FIRE Parameters")
+        layout7 = QGridLayout()
+        layout7.addWidget(QLabel("Background Threshold (thresh_im2):"), 0, 0)
+        layout7.addWidget(self.thresh_im2, 0, 1)
+        group7.setLayout(layout7)
+        scroll_layout.addWidget(group7)
 
         # === Action Buttons ===
         button_layout = QHBoxLayout()
@@ -737,6 +755,7 @@ class ProcessImageGUI(QMainWindow):
         self.minimum_nearest_fibers.setValue(2)
         self.minimum_box_size.setValue(32)
         self.fiber_midpoint_estimate.setValue(1)
+        self.thresh_im2.setValue(5)
         QMessageBox.information(
             self, "Defaults Loaded", "Default parameters have been restored."
         )
@@ -785,12 +804,16 @@ class ProcessImageGUI(QMainWindow):
                 num_sections=self.num_sections.value(),
             )
 
+            ctfire_params = copy.deepcopy(DEFAULT_CTFIRE_PARAMS)
+            ctfire_params["value"]["thresh_im2"] = self.thresh_im2.value()
+
             fiber_params = FiberAnalysisParameters(
                 fiber_mode=self.fiber_mode.currentIndex(),
                 keep=self.keep.value(),
                 fire_directory=(
                     self.fire_directory.text() if self.fire_directory.text() else None
                 ),
+                ctfire_params=ctfire_params,
             )
 
             output_params = OutputControlParameters(
@@ -1009,10 +1032,14 @@ def main_cli():
         num_sections=1,
     )
 
+    ctfire_params = copy.deepcopy(DEFAULT_CTFIRE_PARAMS)
+    ctfire_params["value"]["thresh_im2"] = 98
+
     fiber_params = FiberAnalysisParameters(
         fiber_mode=0,  # 0=curvelet, 1/2/3=FIRE variants
         keep=0.1,  # Fraction of curvelets to keep
         fire_directory=None,  # None to use curvelet mode
+        ctfire_params=ctfire_params,
     )
 
     output_params = OutputControlParameters(
