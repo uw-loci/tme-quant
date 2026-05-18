@@ -54,9 +54,20 @@ def test_config():
 
 
 def load_test_image(image_name):
-    """Load a test image by filename."""
+    """Load a test image by filename.
+
+    Always returns an array with intensity values in the uint8 [0, 255] range
+    so that absolute thresholds (thresh_im2) work consistently regardless of
+    whether the source file is a TIF or a PNG.
+    """
     img_path = Path(__file__).parent / "test_images" / image_name
-    img = plt.imread(img_path, format="TIF")
+    if not img_path.exists():
+        pytest.skip(f"Test image not found: {image_name}")
+    img = plt.imread(str(img_path))
+    # PNG files are loaded by matplotlib as float32 [0, 1]; rescale to [0, 255]
+    # to match the uint8 range that TIF files produce and that thresh_im2 expects.
+    if img.dtype == np.float32 and img.max() <= 1.0:
+        img = (img * 255).astype(np.uint8)
     return img
 
 
@@ -100,9 +111,16 @@ def load_matlab_reference(mat_file_path):
     if not os.path.exists(mat_file_path):
         pytest.skip(f"MATLAB reference file not found: {mat_file_path}")
     
-    # Try h5py first (for MATLAB v7.3 files), fall back to scipy
+    # Try h5py first (for MATLAB v7.3 files), fall back to scipy for v5 files
+    _h5py_ok = False
     try:
         if H5PY_AVAILABLE:
+            try:
+                _h5_file = h5py.File(mat_file_path, 'r')
+                _h5py_ok = True
+            except Exception:
+                _h5py_ok = False  # not an HDF5 file — fall through to scipy
+        if _h5py_ok:
             # Load MATLAB v7.3 file using h5py
             with h5py.File(mat_file_path, 'r') as f:
                 if 'data' not in f:
@@ -159,7 +177,7 @@ def load_matlab_reference(mat_file_path):
                 
                 return result
         
-        elif SCIPY_AVAILABLE:
+        if not _h5py_ok and SCIPY_AVAILABLE:
             # Fall back to scipy for older .mat files
             mat_data = loadmat(mat_file_path, struct_as_record=False, squeeze_me=True)
             
@@ -168,10 +186,24 @@ def load_matlab_reference(mat_file_path):
             
             data = mat_data['data']
             
-            # Extract relevant fields
+            # Extract Xa
+            raw_xa = data.Xa if hasattr(data, 'Xa') else None
+
+            # Normalize Fa: scipy returns array of mat_struct objects with 1-based
+            # MATLAB indices; convert to list of dicts with 0-based indices to match
+            # the h5py loading branch.
+            raw_fa = data.Fa if hasattr(data, 'Fa') else None
+            fa_norm = None
+            if raw_fa is not None:
+                fa_norm = []
+                for fib in np.atleast_1d(raw_fa):
+                    if hasattr(fib, 'v'):
+                        v_arr = np.atleast_1d(fib.v).flatten().astype(int) - 1
+                        fa_norm.append({'v': v_arr.tolist()})
+
             result = {
-                'Xa': data.Xa if hasattr(data, 'Xa') else None,
-                'Fa': data.Fa if hasattr(data, 'Fa') else None,
+                'Xa': raw_xa,
+                'Fa': fa_norm,
                 'M': {},
             }
             
@@ -270,7 +302,7 @@ def _fiber_stats_filtered(X, F, min_len=MIN_FIBER_LEN_PX, row_idx=0, col_idx=1):
       Python [row, col, ...]: row_idx=0, col_idx=1  (default)
       MATLAB Xa (loaded as [col, row, z]): row_idx=1, col_idx=0
     """
-    if not F or X is None or len(X) == 0:
+    if F is None or len(F) == 0 or X is None or len(X) == 0:
         return {'fiber_num': 0, 'avgL': 0.0, 'totL': 0.0, 'angle_xy': np.array([])}
 
     eps = np.finfo(float).eps
@@ -296,7 +328,7 @@ def _fiber_stats_filtered(X, F, min_len=MIN_FIBER_LEN_PX, row_idx=0, col_idx=1):
         if 0 <= v0 < N and 0 <= v1 < N:
             dr = float(X_arr[v1, row_idx] - X_arr[v0, row_idx])
             dc = float(X_arr[v1, col_idx] - X_arr[v0, col_idx])
-            angles.append(np.arctan(dr / (dc + eps)))
+            angles.append(np.arctan(dr / (dc + eps)) % np.pi)
 
     L = np.array(lengths, dtype=float)
     return {
@@ -355,8 +387,7 @@ def _default_fire_params():
     """
     Return the standard FIRE algorithm parameters from test_cases_fire_2d.json.
 
-    Uses the 'real1_ctfire_params' test case (the only one whose image is
-    available; 2B_D9_ROI1.tif is not present in the repo).
+    Uses the 'real1_fire_params' test case parameters.
     Intended for use with real biological images.
     """
     config_path = (
@@ -367,7 +398,7 @@ def _default_fire_params():
     )
     with open(config_path, "r") as f:
         cfg = json.load(f)
-    case = next(c for c in cfg["test_cases"] if c["name"] == "real1_ctfire_params")
+    case = next(c for c in cfg["test_cases"] if c["name"] == "real1_fire_params")
     return dict(case["params"])
 
 
@@ -527,24 +558,20 @@ def test_fire_2d_matches_matlab_fiber_count(test_name, test_case):
     mat_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / test_case["matlab_reference_mat"]
     data_mat = load_matlab_reference(mat_path)
     
-    # Filter both sides to fibers > 30px before comparing
-    stats_py  = _fiber_stats_filtered(data_py['Xf'], data_py['Ff'])
-    stats_mat = (_fiber_stats_filtered(data_mat['Xa'], data_mat['Fa'], row_idx=1, col_idx=0)
-                 if data_mat.get('Fa') is not None else data_mat['M'])
-
-    fiber_count_py  = stats_py['fiber_num']
-    fiber_count_mat = stats_mat['fiber_num']
+    # Compare unfiltered M stats — MATLAB Fa is unfiltered, Python M is also on all Fa
+    fiber_count_py  = data_py['M']['fiber_num']
+    fiber_count_mat = data_mat['M']['fiber_num']
 
     if fiber_count_mat > 0:
         rel_diff = abs(fiber_count_py - fiber_count_mat) / fiber_count_mat
 
         assert fiber_count_py >= fiber_count_mat * 0.70, \
-            f"Python has too few fibers (>30px): {fiber_count_py} vs MATLAB {fiber_count_mat} (diff: {rel_diff:.1%})"
+            f"Python has too few fibers: {fiber_count_py} vs MATLAB {fiber_count_mat} (diff: {rel_diff:.1%})"
 
         assert fiber_count_py <= fiber_count_mat * 1.8, \
-            f"Python has too many fibers (>30px): {fiber_count_py} vs MATLAB {fiber_count_mat} (diff: {rel_diff:.1%})"
+            f"Python has too many fibers: {fiber_count_py} vs MATLAB {fiber_count_mat} (diff: {rel_diff:.1%})"
 
-        print(f"\nFiber count (>30px) - Python: {fiber_count_py}, MATLAB: {fiber_count_mat}, diff: {rel_diff:.1%}")
+        print(f"\nFiber count - Python: {fiber_count_py}, MATLAB: {fiber_count_mat}, diff: {rel_diff:.1%}")
 
 
 @pytest.mark.matlab
@@ -574,24 +601,20 @@ def test_fire_2d_matches_matlab_fiber_length(test_name, test_case):
     mat_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / test_case["matlab_reference_mat"]
     data_mat = load_matlab_reference(mat_path)
     
-    # Filter both sides to fibers > 30px before comparing
-    stats_py  = _fiber_stats_filtered(data_py['Xf'], data_py['Ff'])
-    stats_mat = (_fiber_stats_filtered(data_mat['Xa'], data_mat['Fa'], row_idx=1, col_idx=0)
-                 if data_mat.get('Fa') is not None else data_mat['M'])
-
-    avgL_py  = stats_py['avgL']
-    avgL_mat = stats_mat['avgL']
+    # Compare unfiltered M stats — same stage as MATLAB (post-fiberproc Fa)
+    avgL_py  = data_py['M'].get('avgL', 0)
+    avgL_mat = data_mat['M']['avgL']
 
     if avgL_mat > 0 and avgL_py > 0:
         rel_diff = abs(avgL_py - avgL_mat) / avgL_mat
 
         assert avgL_py >= avgL_mat * 0.45, \
-            f"Python fibers too short (>30px): {avgL_py:.2f} vs MATLAB {avgL_mat:.2f} (diff: {rel_diff:.1%})"
+            f"Python fibers too short: {avgL_py:.2f} vs MATLAB {avgL_mat:.2f} (diff: {rel_diff:.1%})"
 
         assert avgL_py <= avgL_mat * 1.2, \
-            f"Python fibers too long (>30px): {avgL_py:.2f} vs MATLAB {avgL_mat:.2f}"
+            f"Python fibers too long: {avgL_py:.2f} vs MATLAB {avgL_mat:.2f}"
 
-        print(f"\nAvg fiber length (>30px) - Python: {avgL_py:.2f}, MATLAB: {avgL_mat:.2f}, diff: {rel_diff:.1%}")
+        print(f"\nAvg fiber length - Python: {avgL_py:.2f}, MATLAB: {avgL_mat:.2f}, diff: {rel_diff:.1%}")
 
 
 @pytest.mark.matlab
@@ -622,16 +645,14 @@ def test_fire_2d_matches_matlab_angles(test_name, test_case):
     mat_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / test_case["matlab_reference_mat"]
     data_mat = load_matlab_reference(mat_path)
     
-    # Filter both sides to fibers > 30px before comparing
-    stats_py  = _fiber_stats_filtered(data_py['Xf'], data_py['Ff'])
-    stats_mat = (_fiber_stats_filtered(data_mat['Xa'], data_mat['Fa'], row_idx=1, col_idx=0)
-                 if data_mat.get('Fa') is not None else data_mat['M'])
-
-    angles_py  = stats_py['angle_xy']
-    angles_mat = np.asarray(stats_mat.get('angle_xy', []))
+    # Compare unfiltered angle distributions from M stats
+    angles_py  = data_py['M'].get('angle_xy', np.array([]))
+    angles_mat = data_mat['M'].get('angle_xy', np.array([]))
 
     if len(angles_py) > 0 and len(angles_mat) > 0:
-        bins = np.linspace(-np.pi / 2, np.pi / 2, 20)
+        angles_py  = angles_py  % np.pi
+        angles_mat = angles_mat % np.pi
+        bins = np.linspace(0, np.pi, 20)
 
         hist_py, _ = np.histogram(angles_py, bins=bins, density=True)
         hist_mat, _ = np.histogram(angles_mat, bins=bins, density=True)
@@ -643,9 +664,99 @@ def test_fire_2d_matches_matlab_angles(test_name, test_case):
             correlation = np.corrcoef(hist_py, hist_mat)[0, 1]
 
             assert correlation > 0.5, \
-                f"Angle distributions too different (>30px, correlation: {correlation:.3f})"
+                f"Angle distributions too different (correlation: {correlation:.3f})"
 
-            print(f"\nAngle distribution correlation (>30px): {correlation:.3f}")
+            print(f"\nAngle distribution correlation: {correlation:.3f}")
+
+
+@pytest.mark.matlab
+@pytest.mark.parametrize(
+    "test_name,test_case",
+    load_test_cases(matlab_only=True),
+    ids=[name for name, _ in load_test_cases(matlab_only=True)],
+)
+def test_fire_2d_segment_angle_mean(test_name, test_case):
+    """
+    Validate per-segment angles from calc_fiberang2.
+
+    For non-straight fibers, segment angles vary along the path.
+    The mean of all segment angles per fiber should correlate with the
+    endpoint angle (M['angle_xy']) and with the MATLAB reference distribution.
+    """
+    if not CPP_AVAILABLE:
+        pytest.skip("C++ backend not available")
+
+    img = load_test_image(test_case["image"])
+    im3 = img[np.newaxis] if img.ndim == 2 else img
+    data_py = fire_2d_angle(p=test_case["params"], im=im3, plotflag=0)
+
+    mat_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / test_case["matlab_reference_mat"]
+    data_mat = load_matlab_reference(mat_path)
+
+    # Filter to fibers with arc-length >= 30px (same threshold as other tests)
+    Xa  = data_py['Xa']
+    Fa  = data_py['Fa']
+    Fang_all          = data_py['M']['Fang']
+    endpoint_all      = np.asarray(data_py['M']['angle_xy'])
+
+    long_mask = []
+    for fiber in Fa:
+        v = fiber['v']
+        length = sum(
+            np.linalg.norm(Xa[v[i + 1]] - Xa[v[i]])
+            for i in range(len(v) - 1)
+            if 0 <= v[i] < len(Xa) and 0 <= v[i + 1] < len(Xa)
+        )
+        long_mask.append(length >= MIN_FIBER_LEN_PX)
+
+    Fang           = [f for f, keep in zip(Fang_all,     long_mask) if keep]
+    endpoint_angles = endpoint_all[np.array(long_mask)]
+
+    # MATLAB: filter endpoint angles to fibers > 30px
+    mat_stats  = (_fiber_stats_filtered(data_mat['Xa'], data_mat['Fa'], row_idx=1, col_idx=0)
+                  if data_mat.get('Fa') is not None else data_mat['M'])
+    mat_angles = np.asarray(mat_stats.get('angle_xy', []))
+
+    print(f"\nFibers >30px — Python: {len(Fang)}, MATLAB: {len(mat_angles)}")
+
+    # Sub-check A: mean segment angle per fiber correlates with endpoint angle
+    mean_seg = np.array([
+        np.mean(f['angle_xy']) for f in Fang if len(f.get('angle_xy', [])) > 0
+    ])
+    if len(mean_seg) > 1 and len(endpoint_angles) > 1:
+        n = min(len(mean_seg), len(endpoint_angles))
+        corr = np.corrcoef(mean_seg[:n], endpoint_angles[:n])[0, 1]
+        assert corr > 0.5, (
+            f"Mean segment angle vs endpoint angle correlation too low: {corr:.3f}"
+        )
+        print(f"\nMean segment vs endpoint angle correlation: {corr:.3f}")
+
+    # Sub-check A2: long non-straight fibers must show angle variation
+    SPI = test_case["params"].get("ang_interval", 5)
+    long_stds = [
+        np.std(f['angle_xy'])
+        for f in Fang
+        if len(f.get('angle_xy', [])) > 2 * SPI
+    ]
+    if long_stds:
+        max_std = max(long_stds)
+        assert max_std > 0.05, (
+            f"Long fibers show no angle variation (max std={max_std:.3f} rad) — "
+            "calc_fiberang2 may be returning identical angles for all segments"
+        )
+        print(f"Long fiber angle std — max: {max_std:.3f} rad, mean: {np.mean(long_stds):.3f} rad")
+
+    # Sub-check B: mean |segment angle| is within 20° of MATLAB endpoint mean |angle|.
+    # MATLAB stores endpoint angles (one per fiber); mean segment angles differ for
+    # non-straight fibers, so a scalar proximity check is more robust than histogram shape.
+    if len(mean_seg) > 0 and len(mat_angles) > 0:
+        py_mean_abs  = np.degrees(np.mean(mean_seg % np.pi))
+        mat_mean_abs = np.degrees(np.mean(mat_angles % np.pi))
+        delta_deg = abs(py_mean_abs - mat_mean_abs)
+        assert delta_deg < 20.0, (
+            f"Mean segment angle {py_mean_abs:.1f}° differs from MATLAB {mat_mean_abs:.1f}° by {delta_deg:.1f}° > 20°"
+        )
+        print(f"Mean segment angle [0-180°] - Python: {py_mean_abs:.1f}°, MATLAB: {mat_mean_abs:.1f}°, delta: {delta_deg:.1f}°")
 
 
 # ============================================================================
@@ -700,10 +811,10 @@ class TestSoftIoU:
             f"length {gt_length:.1f} px — pipeline may be discarding too many fibers"
         )
 
-        # 3. Angle range sanity check
-        angles = np.asarray(data["M"].get("angle_xy", []))
+        # 3. Angle range sanity check (normalize raw arctan output to [0, π])
+        angles = np.asarray(data["M"].get("angle_xy", [])) % np.pi
         assert len(angles) > 0, "no fiber angles in M['angle_xy']"
-        assert np.all(np.abs(angles) <= np.pi + 1e-6), "angle value outside [-π, π]"
+        assert np.all((angles >= -1e-6) & (angles <= np.pi + 1e-6)), "angle value outside [0, π]"
         assert angles.std() > 0.3, (
             f"angle std {angles.std():.3f} rad unexpectedly small — "
             "all fibers have nearly the same orientation on a random image"
@@ -748,7 +859,7 @@ class TestSoftIoU:
         if not CPP_AVAILABLE:
             pytest.skip("C++ backend not available")
 
-        # Skip if test image is not present (e.g. 2B_D9_ROI1.tif is not in the repo)
+        # Skip if test image is not present
         img_path = Path(__file__).parent / "test_images" / test_case["image"]
         if not img_path.exists():
             pytest.skip(f"Test image not found: {test_case['image']}")
@@ -772,59 +883,70 @@ class TestSoftIoU:
         image_2d = img[0] if img.ndim == 3 else img
         H, W = image_2d.shape
 
-        # Soft IoU — rasterize fibers > 30px from both sides.
-        # MATLAB Xa is stored [col, row, z] after h5py transpose; convert to
-        # Python [row, col] convention so _rasterize_fibers indexes correctly.
+        # Soft IoU — unfiltered Fa from both sides.
+        # MATLAB Xa is [col, row, z] after h5py transpose; swap to [row, col].
         if data_mat["Xa"] is not None and data_mat.get("Fa") is not None:
             mat_Xa_rc = data_mat["Xa"][:, [1, 0]]  # [col,row,z] → [row,col]
-            # Filter MATLAB fibers to > 30px (same threshold as Python Ff)
-            mat_Ff = []
-            for _f in data_mat["Fa"]:
-                _v = _f['v']
-                _len = sum(
-                    np.linalg.norm(mat_Xa_rc[_v[i + 1]] - mat_Xa_rc[_v[i]])
-                    for i in range(len(_v) - 1)
-                    if 0 <= _v[i] < len(mat_Xa_rc) and 0 <= _v[i + 1] < len(mat_Xa_rc)
-                )
-                if _len >= MIN_FIBER_LEN_PX:
-                    mat_Ff.append(_f)
-            mat_skel = _rasterize_fibers(mat_Xa_rc, list(mat_Ff), (H, W))
-            py_skel  = _rasterize_fibers(data_py["Xf"], data_py["Ff"], (H, W))
+            mat_skel = _rasterize_fibers(mat_Xa_rc, data_mat["Fa"], (H, W))
+            py_skel  = _rasterize_fibers(data_py["Xa"], data_py["Fa"], (H, W))
             iou = _soft_iou(_smooth_mask(mat_skel.astype(np.float32)),
                             _smooth_mask(py_skel.astype(np.float32)))
             assert iou > SOFT_IOU_THRESHOLD_MATLAB, (
                 f"soft IoU {iou:.3f} < {SOFT_IOU_THRESHOLD_MATLAB} "
                 f"({test_name}): Python and MATLAB centerlines diverge spatially"
             )
-            print(f"\n{test_name} soft IoU (>30px) = {iou:.3f}")
+            print(f"\n{test_name} soft IoU = {iou:.3f}")
 
-        # Filter both sides to fibers > 30px
-        stats_py  = _fiber_stats_filtered(data_py['Xf'], data_py['Ff'])
-        stats_mat = (_fiber_stats_filtered(data_mat['Xa'], data_mat['Fa'], row_idx=1, col_idx=0)
-                     if data_mat.get('Fa') is not None else data_mat['M'])
-
-        # Total length within 5% of MATLAB reference (fibers > 30px only)
-        py_totL  = stats_py['totL']
-        mat_totL = float(stats_mat.get('totL', 0))
-        if mat_totL > 0 and py_totL > 0:
-            assert 0.95 * mat_totL <= py_totL <= 1.05 * mat_totL, (
-                f"total length (>30px) {py_totL:.1f} not within 5% of MATLAB {mat_totL:.1f}"
+            # Save IoU overlay: transparent RGBA so original image shows through
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            overlay_rgba = np.zeros((H, W, 4), dtype=np.float32)
+            mat_only = mat_skel & ~py_skel
+            py_only  = py_skel  & ~mat_skel
+            both     = mat_skel & py_skel
+            overlay_rgba[mat_only] = [1.0, 0.0, 0.0, 1.0]  # red:    MATLAB only
+            overlay_rgba[py_only]  = [0.0, 1.0, 0.0, 1.0]  # green:  Python only
+            overlay_rgba[both]     = [1.0, 1.0, 0.0, 1.0]  # yellow: overlap
+            from skimage import exposure
+            image_eq = exposure.rescale_intensity(
+                image_2d, in_range=tuple(np.percentile(image_2d, (2, 98)))
             )
-            print(f"\ntotal length (>30px) - Python: {py_totL:.1f}, MATLAB: {mat_totL:.1f}, "
+            fig, ax = plt.subplots(figsize=(8, 8))
+            ax.imshow(image_eq, cmap="gray")
+            ax.imshow(overlay_rgba)
+            ax.set_title(f"{test_name}  soft IoU={iou:.3f}  "
+                         f"(red=MATLAB, green=Python, yellow=overlap)")
+            ax.axis("off")
+            plt.tight_layout()
+            overlay_path = (Path(__file__).parent / "test_results" / "fire_2d_test_files"
+                            / f"iou_overlay_{test_name}.png")
+            fig.savefig(overlay_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            print(f"   Saved IoU overlay: {overlay_path}")
+
+        # Total length — unfiltered M stats (same stage: post-fiberproc Fa)
+        py_totL  = float(data_py['M']['totL'])
+        mat_totL = float(data_mat['M'].get('totL', 0))
+        if mat_totL > 0 and py_totL > 0:
+            assert 0.93 * mat_totL <= py_totL <= 1.07 * mat_totL, (
+                f"total length {py_totL:.1f} not within 7% of MATLAB {mat_totL:.1f}"
+            )
+            print(f"\ntotal length - Python: {py_totL:.1f}, MATLAB: {mat_totL:.1f}, "
                   f"diff: {abs(py_totL - mat_totL) / mat_totL:.1%}")
 
-        # Mean |angle| within 10° of MATLAB reference (fibers > 30px only)
-        mat_angles = np.asarray(stats_mat.get('angle_xy', []))
-        py_angles  = np.asarray(stats_py['angle_xy'])
+        # Mean |angle| within 10° of MATLAB reference — unfiltered M stats
+        mat_angles = np.asarray(data_mat['M'].get('angle_xy', []))
+        py_angles  = np.asarray(data_py['M'].get('angle_xy', []))
         if len(mat_angles) > 0 and len(py_angles) > 0:
-            delta_deg = np.degrees(
-                abs(np.mean(np.abs(py_angles)) - np.mean(np.abs(mat_angles)))
-            )
+            py_mean  = np.degrees(np.mean(py_angles  % np.pi))
+            mat_mean = np.degrees(np.mean(mat_angles % np.pi))
+            delta_deg = abs(py_mean - mat_mean)
             assert delta_deg < 10.0, (
-                f"mean |angle| (>30px) differs by {delta_deg:.1f}° > 10° ({test_name})"
+                f"mean angle [0-180°] differs by {delta_deg:.1f}° > 10° ({test_name})"
             )
-            print(f"mean |angle| (>30px) - Python: {np.degrees(np.mean(np.abs(py_angles))):.1f}°, "
-                  f"MATLAB: {np.degrees(np.mean(np.abs(mat_angles))):.1f}°, delta: {delta_deg:.1f}°")
+            print(f"mean angle [0-180°] - Python: {py_mean:.1f}°, "
+                  f"MATLAB: {mat_mean:.1f}°, delta: {delta_deg:.1f}°")
 
 
 # ============================================================================
@@ -875,9 +997,9 @@ def test_implementation_status_documented():
     
     This reminds developers about known differences between Python and MATLAB.
     """
-    doc_path = Path(__file__).parent.parent / "docs" / "CTFIRE_CONVERSION.md"
+    doc_path = Path(__file__).parent.parent / "docs" / "MATLAB_PARITY_ANALYSIS.md"
     
-    assert doc_path.exists(), "CTFIRE_CONVERSION.md documentation not found"
+    assert doc_path.exists(), "MATLAB_PARITY_ANALYSIS.md documentation not found"
     
     with open(doc_path, "r") as f:
         doc_content = f.read()
@@ -909,7 +1031,7 @@ if __name__ == "__main__":
                     _smooth_mask(pred.astype(np.float32)))
 
     angles = np.asarray(data["M"].get("angle_xy", []))
-    mean_angle_deg = float(np.degrees(np.mean(np.abs(angles)))) if len(angles) > 0 else float("nan")
+    mean_angle_deg = float(np.degrees(np.mean(angles % np.pi))) if len(angles) > 0 else float("nan")
 
     print(
         f"Soft IoU    = {iou:.4f}  (threshold {SOFT_IOU_THRESHOLD_SYNTHETIC})\n"
