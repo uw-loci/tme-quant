@@ -75,10 +75,11 @@ def calc_fiberang2(
             x1 = X[v1, :]
             x2 = X[v2, :]
             
-            # MATLAB: atan((x2(:,3)-x1(:,3)) ./ (x2(:,1)-x1(:,1)+eps))
-            angxz = _atan_ratio(x2[2] - x1[2], x2[0] - x1[0]) if X.shape[1] >= 3 else 0.0
-            angxy = _atan_ratio(x2[1] - x1[1], x2[0] - x1[0])
-            
+            # Python X is [row, col, z]; MATLAB X is [col, row, z].
+            # MATLAB: atan(Δy/Δx) = atan(Δrow/Δcol) → numerator index 0, denominator index 1.
+            angxz = _atan_ratio(x2[2] - x1[2], x2[1] - x1[1]) if X.shape[1] >= 3 else 0.0
+            angxy = _atan_ratio(x2[0] - x1[0], x2[1] - x1[1])
+
             # Replicate angle for all points
             fang['angle_xz'] = np.full(k, angxz)
             fang['angle_xy'] = np.full(k, angxy)
@@ -96,9 +97,9 @@ def calc_fiberang2(
                 x1 = X[v1, :]
                 x2 = X[v2, :]
                 
-                # MATLAB: atan((x2(:,3)-x1(:,3)) ./ (x2(:,1)-x1(:,1)+eps))
-                angxz = _atan_ratio(x2[2] - x1[2], x2[0] - x1[0]) if X.shape[1] >= 3 else 0.0
-                angxy = _atan_ratio(x2[1] - x1[1], x2[0] - x1[0])
+                # Python X is [row, col, z]; atan(Δrow/Δcol) matches MATLAB atan(Δy/Δx).
+                angxz = _atan_ratio(x2[2] - x1[2], x2[1] - x1[1]) if X.shape[1] >= 3 else 0.0
+                angxy = _atan_ratio(x2[0] - x1[0], x2[1] - x1[1])
                 
                 angle_xz.append(angxz)
                 angle_xy.append(angxy)

@@ -2,6 +2,8 @@
 Test script for FIRE 2D fiber extraction
 """
 
+import matplotlib
+matplotlib.use("Agg")  # headless: no display server required (WSL2)
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage.draw import line as draw_line

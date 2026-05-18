@@ -417,6 +417,7 @@ def fire_2d_angle(
     else:
         print("Remove danglers and shorties (Python corrected)")
     from ctfire_py.fiber_processing import check_danglers
+    faithful_danglers = True  # Set to True to match MATLAB's behavior (no actual removal)
     Xz2, Fz2, Vz2, Rz2 = check_danglers(
         Xz, Fz, Vz, Rz, p, faithful_matlab=faithful_danglers
     )
@@ -526,12 +527,11 @@ def fire_2d_angle(
     print("Applying CurveAlign-style quality filters")
     from ctfire_py.fiber_processing.curvealign_filter import curvealign_filter, print_fiber_statistics
     
-    # Apply filters with MATLAB-derived thresholds
-    min_length = p.get("min_fiber_length", 30.0)  # MATLAB LL1 parameter
-    min_straightness = p.get("min_straightness", 0.5)  # Straightness threshold
-    
+    # Apply length-only filter; straightness filter disabled
+    min_length = p.get("min_fiber_length", 30.0)
+
     print_fiber_statistics(Xc, Fc)
-    Xf, Ff, Vf = curvealign_filter(Xc, Fc, Vc, min_length=min_length, min_straightness=min_straightness)
+    Xf, Ff, Vf = curvealign_filter(Xc, Fc, Vc, min_length=min_length, min_straightness=0.0)
     print_fiber_statistics(Xf, Ff)
 
     # Create output data structure
