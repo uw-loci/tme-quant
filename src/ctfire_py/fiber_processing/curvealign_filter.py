@@ -143,7 +143,8 @@ def curvealign_filter(
     
     print(f"    Removed {failed_length} fibers (length < {min_length:.1f})")
     print(f"    Removed {failed_straightness} fibers (straightness < {min_straightness:.2f})")
-    print(f"    After filter: {len(F_filtered)} fibers ({100*len(F_filtered)/len(F):.1f}%)")
+    pct = f"{100*len(F_filtered)/len(F):.1f}%" if len(F) > 0 else "N/A"
+    print(f"    After filter: {len(F_filtered)} fibers ({pct})")
     
     # Rebuild data structures
     from ctfire_py.utils.trimxfv import trimxfv
