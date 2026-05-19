@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "napari-tme-quant"
+version = "0.1.0"
+description = "napari plugin for TMEQuant — tumor microenvironment quantification"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+dependencies = [
+    "tme-quant>=0.2.0",
+    "napari>=0.4.17",
+    "napari-matplotlib>=0.2",
+    "qtpy>=2.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-qt",
+    "napari[testing]",
+]
+
+[project.entry-points."napari.manifest"]
+napari-tme-quant = "napari_tme_quant:napari.yaml"
+
+[tool.setuptools.packages.find]
+where = ["src"]

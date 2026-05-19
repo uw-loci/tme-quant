@@ -1,0 +1,77 @@
+name: napari-tme-quant
+display_name: TMEQuant
+contributions:
+  commands:
+    - id: napari-tme-quant.main_widget
+      title: TMEQuant (all panels)
+      python_name: napari_tme_quant._main_widget:TMEQuantDockWidget
+    - id: napari-tme-quant.project_widget
+      title: TMEQuant — Project
+      python_name: napari_tme_quant.widgets.project_widget:ProjectWidget
+    - id: napari-tme-quant.image_widget
+      title: TMEQuant — Image
+      python_name: napari_tme_quant.widgets.image_widget:ImageWidget
+    - id: napari-tme-quant.roi_manager_widget
+      title: TMEQuant — ROI Manager
+      python_name: napari_tme_quant.widgets.roi_manager_widget:ROIManagerWidget
+    - id: napari-tme-quant.registration_widget
+      title: TMEQuant — Registration
+      python_name: napari_tme_quant.widgets.registration_widget:RegistrationWidget
+    - id: napari-tme-quant.fiber_analysis_widget
+      title: TMEQuant — Fiber Analysis
+      python_name: napari_tme_quant.widgets.fiber_analysis_widget:FiberAnalysisWidget
+    - id: napari-tme-quant.cell_analysis_widget
+      title: TMEQuant — Cell Analysis
+      python_name: napari_tme_quant.widgets.cell_analysis_widget:CellAnalysisWidget
+    - id: napari-tme-quant.tme_pipeline_widget
+      title: TMEQuant — TME Pipelines
+      python_name: napari_tme_quant.widgets.tme_pipeline_widget:TMEPipelineWidget
+    - id: napari-tme-quant.measurements_widget
+      title: TMEQuant — Measurements
+      python_name: napari_tme_quant.widgets.measurements_widget:MeasurementsWidget
+    - id: napari-tme-quant.visualization_widget
+      title: TMEQuant — Visualization
+      python_name: napari_tme_quant.widgets.visualization_widget:VisualizationWidget
+    - id: napari-tme-quant.io_widget
+      title: TMEQuant — I/O
+      python_name: napari_tme_quant.widgets.io_widget:IOWidget
+    - id: napari-tme-quant.log_widget
+      title: TMEQuant — Log
+      python_name: napari_tme_quant.widgets.log_widget:LogWidget
+  widgets:
+    - command: napari-tme-quant.main_widget
+      display_name: TMEQuant
+      autogenerate: false
+    - command: napari-tme-quant.project_widget
+      display_name: TMEQuant — Project
+      autogenerate: false
+    - command: napari-tme-quant.image_widget
+      display_name: TMEQuant — Image
+      autogenerate: false
+    - command: napari-tme-quant.roi_manager_widget
+      display_name: TMEQuant — ROI Manager
+      autogenerate: false
+    - command: napari-tme-quant.registration_widget
+      display_name: TMEQuant — Registration
+      autogenerate: false
+    - command: napari-tme-quant.fiber_analysis_widget
+      display_name: TMEQuant — Fiber Analysis
+      autogenerate: false
+    - command: napari-tme-quant.cell_analysis_widget
+      display_name: TMEQuant — Cell Analysis
+      autogenerate: false
+    - command: napari-tme-quant.tme_pipeline_widget
+      display_name: TMEQuant — TME Pipelines
+      autogenerate: false
+    - command: napari-tme-quant.measurements_widget
+      display_name: TMEQuant — Measurements
+      autogenerate: false
+    - command: napari-tme-quant.visualization_widget
+      display_name: TMEQuant — Visualization
+      autogenerate: false
+    - command: napari-tme-quant.io_widget
+      display_name: TMEQuant — I/O
+      autogenerate: false
+    - command: napari-tme-quant.log_widget
+      display_name: TMEQuant — Log
+      autogenerate: false
