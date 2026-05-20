@@ -100,14 +100,26 @@ class TestVisualizationControllerLayers:
         assert labels[0] == "TACS-2"
 
     def test_on_image_selected_hides_other_layers(self, state, mock_viewer, controller):
-        """on_image_selected should hide layers not matching image_id prefix."""
+        """on_image_selected should show layers matching image_id and hide others.
+
+        Visibility is applied via QTimer.singleShot(0) to avoid vispy recursion;
+        we patch QTimer to execute the callback synchronously in tests.
+        """
         layer_a = mock.MagicMock()
         layer_a.name = "img_A :: Fibers :: all"
+        layer_raw = mock.MagicMock()
+        layer_raw.name = "img_A"           # raw image layer — must stay visible
         layer_b = mock.MagicMock()
         layer_b.name = "img_B :: Fibers :: all"
-        mock_viewer.layers = [layer_a, layer_b]
+        mock_viewer.layers = [layer_a, layer_raw, layer_b]
 
-        controller.on_image_selected("img_A")
+        # Patch QTimer.singleShot to run the callback immediately in tests
+        with mock.patch(
+            "napari_tme_quant.controllers.visualization_controller.QTimer"
+        ) as mock_timer:
+            mock_timer.singleShot.side_effect = lambda _ms, fn: fn()
+            controller.on_image_selected("img_A")
 
         assert layer_a.visible is True
+        assert layer_raw.visible is True   # raw image layer shown for selected image
         assert layer_b.visible is False

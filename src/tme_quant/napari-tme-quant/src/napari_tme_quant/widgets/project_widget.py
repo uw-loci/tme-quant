@@ -124,7 +124,12 @@ class ProjectWidget(QWidget):
         for row in range(self._table.rowCount()):
             item = self._table.item(row, self._COL_FILE)
             if item and item.data(Qt.UserRole) == image_id:
+                # Block signals while programmatically selecting the row so
+                # itemSelectionChanged does not re-fire _on_selection_changed,
+                # which would call select_image again → infinite recursion.
+                self._table.blockSignals(True)
                 self._table.selectRow(row)
+                self._table.blockSignals(False)
                 break
 
     def on_analysis_complete(self, _step: str, _image_id: str) -> None:

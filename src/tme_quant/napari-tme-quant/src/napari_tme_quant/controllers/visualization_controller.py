@@ -13,6 +13,7 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
+from qtpy.QtCore import QTimer
 
 if TYPE_CHECKING:
     from .state import PluginState
@@ -56,13 +57,29 @@ class VisualizationController:
             self._create_curvealign_layers(image_id)
 
     def on_image_selected(self, image_id: str) -> None:
-        """Show only layers with the [image_id] :: prefix; hide others."""
+        """Show only layers belonging to image_id; hide others.
+
+        A layer belongs to image_id when its name is either:
+          - exactly image_id  (the raw napari Image layer added by add_image)
+          - starts with "image_id :: "  (analysis overlay layers)
+
+        Visibility changes are deferred via QTimer so they run after napari
+        finishes processing the current event, preventing the vispy
+        RecursionError that occurs when layer.visible is set mid-event.
+        """
         if self._viewer is None:
             return
-        prefix = make_layer_name(image_id, "", "").rstrip(" :: ")
         sep = " :: "
-        for layer in self._viewer.layers:
-            layer.visible = layer.name.startswith(image_id + sep)
+        prefix = image_id + sep
+
+        def _apply():
+            for layer in self._viewer.layers:
+                layer.visible = (
+                    layer.name == image_id
+                    or layer.name.startswith(prefix)
+                )
+
+        QTimer.singleShot(0, _apply)
 
     # ── Layer creation: CT-FIRE ────────────────────────────────────────────────
 
