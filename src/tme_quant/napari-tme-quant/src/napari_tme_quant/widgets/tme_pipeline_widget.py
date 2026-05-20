@@ -142,8 +142,7 @@ class TMEPipelineWidget(QWidget):
         self._exclude_inside = QCheckBox("Exclude fibers inside mask")
 
         row1 = QHBoxLayout()
-        for lbl, w in [("Keep:", self._keep), ("Scale:", self._scale), ("Radius:", self._radius)]:
-            row1.addWidget(QLabel(lbl)); row1.addWidget(w)
+        row1.addWidget(QLabel("Keep:")); row1.addWidget(self._keep)
         row1.addStretch()
         pg.addRow(row1)
         pg.addRow(self._exclude_inside)
@@ -399,17 +398,24 @@ class TMEPipelineWidget(QWidget):
 
 
 class _CurveAlignTACSAdvancedDialog(QDialog):
-    """Advanced parameter groups for the CurveAlign TACS Pipeline.
-
-    Parameter widgets are stubs; groups are labelled to communicate structure.
-    """
+    """Advanced parameter groups for the CurveAlign TACS Pipeline."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("CurveAlign TACS — Advanced settings")
         self.setModal(False)
         layout = QVBoxLayout(self)
-        for title in ("Transform", "Boundary", "Features", "Output"):
+
+        # Curvelet group — hosts Scale and Radius from the parent widget
+        curv_grp = QGroupBox("Curvelet")
+        curv_form = QFormLayout(curv_grp)
+        curv_form.setLabelAlignment(Qt.AlignRight)
+        if parent is not None and hasattr(parent, "_scale"):
+            curv_form.addRow("Scale:", parent._scale)
+            curv_form.addRow("Radius:", parent._radius)
+        layout.addWidget(curv_grp)
+
+        for title in ("Boundary", "Features", "Output"):
             grp = QGroupBox(title)
             QVBoxLayout(grp).addWidget(
                 QLabel(f"({title} params — not yet wired up)")
