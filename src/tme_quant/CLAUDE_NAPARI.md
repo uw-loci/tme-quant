@@ -18,14 +18,18 @@ through an interactive GUI. It is the primary interface for researchers who
 want to run TME analysis without writing Python code.
 
 It is a **separate package** (`napari-tme-quant`) that depends on `tme-quant`
-as a library. It lives alongside the core library:
+as a library. For prototyping it is co-located inside the core library's source
+tree (tracked in the same git repo):
 
 ```
-tme-quant/                    ← core library (tme_quant/)
-napari-tme-quant/             ← this plugin
-    pyproject.toml
-    src/
-        napari_tme_quant/
+tme-quant/
+└── src/
+    └── tme_quant/            ← core library
+        ├── core/  fiber_analysis/  ...
+        └── napari-tme-quant/ ← this plugin (separate installable package)
+            pyproject.toml
+            src/
+                napari_tme_quant/
             __init__.py
             _main_widget.py           ← TMEQuantDockWidget (QTabWidget container)
             widgets/                  ← one file per dock panel (all independently registerable)
@@ -115,20 +119,39 @@ tab bar via a `QTabWidget`.
 
 **File:** `widgets/project_widget.py`
 
-Manages the image list and image pairing for the entire project.
+Manages the image list, type assignment, and project save/load operations.
+
+**`ImageType.FIBER` covers any microscopic fiber image** — not just SHG. This
+includes birefringent images from polarised-light microscopes (PLM), bright-field
+tissue images with collagen-specific stains, and any other modality where local
+fiber orientations are the analytical target.
+
+**Supported file formats:** TIFF (default), PNG, JPEG.
+File dialog filter: `Images (*.tif *.tiff *.png *.jpg *.jpeg);;TIFF (*.tif *.tiff);;All files (*)`.
 
 **Image type assignment.** When a user adds an image, a type-selector dialog
-appears with auto-pre-selection based on filename keywords:
+appears with auto-pre-selection based on filename keywords (case-insensitive):
 
-| Type | Auto-detected from |
-|------|--------------------|
-| `Fiber` | filename contains `SHG`, `shg`, `collagen` |
-| `Cell` | filename contains `HE`, `he`, `DAPI`, `dapi`, `DAB` |
-| `Mask` | filename contains `mask`, `boundary`, `annotation` |
-| `Pre-registered 2-channel` | filename contains `2ch`, `merged`, `combined` |
+| Type | Auto-detected from filename keywords |
+|------|--------------------------------------|
+| `Fiber` | `shg`, `collagen`, `fiber`, `fibre`, `biref`, `plm`, `brightfield` |
+| `Cell` | `he`, `dapi`, `dab`, `cell`, `nuclei` |
+| `Mask` | `mask`, `boundary`, `annotation`, `label`, `seg` |
+| `Pre-registered 2-channel` | `2ch`, `merged`, `combined` |
 | `Unknown` | fallback |
 
 User confirms or changes the type before the image is added to the project.
+`ProjectController.add_image(path, image_type, viewer)` loads the file, adds
+it as a napari layer, stores the array in `PluginState.images`, and records the
+absolute path in `PluginState.image_paths` for save/restore.
+
+**Mask provenance note.** In the full plugin the ROI Manager is the hub for
+boundary masks: they can be loaded from file, drawn manually in a napari Shapes
+or Labels layer, or auto-detected from the Cell Analysis tumor-detection step.
+In the current prototype:
+- Add mask TIFFs via `[ + Add Image... ]` → type = Mask
+- Or draw / import a Shapes/Labels layer directly in napari; the CurveAlign TACS
+  pipeline mask selector lists **all napari layers** (not just project-registered ones)
 
 **Image pairing.** Fiber and cell images are paired by matching filename stems
 across folders (e.g. `SHG/SHG_001.tif` auto-pairs with `HE/HE_001.tif`).
@@ -148,15 +171,28 @@ or leave an image unpaired (valid for pure-fiber or pure-cell pipelines).
 [ + Add Image... ]   [ Auto-Pair ]   [ Merge to 2-channel ]
 ```
 
-- **"Merge to 2-channel"** (on-demand): creates a new project entry
-  (ch1 = fiber, ch2 = cell); does not remove the originals. Requires a
-  confirmed pair. If the images are not yet registered, the button is
-  greyed out with tooltip "Register first in Analysis → Registration".
+- **"Merge to 2-channel"** — future batch; greyed out in v1.
 - **"Register & Merge"** lives in the Registration sub-tab; on completion
   it adds the merged 2-channel image to the project automatically.
-- Selecting an image here emits `image_selected(image_id)`, which triggers
-  `VisualizationController` to show only layers with the matching
-  `[image_id] ::` prefix in their name.
+- Selecting an image emits `image_selected(image_id)`, which triggers
+  `VisualizationController.on_image_selected()` to show only layers with the
+  matching `[image_id] ::` prefix in their name.
+- Double-clicking a row opens a type-change dialog.
+
+**Project operations** (bottom of the Project tab):
+```
+[ New ]   [ Save Project... ]   [ Load Project... ]
+```
+- `[ New ]` — clears all project state and napari layers after confirmation.
+- `[ Save Project... ]` — selects a save directory → calls
+  `io_utils.save_plugin_state(state, save_dir)` which writes:
+  - `plugin_state.json` — image types, paths, per-image params
+  - `results/<image_id>/` — `fiber_features.csv`, `roi_summary.csv`,
+    `fiber_structure.csv`, numpy arrays, `params.json`
+- `[ Load Project... ]` — selects a directory → calls
+  `io_utils.load_plugin_state(state, load_dir, viewer)` which restores
+  metadata, reloads image files as napari layers, and reconstructs
+  `CurveAlignPipelineResult` objects from the saved CSVs/npy files.
 
 ---
 
@@ -164,16 +200,29 @@ or leave an image unpaired (valid for pure-fiber or pure-cell pipelines).
 
 **File:** `widgets/image_widget.py`
 
-Details and controls for the currently selected image.
+Details, controls, and analysis status for the currently selected image.
 
-- Channel names and roles (editable)
-- Pixel size (µm/px) — pre-filled from TIFF metadata if available
-- Z-slice navigator and max-projection toggle — **hidden** unless image is 3D
-- Time-point slider — **hidden** unless image has a T dimension
-- "Set as active fiber image" / "Set as active cell image" shortcuts
+```
+┌─ Image metadata ────────────────────────────────────────────┐
+│  File:        fiber_001                                     │
+│  Path:        /data/SHG_001.tif                             │
+│  Dimensions:  512 × 512  (float32)                          │
+│  Type:        Fiber                                         │
+│  Pixel size:  [ 1.0 ▴▾ ] µm/px                              │
+└─────────────────────────────────────────────────────────────┘
+┌─ Analysis status ───────────────────────────────────────────┐
+│  CT-FIRE:         ○ not run                                 │
+│  CurveAlign TACS: ● computed (memory)                       │
+└─────────────────────────────────────────────────────────────┘
+```
 
-The widget reads `PluginState.active_image_id` and updates whenever
-`image_selected` fires.
+- **Pixel size** is editable; stored in
+  `PluginState.per_image_params[image_id]["image"]["pixel_size"]`.
+- **Status chips** refresh on every `analysis_complete` signal.
+- Z-slice navigator and T-slider are present in code but hidden unless
+  `image.ndim >= 3` or `image.n_timepoints > 1` (future 3D/4D support).
+- The widget reads `PluginState.active_image_id` and updates whenever
+  `image_selected` fires from `ProjectController`.
 
 ---
 
@@ -346,15 +395,58 @@ Runs `curvealign_curvelets_mode_pipeline()` and stores a
 
 **File:** `widgets/tme_pipeline_widget.py`
 
-The hub for all relational multi-object analysis. Interaction detection logic
-lives **here**, not in the ROI Manager.
+The hub for all multi-object TME analysis that combines fiber data with tumor
+context (boundary, cell populations). Two pipeline families live here:
 
-- **Mode toggle:** `◉ Single Image  ○ Batch` (Batch greyed in v1; architecture
-  in place via `AnalysisController.run_batch()` stub)
-- **Recipe system:** `[ Load JSON ]  [ Save JSON ]` — serialises/deserialises
-  the current `TMEAnalysisParams` dataclass. One JSON recipe per pipeline
-  configuration.
-- Three collapsible sections:
+**CurveAlign TACS Pipeline** (implemented in v1) — combines curvelet-based local
+fiber orientation analysis with a pre-computed tumor boundary mask to classify
+fibers as TACS-1/2/3. The boundary mask is assumed to have been derived from
+cell/tumor image analysis (e.g. DBSCAN tumor boundary detection in the Cell tab).
+
+```
+┌─ CurveAlign TACS Pipeline ─────────────────────────────────────┐
+│  Fiber image:   [ fiber_001 (Fiber) ▾ ]                        │
+│  Boundary mask: [ Select napari layer ▾ ] [ Load from file... ]│
+│  Zone width:    [ 50.0 µm ]                                    │
+│                                                                │
+│  ─── Curvelet params ──────────────────────────────────────    │
+│  Keep: [0.05]  Scale: [1]  Radius: [4.0]  Pixel size: [1.0]   │
+│  Dist threshold: [50.0]  ☐ Exclude fibers inside mask          │
+│                                          [ Advanced... ]       │
+│                                                                │
+│  Run on:  ◉ Current image  ○ All images in project             │
+│  [ Copy params to all images ]                                 │
+│  [████████░░]  2/4  Extracting curvelet fiber structure…       │
+│                                                                │
+│  [ Run CurveAlign TACS ]      [ Commit to Hierarchy ]          │
+│  ○ not run                                                     │
+└────────────────────────────────────────────────────────────────┘
+```
+
+Key behaviours:
+- **Fiber image selector** — populated from `PluginState.image_types` filtered to
+  `ImageType.FIBER`; auto-selects the current active image when it is a Fiber type.
+- **Boundary mask selector** — lists ALL napari layers (Image, Labels, Shapes).
+  Shapes layers are rasterised to a binary mask via
+  `layer.to_labels(labels_shape=image.shape[:2])`. Also includes project-registered
+  MASK images. `[ Load from file... ]` adds a mask file to the project as
+  `ImageType.MASK` and auto-selects it.
+- **Per-image params** — parameters are stored per image in
+  `PluginState.per_image_params[image_id]["curvealign_tacs"]`; automatically
+  saved on Run and restored when the active image changes.
+- **Progress bar** — steps through the pipeline's 4 progress messages; hidden at
+  rest, shown during the run.
+- **tif_boundary** — always passes `tif_boundary=3` to the pipeline when a mask
+  is selected (the only supported mode for binary mask input). `tif_boundary=0`
+  when no mask is selected.
+
+**Standard TME Pipeline** (stub in v1) — uses CT-FIRE fibers + StarDist cells +
+tumor detection; architecture in place via stub sections. Mode toggle, recipe
+JSON, and collapsible sections below are future additions.
+
+- **Mode toggle:** `◉ Single Image  ○ Batch` (Batch greyed in v1)
+- **Recipe system:** `[ Load JSON ]  [ Save JSON ]` — future addition.
+- Three collapsible sections (Standard Pipeline only):
 
   **Interactions section** (covers workflow step 6 + 7):
   ```
@@ -426,8 +518,9 @@ Three-tier output strategy:
 | Output type | Display | Controls |
 |-------------|---------|----------|
 | Fiber centerlines, ROI boundaries, TACS zones | napari `Shapes` / `Points` layers | Overlay checkboxes |
-| Heatmaps, histograms, TACS charts, network graphs | Docked `napari-matplotlib` panel (auto-shown on `analysis_complete`) | Plot selector dropdown |
-| Exported PNGs (`generate_fiber_overlay`, `generate_fiber_heatmap`) | `QDialog` with `QLabel` on demand | "View in window" button |
+| Orientation heatmap (`procmap` from `generate_fiber_heatmap`) | napari `Image` layer `[id] :: Heatmap :: orientation` (inferno, 60 % opacity) — added on Commit | Overlay toggle |
+| Heatmaps, histograms, TACS charts, network graphs | Docked `napari-matplotlib` panel | Plot selector dropdown |
+| Overlay / heatmap figures (`generate_fiber_overlay`, `generate_fiber_heatmap`) | `FigureDialog` (`QDialog` with `QLabel`) on demand | "View … in window" buttons |
 
 Controls:
 ```
@@ -471,6 +564,10 @@ active image. Docked below the main overlay controls.
 │  │    0    │  127.4   │   88.1    │  43.2°    │  TACS-3  │    │
 │  │   ...   │   ...    │    ...    │   ...     │   ...    │    │
 │  └─────────┴──────────┴───────────┴───────────┴──────────┘    │
+│                                                                │
+│  ─── Save results ─────────────────────────────────────────    │
+│  [ Save fiber features CSV ]  [ Save fiber features XLSX ]     │
+│  [ Save overlay PNG ]         [ Save heatmap PNG ]             │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -624,7 +721,24 @@ class PluginState:
 
     # Active parameter presets (one per analysis step)
     presets: Dict[str, dict] = field(default_factory=dict)
+
+    # Raw image arrays keyed by image_id (populated by ProjectController.add_image).
+    # Used by VisualizationController for heatmap/overlay generation without
+    # re-reading the napari layer.
+    images: Dict[str, np.ndarray] = field(default_factory=dict)
+
+    # Per-image parameter snapshots: image_id → {step → params_dict}
+    # e.g. state.per_image_params["fiber_001"]["curvealign_tacs"] = {"keep": 0.05, ...}
+    # Preserved across reset() so re-runs use the same settings.
+    per_image_params: Dict[str, Dict[str, dict]] = field(default_factory=dict)
+
+    # Absolute file paths for project save/restore: image_id → path string
+    image_paths: Dict[str, str] = field(default_factory=dict)
 ```
+
+`reset()` clears analysis results and `layer_map` but **preserves** `images`,
+`image_types`, `image_paths`, and `per_image_params` so a re-run uses the same
+images and settings without needing to reload from disk.
 
 Widgets read and write state **only through controllers**. No widget holds a
 reference to `PluginState` directly.
@@ -797,21 +911,28 @@ the widget(s) that provide them:
 | 11. Create TACS overlay | Results → Visualization (napari Shapes layers) |
 | 12. Export results | Results → I/O |
 
-### CurveAlign curvelets-mode pipeline coverage
+### CurveAlign TACS Pipeline coverage (Scenario 3)
 
-The following maps all steps of `example_curvealign_curvelets_mode_pipeline.py`
-to the widget(s) that provide them:
+This pipeline is a **TME analysis** that combines curvelet fiber orientations with
+a pre-computed tumor boundary mask. `Run CurveAlign TACS` is in
+**Analysis → TME sub-tab → CurveAlign TACS Pipeline section**.
 
 | Pipeline step | progress_callback call | Widget(s) |
 |---------------|----------------------|-----------|
-| 1. Curvelet fiber extraction (or pre-computed load) | `"Extracting curvelet fiber structure…"` | Analysis → Fiber sub-tab (`☐ Use pre-computed fiber_structure`) |
-| 2. Density + alignment statistics | *(internal, no progress msg)* | Analysis → Fiber sub-tab (inline params: keep, scale, radius) |
-| 3. ROI boundary coordinate extraction | `"Extracting boundary coordinates…"` | Analysis → Fiber sub-tab (`☐ Analyze boundary alignment`, mask selector) |
-| 4. Global boundary alignment analysis | `"Computing boundary alignment…"` | Analysis → Fiber sub-tab (zone width / dist threshold) |
+| 0. Load fiber image | *(Project tab)* | Project → `[ + Add Image... ]` (type = Fiber) |
+| 0. Load / draw boundary mask | *(Project tab or napari)* | Project → `[ + Add Image... ]` (type = Mask) OR draw Shapes/Labels in napari |
+| 0. Select active image | *(Project tab)* | Project → click row → `ProjectController.select_image()` |
+| 1. Curvelet fiber extraction | `"Extracting curvelet fiber structure…"` | Analysis → TME → CurveAlign TACS (keep, scale, radius params) |
+| 2. Density + alignment statistics | *(internal, no progress msg)* | Analysis → TME → CurveAlign TACS (inline params) |
+| 3. ROI boundary coordinate extraction | `"Extracting boundary coordinates…"` | Analysis → TME → CurveAlign TACS (boundary mask selector, zone width) |
+| 4. Global boundary alignment analysis | `"Computing boundary alignment…"` | Analysis → TME → CurveAlign TACS (dist threshold) |
 | 4b. Feature table assembly | `"Assembling fiber feature table…"` | *(automatic, no widget)* |
-| FiberObject node creation | — | Results → Commit to Hierarchy button |
-| TMEHierarchy commit | — | Results → Commit to Hierarchy button |
-| TACS visualisation | — | Results → Visualization → CurveAlign TACS View |
+| 5. FiberObject node creation | — | `[ Commit to Hierarchy ]` button in CurveAlign TACS section |
+| 5. TMEHierarchy commit | — | `[ Commit to Hierarchy ]` button |
+| 5. Orientation heatmap layer | — | `VisualizationController._create_heatmap_layer()` → `[id] :: Heatmap :: orientation` |
+| 6. TACS visualisation | — | Results → Visualization → CurveAlign TACS View (auto-shown after commit) |
+| 7. Save results | — | CurveAlign TACS View → Save results group (CSV/XLSX/PNG) |
+| 8. Save project | — | Project → `[ Save Project... ]` |
 
 ---
 
