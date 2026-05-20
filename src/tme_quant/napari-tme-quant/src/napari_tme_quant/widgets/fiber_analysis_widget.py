@@ -85,25 +85,25 @@ class FiberAnalysisWidget(QWidget):
         method_row = QHBoxLayout()
         method_row.addWidget(QLabel("Method:"))
         self._method_combo = QComboBox()
-        self._method_combo.addItems(["CT-FIRE", "CurveAlign (curvelets mode)"])
+        self._method_combo.addItems(["CurveAlign (curvelets mode)", "CT-FIRE"])
         self._method_combo.currentIndexChanged.connect(self._on_method_changed)
         method_row.addWidget(self._method_combo, stretch=1)
         layout.addLayout(method_row)
 
-        # CT-FIRE group box
-        self._ctfire_group = self._build_ctfire_group()
-        layout.addWidget(self._ctfire_group)
-
-        # CurveAlign group box (initially hidden)
+        # CurveAlign group box (default method — shown first)
         self._curvealign_group = self._build_curvealign_group()
-        self._curvealign_group.setVisible(False)
         layout.addWidget(self._curvealign_group)
+
+        # CT-FIRE group box (initially hidden)
+        self._ctfire_group = self._build_ctfire_group()
+        self._ctfire_group.setVisible(False)
+        layout.addWidget(self._ctfire_group)
 
         layout.addStretch()
 
     def _on_method_changed(self, index: int) -> None:
-        self._ctfire_group.setVisible(index == 0)
-        self._curvealign_group.setVisible(index == 1)
+        self._curvealign_group.setVisible(index == 0)
+        self._ctfire_group.setVisible(index == 1)
 
     # ── CT-FIRE group ──────────────────────────────────────────────────────────
 
