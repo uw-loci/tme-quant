@@ -1,7 +1,4 @@
 {
-  // Use IntelliSense to learn about possible attributes.
-  // Hover to view descriptions of existing attributes.
-  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
     {
@@ -10,6 +7,42 @@
       "request": "launch",
       "program": "${file}",
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Launch napari (TMEQuant plugin)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "napari",
+      "args": [],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src/tme_quant/src"
+      }
+    },
+    {
+      "name": "Launch napari (TMEQuant plugin, open dock widget)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/tme_quant/napari-tme-quant/scripts/launch_plugin.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src/tme_quant/src"
+      }
+    },
+    {
+      "name": "Launch napari (TMEQuant + curvelops)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "napari",
+      "args": [],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "python": "${workspaceFolder}/src/tme_quant/.venv-curvelops/bin/python.exe",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src/tme_quant/src"
+      }
     }
   ]
 }

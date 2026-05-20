@@ -52,7 +52,7 @@
   },
   "cmake.sourceDirectory": "/Users/dongwoolee/Documents/GitHub/curvelets/cpp",
   "cmake.ignoreCMakeListsMissing": true
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.defaultInterpreterPath": "${workspaceFolder}/src/tme_quant/.venv/Scripts/python.exe",
   "python.terminal.activateEnvironment": true,
   "python.analysis.extraPaths": [
       "${workspaceFolder}/src",
@@ -102,5 +102,15 @@
       "NAPARI_DEBUG": "1"
   },
   "jupyter.notebookFileRoot": "${workspaceFolder}",
-  "notebook.output.textLineLimit": 100
+  "notebook.output.textLineLimit": 100,
+  "terminal.integrated.profiles.windows": {
+    "MSYS2 UCRT64": {
+      "path": "C:\\msys64\\ucrt64.exe",
+      "icon": "terminal-bash"
+    },
+    "MSYS2 MINGW64": {
+      "path": "C:\\msys64\\mingw64.exe",
+      "icon": "terminal-bash"
+    }
+  }
 }

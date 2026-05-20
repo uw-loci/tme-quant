@@ -518,12 +518,72 @@ black src/ && ruff check src/ && mypy src/tme_quant/
 
 **General install instructions:** `docs/getting_started.md` Step 2 and Step 6.
 
-**On this machine (Windows — primary):** curvelops 0.23.4 is installed in the
-MSYS2 UCRT64 venv at `H:\GitHub.06.2022\tme-quant\src\tme_quant\.venv-curvelops`
-(Python 3.14, UCRT64 GCC).  **Must be activated from the MSYS2 UCRT64 shell** —
-MSYS2 Python uses the `mingw_x86_64_ucrt_gnu` platform tag (incompatible with
-standard win_amd64 PyPI wheels; core deps installed via pacman instead).
+**On this machine (Windows — primary):** curvelops is installed in the MSYS2 UCRT64
+venv at `H:\GitHub.06.2022\tme-quant\src\tme_quant\.venv-curvelops` (Python 3.14,
+UCRT64 GCC).
 
+**ABI incompatibility**: `.venv` (Python 3.11.9, Windows Store) uses the MSVC ABI and
+cannot load GCC-compiled C extensions. curvelops **cannot** be pip-installed into `.venv`.
+To use curvelops with the napari plugin, napari must run from `.venv-curvelops` instead.
+
+#### Running napari with curvelops
+
+**One-time PATH setup** (required so VS Code can find MSYS2 DLLs):
+Add `C:\msys64\ucrt64\bin` to the Windows System PATH.
+Windows Settings → System → About → Advanced system settings → Environment Variables
+→ System variables → Path → Edit → New → `C:\msys64\ucrt64\bin`
+
+**Install napari into `.venv-curvelops`** (from MSYS2 UCRT64 shell):
+
+MSYS2 UCRT64 uses GCC 15, which cannot build many napari C-extension dependencies from
+source (GCC 15 breaks the ninja build tool). Install those via pacman first, then handle
+vispy specially (no MSYS2 package; its git-based versioning reports `0.0.0` until patched),
+then install napari with full deps.
+
+```bash
+cd /h/GitHub.06.2022/tme-quant/src/tme_quant
+source .venv-curvelops/bin/activate
+
+# Step 1: C-extension deps via pacman (avoids GCC 15 build failures)
+pacman -S --needed \
+  mingw-w64-ucrt-x86_64-python-pyqt6 \
+  mingw-w64-ucrt-x86_64-qt6-svg \
+  mingw-w64-ucrt-x86_64-python-pyopengl \
+  mingw-w64-ucrt-x86_64-python-psutil \
+  mingw-w64-ucrt-x86_64-python-pywin32 \
+  mingw-w64-ucrt-x86_64-python-pydantic \
+  mingw-w64-ucrt-x86_64-python-rpds-py \
+  mingw-w64-ucrt-x86_64-python-pyzmq \
+  mingw-w64-ucrt-x86_64-python-wrapt \
+  mingw-w64-ucrt-x86_64-python-lxml \
+  mingw-w64-ucrt-x86_64-python-pillow \
+  mingw-w64-ucrt-x86_64-python-aiohttp \
+  mingw-w64-ucrt-x86_64-python-dask \
+  mingw-w64-ucrt-x86_64-python-cython
+
+# Step 2: vispy from git tag with --no-build-isolation
+# (avoids numpy→ninja build chain that fails under GCC 15)
+pip install --no-build-isolation \
+  "vispy @ git+https://github.com/vispy/vispy.git@v0.16.2"
+
+# Step 3: patch vispy version metadata
+# (hatch-vcs reports 0.0.0 from git clone; pip won't satisfy vispy>=0.16.1 until fixed)
+VISPY_DIST=.venv-curvelops/lib/python3.14/site-packages/vispy-0.0.0.dist-info
+sed -i 's/^Version: 0.0.0/Version: 0.16.2/' "$VISPY_DIST/METADATA"
+mv "$VISPY_DIST" "${VISPY_DIST/vispy-0.0.0/vispy-0.16.2}"
+pip show vispy   # verify: Version: 0.16.2
+
+# Step 4: install napari with full deps (vispy patch prevents rebuild loop)
+pip install napari
+
+# Step 5: install the plugin
+pip install -e napari-tme-quant --no-deps
+```
+
+**Launch from VS Code**: use the **"Launch napari (TMEQuant + curvelops)"** configuration
+in `.vscode/launch.json` (uses `.venv-curvelops/bin/python.exe` explicitly).
+
+#### Running tests with curvelops
 ```bash
 # From MSYS2 UCRT64 shell:
 cd /h/GitHub.06.2022/tme-quant/src/tme_quant
@@ -531,7 +591,7 @@ source .venv-curvelops/bin/activate
 python -m pytest tests/ -v        # 239 passed, 7 skipped
 ```
 
-Build notes (if rebuilding curvelops):
+#### Build notes (if rebuilding curvelops from scratch)
 - Core deps: `pacman -S mingw-w64-ucrt-x86_64-python-{numpy,scipy,scikit-image,opencv,pandas,matplotlib,shapely,tifffile,openpyxl,imageio,pillow,networkx,scikit-learn}`
 - Venv: `python3.14 -m venv --system-site-packages .venv-curvelops`
 - curvelops build: `FFTW=H:/GitHub.06.2022/utils/fftw-2.1.5 FDCT=H:/GitHub.06.2022/utils/CurveLab-2.1.3 CXXFLAGS="-fpermissive -Wno-error -Wno-class-memaccess -std=gnu++14 -D_USE_MATH_DEFINES" pip install --no-build-isolation "curvelops @ git+https://github.com/PyLops/curvelops@0.23.4"`
@@ -539,8 +599,28 @@ Build notes (if rebuilding curvelops):
 - tme_quant: `pip install -e . --no-deps` (deps already provided by pacman/system-site-packages)
 
 **On this machine (WSL — legacy):** curvelops 0.23 may be at `/home/yuming/miniconda3/`
-(not verified).  The Windows `.venv` (Python 3.11.9 Windows Store) cannot build C
-extensions; use `.venv-curvelops` from MSYS2 shell instead.
+(not verified).
+
+#### VS Code terminal profile for MSYS2 UCRT64
+
+The MSYS2 UCRT64 shell is registered as a VS Code terminal profile in
+`.vscode/settings.json` under `terminal.integrated.profiles.windows`. If it
+disappears (VS Code Settings Sync or a `git checkout` can overwrite workspace
+settings), re-add it:
+
+```json
+"terminal.integrated.profiles.windows": {
+  "MSYS2 UCRT64": {
+    "path": "C:\\msys64\\ucrt64.exe",
+    "icon": "terminal-bash"
+  }
+}
+```
+
+To make it permanent and immune to git/Sync overwrites, add it instead to your
+**user settings** (`%APPDATA%\Code\User\settings.json`) — VS Code merges user and
+workspace settings, so the profile will always be available regardless of what
+happens to `.vscode/settings.json`.
 
 ---
 
