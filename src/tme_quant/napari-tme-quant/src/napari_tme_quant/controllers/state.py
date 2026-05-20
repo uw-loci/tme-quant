@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Dict, Optional
 
+import numpy as np
+
 from tme_quant import (
     TMEHierarchy,
     TMEProject,
@@ -56,8 +58,25 @@ class PluginState:
     # Active parameter presets (one per analysis step)
     presets: Dict[str, dict] = field(default_factory=dict)
 
+    # Raw image arrays keyed by image_id (populated on add_image; used for
+    # heatmap/overlay generation without hitting the napari layer API)
+    images: Dict[str, np.ndarray] = field(default_factory=dict)
+
+    # Per-image parameter snapshots: image_id → {step → params_dict}
+    # e.g. state.per_image_params["fiber_001"]["curvealign_tacs"] = {"keep": 0.05, ...}
+    # Preserved across reset() so re-runs use the same settings.
+    per_image_params: Dict[str, Dict[str, dict]] = field(default_factory=dict)
+
+    # Absolute file paths for project save/restore: image_id → path string
+    image_paths: Dict[str, str] = field(default_factory=dict)
+
     def reset(self) -> None:
-        """Clear all transient state (keep hierarchy and project)."""
+        """Clear transient analysis state.
+
+        Preserves: hierarchy, project, image_types, image_pairs, per_image_params,
+        image_paths, images (arrays still available for re-run without reload).
+        Clears: analysis results, layer_map, active_image_id.
+        """
         self.fiber_results.clear()
         self.cell_results.clear()
         self.tme_results.clear()
