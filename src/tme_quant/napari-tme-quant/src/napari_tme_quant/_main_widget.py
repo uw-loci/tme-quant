@@ -87,7 +87,7 @@ class TMEQuantDockWidget(QWidget):
             return  # headless / partial install — skip wiring
 
         self._state         = PluginState()
-        self._log_ctrl      = LogController(self._log_widget)
+        self._log_ctrl      = LogController(self._state, self._log_widget)
         self._proj_ctrl     = ProjectController(self._state)
         self._analysis_ctrl = AnalysisController(self._state, self._log_ctrl)
         self._viz_ctrl      = VisualizationController(self._state, self._viewer)

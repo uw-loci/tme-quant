@@ -23,13 +23,16 @@ class LogController:
         self._widget = log_widget
 
     def info(self, msg: str) -> None:
-        self._widget.append("INFO", msg)
+        if self._widget is not None:
+            self._widget.append("INFO", msg)
 
     def warn(self, msg: str) -> None:
-        self._widget.append("WARN", msg)
+        if self._widget is not None:
+            self._widget.append("WARN", msg)
 
     def error(self, msg: str) -> None:
-        self._widget.append("ERROR", msg)
+        if self._widget is not None:
+            self._widget.append("ERROR", msg)
 
     def on_analysis_complete(self, step: str, image_id: str, result) -> None:
         """Called by AnalysisController after each analysis step completes."""
