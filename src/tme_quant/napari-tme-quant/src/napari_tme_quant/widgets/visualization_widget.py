@@ -36,6 +36,10 @@ class VisualizationWidget(QWidget):
         self._viz_controller = None        # wired up by _main_widget
         self._curvealign_result = None     # set by on_curvealign_committed()
         self._active_image_id: Optional[str] = None
+        self._overlay_fig = None           # cached matplotlib Figure
+        self._heatmap_fig = None           # cached matplotlib Figure
+        self._overlay_dialog = None        # keep reference so dialog stays open
+        self._heatmap_dialog = None
         self._build_ui()
 
     def set_controller(self, controller) -> None:
@@ -141,6 +145,29 @@ class VisualizationWidget(QWidget):
         self._tacs_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self._tacs_table.itemSelectionChanged.connect(self._on_table_row_selected)
         layout.addWidget(self._tacs_table)
+
+        # Save results area
+        save_group = QGroupBox("Save results")
+        save_layout = QVBoxLayout(save_group)
+        row1 = QHBoxLayout()
+        btn_csv   = QPushButton("Save fiber features CSV")
+        btn_xlsx  = QPushButton("Save fiber features XLSX")
+        btn_csv.clicked.connect(self._save_fiber_features_csv)
+        btn_xlsx.clicked.connect(self._save_fiber_features_xlsx)
+        row1.addWidget(btn_csv)
+        row1.addWidget(btn_xlsx)
+        row1.addStretch()
+        save_layout.addLayout(row1)
+        row2 = QHBoxLayout()
+        btn_overlay = QPushButton("Save overlay PNG")
+        btn_heatmap = QPushButton("Save heatmap PNG")
+        btn_overlay.clicked.connect(self._save_overlay_png)
+        btn_heatmap.clicked.connect(self._save_heatmap_png)
+        row2.addWidget(btn_overlay)
+        row2.addWidget(btn_heatmap)
+        row2.addStretch()
+        save_layout.addLayout(row2)
+        layout.addWidget(save_group)
 
         return group
 
@@ -253,7 +280,122 @@ class VisualizationWidget(QWidget):
         pass  # TODO: wire to napari-matplotlib panel
 
     def _view_overlay_png(self) -> None:
-        pass  # TODO: launch QDialog with generated overlay figure
+        fig = self._generate_overlay_fig()
+        if fig is not None:
+            from ..utils.export_utils import open_figure_dialog
+            self._overlay_fig = fig
+            self._overlay_dialog = open_figure_dialog(fig, "Fiber Overlay", self)
 
     def _view_heatmap_png(self) -> None:
-        pass  # TODO: launch QDialog with density heatmap figure
+        fig = self._generate_heatmap_fig()
+        if fig is not None:
+            from ..utils.export_utils import open_figure_dialog
+            self._heatmap_fig = fig
+            self._heatmap_dialog = open_figure_dialog(fig, "Orientation Heatmap", self)
+
+    # ── Figure generation ──────────────────────────────────────────────────────
+
+    def _get_image_array(self):
+        """Get the raw image array for the active image (from state via viz controller)."""
+        if self._viz_controller is None or self._active_image_id is None:
+            return None
+        return self._viz_controller._state.images.get(self._active_image_id)
+
+    def _generate_overlay_fig(self):
+        result = self._curvealign_result
+        img = self._get_image_array()
+        if result is None or img is None:
+            return None
+        try:
+            from tme_quant.fiber_analysis.visualization.draw_utils import generate_fiber_overlay
+            tif_boundary = 3 if getattr(result, "boundary_measurement", False) else 0
+            fig, _ = generate_fiber_overlay(
+                img=img,
+                fiber_structure=result.fiber_structure,
+                coordinates=None,
+                in_curvs_flag=getattr(result, "in_curvs_flag", None),
+                out_curvs_flag=None,
+                nearest_angles=getattr(result, "nearest_angles", None),
+                measured_boundary=None,
+                fiber_mode=0,
+                tif_boundary=tif_boundary,
+                boundary_measurement=getattr(result, "boundary_measurement", False),
+            )
+            return fig
+        except Exception:
+            return None
+
+    def _generate_heatmap_fig(self):
+        result = self._curvealign_result
+        img = self._get_image_array()
+        if result is None or img is None:
+            return None
+        try:
+            from tme_quant.fiber_analysis.visualization.draw_utils import generate_fiber_heatmap
+            tif_boundary = 3 if getattr(result, "boundary_measurement", False) else 0
+            fig, _rawmap, _procmap = generate_fiber_heatmap(
+                img=img,
+                fiber_structure=result.fiber_structure,
+                in_curvs_flag=getattr(result, "in_curvs_flag", None),
+                angles=getattr(result, "nearest_angles", None),
+                distances=None,
+                tif_boundary=tif_boundary,
+                boundary_measurement=getattr(result, "boundary_measurement", False),
+            )
+            return fig
+        except Exception:
+            return None
+
+    # ── Save actions ───────────────────────────────────────────────────────────
+
+    def _save_fiber_features_csv(self) -> None:
+        if self._curvealign_result is None:
+            return
+        df = getattr(self._curvealign_result, "fiber_features_df", None)
+        if df is None:
+            return
+        from qtpy.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save fiber features", "fiber_features.csv",
+            "CSV (*.csv);;All files (*)"
+        )
+        if path:
+            from ..utils.export_utils import export_df_to_csv
+            export_df_to_csv(df, path)
+
+    def _save_fiber_features_xlsx(self) -> None:
+        if self._curvealign_result is None:
+            return
+        df = getattr(self._curvealign_result, "fiber_features_df", None)
+        if df is None:
+            return
+        from qtpy.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save fiber features", "fiber_features.xlsx",
+            "Excel (*.xlsx);;All files (*)"
+        )
+        if path:
+            from ..utils.export_utils import export_df_to_excel
+            export_df_to_excel(df, path)
+
+    def _save_overlay_png(self) -> None:
+        fig = getattr(self, "_overlay_fig", None) or self._generate_overlay_fig()
+        if fig is None:
+            return
+        from qtpy.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save overlay", "fiber_overlay.png", "PNG (*.png);;All files (*)"
+        )
+        if path:
+            fig.savefig(path, dpi=150, bbox_inches="tight")
+
+    def _save_heatmap_png(self) -> None:
+        fig = getattr(self, "_heatmap_fig", None) or self._generate_heatmap_fig()
+        if fig is None:
+            return
+        from qtpy.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save heatmap", "fiber_heatmap.png", "PNG (*.png);;All files (*)"
+        )
+        if path:
+            fig.savefig(path, dpi=150, bbox_inches="tight")

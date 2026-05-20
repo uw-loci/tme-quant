@@ -143,6 +143,47 @@ class VisualizationController:
                 lname = make_layer_name(image_id, "Fibers", tacs_label)
                 self._add_points_layer(lname, coords[mask], face_color=color)
 
+        # Orientation heatmap layer (procmap from generate_fiber_heatmap)
+        self._create_heatmap_layer(image_id, result)
+
+    def _create_heatmap_layer(self, image_id: str, result) -> None:
+        """Generate a fiber orientation heatmap and add it as a napari Image layer."""
+        img = self._state.images.get(image_id)
+        if img is None or self._viewer is None:
+            return
+        fs = getattr(result, "fiber_structure", None)
+        if fs is None or len(fs) == 0:
+            return
+        try:
+            from tme_quant.fiber_analysis.visualization.draw_utils import generate_fiber_heatmap
+            import numpy as np
+            tif_boundary = 3 if getattr(result, "boundary_measurement", False) else 0
+            _fig, _rawmap, procmap = generate_fiber_heatmap(
+                img=img,
+                fiber_structure=fs,
+                in_curvs_flag=getattr(result, "in_curvs_flag", None),
+                angles=getattr(result, "nearest_angles", None),
+                distances=None,
+                tif_boundary=tif_boundary,
+                boundary_measurement=getattr(result, "boundary_measurement", False),
+            )
+            import matplotlib
+            matplotlib.pyplot.close(_fig)  # free memory; we only need procmap
+            if procmap is not None:
+                layer_name = make_layer_name(image_id, "Heatmap", "orientation")
+                existing = self._find_layer(layer_name)
+                if existing is not None:
+                    existing.data = procmap
+                else:
+                    self._viewer.add_image(
+                        procmap,
+                        name=layer_name,
+                        colormap="inferno",
+                        opacity=0.6,
+                    )
+        except Exception:
+            pass  # heatmap generation is optional; never crash the commit flow
+
     def _compute_tacs_face_colors(self, df, result) -> list[str]:
         """Return a per-row color list based on TACS classification."""
         tacs = self._classify_df_tacs(df, result)
