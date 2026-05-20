@@ -112,12 +112,22 @@ class TMEPipelineWidget(QWidget):
         mask_row.addWidget(load_mask_btn)
         form.addRow("Boundary mask:", mask_row)
 
-        # Zone width
+        # Distance threshold (primary control — applies to any TACS pipeline method)
+        self._dist_thresh = QDoubleSpinBox()
+        self._dist_thresh.setRange(1.0, 2000.0)
+        self._dist_thresh.setDecimals(1)
+        self._dist_thresh.setSuffix(" px")
+        self._dist_thresh.setValue(50.0)
+        form.addRow("Dist threshold:", self._dist_thresh)
+
+        # Zone width — read-only display synced to dist_thresh; placeholder for future range support
         self._zone_width = QDoubleSpinBox()
         self._zone_width.setRange(1.0, 2000.0)
         self._zone_width.setDecimals(1)
-        self._zone_width.setSuffix(" µm")
-        self._zone_width.setValue(50.0)
+        self._zone_width.setSuffix(" px")
+        self._zone_width.setValue(self._dist_thresh.value())
+        self._zone_width.setEnabled(False)
+        self._dist_thresh.valueChanged.connect(self._zone_width.setValue)
         form.addRow("Zone width:", self._zone_width)
         layout.addLayout(form)
 
@@ -127,10 +137,8 @@ class TMEPipelineWidget(QWidget):
         pg.setLabelAlignment(Qt.AlignRight)
 
         self._keep   = QDoubleSpinBox(); self._keep.setRange(0.001, 1.0);   self._keep.setDecimals(3);  self._keep.setValue(0.05)
-        self._scale  = QSpinBox();       self._scale.setRange(1, 10);                                     self._scale.setValue(1)
+        self._scale  = QSpinBox();       self._scale.setRange(1, 10);                                    self._scale.setValue(1)
         self._radius = QDoubleSpinBox(); self._radius.setRange(0.5, 50.0);  self._radius.setDecimals(1); self._radius.setValue(4.0)
-        self._px_size = QDoubleSpinBox(); self._px_size.setRange(0.001, 100.0); self._px_size.setDecimals(3); self._px_size.setSuffix(" µm/px"); self._px_size.setValue(1.0)
-        self._dist_thresh = QDoubleSpinBox(); self._dist_thresh.setRange(1.0, 2000.0); self._dist_thresh.setDecimals(1); self._dist_thresh.setValue(50.0)
         self._exclude_inside = QCheckBox("Exclude fibers inside mask")
 
         row1 = QHBoxLayout()
@@ -138,12 +146,6 @@ class TMEPipelineWidget(QWidget):
             row1.addWidget(QLabel(lbl)); row1.addWidget(w)
         row1.addStretch()
         pg.addRow(row1)
-
-        row2 = QHBoxLayout()
-        for lbl, w in [("Pixel size:", self._px_size), ("Dist threshold:", self._dist_thresh)]:
-            row2.addWidget(QLabel(lbl)); row2.addWidget(w)
-        row2.addStretch()
-        pg.addRow(row2)
         pg.addRow(self._exclude_inside)
 
         adv_row = QHBoxLayout()
@@ -318,7 +320,6 @@ class TMEPipelineWidget(QWidget):
         kwargs = self._get_curvealign_params()
         kwargs["boundary_img"] = boundary_img
         kwargs["tif_boundary"] = 3 if boundary_img is not None else 0
-        kwargs["distance_threshold"] = self._zone_width.value()
 
         self._save_params_for_image(image_id)
         self._run_btn.setEnabled(False)
@@ -353,7 +354,6 @@ class TMEPipelineWidget(QWidget):
         if self._analysis_ctrl is None:
             return
         params = self._get_curvealign_params()
-        params["zone_width"] = self._zone_width.value()
         (self._analysis_ctrl._state.per_image_params
          .setdefault(image_id, {})["curvealign_tacs"]) = params
 
@@ -366,11 +366,10 @@ class TMEPipelineWidget(QWidget):
         if stored is None:
             return
         for attr, key in [
-            ("_keep",          "keep"),
-            ("_scale",         "scale"),
-            ("_radius",        "radius"),
-            ("_dist_thresh",   "distance_threshold"),
-            ("_zone_width",    "zone_width"),
+            ("_keep",        "keep"),
+            ("_scale",       "scale"),
+            ("_radius",      "radius"),
+            ("_dist_thresh", "distance_threshold"),
         ]:
             widget = getattr(self, attr, None)
             if widget is not None and key in stored:
@@ -386,7 +385,6 @@ class TMEPipelineWidget(QWidget):
         if self._analysis_ctrl is None:
             return
         params = self._get_curvealign_params()
-        params["zone_width"] = self._zone_width.value()
         state = self._analysis_ctrl._state
         for iid in state.image_types:
             state.per_image_params.setdefault(iid, {})["curvealign_tacs"] = dict(params)
