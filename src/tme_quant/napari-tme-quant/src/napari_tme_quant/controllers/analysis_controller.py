@@ -112,9 +112,16 @@ class AnalysisController:
     def _run_curvealign_worker(self, image_id: str, image, **kwargs) -> None:
         from napari.qt.threading import thread_worker
         from tme_quant import curvealign_curvelets_mode_pipeline
+        if self._log:
+            self._log.info(f"Starting CurveAlign pipeline for {image_id!r} …")
 
         def _cb(step: int, total: int, msg: str) -> None:
-            self._emit_batch_progress(step, total, msg)
+            print(f"[curvealign {step}/{total}] {msg}", flush=True)
+            # Defer GUI update to the main thread — calling Qt widgets directly
+            # from a worker thread triggers OpenGL context errors on some platforms.
+            from qtpy.QtCore import QTimer
+            QTimer.singleShot(0, lambda s=step, t=total, m=msg:
+                              self._emit_batch_progress(s, t, m))
 
         @thread_worker(connect={
             "returned": lambda result: self._on_curvealign_result(image_id, result),
@@ -122,9 +129,15 @@ class AnalysisController:
         })
         def _worker():
             img = image if image is not None else np.zeros((64, 64), dtype=np.float32)
-            return curvealign_curvelets_mode_pipeline(
-                img, progress_callback=_cb, **kwargs
-            )
+            try:
+                return curvealign_curvelets_mode_pipeline(
+                    img, progress_callback=_cb, **kwargs
+                )
+            except Exception as exc:
+                import traceback
+                print(f"[curvealign ERROR] {exc}", flush=True)
+                traceback.print_exc()
+                raise
 
         _worker()
 
@@ -132,6 +145,75 @@ class AnalysisController:
         if result is not None:
             self._state.curvealign_pipeline_results[image_id] = result
         self._emit_analysis_complete("curvealign", image_id, result)
+        if result is not None and getattr(self._state, "project_dir", None):
+            self._auto_save_curvealign(image_id, result)
+
+    def _auto_save_curvealign(self, image_id: str, result) -> None:
+        out_dir = self._state.project_dir / "output" / image_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # Fiber features CSV
+        df = getattr(result, "fiber_features_df", None)
+        if df is not None and len(df) > 0:
+            from ..utils.export_utils import export_df_to_csv
+            export_df_to_csv(df, out_dir / "fiber_features.csv")
+            if self._log:
+                self._log.info(f"Auto-saved fiber_features.csv → {out_dir}")
+        # Figures (non-interactive, Agg backend)
+        img = self._state.images.get(image_id)
+        if img is None:
+            return
+        fs = getattr(result, "fiber_structure", None)
+        if fs is None or (hasattr(fs, "__len__") and len(fs) == 0):
+            if self._log:
+                self._log.warn("Auto-save: no fiber_structure — skipping figures")
+            return
+        try:
+            import traceback as _tb
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            from tme_quant.fiber_analysis.visualization.draw_utils import (
+                generate_fiber_heatmap, generate_fiber_overlay,
+            )
+            tif_boundary = 3 if getattr(result, "boundary_measurement", False) else 0
+            bm = getattr(result, "boundary_measurement", False)
+            fig_h, _, _ = generate_fiber_heatmap(
+                img=img,
+                fiber_structure=fs,
+                in_curvs_flag=getattr(result, "in_curvs_flag", None),
+                angles=getattr(result, "nearest_angles", None),
+                distances=None,
+                tif_boundary=tif_boundary,
+                boundary_measurement=bm,
+            )
+            if fig_h is not None:
+                fig_h.savefig(str(out_dir / "orientation_heatmap.png"), dpi=150, bbox_inches="tight")
+                plt.close(fig_h)
+                if self._log:
+                    self._log.info(f"Auto-saved orientation_heatmap.png → {out_dir}")
+            in_flag = getattr(result, "in_curvs_flag", None)
+            out_flag = (~in_flag) if in_flag is not None else None
+            fig_o, _ = generate_fiber_overlay(
+                img=img,
+                fiber_structure=fs,
+                coordinates=getattr(result, "roi_coordinates", None),
+                in_curvs_flag=in_flag,
+                out_curvs_flag=out_flag,
+                nearest_angles=getattr(result, "nearest_angles", None),
+                measured_boundary=None,
+                fiber_mode=0,
+                tif_boundary=tif_boundary,
+                boundary_measurement=bm,
+            )
+            if fig_o is not None:
+                fig_o.savefig(str(out_dir / "fiber_overlay.png"), dpi=150, bbox_inches="tight")
+                plt.close(fig_o)
+                if self._log:
+                    self._log.info(f"Auto-saved fiber_overlay.png → {out_dir}")
+        except Exception as exc:
+            _tb.print_exc()
+            if self._log:
+                self._log.warn(f"Auto-save figures failed: {exc}")
 
     # ── Hierarchy commit ───────────────────────────────────────────────────────
 
@@ -162,10 +244,22 @@ class AnalysisController:
                 if self._log:
                     self._log.warn(f"No CurveAlign result to commit for {_image_id!r}")
                 return
-            image_entry = self._get_or_create_image_entry(_image_id)
-            # Attach as population-level fiber result using fiber_features_df
-            self._attach_curvealign_result(image_entry, _image_id, result)
-            self._emit_committed(_image_id, "curvealign")
+            if self._log:
+                self._log.info(f"Committing CurveAlign result to hierarchy for {_image_id!r} …")
+            print(f"[commit] curvealign → {_image_id}", flush=True)
+            try:
+                image_entry = self._get_or_create_image_entry(_image_id)
+                self._attach_curvealign_result(image_entry, _image_id, result)
+                self._emit_committed(_image_id, "curvealign")
+                if self._log:
+                    self._log.info(f"Committed CurveAlign result for {_image_id!r}")
+                print(f"[commit] done → {_image_id}", flush=True)
+            except Exception as exc:
+                import traceback
+                print(f"[commit ERROR] {exc}", flush=True)
+                traceback.print_exc()
+                if self._log:
+                    self._log.error(f"Commit failed: {exc}")
 
     def _get_or_create_image_entry(self, image_id: str):
         """Return the ImageEntry for image_id, creating a root one if needed."""
@@ -211,5 +305,8 @@ class AnalysisController:
             self._log.on_batch_progress(step, total, msg)
 
     def _on_error(self, exc: Exception) -> None:
+        import traceback
+        print(f"[analysis ERROR] {exc}", flush=True)
+        traceback.print_exc()
         if self._log:
             self._log.on_error(exc)

@@ -16,7 +16,10 @@ from typing import TYPE_CHECKING, Optional
 import pandas as pd
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QPixmap
-from qtpy.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QSizePolicy
+from qtpy.QtWidgets import (
+    QDialog, QDialogButtonBox, QLabel, QScrollArea,
+    QSizePolicy, QTableWidget, QTableWidgetItem, QVBoxLayout,
+)
 
 if TYPE_CHECKING:
     from qtpy.QtWidgets import QWidget
@@ -85,6 +88,47 @@ def open_figure_dialog(fig, title: str = "Figure", parent: Optional["QWidget"] =
     """
     dlg = FigureDialog(fig, title=title, parent=parent)
     dlg.show()
+    return dlg
+
+
+class DataFrameDialog(QDialog):
+    """Non-modal dialog showing a pandas DataFrame in a scrollable QTableWidget."""
+
+    def __init__(self, df: pd.DataFrame, title: str = "Data", parent: Optional["QWidget"] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(False)
+        self.resize(900, 500)
+
+        table = QTableWidget(len(df), len(df.columns))
+        table.setHorizontalHeaderLabels(df.columns.tolist())
+        table.verticalHeader().setVisible(False)
+        for r, row in enumerate(df.itertuples(index=False)):
+            for c, val in enumerate(row):
+                if isinstance(val, float):
+                    text = f"{val:.4g}"
+                else:
+                    text = str(val)
+                table.setItem(r, c, QTableWidgetItem(text))
+        table.resizeColumnsToContents()
+        table.setSortingEnabled(True)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(table)
+        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns.rejected.connect(self.close)
+        layout.addWidget(btns)
+
+
+def open_dataframe_dialog(
+    df: pd.DataFrame,
+    title: str = "Data",
+    parent: Optional["QWidget"] = None,
+) -> DataFrameDialog:
+    """Create and show a non-modal DataFrameDialog for *df*."""
+    dlg = DataFrameDialog(df, title=title, parent=parent)
+    dlg.show()
+    dlg.raise_()
     return dlg
 
 
