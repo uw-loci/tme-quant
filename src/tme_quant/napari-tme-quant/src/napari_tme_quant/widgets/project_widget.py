@@ -80,7 +80,8 @@ class ProjectWidget(QWidget):
         layout.addWidget(self._table)
 
         proj_group = QGroupBox("Project")
-        proj_row = QHBoxLayout(proj_group)
+        proj_layout = QVBoxLayout(proj_group)
+        proj_row = QHBoxLayout()
         self._new_btn  = QPushButton("New")
         self._save_btn = QPushButton("Save Project...")
         self._load_btn = QPushButton("Load Project...")
@@ -90,6 +91,16 @@ class ProjectWidget(QWidget):
         self._new_btn.clicked.connect(self._new_project)
         self._save_btn.clicked.connect(self._save_project)
         self._load_btn.clicked.connect(self._load_project)
+        proj_layout.addLayout(proj_row)
+
+        folder_row = QHBoxLayout()
+        self._folder_btn = QPushButton("Set Project Folder…")
+        self._folder_btn.clicked.connect(self._set_project_folder)
+        self._folder_lbl = QLabel("No project folder set")
+        self._folder_lbl.setStyleSheet("color: gray; font-style: italic;")
+        folder_row.addWidget(self._folder_btn)
+        folder_row.addWidget(self._folder_lbl, stretch=1)
+        proj_layout.addLayout(folder_row)
         layout.addWidget(proj_group)
 
     # ── Table population ───────────────────────────────────────────────────────
@@ -167,6 +178,28 @@ class ProjectWidget(QWidget):
         if confirmed is None:
             return
         self._project_ctrl.add_image(path, confirmed, self._viewer)
+        # Offer to set a project folder if none is set yet
+        state = self._project_ctrl._state
+        if state.project_dir is None:
+            reply = QMessageBox.question(
+                self, "Project folder",
+                "Set a project folder to auto-save results?\n"
+                "(outputs will be saved to <folder>/output/<image>/)",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if reply == QMessageBox.Yes:
+                self._set_project_folder()
+
+    def _set_project_folder(self) -> None:
+        if self._project_ctrl is None:
+            return
+        from pathlib import Path
+        folder = QFileDialog.getExistingDirectory(self, "Set project folder")
+        if not folder:
+            return
+        self._project_ctrl._state.project_dir = Path(folder)
+        self._folder_lbl.setText(folder)
+        self._folder_lbl.setStyleSheet("color: #90ee90;")
 
     def _remove_image(self) -> None:
         rows = self._table.selectionModel().selectedRows()

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
@@ -69,6 +70,9 @@ class PluginState:
 
     # Absolute file paths for project save/restore: image_id → path string
     image_paths: Dict[str, str] = field(default_factory=dict)
+
+    # Project output folder — auto-save target for results and figures
+    project_dir: Optional[Path] = None
 
     def reset(self) -> None:
         """Clear transient analysis state.
