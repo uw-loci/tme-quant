@@ -104,9 +104,11 @@ class TMEQuantDockWidget(QWidget):
         if self._viz_widget and hasattr(self._viz_widget, "set_controller"):
             self._viz_widget.set_controller(self._viz_ctrl)
 
-        # image_selected → layer visibility + TME widget + Image tab + Project row
+        # image_selected → layer visibility + all sub-widgets
         def _on_image_selected(image_id: str) -> None:
             self._viz_ctrl.on_image_selected(image_id)
+            if self._viz_widget and hasattr(self._viz_widget, "set_active_image"):
+                self._viz_widget.set_active_image(image_id)
             if self._tme_widget and hasattr(self._tme_widget, "set_active_image"):
                 self._tme_widget.set_active_image(image_id)
             if self._image_widget and hasattr(self._image_widget, "on_image_selected"):
@@ -116,11 +118,14 @@ class TMEQuantDockWidget(QWidget):
 
         self._proj_ctrl.connect_image_selected(_on_image_selected)
 
-        # analysis_complete → status chips in TME widget + Image tab + Project table
+        # analysis_complete → status chips in TME widget + Image tab + Project table + viz
         def _on_complete(step: str, image_id: str, result) -> None:
             if self._tme_widget and step == "curvealign":
                 if hasattr(self._tme_widget, "on_curvealign_complete"):
                     self._tme_widget.on_curvealign_complete()
+            if self._viz_widget and step == "curvealign":
+                if hasattr(self._viz_widget, "on_analysis_complete"):
+                    self._viz_widget.on_analysis_complete(image_id, result)
             if self._image_widget and hasattr(self._image_widget, "on_analysis_complete"):
                 self._image_widget.on_analysis_complete(step, image_id)
             if self._project_widget and hasattr(self._project_widget, "on_analysis_complete"):
@@ -140,7 +145,7 @@ class TMEQuantDockWidget(QWidget):
             self._viz_ctrl.on_committed(image_id, obj_type)
             if obj_type == "curvealign" and self._viz_widget:
                 result = self._state.curvealign_pipeline_results.get(image_id)
-                if result and hasattr(self._viz_widget, "on_curvealign_committed"):
+                if result is not None and hasattr(self._viz_widget, "on_curvealign_committed"):
                     self._viz_widget.on_curvealign_committed(image_id, result)
 
         self._analysis_ctrl.connect_committed_to_hierarchy(_on_committed)
