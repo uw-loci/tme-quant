@@ -1108,3 +1108,156 @@ Widget tests use napari's `make_napari_viewer` fixture (headless via `pytest-qt`
 11. **Do not put interaction detection logic in the ROI Manager.** The ROI
     Manager may have a context-menu shortcut that pre-fills and switches to the
     TME Pipelines sub-tab, but the logic runs there.
+
+---
+
+## Troubleshooting — Known Bugs and Hard-Won Fixes
+
+This section documents runtime bugs encountered during development. Read before
+implementing new features in the same areas to avoid reintroducing known problems.
+
+### Qt / napari threading
+
+**RecursionError: itemSelectionChanged → selectRow infinite loop**
+Calling `self._table.selectRow(row)` from inside an `itemSelectionChanged` slot fires
+the signal again, causing infinite recursion. Fix: always wrap programmatic row
+selection with `blockSignals(True/False)`:
+```python
+self._table.blockSignals(True)
+self._table.selectRow(row)
+self._table.blockSignals(False)
+```
+
+**vispy RecursionError when setting `layer.visible`**
+In napari 0.7.0 + vispy 0.16.x, setting `layer.visible` synchronously inside napari's
+event cycle triggers `_reorder_layers_in_the_same_view` → vispy recursion. Always
+defer with:
+```python
+from qtpy.QtCore import QTimer
+QTimer.singleShot(0, lambda: setattr(layer, "visible", value))
+```
+
+**OpenGL "Cannot make QOpenGLContext current in a different thread"**
+Any Qt widget update (progress bar, status label, layer creation) called from inside a
+`@thread_worker` worker body crashes napari on MSYS2. Fix: defer ALL GUI updates to
+the main thread via `QTimer.singleShot(0, ...)` in the progress callback:
+```python
+def _cb(step, total, msg):
+    print(f"[{step}/{total}] {msg}", flush=True)  # terminal: safe from any thread
+    from qtpy.QtCore import QTimer
+    QTimer.singleShot(0, lambda s=step, t=total, m=msg:
+                      self._emit_batch_progress(s, t, m))
+```
+
+**LogController.__init__ wrong argument order**
+`LogController(state, log_widget)` — state is the first arg, widget second. Passing
+`LogController(log_widget)` silently puts the widget in the `state` slot and crashes
+later with a missing-arg error. The None-guards in `info/warn/error` prevent crashes if
+`_widget` is None.
+
+### Signal wiring (_main_widget.py)
+
+**viz_widget never gets active image id**
+`_on_image_selected` must call `viz_widget.set_active_image(image_id)` explicitly.
+This is easy to forget because the viz widget is wired separately from the other widgets.
+Without it `_active_image_id` stays `None` and all view buttons silently return early.
+
+**`if result` is False for CurveAlignPipelineResult**
+Dataclass instances with DataFrame fields can evaluate to `False` in boolean context
+(pandas ambiguous-truth-value). Always use `if result is not None` when guarding
+callbacks that receive a result object.
+
+**Commit to Hierarchy fails when image selected via dropdown (not project table)**
+`_commit_curvealign` uses `self._active_image_id` set by the project selection signal.
+If the user picks an image from the fiber dropdown without clicking the project table
+row, `_active_image_id` stays `None`. Always fall back:
+```python
+image_id = self._active_image_id or self._fiber_selector.currentData()
+```
+
+### Coordinate conventions
+
+**`boundary_point_row`/`boundary_point_col` are MATLAB-swapped**
+In `fiber_features_df`, the columns from `extract_tif_boundary` follow MATLAB (x,y)
+convention: `boundary_point_row` stores the **column** (x) value and
+`boundary_point_col` stores the **row** (y) value. When building napari shapes
+(row, col order), always swap:
+```python
+# WRONG:
+[[center_row, center_col], [row["boundary_point_row"], row["boundary_point_col"]]]
+# CORRECT (napari row,col):
+[[center_row, center_col], [row["boundary_point_col"], row["boundary_point_row"]]]
+```
+
+**`fiber_df_to_napari_shapes` had swapped dy/dx**
+The original implementation used `dy = cos(angle), dx = sin(angle)` — wrong.
+`draw_curvs` in `draw_utils.py` uses col-direction = cos(angle), row-direction = sin(angle).
+Correct formula:
+```python
+dy = half_len * np.sin(angle_rad)   # row
+dx = half_len * np.cos(angle_rad)   # col
+```
+
+### Visualization / draw_utils
+
+**`generate_fiber_overlay` crashes when `coordinates=None`**
+When called without pre-computed ROI boundary coords, `coordinates=None` causes
+`for roi_coords in coordinates.values()` to crash. Guard:
+```python
+if coordinates is not None:
+    for roi_coords in coordinates.values():
+        ...
+```
+Also: `CurveAlignPipelineResult` now stores `roi_coordinates` so callers can pass it
+instead of `None`.
+
+**Fiber overlay always uses absolute angle; heatmap uses relative when boundary available**
+- Overlay orientation LINES → always `fiber_structure["angle"]` (absolute, 0–180°)
+- Orientation heatmap COLOR → `nearest_angles` (relative to boundary tangent, 0–90°)
+  when boundary was run; `fiber_structure["angle"]` (absolute) when no boundary.
+
+**`generate_fiber_heatmap` crashes when `tif_boundary=0`**
+With no boundary mask, `in_curvs_flag` and `angles` (nearest_angles) are both `None`.
+`fiber_structure[None]` and `angles[None]` raise TypeError. Guard:
+```python
+if in_curvs_flag is not None:
+    map_fibers = fiber_structure[in_curvs_flag]
+    map_angles = angles[in_curvs_flag]
+else:
+    map_fibers = fiber_structure
+    map_angles = fiber_structure["angle"].values  # absolute angles
+```
+
+### MSYS2 / Windows environment
+
+**vispy `freetype.dll` not found in MSYS2**
+`freetype-py` (used by vispy for text rendering) looks for `freetype.dll` but MSYS2
+names the library `libfreetype-6.dll`. Fix:
+```bash
+cp /c/msys64/ucrt64/bin/libfreetype-6.dll /c/msys64/ucrt64/bin/freetype.dll
+```
+
+**napari deps build from source under MSYS2 GCC 15**
+GCC 15 has a `mkdtemp` overload ambiguity that breaks the `ninja` build tool, which
+blocks numpy/vispy source builds. Pre-install C-extension deps via pacman; for vispy
+specifically install from git tag with `--no-build-isolation` and patch the
+`vispy-0.0.0.dist-info` METADATA version to `0.16.2` (hatch-vcs reports 0.0.0 without
+git tag context). See CLAUDE.md "Installing / locating curvelops" for the full sequence.
+
+**Qt SVG DLL missing in MSYS2**
+napari requires `QtSvg` for layer icons. Install:
+```bash
+pacman -S --needed mingw-w64-ucrt-x86_64-qt6-svg
+```
+
+### QTableWidget performance
+
+**Slow ROI/TACS filter in TACS View table**
+`_populate_tacs_table` with `iterrows()` rebuilds all QTableWidgetItem objects on every
+filter change — O(n) Qt creation, visibly slow for 1000+ rows. Use `setRowHidden`:
+```python
+# Build once; filter by hiding/showing rows
+for row_idx in range(self._tacs_table.rowCount()):
+    hide = want_tacs and row_data["tacs_class"] != want_tacs
+    self._tacs_table.setRowHidden(row_idx, hide)
+```
