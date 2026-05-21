@@ -55,25 +55,25 @@ def fiber_df_to_napari_points(df: pd.DataFrame) -> np.ndarray:
     return df[["center_row", "center_col"]].to_numpy(dtype=np.float64)
 
 
-def fiber_df_to_napari_shapes(df: pd.DataFrame) -> list[np.ndarray]:
+def fiber_df_to_napari_shapes(
+    df: pd.DataFrame, line_length: float = 6.0
+) -> list[np.ndarray]:
     """Convert a fiber DataFrame to a list of 2-point shape arrays for napari Shapes.
 
     Each shape is a (2, 2) array: [[y_start, x_start], [y_end, x_end]],
     representing a line segment along the fiber orientation.
 
-    This is a simplified representation (center ± half-length along the angle).
-    A full centerline representation is used when ``centerline`` data is available.
-
     Parameters
     ----------
-    df : DataFrame with ``center_row``, ``center_col``, ``angle``, ``length`` columns.
+    df : DataFrame with ``center_row``, ``center_col``, ``angle`` columns.
+    line_length : total length of each orientation line in pixels (default 6).
     """
     shapes = []
+    half_len = line_length / 2.0
     for _, row in df.iterrows():
         cy, cx = float(row["center_row"]), float(row["center_col"])
         angle_rad = np.deg2rad(float(row.get("angle", 0.0)))
-        half_len = float(row.get("length", 10.0)) / 2.0
-        dy = half_len * np.cos(angle_rad)
-        dx = half_len * np.sin(angle_rad)
+        dy = half_len * np.sin(angle_rad)   # row direction matches draw_curvs convention
+        dx = half_len * np.cos(angle_rad)   # col direction matches draw_curvs convention
         shapes.append(np.array([[cy - dy, cx - dx], [cy + dy, cx + dx]]))
     return shapes

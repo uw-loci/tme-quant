@@ -40,6 +40,8 @@ class VisualizationWidget(QWidget):
         self._heatmap_fig = None           # cached matplotlib Figure
         self._overlay_dialog = None        # keep reference so dialog stays open
         self._heatmap_dialog = None
+        self._features_dialog = None
+        self._tacs_table_df = None         # cached full DataFrame for fast row hiding
         self._build_ui()
 
     def set_controller(self, controller) -> None:
@@ -78,8 +80,9 @@ class VisualizationWidget(QWidget):
         layout.addWidget(overlay_group)
 
         # ── Docked plots selector ─────────────────────────────────────────────
-        plots_group = QGroupBox("Plots (docked napari-matplotlib)")
-        plots_row = QHBoxLayout(plots_group)
+        self._plots_group = QGroupBox("Plots (docked napari-matplotlib)")
+        self._plots_group.setEnabled(False)
+        plots_row = QHBoxLayout(self._plots_group)
         self._plot_combo = QComboBox()
         self._plot_combo.addItems([
             "Orientation Heatmap",
@@ -91,18 +94,19 @@ class VisualizationWidget(QWidget):
         show_plot_btn.clicked.connect(self._show_plot)
         plots_row.addWidget(self._plot_combo, stretch=1)
         plots_row.addWidget(show_plot_btn)
-        layout.addWidget(plots_group)
+        layout.addWidget(self._plots_group)
 
         # ── Exported figures ──────────────────────────────────────────────────
-        fig_group = QGroupBox("Exported figures")
-        fig_layout = QVBoxLayout(fig_group)
+        self._fig_group = QGroupBox("Exported figures")
+        self._fig_group.setEnabled(False)
+        fig_layout = QVBoxLayout(self._fig_group)
         view_overlay_btn = QPushButton("View Overlay PNG in window")
-        view_heatmap_btn = QPushButton("View Density Heatmap in window")
+        view_heatmap_btn = QPushButton("View Orientation Heatmap in window")
         view_overlay_btn.clicked.connect(self._view_overlay_png)
         view_heatmap_btn.clicked.connect(self._view_heatmap_png)
         fig_layout.addWidget(view_overlay_btn)
         fig_layout.addWidget(view_heatmap_btn)
-        layout.addWidget(fig_group)
+        layout.addWidget(self._fig_group)
 
         # ── CurveAlign TACS View (hidden until result available) ──────────────
         self._tacs_view_group = self._build_curvealign_tacs_view()
@@ -173,10 +177,33 @@ class VisualizationWidget(QWidget):
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
+    def on_analysis_complete(self, image_id: str, result) -> None:
+        """Called immediately after CurveAlign analysis finishes (before commit).
+
+        Enables the view buttons and shows the fiber features table.
+        """
+        if result is None:
+            return
+        self._curvealign_result = result
+        self._active_image_id = image_id
+        self._fig_group.setEnabled(True)
+        self._plots_group.setEnabled(True)
+        df = getattr(result, "fiber_features_df", None)
+        if df is not None and len(df) > 0:
+            self._show_fiber_features_table(df, image_id)
+
+    def _show_fiber_features_table(self, df, image_id: str) -> None:
+        from ..utils.export_utils import open_dataframe_dialog
+        self._features_dialog = open_dataframe_dialog(
+            df, f"Fiber Features — {image_id}", self
+        )
+
     def on_curvealign_committed(self, image_id: str, result) -> None:
         """Show the TACS View and populate it when a CurveAlign result is committed."""
         self._curvealign_result = result
         self._active_image_id = image_id
+        self._fig_group.setEnabled(True)
+        self._plots_group.setEnabled(True)
         self._tacs_view_group.setVisible(True)
 
         # Populate ROI dropdown from roi_summary_df
@@ -195,42 +222,64 @@ class VisualizationWidget(QWidget):
 
     # ── Table population ───────────────────────────────────────────────────────
 
+    _TACS_TABLE_COLS = [
+        "fiber_key",
+        "center_row", "center_col",
+        "fiber_absolute_angle",
+        "nearest_relative_boundary_angle",
+        "nearest_distance_to_boundary",
+        "tacs_class",
+    ]
+
     def _populate_tacs_table(self, result, roi_filter=None, tacs_filter=None) -> None:
         df = getattr(result, "fiber_features_df", None)
         if df is None or len(df) == 0:
             self._tacs_table.setRowCount(0)
+            self._tacs_table_df = None
             return
 
-        display_cols = [
-            c for c in ("fiber_key", "center_row", "center_col", "angle",
-                        "abs_angle", "angle_to_boundary_tangent", "tacs_class")
-            if c in df.columns
-        ]
+        display_cols = [c for c in self._TACS_TABLE_COLS if c in df.columns]
         if not display_cols:
-            display_cols = list(df.columns[:6])
+            display_cols = list(df.columns[:7])
 
-        filtered = df.copy()
-        if tacs_filter and tacs_filter != "All zones":
-            if "tacs_class" in filtered.columns:
-                filtered = filtered[filtered["tacs_class"].astype(str) == tacs_filter]
-
+        self._tacs_table_df = df[display_cols].copy()
+        self._tacs_table.setSortingEnabled(False)
         self._tacs_table.setColumnCount(len(display_cols))
         self._tacs_table.setHorizontalHeaderLabels(display_cols)
-        self._tacs_table.setRowCount(len(filtered))
-        for row_idx, (_, row_data) in enumerate(filtered[display_cols].iterrows()):
+        self._tacs_table.setRowCount(len(self._tacs_table_df))
+
+        for row_idx, (_, row_data) in enumerate(self._tacs_table_df.iterrows()):
             for col_idx, val in enumerate(row_data):
                 item = QTableWidgetItem(
-                    f"{val:.2f}" if isinstance(val, float) else str(val)
+                    f"{val:.3f}" if isinstance(val, float) else str(val)
                 )
                 self._tacs_table.setItem(row_idx, col_idx, item)
 
+        self._tacs_table.setSortingEnabled(True)
+        self._tacs_table.resizeColumnsToContents()
+        # Apply any active filter immediately
+        self._apply_tacs_filter_fast()
+
     def _apply_tacs_filter(self) -> None:
-        if self._curvealign_result is None:
+        self._apply_tacs_filter_fast()
+
+    def _apply_tacs_filter_fast(self) -> None:
+        """Hide/show rows without rebuilding — instant even for thousands of fibers."""
+        df = self._tacs_table_df
+        if df is None or self._tacs_table.rowCount() == 0:
             return
         tacs_sel = self._tacs_class_combo.currentText()
-        roi_sel = self._tacs_roi_combo.currentText()
-        tacs_filter = tacs_sel if tacs_sel != "All zones" else None
-        self._populate_tacs_table(self._curvealign_result, roi_filter=roi_sel, tacs_filter=tacs_filter)
+        want_tacs = tacs_sel if tacs_sel != "All zones" else None
+
+        tacs_col = df.columns.get_loc("tacs_class") if "tacs_class" in df.columns else None
+
+        for row_idx in range(self._tacs_table.rowCount()):
+            hide = False
+            if want_tacs and tacs_col is not None:
+                item = self._tacs_table.item(row_idx, tacs_col)
+                if item and item.text() != want_tacs:
+                    hide = True
+            self._tacs_table.setRowHidden(row_idx, hide)
 
     def _on_table_row_selected(self) -> None:
         """Highlight the napari Points layer point for the selected fiber."""
@@ -245,15 +294,38 @@ class VisualizationWidget(QWidget):
         existing = next((l for l in self._viewer.layers if l.name == lname), None)
 
         if checked:
+            # Also make boundary mask and source image layers visible
+            self._set_mask_layers_visible(True)
             if existing is None:
                 self._create_boundary_lines_layer(lname)
             else:
                 existing.visible = True
-        elif existing is not None:
-            existing.visible = False
+        else:
+            if existing is not None:
+                existing.visible = False
+
+    def _set_mask_layers_visible(self, visible: bool) -> None:
+        """Make all MASK-type image layers visible (or hidden)."""
+        if self._viewer is None or self._viz_controller is None:
+            return
+        from ..controllers.state import ImageType
+        state = self._viz_controller._state
+        mask_ids = {iid for iid, itype in state.image_types.items()
+                    if itype == ImageType.MASK}
+        # Also make the active fiber image visible
+        if self._active_image_id:
+            mask_ids.add(self._active_image_id)
+        for layer in self._viewer.layers:
+            if layer.name in mask_ids:
+                layer.visible = visible
 
     def _create_boundary_lines_layer(self, layer_name: str) -> None:
-        """Lazily create dashed lines from each fiber centroid to its nearest boundary point."""
+        """Lazily create lines from each fiber centroid to its nearest boundary point.
+
+        Note: boundary_point_row/col in fiber_features_df use MATLAB (x,y) convention
+        where boundary_point_row=col and boundary_point_col=row. Swap when building
+        napari (row, col) coordinates.
+        """
         df = getattr(self._curvealign_result, "fiber_features_df", None)
         if df is None or self._viewer is None:
             return
@@ -261,15 +333,17 @@ class VisualizationWidget(QWidget):
             return
         shapes = []
         for _, row in df.iterrows():
+            bpr = float(row["boundary_point_row"])
+            bpc = float(row["boundary_point_col"])
             shapes.append(np.array([
                 [float(row["center_row"]), float(row["center_col"])],
-                [float(row["boundary_point_row"]), float(row["boundary_point_col"])],
+                [bpc, bpr],  # swap: boundary_point_col=row, boundary_point_row=col
             ]))
         if shapes:
             self._viewer.add_shapes(
                 shapes,
                 shape_type="line",
-                edge_color="white",
+                edge_color="cyan",
                 edge_width=1,
                 name=layer_name,
             )
@@ -280,11 +354,14 @@ class VisualizationWidget(QWidget):
         pass  # TODO: wire to napari-matplotlib panel
 
     def _view_overlay_png(self) -> None:
+        print(f"[overlay] active_id={self._active_image_id!r} result={self._curvealign_result is not None}", flush=True)
         fig = self._generate_overlay_fig()
         if fig is not None:
             from ..utils.export_utils import open_figure_dialog
             self._overlay_fig = fig
             self._overlay_dialog = open_figure_dialog(fig, "Fiber Overlay", self)
+        else:
+            print("[overlay] figure generation returned None", flush=True)
 
     def _view_heatmap_png(self) -> None:
         fig = self._generate_heatmap_fig()
@@ -309,12 +386,14 @@ class VisualizationWidget(QWidget):
         try:
             from tme_quant.fiber_analysis.visualization.draw_utils import generate_fiber_overlay
             tif_boundary = 3 if getattr(result, "boundary_measurement", False) else 0
+            in_flag = getattr(result, "in_curvs_flag", None)
+            out_flag = (~in_flag) if in_flag is not None else None
             fig, _ = generate_fiber_overlay(
                 img=img,
                 fiber_structure=result.fiber_structure,
-                coordinates=None,
-                in_curvs_flag=getattr(result, "in_curvs_flag", None),
-                out_curvs_flag=None,
+                coordinates=getattr(result, "roi_coordinates", None),
+                in_curvs_flag=in_flag,
+                out_curvs_flag=out_flag,
                 nearest_angles=getattr(result, "nearest_angles", None),
                 measured_boundary=None,
                 fiber_mode=0,
@@ -322,13 +401,17 @@ class VisualizationWidget(QWidget):
                 boundary_measurement=getattr(result, "boundary_measurement", False),
             )
             return fig
-        except Exception:
+        except Exception as exc:
+            import traceback
+            print(f"[overlay ERROR] {exc}", flush=True)
+            traceback.print_exc()
             return None
 
     def _generate_heatmap_fig(self):
         result = self._curvealign_result
         img = self._get_image_array()
         if result is None or img is None:
+            print(f"[heatmap] result={result is not None} img={img is not None}", flush=True)
             return None
         try:
             from tme_quant.fiber_analysis.visualization.draw_utils import generate_fiber_heatmap
@@ -343,7 +426,10 @@ class VisualizationWidget(QWidget):
                 boundary_measurement=getattr(result, "boundary_measurement", False),
             )
             return fig
-        except Exception:
+        except Exception as exc:
+            import traceback
+            print(f"[heatmap ERROR] {exc}", flush=True)
+            traceback.print_exc()
             return None
 
     # ── Save actions ───────────────────────────────────────────────────────────

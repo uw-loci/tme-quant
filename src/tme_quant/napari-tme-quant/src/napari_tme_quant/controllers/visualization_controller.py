@@ -146,19 +146,31 @@ class VisualizationController:
             return
 
         coords = fiber_df_to_napari_points(df)
-        layer_name = make_layer_name(image_id, "Fibers", "curvealign")
 
-        # Compute TACS class per fiber for color coding
+        # All curvelet groups colored by TACS zone membership
+        layer_name = make_layer_name(image_id, "Fibers", "all (TACS-colored)")
         face_colors = self._compute_tacs_face_colors(df, result)
         self._add_points_layer(layer_name, coords, face_color=face_colors)
 
-        # Per-TACS sub-layers
+        # Fiber orientation lines — 6px white line segments at absolute fiber angle
+        if "angle" in df.columns:
+            shapes = fiber_df_to_napari_shapes(df, line_length=6.0)
+            overlay_name = make_layer_name(image_id, "Fibers", "orientation-lines")
+            self._add_shapes_layer(overlay_name, shapes, edge_color="white")
+
+        # Per-TACS sub-layers (in-zone fibers by TACS class)
         tacs_classes = self._classify_df_tacs(df, result)
         for tacs_label, color in TACS_COLORS.items():
             mask = tacs_classes == tacs_label
             if mask.any():
                 lname = make_layer_name(image_id, "Fibers", tacs_label)
                 self._add_points_layer(lname, coords[mask], face_color=color)
+
+        # Out-of-zone fibers
+        out_mask = tacs_classes == "outside"
+        if out_mask.any():
+            lname = make_layer_name(image_id, "Fibers", "out-of-zone")
+            self._add_points_layer(lname, coords[out_mask], face_color="lightgray")
 
         # Orientation heatmap layer (procmap from generate_fiber_heatmap)
         self._create_heatmap_layer(image_id, result)
@@ -263,7 +275,7 @@ class VisualizationController:
             self._viewer.add_points(
                 coords,
                 face_color=face_color,
-                size=5,
+                size=3,
                 name=name,
             )
             self._state.layer_map[name] = name
