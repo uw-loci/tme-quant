@@ -94,6 +94,7 @@ class CurveAlignPipelineResult:
     in_curvs_flag:      Optional[np.ndarray]
     nearest_angles:     Optional[np.ndarray]
     boundary_measurement: bool
+    roi_coordinates:    Optional[dict] = None  # boundary ROI coord dict (key → (N,2) ndarray)
     params:             dict = field(default_factory=dict)
 
 
@@ -519,6 +520,7 @@ def curvealign_curvelets_mode_pipeline(
         in_curvs_flag=in_curvs_flag,
         nearest_angles=nearest_angles,
         boundary_measurement=boundary_measurement,
+        roi_coordinates=coordinates if boundary_measurement else None,
         params=_params,
     )
 

@@ -352,26 +352,31 @@ def generate_fiber_overlay(
                 ax.plot(coords_array[:, 1], coords_array[:, 0], "y-")
                 ax.plot(coords_array[:, 1], coords_array[:, 0], "*y", markersize=3)
         elif tif_boundary == 3:
-            for roi_coords in coordinates.values():
-                roi_coords_array = np.array(roi_coords)
-                ax.plot(
-                    roi_coords_array[:, 1],
-                    roi_coords_array[:, 0],
-                    "y-",
-                    linewidth=1,
-                )
+            if coordinates is not None:
+                for roi_coords in coordinates.values():
+                    roi_coords_array = np.array(roi_coords)
+                    ax.plot(
+                        roi_coords_array[:, 1],
+                        roi_coords_array[:, 0],
+                        "y-",
+                        linewidth=1,
+                    )
 
     marksize = 3
     linewidth = 1
 
     if tif_boundary == 3:
+        # Orientation lines always use absolute fiber angle, not relative angle to boundary
+        _abs_angles = (fiber_structure["angle"].values
+                       if hasattr(fiber_structure, "columns") and "angle" in fiber_structure.columns
+                       else nearest_angles)
         if np.any(in_curvs_flag):
             draw_curvs(
                 fiber_structure[in_curvs_flag],
                 ax,
                 fiber_len,
                 color_flag=0,
-                angles=nearest_angles[in_curvs_flag],
+                angles=_abs_angles[in_curvs_flag],
                 mark_size=marksize,
                 line_width=linewidth,
                 boundary_measurement=boundary_measurement,
@@ -382,7 +387,7 @@ def generate_fiber_overlay(
                 ax,
                 fiber_len,
                 color_flag=1,
-                angles=nearest_angles[out_curvs_flag],
+                angles=_abs_angles[out_curvs_flag],
                 mark_size=marksize,
                 line_width=linewidth,
                 boundary_measurement=boundary_measurement,
@@ -408,16 +413,21 @@ def generate_fiber_overlay(
                         linewidth=0.5,
                     )
     elif tif_boundary == 0:
-        draw_curvs(
-            fiber_structure,
-            ax,
-            fiber_len,
-            color_flag=0,
-            angles=nearest_angles,
-            mark_size=marksize,
-            line_width=linewidth,
-            boundary_measurement=boundary_measurement,
-        )
+        # No boundary: use absolute fiber angle for orientation lines
+        _angles = (fiber_structure["angle"].values
+                   if hasattr(fiber_structure, "columns") and "angle" in fiber_structure.columns
+                   else nearest_angles)
+        if fiber_structure is not None and len(fiber_structure) > 0:
+            draw_curvs(
+                fiber_structure,
+                ax,
+                fiber_len,
+                color_flag=0,
+                angles=_angles,
+                mark_size=marksize,
+                line_width=linewidth,
+                boundary_measurement=boundary_measurement,
+            )
     # tif_boundary 1/2: not yet ported
 
     return fig, ax
@@ -473,8 +483,23 @@ def generate_fiber_heatmap(
     if map_params is None:
         map_params = {}
 
-    map_fibers = fiber_structure[in_curvs_flag]
-    map_angles = angles[in_curvs_flag]
+    if in_curvs_flag is not None:
+        # Boundary present: use relative angles (nearest_angles) for heatmap color
+        map_fibers = fiber_structure[in_curvs_flag]
+        map_angles = angles[in_curvs_flag] if angles is not None else None
+    else:
+        # No boundary: include all fibers, use absolute angles for heatmap color
+        map_fibers = fiber_structure
+        map_angles = (fiber_structure["angle"].values
+                      if hasattr(fiber_structure, "columns") and "angle" in fiber_structure.columns
+                      else None)
+
+    if map_angles is None:
+        import warnings
+        warnings.warn("generate_fiber_heatmap: no angles available, returning empty figure")
+        fig, ax = plt.subplots()
+        ax.imshow(img, cmap="gray")
+        return fig, None, None
 
     raw_map, proc_map = draw_map(
         map_fibers, map_angles, img, boundary_measurement, map_params
