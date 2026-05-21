@@ -107,9 +107,14 @@ class ProjectController:
         data = np.asarray(iio.imread(path), dtype=np.float32)
 
         # Add to napari (reuse existing layer if already loaded)
+        from .state import ImageType
         existing = next((l for l in viewer.layers if l.name == image_id), None)
         if existing is None:
-            viewer.add_image(data, name=image_id)
+            if image_type == ImageType.MASK:
+                # Show boundary contour outline instead of the filled mask image
+                self._add_mask_boundary_layer(viewer, image_id, data)
+            else:
+                viewer.add_image(data, name=image_id)
 
         self._state.images[image_id] = data
         self._state.image_types[image_id] = image_type
@@ -120,6 +125,30 @@ class ProjectController:
         for fn in self._on_image_added:
             fn(image_id)
         return image_id
+
+    def _add_mask_boundary_layer(self, viewer, image_id: str, data: np.ndarray) -> None:
+        """Extract boundary contour from a binary mask and add as a yellow Shapes layer."""
+        try:
+            from tme_quant.fiber_analysis.utils.boundary_tif_utils import (
+                extract_boundary_coords_from_mask,
+            )
+            mask_u8 = (data > 0).astype(np.uint8) * 255
+            coords_dict = extract_boundary_coords_from_mask(mask_u8)
+            polys = [np.asarray(rc) for rc in coords_dict.values() if len(rc) > 0]
+            if polys:
+                viewer.add_shapes(
+                    polys,
+                    shape_type="polygon",
+                    edge_color="yellow",
+                    face_color="transparent",
+                    edge_width=2,
+                    name=image_id,
+                )
+                return
+        except Exception:
+            pass
+        # Fallback: show as image
+        viewer.add_image(data, name=image_id)
 
     def remove_image(self, image_id: str, viewer) -> None:
         """Remove an image from state and from the napari viewer."""
