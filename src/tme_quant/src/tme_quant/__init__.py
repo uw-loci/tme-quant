@@ -55,7 +55,7 @@ from .fiber_analysis import (
     SkeletonParams, RidgeDetectionParams,
     OrientationJParams, GradientParams, StructureTensorParams,
     # Fiber data
-    FiberProperties, FiberAnalysisResult,
+    FiberProperties, FiberFeatureParams, FiberAnalysisResult,
     # Boundary / ROI utilities
     extract_boundary_coords_from_mask,
     # Visualization
@@ -118,7 +118,7 @@ __all__ = [
     "CTFireParams", "CurveAlignParams",
     "SkeletonParams", "RidgeDetectionParams",
     "OrientationJParams", "GradientParams", "StructureTensorParams",
-    "FiberProperties",
+    "FiberProperties", "FiberFeatureParams",
     # ── Fiber: utilities + visualization ─────────────────────────────────────
     "extract_boundary_coords_from_mask",
     "generate_fiber_overlay", "generate_fiber_heatmap",

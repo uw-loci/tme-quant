@@ -205,6 +205,7 @@ src/tme_quant/.venv_*/
 
 # ── Local tool settings ───────────────────────────────────────────────────────
 src/tme_quant/.claude/settings.local.json
+src/tme_quant/.claude/sessions/
 
 # ── Local data directory ──────────────────────────────────────────────────────
 src/tme_quant/data/

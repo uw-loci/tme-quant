@@ -23,7 +23,7 @@ from .config import (
     CTFireParams, CurveAlignParams,
     SkeletonParams, RidgeDetectionParams,
     OrientationJParams, GradientParams, StructureTensorParams,
-    FiberProperties,
+    FiberProperties, FiberFeatureParams,
 )
 from .results import FiberAnalysisResult
 from .utils.fiber_dataframe_utils import (
@@ -56,7 +56,7 @@ __all__ = [
     'SkeletonParams', 'RidgeDetectionParams',
     'OrientationJParams', 'GradientParams', 'StructureTensorParams',
     # Fiber data
-    'FiberProperties', 'FiberAnalysisResult',
+    'FiberProperties', 'FiberFeatureParams', 'FiberAnalysisResult',
     # Utilities
     'build_fiber_structure_from_curvelets',
     'compute_fiber_density_and_alignment',

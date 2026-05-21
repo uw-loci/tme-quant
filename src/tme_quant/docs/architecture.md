@@ -120,42 +120,54 @@ src/tme_quant/
 │       ├── __init__.py
 │       └── interaction_visualization.py
 │
-└── image_registration/
-    ├── __init__.py
-    ├── config.py
-    ├── io.py
-    ├── preprocessing.py           ← 16 functions (merged from 3 files)
-    ├── registration_manager.py
-    ├── transform_handler.py
-    ├── methods/
-    │   ├── __init__.py
-    │   ├── base_registration.py
-    │   ├── deep_learning/
-    │   │   ├── __init__.py
-    │   │   ├── comir_registration.py
-    │   │   └── voxelmorph_registration.py
-    │   ├── feature_based/
-    │   │   ├── __init__.py
-    │   │   ├── orb_registration.py
-    │   │   └── sift_registration.py
-    │   ├── intensity_based/
-    │   │   ├── __init__.py
-    │   │   ├── cross_correlation.py
-    │   │   ├── he_shg_registration_python.py
-    │   │   └── mutual_information.py
-    │   └── landmark_based/
+├── image_registration/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── io.py
+│   ├── preprocessing.py           ← 16 functions (merged from 3 files)
+│   ├── registration_manager.py
+│   ├── transform_handler.py
+│   ├── methods/
+│   │   ├── __init__.py
+│   │   ├── base_registration.py
+│   │   ├── deep_learning/
+│   │   │   ├── __init__.py
+│   │   │   ├── comir_registration.py
+│   │   │   └── voxelmorph_registration.py
+│   │   ├── feature_based/
+│   │   │   ├── __init__.py
+│   │   │   ├── orb_registration.py
+│   │   │   └── sift_registration.py
+│   │   ├── intensity_based/
+│   │   │   ├── __init__.py
+│   │   │   ├── cross_correlation.py
+│   │   │   ├── he_shg_registration_python.py
+│   │   │   └── mutual_information.py
+│   │   └── landmark_based/
+│   │       ├── __init__.py
+│   │       ├── manual_landmarks.py
+│   │       └── thin_plate_spline.py
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── image_utils.py
+│   │   └── transform_utils.py
+│   └── visualization/
+│       ├── checkerboard.py
+│       ├── difference_map.py
+│       ├── interactive_viewer.py
+│       └── overlay.py
+│
+└── napari-tme-quant/              ← napari plugin (separate installable package; co-located for prototyping)
+    ├── pyproject.toml             ← declares napari-tme-quant distribution
+    ├── src/
+    │   └── napari_tme_quant/      ← plugin Python package (NOT part of tme_quant namespace)
     │       ├── __init__.py
-    │       ├── manual_landmarks.py
-    │       └── thin_plate_spline.py
-    ├── utils/
-    │   ├── __init__.py
-    │   ├── image_utils.py
-    │   └── transform_utils.py
-    └── visualization/
-        ├── checkerboard.py
-        ├── difference_map.py
-        ├── interactive_viewer.py
-        └── overlay.py
+    │       ├── _main_widget.py    ← TMEQuantDockWidget (QTabWidget container)
+    │       ├── napari.yaml        ← plugin manifest (napari ≥ 0.4.17)
+    │       ├── controllers/       ← PluginState + per-tab controllers
+    │       ├── utils/             ← layer helpers, export utils, coord utils
+    │       └── widgets/           ← one file per dock panel
+    └── tests/
 
 tests/
 └── test_geometry_utils.py             ← 55 unit tests for fiber_analysis/utils/geometry_utils.py

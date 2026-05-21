@@ -133,3 +133,11 @@ User: "write an example to run this pipeline"
 
 ---
 
+## 2026-05-07T18:45:47Z
+- Branch: prototype/hierarchy-model-for-CApy
+- Commit: f58e37b feat(integrations): add QuPath GeoJSON bridge and orientation map sidecars
+
+
+
+---
+
