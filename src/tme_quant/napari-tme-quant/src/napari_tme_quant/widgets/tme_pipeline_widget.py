@@ -112,6 +112,15 @@ class TMEPipelineWidget(QWidget):
         mask_row.addWidget(load_mask_btn)
         form.addRow("Boundary mask:", mask_row)
 
+        self._invert_mask = QCheckBox("Invert mask (white = tumor region)")
+        self._invert_mask.setChecked(False)
+        self._invert_mask.setToolTip(
+            "Inverts the binary mask data passed to the pipeline.\n"
+            "Check this when the tumor region is dark (0) in your mask image.\n"
+            "Note: does not change the napari layer display — only affects the pipeline input."
+        )
+        form.addRow("", self._invert_mask)
+
         # Distance threshold (primary control — applies to any TACS pipeline method)
         self._dist_thresh = QDoubleSpinBox()
         self._dist_thresh.setRange(1.0, 2000.0)
@@ -285,15 +294,19 @@ class TMEPipelineWidget(QWidget):
         import napari.layers
         layer = next((l for l in self._viewer.layers if l.name == layer_name), None)
         if layer is None:
-            # Try looking it up in state.images
             if self._project_ctrl:
                 arr = self._project_ctrl._state.images.get(layer_name)
                 if arr is not None:
-                    return arr.astype(np.uint8)
+                    arr = arr.astype(np.uint8)
+                    return (255 - arr) if self._invert_mask.isChecked() else arr
             return None
         if isinstance(layer, napari.layers.Shapes):
-            return layer.to_labels(labels_shape=image_shape[:2]).astype(np.uint8)
-        return np.asarray(layer.data, dtype=np.uint8)
+            arr = layer.to_labels(labels_shape=image_shape[:2]).astype(np.uint8)
+        else:
+            arr = np.asarray(layer.data, dtype=np.uint8)
+        if self._invert_mask.isChecked():
+            arr = 255 - arr
+        return arr
 
     def _get_curvealign_params(self) -> dict:
         return {
@@ -341,11 +354,14 @@ class TMEPipelineWidget(QWidget):
             )
 
     def _commit_curvealign(self) -> None:
-        if self._analysis_ctrl is None or not self._active_image_id:
+        image_id = self._active_image_id or self._fiber_selector.currentData()
+        print(f"[commit] active_id={self._active_image_id!r}  fiber_id={self._fiber_selector.currentData()!r}", flush=True)
+        if self._analysis_ctrl is None or not image_id:
+            print("[commit] aborting — no image id", flush=True)
             return
-        self._analysis_ctrl.commit_fiber_result(
-            self._active_image_id, method="curvealign"
-        )
+        results = self._analysis_ctrl._state.curvealign_pipeline_results
+        print(f"[commit] results keys: {list(results.keys())}", flush=True)
+        self._analysis_ctrl.commit_fiber_result(image_id, method="curvealign")
 
     # ── Per-image params ───────────────────────────────────────────────────────
 
