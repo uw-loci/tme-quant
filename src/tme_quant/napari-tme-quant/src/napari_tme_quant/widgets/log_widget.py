@@ -5,9 +5,9 @@ from qtpy.QtGui import QColor, QTextCursor
 from qtpy.QtCore import Qt
 
 _LEVEL_COLORS = {
-    "INFO":  "#000000",
-    "WARN":  "#d07000",
-    "ERROR": "#cc0000",
+    "INFO":  "#d0d0d0",
+    "WARN":  "#f0a030",
+    "ERROR": "#ff5555",
 }
 
 
@@ -34,6 +34,9 @@ class LogWidget(QWidget):
         self._text = QTextEdit()
         self._text.setReadOnly(True)
         self._text.setLineWrapMode(QTextEdit.NoWrap)
+        self._text.setStyleSheet(
+            "QTextEdit { background-color: #1e1e1e; color: #d0d0d0; }"
+        )
         layout.addWidget(self._text)
 
     def append(self, level: str, msg: str) -> None:
