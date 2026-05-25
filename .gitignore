@@ -175,6 +175,13 @@ lastPATH_CTF.mat
 *.mat
 *.tif
 
+# image files in src/
+src/**/*.png
+src/**/*.tif
+src/**/*.tiff
+src/**/*.jpg
+src/**/*.jpeg
+
 pycurvelets/opt/*.*
 
 # test tmp folder
