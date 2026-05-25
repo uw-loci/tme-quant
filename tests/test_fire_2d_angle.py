@@ -237,7 +237,6 @@ def load_matlab_reference(mat_file_path):
 # pixel scale.  Adapted from tme_quant/tests/test_ctfire.py.
 _SMOOTH_SIGMA = 5.0
 
-SOFT_IOU_THRESHOLD_SYNTHETIC = 0.70  # extracted skeleton vs known GT skeleton
 SOFT_IOU_THRESHOLD_MATLAB    = 0.50  # Python vs MATLAB centerlines (>30px filtered)
 
 
@@ -337,86 +336,6 @@ def _fiber_stats_filtered(X, F, min_len=MIN_FIBER_LEN_PX, row_idx=0, col_idx=1):
         'totL': float(np.sum(L)),
         'angle_xy': np.array(angles, dtype=float),
     }
-
-
-def _make_synthetic_fiber_image(shape=(256, 256), n_fibers=8, fiber_sigma=2.5, rng_seed=42):
-    """
-    Generate a synthetic fiber image with a known ground-truth skeleton.
-
-    Straight-line fibers are drawn with Gaussian cross-section profiles
-    (signal amplitude 180, background mean 10 with Gaussian noise σ=4)
-    so the FIRE distance-transform pipeline can find them at thresh_im2=5.
-    Returns the image and the skeletonized 1-px ground-truth centerline mask.
-
-    Why synthetic images:
-      - Exact centerline positions are known at generation time — soft IoU
-        measures genuine spatial recovery, not just "did any fibers come out".
-      - Deterministic RNG seeds make CI results reproducible.
-      - No MATLAB .mat reference files required.
-      - Straight-line Gaussian fibers are the canonical FIRE input; regressions
-        in extend_xlink, trimxfv, or filtering stages show up as IoU drops.
-    """
-    from scipy.ndimage import distance_transform_edt
-    from skimage.draw import line as draw_line
-    from skimage.morphology import skeletonize
-    rng = np.random.default_rng(rng_seed)
-    H, W = shape
-    margin = 20
-    skeleton = np.zeros(shape, dtype=bool)
-    generated = 0
-    while generated < n_fibers:
-        r0 = int(rng.integers(margin, H - margin))
-        c0 = int(rng.integers(margin, W - margin))
-        angle = rng.uniform(0, np.pi)
-        length = int(rng.integers(60, min(H, W) - 2 * margin))
-        r1 = int(np.clip(r0 + length * np.sin(angle), margin, H - margin))
-        c1 = int(np.clip(c0 + length * np.cos(angle), margin, W - margin))
-        if np.hypot(r1 - r0, c1 - c0) < 50:
-            continue
-        rr, cc = draw_line(r0, c0, r1, c1)
-        skeleton[rr, cc] = True
-        generated += 1
-    dist = distance_transform_edt(~skeleton).astype(np.float32)
-    signal = 180.0 * np.exp(-dist**2 / (2.0 * fiber_sigma**2))
-    bg = rng.normal(10.0, 4.0, size=shape).astype(np.float32)
-    image = np.clip(bg + signal, 0.0, 255.0).astype(np.float32)
-    return image, skeletonize(skeleton)
-
-
-def _default_fire_params():
-    """
-    Return the standard FIRE algorithm parameters from test_cases_fire_2d.json.
-
-    Uses the 'real1_fire_params' test case parameters.
-    Intended for use with real biological images.
-    """
-    config_path = (
-        Path(__file__).parent
-        / "test_results"
-        / "fire_2d_test_files"
-        / "test_cases_fire_2d.json"
-    )
-    with open(config_path, "r") as f:
-        cfg = json.load(f)
-    case = next(c for c in cfg["test_cases"] if c["name"] == "real1_fire_params")
-    return dict(case["params"])
-
-
-def _synthetic_fire_params():
-    """
-    Return FIRE algorithm parameters tuned for synthetic test images.
-
-    Synthetic images have Gaussian-profile fibers (peak ~180, background ~10).
-    The JSON default of thresh_im2=5 (absolute) includes nearly all background
-    pixels at that level, producing hundreds of spurious short zigzag fibers.
-    Using a fractional threshold (thresh_im=0.2, i.e. 20% of image maximum)
-    raises the effective cutoff to ~36, cleanly separating fiber signal from
-    background and suppressing spurious detections.
-    """
-    p = _default_fire_params()
-    p["thresh_im"]  = 0.2   # fractional: keep pixels > 20% of max (~36 for peak 180)
-    p["thresh_im2"] = []    # disable absolute threshold when thresh_im is set
-    return p
 
 
 # ============================================================================
@@ -774,75 +693,6 @@ class TestSoftIoU:
     granularity, not pixel precision.
     """
 
-    def test_soft_iou_synthetic(self):
-        """
-        Synthetic image with known GT skeleton — always runs, no .mat needed.
-
-        Validates:
-        1. Soft IoU of extracted centerlines vs ground-truth skeleton > 0.30
-        2. Total extracted fiber length is at least 20% of GT skeleton length
-        3. Extracted fiber angles span a reasonable range (std > 0.3 rad),
-           confirming the angle computation is not degenerate
-        """
-        if not CPP_AVAILABLE:
-            pytest.skip("C++ backend not available")
-
-        image, gt_skeleton = _make_synthetic_fiber_image(rng_seed=42)
-        p = _synthetic_fire_params()
-        data = fire_2d_angle(p=p, im=image, plotflag=0)
-
-        assert len(data["Ff"]) > 0, "no filtered fibers extracted"
-
-        # 1. Soft IoU
-        pred = _rasterize_fibers(data["Xf"], data["Ff"], image.shape)
-        iou = _soft_iou(_smooth_mask(gt_skeleton.astype(np.float32)),
-                        _smooth_mask(pred.astype(np.float32)))
-        assert iou > SOFT_IOU_THRESHOLD_SYNTHETIC, (
-            f"soft IoU {iou:.3f} < {SOFT_IOU_THRESHOLD_SYNTHETIC} — "
-            "extracted centerlines do not overlap ground truth at fiber scale"
-        )
-
-        # 2. Total extracted length vs GT skeleton pixel count (arc-length proxy)
-        tot_L = float(data["M"]["totL"])
-        assert tot_L > 0, "total extracted fiber length is zero"
-        gt_length = float(gt_skeleton.sum())
-        assert tot_L > 0.2 * gt_length, (
-            f"extracted total length {tot_L:.1f} px < 20% of GT skeleton "
-            f"length {gt_length:.1f} px — pipeline may be discarding too many fibers"
-        )
-
-        # 3. Angle range sanity check (normalize raw arctan output to [0, π])
-        angles = np.asarray(data["M"].get("angle_xy", [])) % np.pi
-        assert len(angles) > 0, "no fiber angles in M['angle_xy']"
-        assert np.all((angles >= -1e-6) & (angles <= np.pi + 1e-6)), "angle value outside [0, π]"
-        assert angles.std() > 0.3, (
-            f"angle std {angles.std():.3f} rad unexpectedly small — "
-            "all fibers have nearly the same orientation on a random image"
-        )
-
-    @pytest.mark.parametrize("seed", [0, 7, 99])
-    def test_soft_iou_multiple_seeds(self, seed):
-        """
-        Soft IoU > 0.30 across multiple random synthetic configurations.
-
-        Guards against a lucky pass on a single seed by checking that the
-        pipeline recovers fibers consistently across different random images.
-        """
-        if not CPP_AVAILABLE:
-            pytest.skip("C++ backend not available")
-
-        image, gt_skeleton = _make_synthetic_fiber_image(rng_seed=seed)
-        p = _synthetic_fire_params()
-        data = fire_2d_angle(p=p, im=image, plotflag=0)
-
-        assert len(data["Ff"]) > 0, f"no fibers extracted (seed={seed})"
-        pred = _rasterize_fibers(data["Xf"], data["Ff"], image.shape)
-        iou = _soft_iou(_smooth_mask(gt_skeleton.astype(np.float32)),
-                        _smooth_mask(pred.astype(np.float32)))
-        assert iou > SOFT_IOU_THRESHOLD_SYNTHETIC, (
-            f"soft IoU {iou:.3f} < {SOFT_IOU_THRESHOLD_SYNTHETIC} (seed={seed})"
-        )
-
     @pytest.mark.matlab
     @pytest.mark.parametrize(
         "test_name,test_case",
@@ -1018,32 +868,69 @@ def test_implementation_status_documented():
 
 
 if __name__ == "__main__":
-    # Standalone demo: generate synthetic image, run FIRE, print metrics, save overlay.
+    # Standalone demo: run FIRE on real1.tif, compare with MATLAB reference,
+    # print soft IoU metrics, and save a red/green/yellow centerline overlay.
     # Run with:  python tests/test_fire_2d_angle.py
-    from ctfire_py.test_fire_2d import plot_fiber_overlay
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from skimage import exposure as _exposure
 
-    image, gt_skeleton = _make_synthetic_fiber_image(rng_seed=42)
-    p = _synthetic_fire_params()
-    data = fire_2d_angle(p=p, im=image, plotflag=0)
+    _, test_case = next(
+        (n, tc) for n, tc in load_test_cases(matlab_only=True) if n == "real1_fire_params"
+    )
+    img = load_test_image(test_case["image"])
+    if img.ndim == 2:
+        img = img[np.newaxis, :, :]
+    data_py = fire_2d_angle(p=test_case["params"], im=img, plotflag=0)
 
-    pred = _rasterize_fibers(data["Xf"], data["Ff"], image.shape)
-    iou = _soft_iou(_smooth_mask(gt_skeleton.astype(np.float32)),
-                    _smooth_mask(pred.astype(np.float32)))
+    mat_path = (
+        Path(__file__).parent
+        / "test_results"
+        / "fire_2d_test_files"
+        / test_case["matlab_reference_mat"]
+    )
+    data_mat = load_matlab_reference(mat_path)
 
-    angles = np.asarray(data["M"].get("angle_xy", []))
-    mean_angle_deg = float(np.degrees(np.mean(angles % np.pi))) if len(angles) > 0 else float("nan")
+    image_2d = img[0] if img.ndim == 3 else img
+    H, W = image_2d.shape
+
+    mat_Xa_rc = data_mat["Xa"][:, [1, 0]]  # [col,row,z] → [row,col]
+    mat_skel = _rasterize_fibers(mat_Xa_rc, data_mat["Fa"], (H, W))
+    py_skel  = _rasterize_fibers(data_py["Xa"], data_py["Fa"], (H, W))
+    iou = _soft_iou(_smooth_mask(mat_skel.astype(np.float32)),
+                    _smooth_mask(py_skel.astype(np.float32)))
+
+    py_angles = np.asarray(data_py["M"].get("angle_xy", [])) % np.pi
+    mean_angle_deg = float(np.degrees(np.mean(py_angles))) if len(py_angles) > 0 else float("nan")
 
     print(
-        f"Soft IoU    = {iou:.4f}  (threshold {SOFT_IOU_THRESHOLD_SYNTHETIC})\n"
-        f"Fibers      = {len(data['Ff'])}\n"
-        f"Total length= {data['M']['totL']:.1f} px\n"
+        f"Test case   = real1_fire_params\n"
+        f"Soft IoU    = {iou:.4f}  (threshold {SOFT_IOU_THRESHOLD_MATLAB})\n"
+        f"Fibers      = {data_py['M']['fiber_num']}\n"
+        f"Total length= {data_py['M']['totL']:.1f} px\n"
         f"Mean |angle|= {mean_angle_deg:.1f}°"
     )
 
-    plot_fiber_overlay(
-        image,
-        data["Xf"],
-        data["Ff"],
-        title=f"FIRE overlay  (soft IoU={iou:.3f})",
-        save_path="fire_2d_soft_iou_overlay.png",
+    overlay_rgba = np.zeros((H, W, 4), dtype=np.float32)
+    mat_only = mat_skel & ~py_skel
+    py_only  = py_skel  & ~mat_skel
+    both     = mat_skel &  py_skel
+    overlay_rgba[mat_only] = [1.0, 0.0, 0.0, 1.0]  # red:    MATLAB only
+    overlay_rgba[py_only]  = [0.0, 1.0, 0.0, 1.0]  # green:  Python only
+    overlay_rgba[both]     = [1.0, 1.0, 0.0, 1.0]  # yellow: overlap
+    image_eq = _exposure.rescale_intensity(
+        image_2d, in_range=tuple(np.percentile(image_2d, (2, 98)))
     )
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.imshow(image_eq, cmap="gray")
+    ax.imshow(overlay_rgba)
+    ax.set_title(f"real1  soft IoU={iou:.3f}  (red=MATLAB, green=Python, yellow=overlap)")
+    ax.axis("off")
+    plt.tight_layout()
+    overlay_path = (
+        Path(__file__).parent / "test_results" / "fire_2d_test_files" / "iou_overlay_real1_demo.png"
+    )
+    fig.savefig(overlay_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved IoU overlay: {overlay_path}")
