@@ -1,0 +1,28 @@
+# --- Configuration ---
+TARGET = fiber_backend$(shell python -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
+
+# Compiler setup
+CXX = g++
+CXXFLAGS = -g -O0 -Wall -shared -std=c++14 -fPIC
+
+# Python and Pybind11 Flags
+PY_INCLUDES = $(shell python -m pybind11 --includes) $(shell python -c "import sysconfig; print('-I' + sysconfig.get_path('include'))")
+# Replace python-config with sysconfig calls
+PY_LDFLAGS = $(shell python -c "import sysconfig; print('-L' + sysconfig.get_config_var('LIBDIR') + ' -lpython' + sysconfig.get_config_var('VERSION'))")
+
+# OpenMP Configuration
+OMP_FLAGS = -fopenmp
+OMP_INCLUDES = -I$(CONDA_PREFIX)/include
+OMP_LIBS = -L$(CONDA_PREFIX)/lib -lgomp
+
+# Source files
+SRCS = extend_xlink_native.cpp fiberproc_native.cpp findlocmax_native.cpp fire_utils.cpp
+
+# --- Build Rules ---
+all: $(TARGET)
+
+$(TARGET): $(SRCS) link_fibre.h
+	$(CXX) $(CXXFLAGS) $(PY_INCLUDES) $(OMP_FLAGS) $(OMP_INCLUDES) $(SRCS) $(PY_LDFLAGS) $(OMP_LIBS) -o $(TARGET)
+
+clean:
+	rm -f *.so *.pyd

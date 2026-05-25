@@ -252,6 +252,36 @@ The FIRE (Fiber Extraction) graph-based tracing algorithm:
   C++ 3D FIRE extension is compiled; `extract_3d` raises `NotImplementedError`
   at the FIRE stage (curvelet and mask steps work)
 
+### `ctfire_py` — Direct-call Python CT-FIRE module (PoC bridge)
+
+A full Python conversion of the original CT-FIRE MATLAB code, living in
+`src/ctfire_py/` as a **sibling package** alongside `src/pycurvelets/`.
+
+- **Why it exists:** PoC bridge — `pycurvelets/get_fire.py` calls it directly
+  without routing through the `tme_quant.fiber_analysis` architecture. Future
+  plan: port into `CTFireExtraction` and retire this shim.
+- **How it differs from `_ctfire_cpp`:** `ctfire_py` is the complete Python
+  CT-FIRE conversion (curvelet pre-processing + FIRE graph tracing); `_ctfire_cpp`
+  is the planned pybind11 re-binding of just the C++ FIRE core.
+- **Entry point:** `from ctfire_py.ct_fire import ct_fire`
+- **C++ backend** (`src/ctfire_py/CPP/`):
+  - macOS (Apple Silicon / M-chips): `make -f Makefile`
+  - WSL / Linux: `make -f Makefile.linux`
+  - Native Windows: MSYS2 UCRT64 GCC toolchain (same pattern as curvelops;
+    see MSYS2 setup in `doc/DEVELOPMENT.md`)
+- **Source branch:** `32-convert-ctfire` in the ctfire fork repo
+  (`H:\GitHub.06.2022\tmequant_ctfire\tme-quant`)
+- **Sync workflow** (`32-convert-ctfire` is unstable — use direct copy, not
+  subtree; see `doc/DEVELOPMENT.md § Synchronizing ctfire_py`):
+  ```bash
+  git rm -r src/ctfire_py/
+  # in ctfire fork repo:
+  cp -r ../tmequant_ctfire/tme-quant/src/ctfire_py src/ctfire_py
+  git add src/ctfire_py/
+  git commit -m "sync: update ctfire_py from 32-convert-ctfire <SHA>"
+  ```
+  Each sync commit should record the source SHA in the message.
+
 ### Curvelet Transform (`curvelops` / `_curvelet_cpp`)
 
 Three backends in priority order:

@@ -1,3 +1,4 @@
+﻿import copy
 import os
 import sys
 import tempfile
@@ -116,6 +117,7 @@ except ImportError:
 
             QT_VERSION = 5
 
+from pycurvelets.get_fire import DEFAULT_CTFIRE_PARAMS
 from pycurvelets.process_image import process_image
 from pycurvelets.models import (
     AdvancedAnalysisOptions,
@@ -223,11 +225,11 @@ def display_image_comparison(original_img, overlay_path, procmap_path=None):
         plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.08, wspace=0.15)
         plt.show(block=False)
 
-        print(f"\n✓ Image comparison displayed successfully ({n_plots} images)")
+        print(f"\nΓ£ô Image comparison displayed successfully ({n_plots} images)")
         print("  (Use zoom/pan tools - all images are linked)")
 
     except Exception as e:
-        print(f"\n✗ Error displaying image comparison: {e}")
+        print(f"\nΓ£ù Error displaying image comparison: {e}")
 
 
 def display_excel_tables(xlsx_path):
@@ -261,10 +263,10 @@ def display_excel_tables(xlsx_path):
         for sheet_idx, sheet_name in enumerate(excel_file.sheet_names):
             df = pd.read_excel(xlsx_path, sheet_name=sheet_name)
 
-            print(f"\n{'─' * 80}")
+            print(f"\n{'ΓöÇ' * 80}")
             print(f"Sheet: {sheet_name}")
-            print(f"{'─' * 80}")
-            print(f"Shape: {df.shape[0]} rows × {df.shape[1]} columns")
+            print(f"{'ΓöÇ' * 80}")
+            print(f"Shape: {df.shape[0]} rows ├ù {df.shape[1]} columns")
 
             if len(df) > 0:
                 # Create Qt table window
@@ -288,7 +290,7 @@ def display_excel_tables(xlsx_path):
 
                 # Add title label
                 title_label = QLabel(
-                    f"{sheet_name}\n{df.shape[0]} rows × {df.shape[1]} columns"
+                    f"{sheet_name}\n{df.shape[0]} rows ├ù {df.shape[1]} columns"
                 )
                 title_label.setStyleSheet(
                     "font-size: 14px; font-weight: bold; padding: 10px;"
@@ -378,7 +380,7 @@ def display_excel_tables(xlsx_path):
                 table_windows.append(table_window)  # Keep reference
 
                 print(
-                    f"  ✓ Displayed table with {df.shape[1]} columns (all visible with horizontal scrollbar)"
+                    f"  Γ£ô Displayed table with {df.shape[1]} columns (all visible with horizontal scrollbar)"
                 )
 
             else:
@@ -386,7 +388,7 @@ def display_excel_tables(xlsx_path):
 
         print(f"\n{'=' * 80}\n")
         print(
-            f"✓ Excel file tables displayed in {len(table_windows)} Qt window(s) with scrollbars"
+            f"Γ£ô Excel file tables displayed in {len(table_windows)} Qt window(s) with scrollbars"
         )
 
         # Store windows globally to prevent garbage collection
@@ -395,7 +397,7 @@ def display_excel_tables(xlsx_path):
         display_excel_tables._windows.extend(table_windows)
 
     except Exception as e:
-        print(f"\n✗ Error displaying Excel file: {e}")
+        print(f"\nΓ£ù Error displaying Excel file: {e}")
         import traceback
 
         traceback.print_exc()
@@ -497,6 +499,14 @@ class ProcessImageGUI(QMainWindow):
         self.fiber_midpoint_estimate = QSpinBox()
         self.fiber_midpoint_estimate.setRange(0, 1)
         self.fiber_midpoint_estimate.setValue(1)
+
+        # CT-FIRE parameters
+        self.thresh_im2 = QSpinBox()
+        self.thresh_im2.setRange(0, 255)
+        self.thresh_im2.setValue(5)
+        self.thresh_im2.setToolTip(
+            "Background intensity threshold for fiber tracing (default 5; use ~98 for bright-field images)"
+        )
 
     def create_widgets(self):
         """Create all GUI widgets."""
@@ -603,6 +613,14 @@ class ProcessImageGUI(QMainWindow):
         layout6.addWidget(self.fiber_midpoint_estimate, 8, 1)
         group6.setLayout(layout6)
         scroll_layout.addWidget(group6)
+
+        # === CT-FIRE Parameters ===
+        group7 = QGroupBox("CT-FIRE Parameters")
+        layout7 = QGridLayout()
+        layout7.addWidget(QLabel("Background Threshold (thresh_im2):"), 0, 0)
+        layout7.addWidget(self.thresh_im2, 0, 1)
+        group7.setLayout(layout7)
+        scroll_layout.addWidget(group7)
 
         # === Action Buttons ===
         button_layout = QHBoxLayout()
@@ -737,6 +755,7 @@ class ProcessImageGUI(QMainWindow):
         self.minimum_nearest_fibers.setValue(2)
         self.minimum_box_size.setValue(32)
         self.fiber_midpoint_estimate.setValue(1)
+        self.thresh_im2.setValue(5)
         QMessageBox.information(
             self, "Defaults Loaded", "Default parameters have been restored."
         )
@@ -785,12 +804,16 @@ class ProcessImageGUI(QMainWindow):
                 num_sections=self.num_sections.value(),
             )
 
+            ctfire_params = copy.deepcopy(DEFAULT_CTFIRE_PARAMS)
+            ctfire_params["value"]["thresh_im2"] = self.thresh_im2.value()
+
             fiber_params = FiberAnalysisParameters(
                 fiber_mode=self.fiber_mode.currentIndex(),
                 keep=self.keep.value(),
                 fire_directory=(
                     self.fire_directory.text() if self.fire_directory.text() else None
                 ),
+                ctfire_params=ctfire_params,
             )
 
             output_params = OutputControlParameters(
@@ -936,13 +959,13 @@ def display_results(img, output_directory, result, img_name=None):
             if f.startswith(base_name):
                 if "overlay" in f and (f.endswith(".tiff") or f.endswith(".tif")):
                     output_files["overlay"] = os.path.join(output_directory, f)
-                    print(f"    ✓ Matched as overlay for '{base_name}'")
+                    print(f"    Γ£ô Matched as overlay for '{base_name}'")
                 elif "procmap" in f and (f.endswith(".tiff") or f.endswith(".tif")):
                     output_files["procmap"] = os.path.join(output_directory, f)
-                    print(f"    ✓ Matched as procmap for '{base_name}'")
+                    print(f"    Γ£ô Matched as procmap for '{base_name}'")
                 elif "FiberFeatures" in f and f.endswith(".xlsx"):
                     output_files["features_xlsx"] = os.path.join(output_directory, f)
-                    print(f"    ✓ Matched as Excel features for '{base_name}'")
+                    print(f"    Γ£ô Matched as Excel features for '{base_name}'")
     else:
         # Fallback to old behavior if no img_name provided (search for any matching file)
         print("Warning: No image name provided, using loose file matching")
@@ -966,18 +989,18 @@ def display_results(img, output_directory, result, img_name=None):
         procmap_path = output_files.get("procmap", None)
         display_image_comparison(img, output_files["overlay"], procmap_path)
     else:
-        print("\n⚠ Overlay image not found, skipping image comparison")
+        print("\nΓÜá Overlay image not found, skipping image comparison")
 
     # Display Excel file contents as tables
     if "features_xlsx" in output_files:
         display_excel_tables(output_files["features_xlsx"])
     else:
-        print("\n⚠ Excel file not found, skipping table display")
+        print("\nΓÜá Excel file not found, skipping table display")
 
     # Print result summary
     if result and "fib_feat_df" in result:
         fib_feat_df = result["fib_feat_df"]
-        print(f"\n✓ Detected {len(fib_feat_df)} fibers")
+        print(f"\nΓ£ô Detected {len(fib_feat_df)} fibers")
 
 
 def main():
@@ -1009,10 +1032,14 @@ def main_cli():
         num_sections=1,
     )
 
+    ctfire_params = copy.deepcopy(DEFAULT_CTFIRE_PARAMS)
+    ctfire_params["value"]["thresh_im2"] = 98
+
     fiber_params = FiberAnalysisParameters(
         fiber_mode=0,  # 0=curvelet, 1/2/3=FIRE variants
         keep=0.1,  # Fraction of curvelets to keep
         fire_directory=None,  # None to use curvelet mode
+        ctfire_params=ctfire_params,
     )
 
     output_params = OutputControlParameters(
@@ -1071,8 +1098,8 @@ def main_cli():
 
             # Display some statistics
             print(f"\nFiber Angle Statistics:")
-            print(f"  - Mean: {fib_feat_df['fiber_absolute_angle'].mean():.2f}°")
-            print(f"  - Std: {fib_feat_df['fiber_absolute_angle'].std():.2f}°")
+            print(f"  - Mean: {fib_feat_df['fiber_absolute_angle'].mean():.2f}┬░")
+            print(f"  - Std: {fib_feat_df['fiber_absolute_angle'].std():.2f}┬░")
 
             if "alignment_mean" in fib_feat_df.columns:
                 print(f"\nAlignment Statistics:")

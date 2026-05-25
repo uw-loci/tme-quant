@@ -194,6 +194,11 @@ src/tme_quant/.../
 */_ctfire_cpp*.so
 build/ctfire_cpp/
 
+# ctfire_py C++ backend compiled outputs
+src/ctfire_py/CPP/*.so
+src/ctfire_py/CPP/*.pyd
+src/ctfire_py/CPP/*.dSYM/
+
 # ── Python caches (any location) ─────────────────────────────────────────────
 __pycache__/
 .pytest_cache/

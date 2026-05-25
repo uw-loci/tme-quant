@@ -193,7 +193,7 @@ def process_image(
         # Call getFIRE
         # Add slice name used in CT-FIRE output
         fiber_structure, density_df, alignment_df = get_fire(
-            img_name_plain, fire_directory, fiber_mode, feature_cp
+            img_name_plain, fire_directory, fiber_mode, feature_cp, img=img
         )
     t_fiber_end = time.perf_counter()
     print(f"⏱️  Fiber extraction took: {t_fiber_end - t_fiber_start:.2f}s")

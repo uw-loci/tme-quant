@@ -158,6 +158,17 @@ src/tme_quant/
 │       └── overlay.py
 │
 └── napari-tme-quant/              ← napari plugin (separate installable package; co-located for prototyping)
+
+src/ctfire_py/                         ← direct-call CT-FIRE Python module (PoC bridge; source: 32-convert-ctfire)
+├── __init__.py
+├── ct_fire.py                         ← main entry point: ct_fire()
+├── ct_reconstruction.py               ← image preprocessing
+├── fire_2d_angle.py                   ← FIRE 2D angle computation
+├── parameter_mapping.py               ← MATLAB→Python parameter mapping
+└── CPP/                               ← C++ FIRE backend
+    ├── Makefile                       ← macOS (Apple Silicon / M-chips)
+    ├── Makefile.linux                 ← WSL / Linux
+    └── ...                            ← native Windows: MSYS2 UCRT64 GCC
     ├── pyproject.toml             ← declares napari-tme-quant distribution
     ├── src/
     │   └── napari_tme_quant/      ← plugin Python package (NOT part of tme_quant namespace)
