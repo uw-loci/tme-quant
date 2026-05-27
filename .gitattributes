@@ -1,0 +1,17 @@
+# Enforce LF line endings for all text files in the repo.
+# This prevents CRLF/LF noise when working across Windows and Linux/WSL.
+
+* text=auto eol=lf
+
+# Explicitly binary — never touch line endings
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.tif binary
+*.tiff binary
+*.mat binary
+*.pyd binary
+*.so  binary
+*.dll binary
+*.exe binary
+*.zip binary

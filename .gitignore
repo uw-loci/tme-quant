@@ -214,3 +214,15 @@ src/tme_quant/.claude/sessions/
 
 # ── Local data directory ──────────────────────────────────────────────────────
 src/tme_quant/data/
+
+# ── Plugin runtime outputs (napari test runs, overlay PNGs) ──────────────────
+src/tme_quant/*.png
+src/tme_quant/*.jpg
+src/tme_quant/*.tif
+
+# ── Plugin project save/load test artifacts ───────────────────────────────────
+tests/test_images/**/plugin_state.json
+tests/test_images/**/results/
+
+# ── Claude session summaries (internal, not for review) ──────────────────────
+src/tme_quant/.claude/session-summary.md
