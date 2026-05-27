@@ -99,6 +99,35 @@ class TestVisualizationControllerLayers:
         labels = controller._classify_df_tacs(df, result)
         assert labels[0] == "TACS-2"
 
+    def test_remove_analysis_layers_removes_prefixed_layers(
+        self, state, mock_viewer, controller
+    ):
+        """remove_analysis_layers should delete all image_id :: * layers and
+        remove them from layer_map, leaving unrelated layers intact."""
+        layer_keep = mock.MagicMock()
+        layer_keep.name = "other_img :: Fibers :: all"
+        layer_del1 = mock.MagicMock()
+        layer_del1.name = "img_A :: Fibers :: all"
+        layer_del2 = mock.MagicMock()
+        layer_del2.name = "img_A :: Heatmap :: orientation"
+        mock_viewer.layers = [layer_keep, layer_del1, layer_del2]
+        state.layer_map = {
+            "img_A :: Fibers :: all": "obj1",
+            "img_A :: Heatmap :: orientation": "obj2",
+            "other_img :: Fibers :: all": "obj3",
+        }
+
+        controller.remove_analysis_layers("img_A")
+
+        # The real list.remove() mutates in place — check content directly
+        assert layer_del1 not in mock_viewer.layers
+        assert layer_del2 not in mock_viewer.layers
+        assert layer_keep in mock_viewer.layers
+        # layer_map entries for img_A should be gone; other_img entry survives
+        assert "img_A :: Fibers :: all" not in state.layer_map
+        assert "img_A :: Heatmap :: orientation" not in state.layer_map
+        assert "other_img :: Fibers :: all" in state.layer_map
+
     def test_on_image_selected_hides_other_layers(self, state, mock_viewer, controller):
         """on_image_selected should show layers matching image_id and hide others.
 

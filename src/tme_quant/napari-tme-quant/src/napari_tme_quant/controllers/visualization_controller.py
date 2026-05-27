@@ -56,6 +56,22 @@ class VisualizationController:
         elif obj_type == "curvealign":
             self._create_curvealign_layers(image_id)
 
+    def remove_analysis_layers(self, image_id: str) -> None:
+        """Remove all analysis overlay layers for image_id (keeps the raw image layer).
+
+        Called when an analysis is invalidated or reset so stale layers disappear.
+        """
+        if self._viewer is None:
+            return
+        prefix = image_id + " :: "
+        to_remove = [l for l in list(self._viewer.layers) if l.name.startswith(prefix)]
+        for layer in to_remove:
+            self._viewer.layers.remove(layer)
+        self._state.layer_map = {
+            k: v for k, v in self._state.layer_map.items()
+            if not k.startswith(prefix)
+        }
+
     def on_image_selected(self, image_id: str) -> None:
         """Show only layers belonging to image_id; hide others.
 

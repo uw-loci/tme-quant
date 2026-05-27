@@ -75,3 +75,56 @@ class TestAnalysisControllerFiberPath:
         e1 = controller._get_or_create_image_entry("existing")
         e2 = controller._get_or_create_image_entry("existing")
         assert e1 is e2
+
+
+class TestAnalysisControllerAbortInvalidate:
+
+    def test_abort_emits_analysis_aborted(self, state, controller):
+        """abort() must emit analysis_aborted with the tracked step/image_id."""
+        aborted = []
+        controller.connect_analysis_aborted(lambda s, i: aborted.append((s, i)))
+        controller._active_worker = mock.MagicMock()
+        controller._active_step = "curvealign"
+        controller._active_image_for_abort = "img_abc"
+        controller.abort()
+        assert aborted == [("curvealign", "img_abc")]
+        assert controller._active_worker is None
+
+    def test_abort_noop_when_no_worker(self, state, controller):
+        """abort() must not crash when no worker is running."""
+        controller.abort()  # should not raise
+
+    def test_invalidate_result_curvealign_clears_state(self, state, controller):
+        """invalidate_result removes the cached curvealign result from state."""
+        state.curvealign_pipeline_results["img1"] = mock.MagicMock()
+        controller.invalidate_result("img1", "curvealign")
+        assert "img1" not in state.curvealign_pipeline_results
+
+    def test_invalidate_result_ctfire_clears_state(self, state, controller):
+        """invalidate_result removes the cached fiber result from state."""
+        state.fiber_results["img2"] = mock.MagicMock()
+        controller.invalidate_result("img2", "ctfire")
+        assert "img2" not in state.fiber_results
+
+    def test_invalidate_result_emits_aborted(self, state, controller):
+        """invalidate_result must emit analysis_aborted for the image."""
+        aborted = []
+        controller.connect_analysis_aborted(lambda s, i: aborted.append((s, i)))
+        controller.invalidate_result("img1", "curvealign")
+        assert any(i == "img1" for _, i in aborted)
+
+    def test_invalidate_all_clears_all_results(self, state, controller):
+        """invalidate_all must clear both curvealign and fiber results."""
+        state.curvealign_pipeline_results["a"] = mock.MagicMock()
+        state.fiber_results["b"] = mock.MagicMock()
+        controller.invalidate_all()
+        assert "a" not in state.curvealign_pipeline_results
+        assert "b" not in state.fiber_results
+
+    def test_notify_result_loaded_fires_analysis_complete(self, state, controller):
+        """notify_result_loaded must fire analysis_complete so widgets update."""
+        received = []
+        controller.connect_analysis_complete(lambda s, i, r: received.append((s, i)))
+        fake = mock.MagicMock()
+        controller.notify_result_loaded("curvealign", "img_x", fake)
+        assert received == [("curvealign", "img_x")]

@@ -187,15 +187,24 @@ class TMEPipelineWidget(QWidget):
         layout.addWidget(self._progress_bar)
         layout.addWidget(self._progress_label)
 
-        # Run / Commit / Status row
+        # Run / Reset / Abort / Commit / Status row
         bottom_row = QHBoxLayout()
-        self._run_btn    = QPushButton("Run CurveAlign TACS")
+        self._run_btn = QPushButton("Run CurveAlign TACS")
+        self._run_btn.clicked.connect(self._run_curvealign_tacs)
+        self._reset_btn = QPushButton("Reset")
+        self._reset_btn.setToolTip("Clear CurveAlign result and remove overlay layers")
+        self._reset_btn.clicked.connect(self._reset_curvealign)
+        self._abort_btn = QPushButton("Abort")
+        self._abort_btn.setEnabled(False)
+        self._abort_btn.setToolTip("Stop the running analysis")
+        self._abort_btn.clicked.connect(self._abort_analysis)
         self._commit_btn = QPushButton("Commit to Hierarchy")
         self._commit_btn.setEnabled(False)
-        self._status_lbl = QLabel("○ not run")
-        self._run_btn.clicked.connect(self._run_curvealign_tacs)
         self._commit_btn.clicked.connect(self._commit_curvealign)
+        self._status_lbl = QLabel("○ not run")
         bottom_row.addWidget(self._run_btn)
+        bottom_row.addWidget(self._reset_btn)
+        bottom_row.addWidget(self._abort_btn)
         bottom_row.addWidget(self._commit_btn)
         bottom_row.addStretch()
         bottom_row.addWidget(self._status_lbl)
@@ -225,10 +234,41 @@ class TMEPipelineWidget(QWidget):
 
     def on_curvealign_complete(self) -> None:
         self._run_btn.setEnabled(True)
+        self._reset_btn.setEnabled(True)
+        self._abort_btn.setEnabled(False)
         self._progress_bar.setVisible(False)
         self._progress_label.setVisible(False)
         self._status_lbl.setText("● computed (memory)")
         self._commit_btn.setEnabled(True)
+
+    def on_analysis_started(self, step: str, image_id: str) -> None:
+        if step == "curvealign":
+            self._run_btn.setEnabled(False)
+            self._reset_btn.setEnabled(False)
+            self._abort_btn.setEnabled(True)
+            self._commit_btn.setEnabled(False)
+            self._status_lbl.setText("◑ running…")
+
+    def on_analysis_aborted(self, step: str, image_id: str) -> None:
+        if step == "curvealign":
+            self._run_btn.setEnabled(True)
+            self._reset_btn.setEnabled(True)
+            self._abort_btn.setEnabled(False)
+            self._progress_bar.setVisible(False)
+            self._progress_label.setVisible(False)
+            state = getattr(self._analysis_ctrl, "_state", None)
+            has_result = bool(state and image_id in state.curvealign_pipeline_results)
+            self._commit_btn.setEnabled(has_result)
+            self._status_lbl.setText("● computed (memory)" if has_result else "○ not run")
+
+    def _reset_curvealign(self) -> None:
+        image_id = self._active_image_id or self._fiber_selector.currentData()
+        if image_id and self._analysis_ctrl:
+            self._analysis_ctrl.invalidate_result(image_id, "curvealign")
+
+    def _abort_analysis(self) -> None:
+        if self._analysis_ctrl:
+            self._analysis_ctrl.abort()
 
     def update_progress(self, step: int, total: int, msg: str) -> None:
         self._progress_bar.setMaximum(total)

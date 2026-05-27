@@ -205,6 +205,17 @@ class FiberAnalysisWidget(QWidget):
         self._ctfire_run_btn.clicked.connect(self._run_ctfire)
         row.addWidget(self._ctfire_run_btn)
 
+        self._ctfire_reset_btn = QPushButton("Reset")
+        self._ctfire_reset_btn.setToolTip("Clear CT-FIRE result and remove layers")
+        self._ctfire_reset_btn.clicked.connect(self._reset_ctfire)
+        row.addWidget(self._ctfire_reset_btn)
+
+        self._ctfire_abort_btn = QPushButton("Abort")
+        self._ctfire_abort_btn.setEnabled(False)
+        self._ctfire_abort_btn.setToolTip("Stop the running CT-FIRE analysis")
+        self._ctfire_abort_btn.clicked.connect(self._abort_analysis)
+        row.addWidget(self._ctfire_abort_btn)
+
         self._ctfire_commit_btn = QPushButton("Commit to Hierarchy")
         self._ctfire_commit_btn.setEnabled(False)
         self._ctfire_commit_btn.clicked.connect(self._commit_ctfire)
@@ -221,11 +232,16 @@ class FiberAnalysisWidget(QWidget):
     def _run_ctfire(self) -> None:
         if self._analysis_controller is None:
             return
-        self._ctfire_run_btn.setEnabled(False)
-        self._ctfire_status.setText(_STATUS_NOT_RUN)
         self._analysis_controller.run_fiber_extraction(
             self._active_image_id, method="ctfire"
         )
+
+    def _reset_ctfire(self) -> None:
+        if self._analysis_controller is None:
+            return
+        image_id = self._active_image_id or self._image_selector.currentData()
+        if image_id:
+            self._analysis_controller.invalidate_result(image_id, "ctfire")
 
     def _commit_ctfire(self) -> None:
         if self._analysis_controller is None:
@@ -235,6 +251,8 @@ class FiberAnalysisWidget(QWidget):
     def on_ctfire_complete(self) -> None:
         """Called by AnalysisController when CT-FIRE finishes."""
         self._ctfire_run_btn.setEnabled(True)
+        self._ctfire_reset_btn.setEnabled(True)
+        self._ctfire_abort_btn.setEnabled(False)
         self._ctfire_status.setText(_STATUS_MEMORY)
         self._ctfire_commit_btn.setEnabled(True)
 
@@ -352,6 +370,17 @@ class FiberAnalysisWidget(QWidget):
         self._ca_run_btn.clicked.connect(self._run_curvealign)
         row.addWidget(self._ca_run_btn)
 
+        self._ca_reset_btn = QPushButton("Reset")
+        self._ca_reset_btn.setToolTip("Clear CurveAlign result and remove layers")
+        self._ca_reset_btn.clicked.connect(self._reset_curvealign)
+        row.addWidget(self._ca_reset_btn)
+
+        self._ca_abort_btn = QPushButton("Abort")
+        self._ca_abort_btn.setEnabled(False)
+        self._ca_abort_btn.setToolTip("Stop the running CurveAlign analysis")
+        self._ca_abort_btn.clicked.connect(self._abort_analysis)
+        row.addWidget(self._ca_abort_btn)
+
         self._ca_commit_btn = QPushButton("Commit to Hierarchy")
         self._ca_commit_btn.setEnabled(False)
         self._ca_commit_btn.clicked.connect(self._commit_curvealign)
@@ -381,11 +410,21 @@ class FiberAnalysisWidget(QWidget):
     def _run_curvealign(self) -> None:
         if self._analysis_controller is None:
             return
-        self._ca_run_btn.setEnabled(False)
-        self._ca_status.setText(_STATUS_NOT_RUN)
         self._analysis_controller.run_fiber_extraction(
             self._active_image_id, method="curvealign"
         )
+
+    def _reset_curvealign(self) -> None:
+        if self._analysis_controller is None:
+            return
+        image_id = self._active_image_id or self._image_selector.currentData()
+        if image_id:
+            self._analysis_controller.invalidate_result(image_id, "curvealign")
+
+    def _abort_analysis(self) -> None:
+        if self._analysis_controller is None:
+            return
+        self._analysis_controller.abort()
 
     def _commit_curvealign(self) -> None:
         if self._analysis_controller is None:
@@ -397,8 +436,47 @@ class FiberAnalysisWidget(QWidget):
     def on_curvealign_complete(self) -> None:
         """Called by AnalysisController when CurveAlign pipeline finishes."""
         self._ca_run_btn.setEnabled(True)
+        self._ca_reset_btn.setEnabled(True)
+        self._ca_abort_btn.setEnabled(False)
         self._ca_status.setText(_STATUS_MEMORY)
         self._ca_commit_btn.setEnabled(True)
+
+    def on_analysis_started(self, step: str, image_id: str) -> None:
+        """Disable Run/Reset/Commit and enable Abort for the running step."""
+        if step in ("curvealign",):
+            self._ca_run_btn.setEnabled(False)
+            self._ca_reset_btn.setEnabled(False)
+            self._ca_abort_btn.setEnabled(True)
+            self._ca_commit_btn.setEnabled(False)
+            self._ca_status.setText("● running…")
+        if step in ("fiber", "ctfire"):
+            self._ctfire_run_btn.setEnabled(False)
+            self._ctfire_reset_btn.setEnabled(False)
+            self._ctfire_abort_btn.setEnabled(True)
+            self._ctfire_commit_btn.setEnabled(False)
+            self._ctfire_status.setText("● running…")
+
+    def on_analysis_aborted(self, step: str, image_id: str) -> None:
+        """Re-enable Run/Reset; disable Abort; restore Commit if result still exists."""
+        state = getattr(self._analysis_controller, "_state", None)
+
+        if step in ("curvealign",):
+            self._ca_run_btn.setEnabled(True)
+            self._ca_reset_btn.setEnabled(True)
+            self._ca_abort_btn.setEnabled(False)
+            has_result = bool(
+                state and image_id in state.curvealign_pipeline_results
+            )
+            self._ca_commit_btn.setEnabled(has_result)
+            self._ca_status.setText(_STATUS_MEMORY if has_result else _STATUS_NOT_RUN)
+
+        if step in ("fiber", "ctfire"):
+            self._ctfire_run_btn.setEnabled(True)
+            self._ctfire_reset_btn.setEnabled(True)
+            self._ctfire_abort_btn.setEnabled(False)
+            has_result = bool(state and image_id in state.fiber_results)
+            self._ctfire_commit_btn.setEnabled(has_result)
+            self._ctfire_status.setText(_STATUS_MEMORY if has_result else _STATUS_NOT_RUN)
 
     # ── Param accessors ────────────────────────────────────────────────────────
 

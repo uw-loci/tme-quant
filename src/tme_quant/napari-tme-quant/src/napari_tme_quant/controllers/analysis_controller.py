@@ -23,6 +23,8 @@ class AnalysisController:
 
     Emits:
         analysis_complete(step: str, image_id: str, result)
+        analysis_started(step: str, image_id: str)
+        analysis_aborted(step: str, image_id: str)
         committed_to_hierarchy(image_id: str, obj_type: str)
         batch_progress(step: int, total: int, msg: str)
     """
@@ -31,13 +33,25 @@ class AnalysisController:
         self._state = state
         self._log = log
         self._on_analysis_complete: list[Callable] = []
+        self._on_analysis_started: list[Callable] = []
+        self._on_analysis_aborted: list[Callable] = []
         self._on_committed: list[Callable] = []
         self._on_batch_progress: list[Callable] = []
+        # Active worker tracking (only one analysis at a time)
+        self._active_worker = None
+        self._active_step: Optional[str] = None
+        self._active_image_for_abort: Optional[str] = None
 
     # ── Signal subscriptions ───────────────────────────────────────────────────
 
     def connect_analysis_complete(self, fn: Callable) -> None:
         self._on_analysis_complete.append(fn)
+
+    def connect_analysis_started(self, fn: Callable) -> None:
+        self._on_analysis_started.append(fn)
+
+    def connect_analysis_aborted(self, fn: Callable) -> None:
+        self._on_analysis_aborted.append(fn)
 
     def connect_committed_to_hierarchy(self, fn: Callable) -> None:
         self._on_committed.append(fn)
@@ -86,8 +100,17 @@ class AnalysisController:
         from napari.qt.threading import thread_worker
         from tme_quant import FiberExtractionAnalyzer, CTFireParams, ExtractionParams
 
+        if self._active_worker is not None:
+            if self._log:
+                self._log.warn("Analysis already running — abort or wait before re-running.")
+            return
+
         if params is None:
             params = CTFireParams()
+
+        self._active_step = "fiber"
+        self._active_image_for_abort = image_id
+        self._emit_analysis_started("fiber", image_id)
 
         def _cb(step: int, total: int, msg: str) -> None:
             self._emit_batch_progress(step, total, msg)
@@ -103,7 +126,9 @@ class AnalysisController:
                 progress_callback=_cb,
             )
 
-        _worker()
+        worker = _worker()
+        worker.signals.finished.connect(self._on_worker_finished)
+        self._active_worker = worker
 
     def _on_ctfire_result(self, image_id: str, result) -> None:
         self._state.fiber_results[image_id] = result
@@ -112,8 +137,18 @@ class AnalysisController:
     def _run_curvealign_worker(self, image_id: str, image, **kwargs) -> None:
         from napari.qt.threading import thread_worker
         from tme_quant import curvealign_curvelets_mode_pipeline
+
+        if self._active_worker is not None:
+            if self._log:
+                self._log.warn("Analysis already running — abort or wait before re-running.")
+            return
+
         if self._log:
             self._log.info(f"Starting CurveAlign pipeline for {image_id!r} …")
+
+        self._active_step = "curvealign"
+        self._active_image_for_abort = image_id
+        self._emit_analysis_started("curvealign", image_id)
 
         def _cb(step: int, total: int, msg: str) -> None:
             print(f"[curvealign {step}/{total}] {msg}", flush=True)
@@ -139,7 +174,9 @@ class AnalysisController:
                 traceback.print_exc()
                 raise
 
-        _worker()
+        worker = _worker()
+        worker.signals.finished.connect(self._on_worker_finished)
+        self._active_worker = worker
 
     def _on_curvealign_result(self, image_id: str, result) -> None:
         if result is not None:
@@ -286,6 +323,49 @@ class AnalysisController:
             )
             self._state.hierarchy.add_object(fiber, parent=parent)
 
+    # ── Abort / invalidate ─────────────────────────────────────────────────────
+
+    def abort(self) -> None:
+        """Interrupt any running analysis and emit analysis_aborted."""
+        if self._active_worker is None:
+            return
+        step = self._active_step or "unknown"
+        image_id = self._active_image_for_abort or "unknown"
+        self._active_worker.quit()
+        self._active_worker = None
+        self._active_step = None
+        self._active_image_for_abort = None
+        self._emit_analysis_aborted(step, image_id)
+
+    def _on_worker_finished(self) -> None:
+        """Called on the Qt main thread when the worker thread exits (success or quit)."""
+        self._active_worker = None
+        self._active_step = None
+        self._active_image_for_abort = None
+
+    def invalidate_result(self, image_id: str, method: str) -> None:
+        """Clear a cached analysis result and remove its napari layers.
+
+        Emits analysis_aborted so UI widgets re-check Commit state.
+        """
+        if method == "curvealign":
+            self._state.curvealign_pipeline_results.pop(image_id, None)
+            step = "curvealign"
+        else:
+            self._state.fiber_results.pop(image_id, None)
+            step = "fiber"
+        self._emit_analysis_aborted(step, image_id)
+
+    def invalidate_all(self) -> None:
+        """Abort any running analysis and clear all cached results."""
+        self.abort()
+        ca_ids = list(self._state.curvealign_pipeline_results.keys())
+        for iid in ca_ids:
+            self.invalidate_result(iid, "curvealign")
+        fiber_ids = list(self._state.fiber_results.keys())
+        for iid in fiber_ids:
+            self.invalidate_result(iid, "ctfire")
+
     # ── Helpers ────────────────────────────────────────────────────────────────
 
     def _emit_analysis_complete(self, step: str, image_id: str, result) -> None:
@@ -293,6 +373,22 @@ class AnalysisController:
             fn(step, image_id, result)
         if self._log:
             self._log.on_analysis_complete(step, image_id, result)
+
+    def notify_result_loaded(self, step: str, image_id: str, result) -> None:
+        """Fire analysis_complete after a project is loaded from disk.
+
+        Called by IOWidget after load_plugin_state restores results to state.
+        This lets visualization and fiber widgets update without re-running.
+        """
+        self._emit_analysis_complete(step, image_id, result)
+
+    def _emit_analysis_started(self, step: str, image_id: str) -> None:
+        for fn in self._on_analysis_started:
+            fn(step, image_id)
+
+    def _emit_analysis_aborted(self, step: str, image_id: str) -> None:
+        for fn in self._on_analysis_aborted:
+            fn(step, image_id)
 
     def _emit_committed(self, image_id: str, obj_type: str) -> None:
         for fn in self._on_committed:
@@ -310,3 +406,10 @@ class AnalysisController:
         traceback.print_exc()
         if self._log:
             self._log.on_error(exc)
+        # Emit aborted so UI re-enables Run buttons (previous result, if any, stays intact)
+        step = self._active_step or "unknown"
+        image_id = self._active_image_for_abort or "unknown"
+        self._active_worker = None
+        self._active_step = None
+        self._active_image_for_abort = None
+        self._emit_analysis_aborted(step, image_id)

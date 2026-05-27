@@ -102,10 +102,17 @@ class VisualizationWidget(QWidget):
         fig_layout = QVBoxLayout(self._fig_group)
         view_overlay_btn = QPushButton("View Overlay PNG in window")
         view_heatmap_btn = QPushButton("View Orientation Heatmap in window")
+        snap_btn = QPushButton("Save Snapshot…")
+        snap_btn.setToolTip(
+            "Copy current output files to a timestamped subfolder in the project dir.\n"
+            "Use this before re-running with different parameters to preserve old results."
+        )
         view_overlay_btn.clicked.connect(self._view_overlay_png)
         view_heatmap_btn.clicked.connect(self._view_heatmap_png)
+        snap_btn.clicked.connect(self._save_snapshot)
         fig_layout.addWidget(view_overlay_btn)
         fig_layout.addWidget(view_heatmap_btn)
+        fig_layout.addWidget(snap_btn)
         layout.addWidget(self._fig_group)
 
         # ── CurveAlign TACS View (hidden until result available) ──────────────
@@ -215,6 +222,24 @@ class VisualizationWidget(QWidget):
                 self._tacs_roi_combo.addItem(str(roi_id))
 
         self._populate_tacs_table(result)
+
+    def reset_for_image(self, image_id: str) -> None:
+        """Clear all result-derived UI state for image_id.
+
+        Called when an analysis result is invalidated or explicitly reset.
+        Previous napari layers are removed by the visualization controller;
+        this method handles only the widget-level state.
+        """
+        if image_id != self._active_image_id:
+            return
+        self._curvealign_result = None
+        self._overlay_fig = None
+        self._heatmap_fig = None
+        self._tacs_table_df = None
+        self._fig_group.setEnabled(False)
+        self._plots_group.setEnabled(False)
+        self._tacs_view_group.setVisible(False)
+        self._tacs_table.setRowCount(0)
 
     def on_layer_selected(self, layer_name: str) -> None:
         """Highlight table row matching the selected napari layer point."""
@@ -485,3 +510,35 @@ class VisualizationWidget(QWidget):
         )
         if path:
             fig.savefig(path, dpi=150, bbox_inches="tight")
+
+    def _save_snapshot(self) -> None:
+        """Copy current output files to a timestamped subfolder in the project dir."""
+        if self._viz_controller is None:
+            return
+        state = self._viz_controller._state
+        project_dir = getattr(state, "project_dir", None)
+        image_id = self._active_image_id
+        if project_dir is None or image_id is None:
+            from qtpy.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, "Save Snapshot",
+                "No project folder is set.\nUse the Project tab to set a project folder first."
+            )
+            return
+        from datetime import datetime
+        import shutil
+        from pathlib import Path
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        snap_dir = Path(project_dir) / "snapshots" / f"{image_id}_{ts}"
+        snap_dir.mkdir(parents=True, exist_ok=True)
+        src_dir = Path(project_dir) / "output" / image_id
+        copied = []
+        for fname in ("fiber_features.csv", "orientation_heatmap.png", "fiber_overlay.png"):
+            src = src_dir / fname
+            if src.exists():
+                shutil.copy2(src, snap_dir / fname)
+                copied.append(fname)
+        if copied:
+            print(f"[snapshot] Saved {len(copied)} file(s) → {snap_dir}", flush=True)
+        else:
+            print(f"[snapshot] No output files found in {src_dir}", flush=True)

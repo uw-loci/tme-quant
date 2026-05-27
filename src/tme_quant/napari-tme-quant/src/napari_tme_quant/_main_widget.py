@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTabWidget, QVBoxLayout, QWidget
 
 
 def _placeholder(name: str) -> QWidget:
@@ -29,9 +29,13 @@ class TMEQuantDockWidget(QWidget):
         # Widget references (set by loader methods below)
         self._project_widget  = None
         self._image_widget    = None
+        self._fiber_widget    = None
         self._tme_widget      = None
         self._viz_widget      = None
+        self._io_widget       = None
         self._log_widget      = None
+        # Global toolbar buttons (set by _build_analysis_tabs)
+        self._global_abort_btn = None
 
         # Controller references (set by _wire_controllers)
         self._state           = None
@@ -48,6 +52,7 @@ class TMEQuantDockWidget(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         self._tabs = QTabWidget()
         layout.addWidget(self._tabs)
 
@@ -58,13 +63,34 @@ class TMEQuantDockWidget(QWidget):
         self._tabs.addTab(self._build_results_tabs(),   "Results")
         self._tabs.addTab(self._load_log_widget(),      "Log")
 
-    def _build_analysis_tabs(self) -> QTabWidget:
+    def _build_analysis_tabs(self) -> QWidget:
+        """Analysis tab: global Reset All / Abort toolbar above the method sub-tabs."""
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(2)
+
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(4, 2, 4, 2)
+        reset_all_btn = QPushButton("Reset All")
+        reset_all_btn.setToolTip("Clear all analysis results and remove overlay layers")
+        reset_all_btn.clicked.connect(self._on_global_reset_all)
+        self._global_abort_btn = QPushButton("Abort")
+        self._global_abort_btn.setToolTip("Stop the currently running analysis")
+        self._global_abort_btn.setEnabled(False)
+        self._global_abort_btn.clicked.connect(self._on_global_abort)
+        toolbar.addWidget(reset_all_btn)
+        toolbar.addWidget(self._global_abort_btn)
+        toolbar.addStretch()
+        vbox.addLayout(toolbar)
+
         tabs = QTabWidget()
-        tabs.addTab(self._load_registration_widget(),    "Registration")
-        tabs.addTab(self._load_fiber_analysis_widget(),  "Fiber")
-        tabs.addTab(self._load_cell_analysis_widget(),   "Cell")
-        tabs.addTab(self._load_tme_pipeline_widget(),    "TME")
-        return tabs
+        tabs.addTab(self._load_registration_widget(),   "Registration")
+        tabs.addTab(self._load_fiber_analysis_widget(), "Fiber")
+        tabs.addTab(self._load_cell_analysis_widget(),  "Cell")
+        tabs.addTab(self._load_tme_pipeline_widget(),   "TME")
+        vbox.addWidget(tabs)
+        return container
 
     def _build_results_tabs(self) -> QTabWidget:
         tabs = QTabWidget()
@@ -97,16 +123,24 @@ class TMEQuantDockWidget(QWidget):
             self._project_widget.set_controller(self._proj_ctrl)
         if self._image_widget and hasattr(self._image_widget, "set_controller"):
             self._image_widget.set_controller(self._proj_ctrl)
+        if self._fiber_widget and hasattr(self._fiber_widget, "set_controller"):
+            self._fiber_widget.set_controller(self._analysis_ctrl)
         if self._tme_widget and hasattr(self._tme_widget, "set_controller"):
             self._tme_widget.set_controller(self._analysis_ctrl)
         if self._tme_widget and hasattr(self._tme_widget, "set_project_controller"):
             self._tme_widget.set_project_controller(self._proj_ctrl)
         if self._viz_widget and hasattr(self._viz_widget, "set_controller"):
             self._viz_widget.set_controller(self._viz_ctrl)
+        if self._io_widget and hasattr(self._io_widget, "set_controller"):
+            self._io_widget.set_controller(self._analysis_ctrl)
+        if self._io_widget and hasattr(self._io_widget, "set_project_controller"):
+            self._io_widget.set_project_controller(self._proj_ctrl)
 
         # image_selected → layer visibility + all sub-widgets
         def _on_image_selected(image_id: str) -> None:
             self._viz_ctrl.on_image_selected(image_id)
+            if self._fiber_widget and hasattr(self._fiber_widget, "set_active_image"):
+                self._fiber_widget.set_active_image(image_id)
             if self._viz_widget and hasattr(self._viz_widget, "set_active_image"):
                 self._viz_widget.set_active_image(image_id)
             if self._tme_widget and hasattr(self._tme_widget, "set_active_image"):
@@ -118,8 +152,48 @@ class TMEQuantDockWidget(QWidget):
 
         self._proj_ctrl.connect_image_selected(_on_image_selected)
 
+        # analysis_started → disable Commit, show "running" status in fiber + TME widgets
+        def _on_started(step: str, image_id: str) -> None:
+            if self._fiber_widget and hasattr(self._fiber_widget, "on_analysis_started"):
+                self._fiber_widget.on_analysis_started(step, image_id)
+            if self._tme_widget and hasattr(self._tme_widget, "on_analysis_started"):
+                self._tme_widget.on_analysis_started(step, image_id)
+            if self._global_abort_btn is not None:
+                self._global_abort_btn.setEnabled(True)
+
+        self._analysis_ctrl.connect_analysis_started(_on_started)
+
+        # analysis_aborted → re-enable Run/Reset; conditionally re-enable Commit
+        def _on_aborted(step: str, image_id: str) -> None:
+            if self._fiber_widget and hasattr(self._fiber_widget, "on_analysis_aborted"):
+                self._fiber_widget.on_analysis_aborted(step, image_id)
+            if self._tme_widget and hasattr(self._tme_widget, "on_analysis_aborted"):
+                self._tme_widget.on_analysis_aborted(step, image_id)
+            if self._global_abort_btn is not None:
+                self._global_abort_btn.setEnabled(False)
+            # Remove stale layers and clear Results tab for invalidation (no result anymore)
+            state = self._state
+            has_result = (
+                (step == "curvealign" and state and image_id in state.curvealign_pipeline_results)
+                or (step in ("fiber", "ctfire") and state and image_id in state.fiber_results)
+            )
+            if not has_result:
+                if self._viz_ctrl:
+                    self._viz_ctrl.remove_analysis_layers(image_id)
+                if self._viz_widget and hasattr(self._viz_widget, "reset_for_image"):
+                    self._viz_widget.reset_for_image(image_id)
+
+        self._analysis_ctrl.connect_analysis_aborted(_on_aborted)
+
         # analysis_complete → status chips in TME widget + Image tab + Project table + viz
         def _on_complete(step: str, image_id: str, result) -> None:
+            # Re-enable the fiber widget (analysis finished, no longer running)
+            if self._fiber_widget and step == "curvealign":
+                if hasattr(self._fiber_widget, "on_curvealign_complete"):
+                    self._fiber_widget.on_curvealign_complete()
+            if self._fiber_widget and step == "fiber":
+                if hasattr(self._fiber_widget, "on_ctfire_complete"):
+                    self._fiber_widget.on_ctfire_complete()
             if self._tme_widget and step == "curvealign":
                 if hasattr(self._tme_widget, "on_curvealign_complete"):
                     self._tme_widget.on_curvealign_complete()
@@ -130,6 +204,8 @@ class TMEQuantDockWidget(QWidget):
                 self._image_widget.on_analysis_complete(step, image_id)
             if self._project_widget and hasattr(self._project_widget, "on_analysis_complete"):
                 self._project_widget.on_analysis_complete(step, image_id)
+            if self._global_abort_btn is not None:
+                self._global_abort_btn.setEnabled(False)
 
         self._analysis_ctrl.connect_analysis_complete(_on_complete)
 
@@ -156,6 +232,16 @@ class TMEQuantDockWidget(QWidget):
                 self._tme_widget.on_image_type_changed(image_id, image_type)
 
         self._proj_ctrl.connect_type_changed(_on_type_changed)
+
+    # ── Global toolbar actions ─────────────────────────────────────────────────
+
+    def _on_global_reset_all(self) -> None:
+        if self._analysis_ctrl:
+            self._analysis_ctrl.invalidate_all()
+
+    def _on_global_abort(self) -> None:
+        if self._analysis_ctrl:
+            self._analysis_ctrl.abort()
 
     # ── Widget loaders ─────────────────────────────────────────────────────────
 
@@ -192,7 +278,8 @@ class TMEQuantDockWidget(QWidget):
     def _load_fiber_analysis_widget(self) -> QWidget:
         try:
             from .widgets.fiber_analysis_widget import FiberAnalysisWidget
-            return FiberAnalysisWidget(self._viewer)
+            self._fiber_widget = FiberAnalysisWidget(self._viewer)
+            return self._fiber_widget
         except ImportError:
             return _placeholder("Fiber Analysis")
 
@@ -229,7 +316,8 @@ class TMEQuantDockWidget(QWidget):
     def _load_io_widget(self) -> QWidget:
         try:
             from .widgets.io_widget import IOWidget
-            return IOWidget(self._viewer)
+            self._io_widget = IOWidget(self._viewer)
+            return self._io_widget
         except ImportError:
             return _placeholder("I/O")
 
