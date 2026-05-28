@@ -51,5 +51,7 @@
     "algorithm": "cpp"
   },
   "cmake.sourceDirectory": "/Users/dongwoolee/Documents/GitHub/curvelets/cpp",
-  "cmake.ignoreCMakeListsMissing": true
+  "cmake.ignoreCMakeListsMissing": true,
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda"
 }
