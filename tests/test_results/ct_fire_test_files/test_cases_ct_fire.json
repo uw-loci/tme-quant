@@ -1,0 +1,220 @@
+{
+  "description": "Test cases for CT-FIRE Python implementation vs MATLAB ctFIRE reference",
+  "test_cases": [
+    {
+      "name": "real1_default",
+      "image": "real1.tif",
+      "description": "real1 image with default CT-FIRE parameters (thresh_im2=5)",
+      "ctfire_params": {
+        "coefficient_percentile": 0.2,
+        "num_scales": 3,
+        "LL1": 30,
+        "value": {
+          "sigma_im": 0,
+          "sigma_d": 0.3,
+          "dtype": "cityblock",
+          "thresh_im": [],
+          "thresh_im2": 5,
+          "thresh_Dxlink": 1.5,
+          "s_xlinkbox": 8,
+          "thresh_LMP": 0.2,
+          "thresh_LMPdist": 2,
+          "thresh_ext": 0.342,
+          "lam_dirdecay": 0.5,
+          "s_minstep": 2,
+          "s_maxstep": 6,
+          "thresh_dang_aextend": 0.9848,
+          "thresh_dang_L": 15,
+          "thresh_short_L": 15,
+          "s_fiberdir": 4,
+          "thresh_linkd": 15,
+          "thresh_linka": -0.866,
+          "thresh_flen": 15,
+          "thresh_numv": 3,
+          "scale": [1.0, 1.0, 1.0],
+          "s_boundthick": 10,
+          "blist": 1,
+          "s_maxspace": 5,
+          "lambda": 0.01,
+          "ang_interval": 3
+        }
+      },
+      "expected_outputs": {
+        "min_fiber_count": 50,
+        "max_fiber_count": 1000,
+        "min_avg_length": 10,
+        "max_avg_length": 120
+      },
+      "matlab_reference_mat": "test_ct_fire_real1_default.mat"
+    },
+    {
+      "name": "real2_th30",
+      "image": "real2.tif",
+      "description": "real2 image with thresh_im2=30 for cleaner background masking",
+      "ctfire_params": {
+        "coefficient_percentile": 0.2,
+        "num_scales": 3,
+        "LL1": 30,
+        "value": {
+          "sigma_im": 0,
+          "sigma_d": 0.3,
+          "dtype": "cityblock",
+          "thresh_im": [],
+          "thresh_im2": 30,
+          "thresh_Dxlink": 1.5,
+          "s_xlinkbox": 8,
+          "thresh_LMP": 0.2,
+          "thresh_LMPdist": 2,
+          "thresh_ext": 0.342,
+          "lam_dirdecay": 0.5,
+          "s_minstep": 2,
+          "s_maxstep": 6,
+          "thresh_dang_aextend": 0.9848,
+          "thresh_dang_L": 15,
+          "thresh_short_L": 15,
+          "s_fiberdir": 4,
+          "thresh_linkd": 15,
+          "thresh_linka": -0.866,
+          "thresh_flen": 15,
+          "thresh_numv": 3,
+          "scale": [1.0, 1.0, 1.0],
+          "s_boundthick": 10,
+          "blist": 1,
+          "s_maxspace": 5,
+          "lambda": 0.01,
+          "ang_interval": 3
+        }
+      },
+      "expected_outputs": {
+        "min_fiber_count": 50,
+        "max_fiber_count": 1000,
+        "min_avg_length": 10,
+        "max_avg_length": 120
+      },
+      "matlab_reference_mat": "test_ct_fire_real2_th30.mat"
+    },
+    {
+      "name": "syn1_th98",
+      "image": "syn1_20fibers.png",
+      "description": "syn1 image (20 synthetic fibers) with thresh_im2=98 heavy background masking",
+      "ctfire_params": {
+        "coefficient_percentile": 0.2,
+        "num_scales": 3,
+        "LL1": 30,
+        "value": {
+          "sigma_im": 0,
+          "sigma_d": 0.3,
+          "dtype": "cityblock",
+          "thresh_im": [],
+          "thresh_im2": 98,
+          "thresh_Dxlink": 1.5,
+          "s_xlinkbox": 8,
+          "thresh_LMP": 0.2,
+          "thresh_LMPdist": 2,
+          "thresh_ext": 0.342,
+          "lam_dirdecay": 0.5,
+          "s_minstep": 2,
+          "s_maxstep": 6,
+          "thresh_dang_aextend": 0.9848,
+          "thresh_dang_L": 15,
+          "thresh_short_L": 15,
+          "s_fiberdir": 4,
+          "thresh_linkd": 15,
+          "thresh_linka": -0.866,
+          "thresh_flen": 15,
+          "thresh_numv": 3,
+          "scale": [1.0, 1.0, 1.0],
+          "s_boundthick": 10,
+          "blist": 1,
+          "s_maxspace": 5,
+          "lambda": 0.01,
+          "ang_interval": 3
+        }
+      },
+      "expected_outputs": {
+        "min_fiber_count": 20,
+        "max_fiber_count": 2000,
+        "min_avg_length": 10,
+        "max_avg_length": 150
+      },
+      "matlab_reference_mat": "test_ct_fire_syn1_th98.mat"
+    },
+    {
+      "name": "syn2_th98",
+      "image": "syn2_35fibers.png",
+      "description": "syn2 image (35 synthetic fibers) with thresh_im2=98 heavy background masking, adjusted linking thresholds",
+      "ctfire_params": {
+        "coefficient_percentile": 0.2,
+        "num_scales": 3,
+        "LL1": 30,
+        "value": {
+          "sigma_im": 0,
+          "sigma_d": 0.3,
+          "dtype": "cityblock",
+          "thresh_im": [],
+          "thresh_im2": 98,
+          "thresh_Dxlink": 2.0,
+          "s_xlinkbox": 8,
+          "thresh_LMP": 0.3,
+          "thresh_LMPdist": 2,
+          "thresh_ext": 0.342,
+          "lam_dirdecay": 0.5,
+          "s_minstep": 2,
+          "s_maxstep": 6,
+          "thresh_dang_aextend": 0.9848,
+          "thresh_dang_L": 15,
+          "thresh_short_L": 15,
+          "s_fiberdir": 4,
+          "thresh_linkd": 15,
+          "thresh_linka": -0.866,
+          "thresh_flen": 15,
+          "thresh_numv": 3,
+          "scale": [1.0, 1.0, 1.0],
+          "s_boundthick": 10,
+          "blist": 1,
+          "s_maxspace": 5,
+          "lambda": 0.01,
+          "ang_interval": 3
+        }
+      },
+      "expected_outputs": {
+        "min_fiber_count": 25,
+        "max_fiber_count": 1500,
+        "min_avg_length": 15,
+        "max_avg_length": 150
+      },
+      "matlab_reference_mat": "test_ct_fire_syn2_th98.mat"
+    }
+  ],
+  "tolerances": {
+    "fiber_count": {
+      "description": "Tolerance for number of fibers detected",
+      "relative": 0.15,
+      "note": "15% tolerance accounts for differences in edge cases"
+    },
+    "fiber_length": {
+      "description": "Tolerance for average fiber length",
+      "relative": 0.10,
+      "absolute": 5.0,
+      "note": "10% relative or 5 pixels absolute"
+    },
+    "fiber_angle": {
+      "description": "Tolerance for fiber angles",
+      "absolute_degrees": 5.0,
+      "note": "5 degree tolerance for angle measurements"
+    },
+    "soft_iou": {
+      "description": "Minimum soft IoU for Python vs MATLAB centerline spatial agreement",
+      "threshold": 0.80,
+      "note": "Higher than fire_2d (0.50) because CT preprocessing should preserve spatial structure"
+    }
+  },
+  "notes": [
+    "MATLAB reference files (.mat) must be generated by running ctFIRE in MATLAB",
+    "Each .mat file must contain a 'data' structure with Xa, Fa, Ra, M fields",
+    "To generate: ctFIREout = ctFIREfun(cP, cP2, im3); save('ref.mat', '-v7.3', 'ctFIREout')",
+    "MATLAB Xa uses [col, row, z] convention (opposite to Python [row, col])",
+    "coefficient_percentile=0.2 keeps top 80% of curvelet coefficients by energy",
+    "num_scales=3 uses the 3 finest scales for reconstruction (matches MATLAB ctFIRE SS=3)"
+  ]
+}
