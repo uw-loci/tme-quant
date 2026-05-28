@@ -271,16 +271,21 @@ A full Python conversion of the original CT-FIRE MATLAB code, living in
     see MSYS2 setup in `doc/DEVELOPMENT.md`)
 - **Source branch:** `32-convert-ctfire` in the ctfire fork repo
   (`H:\GitHub.06.2022\tmequant_ctfire\tme-quant`)
-- **Sync workflow** (`32-convert-ctfire` is unstable — use direct copy, not
-  subtree; see `doc/DEVELOPMENT.md § Synchronizing ctfire_py`):
+- **Git tracking:** `src/ctfire_py/` is **not tracked** in this repo and is
+  listed in `.gitignore`. It lives locally for PoC use only. When
+  `32-convert-ctfire` is eventually merged into `main`, the folder will arrive
+  from that branch without conflicts.
+- **How to update locally** (pull a newer version from the fork branch):
   ```bash
-  git rm -r src/ctfire_py/
-  # in ctfire fork repo:
+  # 1. Update the fork repo
+  cd H:/GitHub.06.2022/tmequant_ctfire/tme-quant
+  git checkout 32-convert-ctfire && git pull
+
+  # 2. Replace the local copy (no git commit needed — folder is gitignored)
+  cd H:/GitHub.06.2022/tme-quant
+  rm -rf src/ctfire_py/
   cp -r ../tmequant_ctfire/tme-quant/src/ctfire_py src/ctfire_py
-  git add src/ctfire_py/
-  git commit -m "sync: update ctfire_py from 32-convert-ctfire <SHA>"
   ```
-  Each sync commit should record the source SHA in the message.
 
 ### Curvelet Transform (`curvelops` / `_curvelet_cpp`)
 
