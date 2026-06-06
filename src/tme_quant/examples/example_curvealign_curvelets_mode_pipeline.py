@@ -978,9 +978,9 @@ def scenario_3_real_image() -> None:
         boundary_img=mask,
         tif_boundary=3,
         distance_threshold=100.0,
-        keep=0.05,
+        keep=0.02,
         scale=1,
-        radius=8.0,
+        radius=10.0,
         exclude_fibers_in_mask=True,
     )
     _print_result("real image + boundary", result)
