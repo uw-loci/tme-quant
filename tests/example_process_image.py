@@ -508,6 +508,22 @@ class ProcessImageGUI(QMainWindow):
             "Background intensity threshold for fiber tracing (default 5; use ~98 for bright-field images)"
         )
 
+        self.num_scales = QSpinBox()
+        self.num_scales.setRange(1, 8)
+        self.num_scales.setValue(3)
+        self.num_scales.setToolTip(
+            "Number of finest curvelet scales used for reconstruction (default 3 = MATLAB SS=3)"
+        )
+
+        self.coefficient_percentile = QDoubleSpinBox()
+        self.coefficient_percentile.setRange(0.01, 1.0)
+        self.coefficient_percentile.setSingleStep(0.05)
+        self.coefficient_percentile.setDecimals(2)
+        self.coefficient_percentile.setValue(0.20)
+        self.coefficient_percentile.setToolTip(
+            "Top fraction of curvelet coefficients to keep (default 0.20 = top 20% by energy)"
+        )
+
     def create_widgets(self):
         """Create all GUI widgets."""
         # Create central widget and main layout
@@ -619,6 +635,10 @@ class ProcessImageGUI(QMainWindow):
         layout7 = QGridLayout()
         layout7.addWidget(QLabel("Background Threshold (thresh_im2):"), 0, 0)
         layout7.addWidget(self.thresh_im2, 0, 1)
+        layout7.addWidget(QLabel("Curvelet Scales (num_scales):"), 1, 0)
+        layout7.addWidget(self.num_scales, 1, 1)
+        layout7.addWidget(QLabel("Coefficients to Keep (fraction):"), 2, 0)
+        layout7.addWidget(self.coefficient_percentile, 2, 1)
         group7.setLayout(layout7)
         scroll_layout.addWidget(group7)
 
@@ -756,6 +776,8 @@ class ProcessImageGUI(QMainWindow):
         self.minimum_box_size.setValue(32)
         self.fiber_midpoint_estimate.setValue(1)
         self.thresh_im2.setValue(5)
+        self.num_scales.setValue(3)
+        self.coefficient_percentile.setValue(0.20)
         QMessageBox.information(
             self, "Defaults Loaded", "Default parameters have been restored."
         )
@@ -806,6 +828,8 @@ class ProcessImageGUI(QMainWindow):
 
             ctfire_params = copy.deepcopy(DEFAULT_CTFIRE_PARAMS)
             ctfire_params["value"]["thresh_im2"] = self.thresh_im2.value()
+            ctfire_params["num_scales"] = self.num_scales.value()
+            ctfire_params["coefficient_percentile"] = self.coefficient_percentile.value()
 
             fiber_params = FiberAnalysisParameters(
                 fiber_mode=self.fiber_mode.currentIndex(),
