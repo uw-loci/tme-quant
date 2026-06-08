@@ -288,3 +288,82 @@ display and the process exits silently with code 1.
 it without the GUI, comment out `app.exec()` and call `run_example()` directly, or run
 from a headless environment where `QApplication` can still be constructed (e.g., with
 `QT_QPA_PLATFORM=offscreen`).
+
+---
+
+## Distributing `ctfire_py` to Other Tools
+
+### Dependency constraints
+
+| Component | Distributable? | Notes |
+|---|---|---|
+| `ctfire_py` Python code | Yes | Pure Python |
+| `pycurvelets` | Yes | Local package in `src/`, included in same wheel |
+| `fiber_backend` C++ extension | Yes (compiled) | Platform-specific `.so` / `.pyd` |
+| `curvelops` | **No** | Must be installed separately by the end user |
+
+**Important:** `fire_2d_angle.py` only requires `pycurvelets` and `fiber_backend` — it does
+**not** need `curvelops`. `ct_fire.py` lazy-imports `ct_reconstruction` (which needs
+`curvelops`) inside the function body at call time, so the import succeeds without it, but
+calling `ct_fire()` will raise `ImportError` at runtime if `curvelops` is absent.
+
+### Option 1 — Editable install from this repo (recommended for local dev)
+
+```bash
+pip install -e /path/to/tme-quant
+# or with uv:
+uv pip install -e /path/to/tme-quant
+```
+
+Then in the other tool:
+
+```python
+from ctfire_py import ct_fire, fire_2d_angle
+```
+
+Changes to the source propagate immediately. Works on the same machine; no C++ recompile
+needed as long as `fiber_backend` was already built via the `Makefile`.
+
+### Option 2 — Install from GitHub
+
+```bash
+pip install "tme-quant @ git+https://github.com/<org>/tme-quant"
+```
+
+Works across machines. **Caveat:** `fiber_backend` is not yet wired into the Python build
+system (see Option 3 note below), so the C++ extension must still be compiled manually
+after install.
+
+### Option 3 — Platform-specific pre-compiled wheels
+
+Build once per platform, ship a `.whl` file:
+
+```bash
+# on each target platform:
+python -m build --wheel
+# produces e.g.:
+# tme_quant-0.1.0.dev0-cp311-cp311-win_amd64.whl
+# tme_quant-0.1.0.dev0-cp311-cp311-macosx_14_0_arm64.whl
+```
+
+The other tool installs with no compiler required:
+
+```bash
+pip install tme_quant-0.1.0.dev0-cp311-cp311-win_amd64.whl
+pip install "curvelops @ git+https://github.com/PyLops/curvelops@0.23.4"  # separately
+```
+
+**Current blocker:** `pyproject.toml` has no `ext_modules` entry — `fiber_backend` is
+compiled by hand via `src/ctfire_py/CPP/Makefile` and is not included in the wheel
+produced by `python -m build`. Before wheels are usable:
+
+1. Add a `setuptools.Extension` (or switch to `scikit-build-core` + CMake) in
+   `pyproject.toml` pointing at the four C++ source files in `src/ctfire_py/CPP/`.
+2. Compile on Windows — no `.pyd` exists yet; use MSVC + pybind11 + `/openmp` flag.
+3. Run `python -m build --wheel` on each platform (Windows x64, Mac arm64, Mac x86_64).
+
+### Option 4 — Copy files directly (discouraged)
+
+Copying `ct_fire.py`, `fire_2d_angle.py`, and their subpackage dependencies into another
+project creates diverging copies with no shared maintenance. Avoid unless nothing else is
+practical.
