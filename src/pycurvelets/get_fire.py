@@ -9,7 +9,7 @@ from pycurvelets.process_fibers import process_fibers
 # Default CT-FIRE parameters, matching the values used in ct_fire.py __main__
 DEFAULT_CTFIRE_PARAMS: Dict[str, Any] = {
     "coefficient_percentile": 0.2,
-    "num_scales": 4,
+    "num_scales": 3,
     "fiber_threshold": 0.5,
     "widMAX": 20,
     "widcon": {
