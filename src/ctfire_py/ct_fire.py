@@ -8,7 +8,6 @@ import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from typing import Dict, Any, Tuple, Optional
 
-from ctfire_py.ct_reconstruction import ct_reconstruction
 from ctfire_py.fire_2d_angle import fire_2d_angle
 
 
@@ -86,6 +85,7 @@ def ct_fire(
     # preserving fiber signal where the original image is bright.
     mask_ori = img > ctfire_params["value"]["thresh_im2"]
 
+    from ctfire_py.ct_reconstruction import ct_reconstruction  # lazy: requires curvelops
     reconstructed_ct = ct_reconstruction(
         img=img,
         output_filename=image_name,
@@ -300,7 +300,7 @@ def _save_params_json(ctfire_params: Dict[str, Any], path: str) -> None:
     cP = {
         "ctfire": {
             "coefficient_percentile": ctfire_params.get("coefficient_percentile", 0.2),
-            "num_scales": ctfire_params.get("num_scales", 4),
+            "num_scales": ctfire_params.get("num_scales", 3),
             "LL1": ctfire_params.get("LL1", 30),
             "widMAX": ctfire_params.get("widMAX", 20),
         },
@@ -385,7 +385,7 @@ def load_ctfire_params(json_path: str) -> Dict[str, Any]:
     ctfire_section = cP.get("ctfire", {})
     return {
         "coefficient_percentile": ctfire_section.get("coefficient_percentile", 0.2),
-        "num_scales": ctfire_section.get("num_scales", 4),
+        "num_scales": ctfire_section.get("num_scales", 3),
         "LL1": ctfire_section.get("LL1", 30),
         "widMAX": ctfire_section.get("widMAX", 20),
         "value": cP.get("fire2d", {}),
@@ -497,7 +497,7 @@ if __name__ == "__main__":
 
     ctfire_params = {
         "coefficient_percentile": 0.2,
-        "num_scales": 4,
+        "num_scales": 3,
         "LL1": 30,
         "fiber_threshold": 0.5,
         "value": {

@@ -21,7 +21,6 @@ import sys
 
 
 from pycurvelets.utils.math import round_mlab
-from ctfire_py import ct_reconstruction
 
 # Import C++ backend
 try:
@@ -607,6 +606,7 @@ if __name__ == "__main__":
 
     import os
     import matplotlib.pyplot as plt
+    from ctfire_py.ct_reconstruction import ct_reconstruction  # lazy: requires curvelops
 
     img = plt.imread(
         os.path.join(
