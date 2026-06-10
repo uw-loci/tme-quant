@@ -1,15 +1,28 @@
-# Setting up the CT-FIRE FIRE-only pipeline on Windows (MSYS2 UCRT64)
+# Setting up the CT-FIRE FIRE-only pipeline
 
 This guide walks through setting up the **FIRE-only** CT-FIRE pipeline
-(`use_ct_reconstruction=False`) on a fresh Windows x64 machine.
+(`use_ct_reconstruction=False`) on Windows, Linux, and macOS (Apple Silicon).
 
 **What you get:** individual fiber extraction with full TACS classification and
 the interactive matplotlib viewer — **without** installing curvelops or any
 curvelet transform library.
 
-**Target platform:** Windows 10/11 x64, Python 3.14 via MSYS2 UCRT64.
-The pre-built `fiber_backend.cp314-mingw_x86_64_ucrt_gnu.pyd` extension
-included in `src/ctfire_py/` is compiled for exactly this combination.
+---
+
+## Pre-built extensions at a glance
+
+Pre-built C++ extension binaries are included in `src/ctfire_py/` for all three
+platforms. You **must** use the matching Python version or the binary will not load.
+
+| Platform | Binary file | Python version required |
+|----------|------------|------------------------|
+| Windows (MSYS2 UCRT64 x64) | `fiber_backend.cp314-mingw_x86_64_ucrt_gnu.pyd` | **3.14** |
+| Linux (x86_64) | `fiber_backend.cpython-310-x86_64-linux-gnu.so` | **3.10** |
+| macOS (Apple Silicon / M-chip) | `fiber_backend.cpython-312-darwin.so` | **3.12** |
+
+If your Python version does not match, you will get
+`ImportError: No module named 'fiber_backend'` or an ABI mismatch error.
+In that case, rebuild the extension from source — see `src/ctfire_py/CPP/`.
 
 ---
 
@@ -19,13 +32,13 @@ Understanding the two-level `src/` structure explains why a normal
 `pip install -e .` cannot set up this environment on its own.
 
 ```
-tme-quant/                          ← git root (clone/copy goes here)
-└── src/                            ← repo-level src: holds all packages as siblings
-    ├── ctfire_py/                  ← ctfire_py package (includes fiber_backend.pyd)
-    ├── pycurvelets/                ← pycurvelets utilities (required by ctfire_py)
-    └── tme_quant/                  ← project root (pyproject.toml lives here)
+tme-quant/                          <- git root (clone/copy goes here)
+└── src/                            <- repo-level src: holds all packages as siblings
+    ├── ctfire_py/                  <- ctfire_py package (includes fiber_backend.*)
+    ├── pycurvelets/                <- pycurvelets utilities (required by ctfire_py)
+    └── tme_quant/                  <- project root (pyproject.toml lives here)
         └── src/
-            └── tme_quant/         ← actual tme_quant Python package
+            └── tme_quant/         <- actual tme_quant Python package
 ```
 
 There are two distinct problems with using `pip install -e .` here:
@@ -34,13 +47,13 @@ There are two distinct problems with using `pip install -e .` here:
 When `uv pip install -e .` is run from inside `src/tme_quant/` (which contains
 `pyproject.toml`), uv detects the project and installs into the project's own
 configured virtual environment (`.venv`) regardless of which venv is currently
-activated. A separately created `venv_fire_only` is silently bypassed.
+activated. A separately created environment is silently bypassed.
 
 **Problem 2 — ctfire_py and pycurvelets are outside the package discovery path.**
 `pyproject.toml` uses `where = ["src"]`, which resolves to `src/tme_quant/src/`
 (the project's own source layout). `ctfire_py` and `pycurvelets` sit one level
 above at `src/` (repo-level) — outside that path. Even if the install went into
-the right venv, those two packages would still not be importable.
+the right environment, those two packages would still not be importable.
 
 **Solution — two `.pth` files written directly into site-packages.**
 Python reads every `.pth` file in `site-packages/` at startup and appends the
@@ -56,30 +69,28 @@ before the second file. This matters because `src/` also contains the
 `tme_quant/` project directory, which Python would otherwise pick up as a
 namespace package and shadow the real `tme_quant` package.
 
----
-
-## Prerequisites at a glance
-
-| Item | Version | Notes |
-|------|---------|-------|
-| Windows | 10 or 11 (x64) | ARM64 not supported by the pre-built extension |
-| MSYS2 UCRT64 | Latest | Provides Python 3.14 + GCC runtime DLLs |
-| Python | 3.14 (UCRT64) | **Must match** the `cp314` tag in `fiber_backend.pyd` |
-| uv | Latest | pip-installable; used for fast package installs |
-| tme-quant repo | `prototype/hierarchy-model-for-CApy` | Pre-built `fiber_backend.pyd` is included |
+The `.pth` file commands are **identical on all platforms** — only the Python
+and package installation steps differ by OS.
 
 ---
 
-## Step 1 — Install MSYS2
+## Platform setup
+
+Follow the section for your OS, then continue at
+[Create the environment and add path files](#create-the-environment-and-add-path-files).
+
+### Windows (MSYS2 UCRT64)
+
+**Python required: 3.14**
+
+#### Step W1 — Install MSYS2
 
 1. Download the installer from **https://www.msys2.org**.
-2. Run the installer. Accept the default path `C:\msys64`.
-3. After installation, open the **MSYS2 UCRT64** shell:
-   - Start menu → "MSYS2 UCRT64", **or**
-   - Run `C:\msys64\ucrt64.exe`
+2. Run it; accept the default path `C:\msys64`.
+3. Open the **MSYS2 UCRT64** shell (Start menu → "MSYS2 UCRT64" or `C:\msys64\ucrt64.exe`).
 
-> ⚠️ Always use the **UCRT64** shell, not MSYS, MinGW32, or MinGW64.
-> The `fiber_backend` extension is linked against the UCRT64 runtime.
+   > Always use the **UCRT64** shell, not MSYS, MinGW32, or MinGW64.
+   > The `fiber_backend` extension is linked against the UCRT64 runtime.
 
 4. Update the package database:
    ```bash
@@ -88,12 +99,7 @@ namespace package and shadow the real `tme_quant` package.
    pacman -Su
    ```
 
----
-
-## Step 2 — Install Python 3.14 and C-extension dependencies
-
-Using `pacman` for C-extension packages avoids build failures under GCC 15
-(the same approach used for `.venv-curvelops` on this development machine).
+#### Step W2 — Install Python 3.14 and C-extension dependencies
 
 ```bash
 pacman -S --needed \
@@ -110,16 +116,11 @@ pacman -S --needed \
   mingw-w64-ucrt-x86_64-python-openpyxl \
   mingw-w64-ucrt-x86_64-python-pillow \
   mingw-w64-ucrt-x86_64-python-imageio
+
+python --version   # must print Python 3.14.x
 ```
 
-Verify the Python version is 3.14:
-```bash
-python --version   # should print Python 3.14.x
-```
-
----
-
-## Step 3 — Add MSYS2 UCRT64 bin to the Windows System PATH
+#### Step W3 — Add MSYS2 UCRT64 bin to the Windows System PATH
 
 `fiber_backend.cp314-mingw_x86_64_ucrt_gnu.pyd` is a GCC-compiled C extension
 that loads GCC runtime DLLs at import time. These DLLs live in
@@ -134,62 +135,152 @@ that loads GCC runtime DLLs at import time. These DLLs live in
 4. Click **New** and paste: `C:\msys64\ucrt64\bin`
 5. Click OK on all dialogs, then **reopen** the UCRT64 shell.
 
-Verify the DLL directory is visible:
 ```bash
 echo $PATH | tr ':' '\n' | grep ucrt64
 # should show /c/msys64/ucrt64/bin
 ```
 
----
+#### Step W4 — Get the tme-quant repository
 
-## Step 4 — Install uv
-
-```bash
-pip install uv
-uv --version   # verify
-```
-
----
-
-## Step 5 — Get the tme-quant repository
-
-**Option A — git clone** (if the repo is hosted on GitHub/GitLab):
 ```bash
 git clone <repo-url> /h/my-repos/tme-quant
 cd /h/my-repos/tme-quant
 git checkout prototype/hierarchy-model-for-CApy
+
+REPO=/h/my-repos/tme-quant   # adjust to your actual path
 ```
 
-**Option B — copy from another machine:**
-Copy the entire `tme-quant/` folder. The pre-built
-`src/ctfire_py/fiber_backend.cp314-mingw_x86_64_ucrt_gnu.pyd` is already
-in the repository, so no compilation is needed.
+**Or copy from another machine.** The pre-built `fiber_backend.cp314-mingw_x86_64_ucrt_gnu.pyd`
+is already in the repo, so no compilation is needed.
 
-From this point, all commands assume the repo root is at some path — adjust
-to match your actual location. The variable `REPO` is used below to keep
-the commands copy-pasteable:
+#### Step W5 — Create the venv
 
-```bash
-REPO=/h/GitHub.06.2022/tme-quant   # change this to your actual path
-```
-
----
-
-## Step 6 — Create `venv_fire_only` and add path files
-
-See "Directory layout and why we don't use `pip install`" above for the full
-explanation. The short version: `uv pip install -e .` in this project always
-installs into `.venv` (not into a separately created venv), and `ctfire_py`/
-`pycurvelets` are outside the pyproject.toml package discovery path regardless.
-Two `.pth` files written directly into site-packages solve both problems.
+Windows uses `--system-site-packages` because the C-extension packages (numpy, scipy,
+opencv, etc.) were installed into the MSYS2 system Python via `pacman`, not into pip.
 
 ```bash
 cd "$REPO/src/tme_quant"
-
-# Create virtual environment that reuses pacman-installed C-extension packages
-# (numpy, scipy, opencv, etc.) to avoid recompilation under GCC 15.
 python -m venv --system-site-packages venv_fire_only
 source venv_fire_only/bin/activate
+```
+
+Then continue at [Create the environment and add path files](#create-the-environment-and-add-path-files).
+
+---
+
+### Linux (x86_64)
+
+**Python required: 3.10**
+
+The pre-built `fiber_backend.cpython-310-x86_64-linux-gnu.so` requires Python 3.10
+exactly. Conda (Miniforge/Miniconda) is the recommended way to get it cleanly.
+
+#### Step L1 — Install Conda (if not already present)
+
+```bash
+# Miniforge (recommended — conda-forge by default):
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+bash Miniforge3-Linux-x86_64.sh
+```
+
+Or use an existing Conda installation (Miniconda, Anaconda).
+
+> **Alternative — system Python 3.10:**
+> If your distro ships Python 3.10 (`apt install python3.10 python3.10-venv`),
+> you can skip Conda and use a plain venv; install packages with
+> `pip install numpy scipy scikit-image opencv-python pandas matplotlib shapely tifffile openpyxl pillow imageio`.
+> In that case, replace `conda activate fire_only_env` with
+> `source venv_fire_only/bin/activate` throughout.
+
+#### Step L2 — Create the Conda environment
+
+```bash
+conda create -n fire_only_env python=3.10 \
+    numpy scipy scikit-image pandas matplotlib \
+    shapely tifffile openpyxl pillow imageio
+conda install -n fire_only_env -c conda-forge opencv
+conda activate fire_only_env
+
+python --version   # must print Python 3.10.x
+```
+
+> No `libgomp1` step is needed — `numpy` and `scipy` from conda-forge pull in
+> the OpenMP runtime automatically. If you see an `libgomp` error, run
+> `conda install -c conda-forge libgomp`.
+
+#### Step L3 — Get the tme-quant repository
+
+```bash
+git clone <repo-url> ~/repos/tme-quant
+cd ~/repos/tme-quant
+git checkout prototype/hierarchy-model-for-CApy
+
+REPO=~/repos/tme-quant   # adjust to your actual path
+```
+
+Then continue at [Create the environment and add path files](#create-the-environment-and-add-path-files).
+
+---
+
+### macOS (Apple Silicon / M-chip)
+
+**Python required: 3.12**
+
+The pre-built `fiber_backend.cpython-312-darwin.so` was compiled with OpenMP support
+via `libomp` from Conda. **Conda is strongly recommended** — it provides both
+Python 3.12 and `libomp` together, avoiding dylib loading errors.
+
+#### Step M1 — Install Xcode command-line tools (if not already present)
+
+```bash
+xcode-select --install
+```
+
+#### Step M2 — Install Conda (if not already present)
+
+```bash
+# Miniforge for Apple Silicon (ARM64):
+curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-arm64.sh -o Miniforge3.sh
+bash Miniforge3.sh
+```
+
+#### Step M3 — Create the Conda environment
+
+```bash
+conda create -n fire_only_env python=3.12 \
+    numpy scipy scikit-image pandas matplotlib \
+    shapely tifffile openpyxl pillow imageio libomp
+conda install -n fire_only_env -c conda-forge opencv
+conda activate fire_only_env
+
+python --version   # must print Python 3.12.x
+```
+
+> `libomp` is required explicitly because `fiber_backend.cpython-312-darwin.so`
+> links against `libomp.dylib`. Without it Python raises
+> `ImportError: Library not loaded: @rpath/libomp.dylib` at import time.
+
+#### Step M4 — Get the tme-quant repository
+
+```bash
+git clone <repo-url> ~/repos/tme-quant
+cd ~/repos/tme-quant
+git checkout prototype/hierarchy-model-for-CApy
+
+REPO=~/repos/tme-quant   # adjust to your actual path
+```
+
+Then continue at [Create the environment and add path files](#create-the-environment-and-add-path-files).
+
+---
+
+## Create the environment and add path files
+
+These steps are **identical on all platforms.** Run them in the activated environment
+created in the platform section above (Windows venv, or Linux/macOS Conda env).
+
+```bash
+cd "$REPO/src/tme_quant"
 
 # pth 1 — real tme_quant package at src/tme_quant/src/
 # aa_ prefix: loaded first (alphabetical), so Python finds the real package
@@ -214,6 +305,70 @@ print('tme_quant_src.pth ->', repo_src)
 
 ---
 
+## Verify the installation
+
+```bash
+python -c "
+import tme_quant, ctfire_py, pycurvelets
+from ctfire_py.fire_2d_angle import fire_2d_angle
+from tme_quant.tme_analysis.pipelines import curvealign_ctfire_mode_pipeline
+print('tme_quant:', tme_quant.__file__)
+print('ctfire_py:', ctfire_py.__file__)
+print('All imports OK — fire-only pipeline is ready.')
+"
+```
+
+Expected output (paths will reflect your repo location):
+```
+tme_quant: /your/path/tme-quant/src/tme_quant/src/tme_quant/__init__.py
+ctfire_py: /your/path/tme-quant/src/ctfire_py/__init__.py
+All imports OK — fire-only pipeline is ready.
+```
+
+If `tme_quant.__file__` is `None` (namespace package), the `aa_tme_quant_pkg.pth`
+file was not created or was processed after `tme_quant_src.pth`. Re-run the pth
+block above and verify both `.pth` files exist in the environment's `site-packages/`.
+
+---
+
+## Run the fire-only example
+
+Place the test images at:
+```
+$REPO/tests/test_images/real1.tif
+$REPO/tests/test_images/CA_Boundary/mask_real1.tiff
+```
+
+Then run:
+```bash
+cd "$REPO/src/tme_quant"
+python examples/example_curvealign_ctfire_pipeline.py --scenario fire-only
+```
+
+Expected output:
+- Fiber count printed to stdout
+- TACS breakdown (TACS-1/2/3 percentages)
+- Overlay PNG + heatmap PNG + xlsx saved to `examples/output/`
+- Interactive matplotlib TACS viewer window (requires a display; see Troubleshooting for headless)
+
+---
+
+## Activating the environment in future sessions
+
+**Windows:**
+```bash
+cd "$REPO/src/tme_quant"
+source venv_fire_only/bin/activate
+```
+
+**Linux / macOS:**
+```bash
+conda activate fire_only_env
+cd "$REPO/src/tme_quant"
+```
+
+---
+
 ## Alternative: flat-layout pip install
 
 If you prefer a single `pip install` command over writing `.pth` files manually,
@@ -222,7 +377,7 @@ and use the provided `pyproject_flat.toml` instead.
 
 ### Which option to choose
 
-| | `.pth` file approach (Step 6) | Flat-layout approach (this section) |
+| | `.pth` file approach | Flat-layout approach |
 |---|---|---|
 | **Recommended for** | Developers; keeps ctfire_py as a clearly separate package | End-user deployment; simplest install command |
 | **ctfire_py location** | `src/ctfire_py/` (repo-level, separate) | `src/tme_quant/src/ctfire_py/` (copied in) |
@@ -258,112 +413,49 @@ cp pyproject.toml pyproject.toml.bak     # keep the original safe
 cp pyproject_flat.toml pyproject.toml
 ```
 
-**3. Create the venv and install:**
+**3. Create the environment and install:**
 
 ```bash
-python -m venv --system-site-packages venv_fire_only
-source venv_fire_only/bin/activate
+# Activate your environment first (conda activate or source venv/bin/activate)
 
 # Use standard pip — NOT uv pip install.
-# uv pip install always targets the project's own .venv, ignoring venv_fire_only.
+# uv pip install always targets the project's own .venv, ignoring your active env.
 python -m pip install -e .
 ```
 
 > **If you prefer uv:** run `uv pip install -e .` instead. It will install into
-> `.venv` (not `venv_fire_only`). Activate `.venv` with
-> `source .venv/bin/activate` in subsequent sessions.
+> `.venv` (not your named environment). Activate `.venv` with
+> `source .venv/bin/activate` (Linux/macOS) or `source .venv/Scripts/activate` (Windows)
+> in subsequent sessions.
 
-Verify with the same command from Step 7:
-```bash
-python -c "
-import tme_quant, ctfire_py, pycurvelets
-print('tme_quant:', tme_quant.__file__)
-print('ctfire_py:', ctfire_py.__file__)
-print('All imports OK.')
-"
-```
-
----
-
-## Step 7 — Verify the installation
-
-```bash
-python -c "
-import tme_quant, ctfire_py, pycurvelets
-from ctfire_py.fire_2d_angle import fire_2d_angle
-from tme_quant.tme_analysis.pipelines import curvealign_ctfire_mode_pipeline
-print('tme_quant:', tme_quant.__file__)
-print('ctfire_py:', ctfire_py.__file__)
-print('All imports OK — fire-only pipeline is ready.')
-"
-```
-
-Expected output (paths will reflect your repo location):
-```
-tme_quant: H:/your/path/tme-quant/src/tme_quant/src/tme_quant/__init__.py
-ctfire_py: H:/your/path/tme-quant/src/ctfire_py/__init__.py
-All imports OK — fire-only pipeline is ready.
-```
-
-If `tme_quant.__file__` is `None` (namespace package), the `aa_tme_quant_pkg.pth`
-file was not created or was processed after `tme_quant_src.pth`. Re-run Step 6 and
-verify both `.pth` files exist in the venv's `site-packages/`.
-
----
-
-## Step 8 — Run the fire-only example
-
-Place the test images at:
-```
-$REPO/tests/test_images/real1.tif
-$REPO/tests/test_images/CA_Boundary/mask_real1.tiff
-```
-
-Then run:
-```bash
-cd "$REPO/src/tme_quant"
-python examples/example_curvealign_ctfire_pipeline.py --scenario fire-only
-```
-
-Expected output:
-- Fiber count printed to stdout
-- TACS breakdown (TACS-1/2/3 percentages)
-- Overlay PNG + heatmap PNG + xlsx saved to `examples/output/`
-- Interactive matplotlib TACS viewer window
-
----
-
-## Activating the environment in future sessions
-
-```bash
-cd "$REPO/src/tme_quant"
-source venv_fire_only/bin/activate
-python examples/example_curvealign_ctfire_pipeline.py --scenario fire-only
-```
+Verify with the same command from the Verify section above.
 
 ---
 
 ## Troubleshooting
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `ImportError: DLL load failed while importing fiber_backend` | MSYS2 DLLs not on Windows PATH | Add `C:\msys64\ucrt64\bin` to System PATH (Step 3) and reopen shell |
-| `ImportError: Module use of python314.dll conflicts` | Python version mismatch | Must use Python 3.14 (cp314); check `python --version` |
-| `ModuleNotFoundError: No module named 'ctfire_py'` | `tme_quant_src.pth` not created | Re-run the pth 2 block in Step 6; verify `site-packages/tme_quant_src.pth` exists |
-| `ModuleNotFoundError: No module named 'pycurvelets'` | Same as above | Re-run the pth 2 block in Step 6 |
-| `tme_quant.__file__ is None` (namespace package) | `aa_tme_quant_pkg.pth` missing or wrong | Re-run the pth 1 block in Step 6; verify `site-packages/aa_tme_quant_pkg.pth` exists |
-| `ModuleNotFoundError: No module named 'cv2'` | opencv not installed | `pacman -S mingw-w64-ucrt-x86_64-python-opencv` |
-| `RuntimeWarning: FIRE ran out of memory (std::bad_alloc)` | Too many FIRE seeds | Raise `thresh_LMPdist` (e.g. 12) in `fire_only_params`; see comments in `scenario_fire_only()` |
-| `SKIPPED — image not found` | Test images missing | Copy `real1.tif` and `mask_real1.tiff` to the paths in Step 8 |
-| `_tkinter.TclError: no display name` | Headless / SSH session | Add `matplotlib.use("Agg")` before `import matplotlib.pyplot` in the example; output will be file-only |
-| `ModuleNotFoundError: ctfire_py` (flat layout) | Folders not copied or used `uv pip` | Verify `src/tme_quant/src/ctfire_py/` exists; use `python -m pip install -e .` (not `uv pip`) |
-| `ModuleNotFoundError: tme_quant.tme_analysis` (flat layout) | Used `uv pip install` which installed to `.venv` | Run `source .venv/bin/activate` then retry, or use `python -m pip install -e .` into `venv_fire_only` |
+| Error | Platform | Cause | Fix |
+|-------|----------|-------|-----|
+| `ImportError: DLL load failed while importing fiber_backend` | Windows | MSYS2 DLLs not on Windows PATH | Add `C:\msys64\ucrt64\bin` to System PATH (Step W3) and reopen shell |
+| `ImportError: Module use of python314.dll conflicts` | Windows | Python version mismatch | Must use Python 3.14 (cp314); check `python --version` |
+| `ImportError: Library not loaded: @rpath/libomp.dylib` | macOS | libomp not installed in Conda env | `conda install -c conda-forge libomp` |
+| `ImportError: No module named 'fiber_backend'` | Linux/macOS | Wrong Python version activated | Linux needs 3.10, macOS needs 3.12; check `python --version` |
+| `ModuleNotFoundError: No module named 'ctfire_py'` | All | `tme_quant_src.pth` not created | Re-run the pth 2 block; verify `site-packages/tme_quant_src.pth` exists |
+| `ModuleNotFoundError: No module named 'pycurvelets'` | All | Same as above | Re-run the pth 2 block |
+| `tme_quant.__file__ is None` (namespace package) | All | `aa_tme_quant_pkg.pth` missing or wrong | Re-run the pth 1 block; verify `site-packages/aa_tme_quant_pkg.pth` exists |
+| `ModuleNotFoundError: No module named 'cv2'` | Windows | opencv not installed | `pacman -S mingw-w64-ucrt-x86_64-python-opencv` |
+| `ModuleNotFoundError: No module named 'cv2'` | Linux/macOS | opencv not in Conda env | `conda install -c conda-forge opencv` |
+| `RuntimeWarning: FIRE ran out of memory (std::bad_alloc)` | All | Too many FIRE seeds | Raise `thresh_LMPdist` (e.g. 12) in `fire_only_params`; see comments in `scenario_fire_only()` |
+| `SKIPPED — image not found` | All | Test images missing | Copy `real1.tif` and `mask_real1.tiff` to the paths in Run section |
+| `_tkinter.TclError: no display name` | All | Headless / SSH session | Add `matplotlib.use("Agg")` before `import matplotlib.pyplot` in the example; output will be file-only |
+| `ModuleNotFoundError: ctfire_py` (flat layout) | All | Folders not copied or used `uv pip` | Verify `src/tme_quant/src/ctfire_py/` exists; use `python -m pip install -e .` (not `uv pip`) |
+| `ModuleNotFoundError: tme_quant.tme_analysis` (flat layout) | All | Used `uv pip install` which installed to `.venv` | Activate `.venv` instead, or use `python -m pip install -e .` |
 
 ---
 
 ## What is NOT installed
 
-The following are intentionally absent from `venv_fire_only`:
+The following are intentionally absent from `fire_only_env` / `venv_fire_only`:
 
 | Package | Why omitted |
 |---------|-------------|
@@ -381,6 +473,6 @@ To add curvelops later and run the full CT-FIRE mode, see
 
 `src/ctfire_py/` is tracked in this repo and synced from the `32-convert-ctfire`
 branch as needed (see `doc/DEVELOPMENT.md § Synchronizing ctfire_py`).
-After a sync commit, the `.pth` files written in Step 6 persist and do not need
+After a sync commit, the `.pth` files written above persist and do not need
 to be recreated. If you used the flat-layout alternative, re-copy `src/ctfire_py/`
 into `src/tme_quant/src/ctfire_py/` and re-run `python -m pip install -e .`.
