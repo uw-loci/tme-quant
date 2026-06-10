@@ -1,0 +1,171 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TMEQuant — Tumor Microenvironment Quantification
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# FLAT-LAYOUT VARIANT
+# -------------------
+# This file is intended for end-user deployments where ctfire_py and
+# pycurvelets have been copied into src/ alongside tme_quant, enabling a
+# plain `pip install -e .` workflow without manual .pth file setup.
+#
+# See docs/fire_only_windows_setup.md "Alternative: flat-layout pip install"
+# for step-by-step instructions.
+#
+# DO NOT commit this file as pyproject.toml — it is for deployment use only.
+# The canonical development layout keeps ctfire_py and pycurvelets as
+# separate sibling packages at the repo-level src/.
+# ─────────────────────────────────────────────────────────────────────────────
+[project]
+name = "tme-quant"
+version = "0.2.0"
+description = "Tumor microenvironment quantification: collagen fibers, cells, TACS classification, and TME hierarchy analysis."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+authors = [
+    { name = "UW-LOCI" },
+]
+
+keywords = [
+    "tumor microenvironment", "collagen", "TACS", "SHG", "CT-FIRE",
+    "CurveAlign", "fiber analysis", "cell segmentation", "QuPath",
+    "computational pathology", "polarization microscopy",
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+# ── Core dependencies ─────────────────────────────────────────────────────────
+dependencies = [
+    "numpy>=1.24.0,<3",
+    "scipy>=1.9.0",
+    "pandas>=1.5.0",
+    "scikit-image>=0.19.0",
+    "tifffile>=2022.2.2",
+    "imageio>=2.22.0",
+    "opencv-python>=4.6.0",
+    "shapely>=1.8.0",
+    "openpyxl>=3.0.0",
+    "matplotlib>=3.5.0",
+]
+
+# ── Optional dependency groups ─────────────────────────────────────────────────
+[project.optional-dependencies]
+
+fiber = [
+    "curvelops>=0.23.0",
+    "pyimagej>=1.4.0",
+    "scyjava>=1.9.0",
+]
+
+dl = [
+    "torch>=1.13.0",
+    "stardist>=0.8.3",
+    "cellpose>=2.0.0",
+]
+
+napari = [
+    "napari>=0.4.17",
+    "magicgui>=0.7.0",
+    "qtpy>=2.3.0",
+]
+
+network-lite = [
+    "networkx>=2.6",
+]
+
+network = [
+    "networkx>=2.6",
+    "python-louvain>=0.16",
+    "plotly>=5.0.0",
+]
+
+examples = [
+    "tme-quant[fiber,dl,network-lite]",
+    "scikit-learn>=1.1.0",
+]
+
+full = [
+    "tme-quant[fiber,dl,network]",
+]
+
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+
+# ── Entry points ───────────────────────────────────────────────────────────────
+[project.scripts]
+# tme-quant = "tme_quant.cli:main"
+
+# ── Build system ───────────────────────────────────────────────────────────────
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ── Package discovery — FLAT LAYOUT VARIANT ───────────────────────────────────
+[tool.setuptools.packages.find]
+# Flat-layout variant: ctfire_py and pycurvelets have been copied into src/
+# alongside tme_quant (src/ctfire_py/ and src/pycurvelets/).
+# Use this file instead of pyproject.toml when following the
+# "Alternative: flat-layout pip install" section of
+# docs/fire_only_windows_setup.md.
+where = ["src"]
+include = ["tme_quant*", "ctfire_py*", "pycurvelets*"]
+
+# ── uv configuration ───────────────────────────────────────────────────────────
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.uv.sources]
+# voxelmorph = { git = "https://github.com/voxelmorph/voxelmorph", rev = "dev" }
+# comir = { git = "https://github.com/CVLAB-Unibo/comir" }
+
+# ── pytest ─────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts   = "-ra -q"
+
+# ── Black ──────────────────────────────────────────────────────────────────────
+[tool.black]
+line-length    = 100
+target-version = ["py310", "py311", "py312"]
+
+# ── Ruff ───────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = [
+    "E501",
+    "UP007",
+]
+
+# ── mypy ───────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version         = "3.10"
+warn_return_any        = true
+warn_unused_configs    = true
+ignore_missing_imports = true
