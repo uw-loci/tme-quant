@@ -34,6 +34,7 @@ tme-quant/
 │   ├── example_ctfire_workflow_hierarchy.py  ← CT-FIRE workflow with TMEHierarchy
 │   ├── example_curvealign_workflow.py
 │   ├── example_curvealign_curvelets_mode_pipeline.py
+│   ├── example_curvealign_ctfire_pipeline.py         ← CT-FIRE pipeline: real SHG + boundary, TACS viewer, saves overlay/heatmap/xlsx
 │   ├── example_3d_volumetric_workflow.py
 │   ├── example_analyze_tacs_zone.py
 │   ├── example_hierarchy_object_analysis.py
@@ -207,6 +208,7 @@ Napari is NOT here: napari calls INTO tme_quant (see Core / Plugin separation).
     in-memory CT-FIRE individual-fiber pipeline; lazy-imports `ctfire_py` (external
     PoC bridge installed via Option 1 from `CLAUDE_CTFIRE.md`); returns
     `CTFirePipelineResult` with full fiber morphology (length, curvature, width).
+    Catches `MemoryError` from C++ FIRE allocator and emits a `RuntimeWarning`.
     Requires `ctfire_py` built for the active environment — see Prerequisites in the
     module docstring. To build for `.venv-curvelops` (MSYS2 UCRT64): use
     `src/ctfire_py/CPP/Makefile.ucrt64` (created in the ctfire repo) then
