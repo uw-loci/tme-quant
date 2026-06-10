@@ -17,6 +17,8 @@ to ``CTFireExtraction`` instead.
 
 Prerequisites
 -------------
+**Full CT-FIRE mode** (``use_ct_reconstruction=True``, default):
+
 1. Build the C++ extension for MSYS2 UCRT64 (.venv-curvelops)::
 
        source .venv-curvelops/bin/activate
@@ -32,6 +34,13 @@ Prerequisites
 3. Verify::
 
        python -c "from ctfire_py.ct_fire import ct_fire; print('ctfire_py OK')"
+
+**FIRE-only mode** (``use_ct_reconstruction=False``):
+
+* ``ctfire_py`` (same install as above) — **required**.
+* curvelops / curvelet transform library — **NOT required**.
+  ``fire_2d_angle()`` is called directly on the normalised input image;
+  the curvelet reconstruction step is bypassed entirely.
 
 No Qt / napari dependencies.  See REFACTORING_GUIDE.md §2.
 """
@@ -207,6 +216,89 @@ def _run_ctfire_on_image(
     )
     fiber_df = _build_fiber_dataframe(
         ctfire_output["data"], LL1, fiber_mode, feature_cp,
+        ctfire_params=resolved_params,
+        img_shape=image.shape,
+    )
+    return fiber_df if fiber_df is not None else pd.DataFrame()
+
+
+def _run_fire_only_on_image(
+    image: np.ndarray,
+    ctfire_params_dict: Optional[dict],
+    fiber_mode: int,
+) -> pd.DataFrame:
+    """Run FIRE fiber extraction directly on a normalised image (no curvelets).
+
+    Calls ``fire_2d_angle()`` on the normalised input image, bypassing the
+    curvelet reconstruction step that ``ct_fire()`` performs.
+
+    This function does **not** require curvelops or any curvelet transform
+    library.  Only ``ctfire_py`` (and its C++ ``fiber_backend`` extension)
+    must be installed.
+
+    Parameters
+    ----------
+    image :
+        Greyscale 2-D array (H × W).  Normalised internally to [0, 255]
+        float32, matching the convention expected by ``fire_2d_angle``.
+    ctfire_params_dict :
+        CT-FIRE parameter dict.  The ``"value"`` sub-dict is forwarded to
+        ``fire_2d_angle`` as its ``p`` argument.  ``None`` uses
+        ``DEFAULT_CTFIRE_PARAMS``.  Note: ``coefficient_percentile`` and
+        ``num_scales`` are ignored in this mode (no curvelet step).
+    fiber_mode :
+        1 = individual segments; 2 / 3 = complete merged fibers.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: ``angle``, ``center_row``, ``center_col``, ``total_length``,
+        ``end_length``, ``curvature``, ``width``.  Empty DataFrame when no
+        fibers are found.
+    """
+    from ctfire_py.fire_2d_angle import fire_2d_angle as _fire_2d_angle
+    from pycurvelets.get_fire import _build_fiber_dataframe, DEFAULT_CTFIRE_PARAMS
+    from pycurvelets.models import FeatureControlParameters
+
+    resolved_params = (
+        ctfire_params_dict if ctfire_params_dict is not None
+        else DEFAULT_CTFIRE_PARAMS.copy()
+    )
+    fire_params = resolved_params["value"].copy()
+
+    # Normalise to [0, 255] float32 — same convention as ct_fire.py uses before
+    # passing to fire_2d_angle, so thresh_im2 thresholds work correctly.
+    img = image.astype(np.float32)
+    if img.max() > 0:
+        img = img / img.max() * 255.0
+
+    # fire_2d_angle expects a 3-D array of shape (1, H, W).
+    im3 = img[np.newaxis, :, :]
+
+    try:
+        data = _fire_2d_angle(p=fire_params, im=im3, plotflag=0)
+    except MemoryError:
+        import warnings
+        warnings.warn(
+            "FIRE ran out of memory (std::bad_alloc) — the image likely has too many "
+            "fiber seed candidates. Try reducing image size or increasing "
+            "thresh_LMPdist in ctfire_params['value'].",
+            RuntimeWarning,
+            stacklevel=4,
+        )
+        return pd.DataFrame()
+
+    if not data:
+        return pd.DataFrame()
+
+    # LL1: post-tracing minimum fiber arc-length filter (same key as ct_fire.py).
+    # Default 30 matches ct_fire.py's default; set ctfire_params["LL1"] to override.
+    LL1 = resolved_params.get("LL1", 30)
+    feature_cp = FeatureControlParameters(
+        minimum_nearest_fibers=2, minimum_box_size=32, fiber_midpoint_estimate=1
+    )
+    fiber_df = _build_fiber_dataframe(
+        data, LL1, fiber_mode, feature_cp,
         ctfire_params=resolved_params,
         img_shape=image.shape,
     )
@@ -460,6 +552,7 @@ def _build_fiber_features_df(
 def curvealign_ctfire_mode_pipeline(
     image: np.ndarray,
     ctfire_params: Optional[dict] = None,
+    use_ct_reconstruction: bool = True,
     fiber_mode: int = 2,
     feature_params: Optional[FiberFeatureParams] = None,
     coordinates: Optional[dict] = None,
@@ -485,6 +578,17 @@ def curvealign_ctfire_mode_pipeline(
         CT-FIRE algorithm parameters.  ``None`` uses ``DEFAULT_CTFIRE_PARAMS``
         from ``pycurvelets.get_fire``.  Key sub-dicts: ``"value"`` (FIRE graph
         parameters) and ``"widcon"`` (width calculation settings).
+    use_ct_reconstruction : bool, default ``True``
+        When ``True`` (default), runs the full CT-FIRE pipeline: curvelet
+        reconstruction via ``ct_reconstruction()`` followed by
+        ``fire_2d_angle()``.
+
+        When ``False``, skips the curvelet preprocessing step and calls
+        ``fire_2d_angle()`` directly on the normalised input image.
+        **This mode does not require curvelops or any curvelet transform
+        library** — only ``ctfire_py`` must be installed.  Use this when
+        the image has already been pre-processed, for non-SHG images, or
+        to isolate FIRE behaviour from curvelet preprocessing effects.
     fiber_mode : int
         Fiber representation mode passed to ``_build_fiber_dataframe``.
         1 = individual segments (shorter, more fragments);
@@ -533,10 +637,13 @@ def curvealign_ctfire_mode_pipeline(
     if feature_params is None:
         feature_params = FiberFeatureParams()
 
-    # ── 1. CT-FIRE fiber extraction ───────────────────────────────────────────
-    _report(progress_callback, 1, 4, "Running CT-FIRE fiber extraction…")
-
-    fiber_structure = _run_ctfire_on_image(image, ctfire_params, fiber_mode)
+    # ── 1. Fiber extraction ───────────────────────────────────────────────────
+    if use_ct_reconstruction:
+        _report(progress_callback, 1, 4, "Running CT-FIRE fiber extraction (with curvelet reconstruction)…")
+        fiber_structure = _run_ctfire_on_image(image, ctfire_params, fiber_mode)
+    else:
+        _report(progress_callback, 1, 4, "Running FIRE fiber extraction (no curvelet reconstruction)…")
+        fiber_structure = _run_fire_only_on_image(image, ctfire_params, fiber_mode)
 
     if fiber_structure is None or fiber_structure.empty:
         return None
@@ -600,6 +707,7 @@ def curvealign_ctfire_mode_pipeline(
 
     _params = {
         "image_shape":            list(image.shape),
+        "use_ct_reconstruction":  use_ct_reconstruction,
         "fiber_mode":             fiber_mode,
         "distance_threshold":     distance_threshold,
         "tif_boundary":           tif_boundary,
