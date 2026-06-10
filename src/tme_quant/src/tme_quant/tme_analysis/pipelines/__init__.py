@@ -9,6 +9,10 @@ from .curvealign_curveletsMode_pipeline import (
     CurveAlignPipelineResult,
     curvealign_curvelets_mode_pipeline,
 )
+from .curvealign_ctfireMode_pipeline import (
+    CTFirePipelineResult,
+    curvealign_ctfire_mode_pipeline,
+)
 
 # Backward-compatible alias — callers using curvealign_pipeline() still work.
 curvealign_pipeline = curvealign_curvelets_mode_pipeline
@@ -20,4 +24,6 @@ __all__ = [
     'CurveAlignPipelineResult',
     'curvealign_curvelets_mode_pipeline',
     'curvealign_pipeline',   # deprecated alias for curvealign_curvelets_mode_pipeline
+    'CTFirePipelineResult',
+    'curvealign_ctfire_mode_pipeline',
 ]

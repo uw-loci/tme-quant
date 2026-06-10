@@ -76,6 +76,7 @@ from .tme_analysis import (
     RegionManager, MeasurementEngine,
     StandardTMEPipeline, InteractionAnalysisPipeline,
     CurveAlignPipelineResult, curvealign_curvelets_mode_pipeline, analyze_tacs_zone,
+    CTFirePipelineResult, curvealign_ctfire_mode_pipeline,
     TMEAnalysisParams, TMEAnalysisResult, AnalysisMode,
     compute_fiber_alignment_to_roi, compute_orientation_relative_to_roi,
 )
@@ -132,6 +133,7 @@ __all__ = [
     "RegionManager", "MeasurementEngine",
     "StandardTMEPipeline", "InteractionAnalysisPipeline",
     "CurveAlignPipelineResult", "curvealign_curvelets_mode_pipeline", "analyze_tacs_zone",
+    "CTFirePipelineResult", "curvealign_ctfire_mode_pipeline",
     "TMEAnalysisParams", "TMEAnalysisResult", "AnalysisMode",
     "compute_fiber_alignment_to_roi", "compute_orientation_relative_to_roi",
     # ── Registration ──────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-﻿import numpy as np
+import numpy as np
 import pandas as pd
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -9,13 +9,13 @@ from pycurvelets.process_fibers import process_fibers
 # Default CT-FIRE parameters, matching the values used in ct_fire.py __main__
 DEFAULT_CTFIRE_PARAMS: Dict[str, Any] = {
     "coefficient_percentile": 0.2,
-    "num_scales": 4,
+    "num_scales": 3,
     "fiber_threshold": 0.5,
     "widMAX": 20,
     "widcon": {
         "wid_mm": 1,     # minimum max-width threshold (pixels)
         "wid_mp": 10,    # minimum sample size for sigma-clipping path
-        "wid_sigma": 1,  # ┬▒╧â confidence region for sigma-clipping
+        "wid_sigma": 1,  # ±σ confidence region for sigma-clipping
         "wid_max": 0,    # 0 = don't compute per-fiber maximum width
         "wid_opt": 1,    # 1 = use all points below threshold (no sigma clip)
     },
@@ -78,9 +78,9 @@ def get_fire(
         ``image_path`` when ``image_path`` is not provided.
     fiber_mode : int
         Fiber processing mode:
-        - ``1`` ΓÇö one row per fiber (``fibProcMeth == 1`` in MATLAB)
-        - ``2`` ΓÇö one row per segment (``fibProcMeth == 0`` in MATLAB)
-        - ``3`` ΓÇö two rows per fiber, one for each endpoint (``fibProcMeth == 2`` in MATLAB)
+        - ``1`` — one row per fiber (``fibProcMeth == 1`` in MATLAB)
+        - ``2`` — one row per segment (``fibProcMeth == 0`` in MATLAB)
+        - ``3`` — two rows per fiber, one for each endpoint (``fibProcMeth == 2`` in MATLAB)
     feature_cp : FeatureControlParameters
         Control parameters for density and alignment feature extraction.
     image_path : str, optional
@@ -115,7 +115,7 @@ def get_fire(
     # Run the CT-FIRE algorithm.  When img is already in memory (the common
     # case when called from process_image) pass it directly to avoid a second
     # disk read.  image_path is still forwarded for output labelling purposes.
-    # show_plots is kept False here ΓÇö the overlay is handled below in get_fire
+    # show_plots is kept False here — the overlay is handled below in get_fire
     # so it can use the original img that was passed in by the caller.
     _fiber_out, ctfire_output = _run_ct_fire(
         image_path=resolved_image_path,
@@ -139,7 +139,7 @@ def get_fire(
     if show_plots and img is not None:
         _visualize_fiber_output(img, data, img_name)
 
-    # Convert CT-FIRE data dict ΓåÆ fiber_structure DataFrame
+    # Convert CT-FIRE data dict → fiber_structure DataFrame
     img_shape = img.shape if img is not None else None
     fiber_structure = _build_fiber_dataframe(
         data, LL1, fiber_mode, feature_cp,
@@ -225,7 +225,7 @@ def _build_fiber_dataframe(
 
     # --- Coordinate clamping for segment mode (mirrors MATLAB fibProcMeth == 0 block) ---
     # Work on a copy so the original data dict is not mutated.
-    # For 512├ù512 (square) images the C++ column-major indexing of a row-major flat
+    # For 512×512 (square) images the C++ column-major indexing of a row-major flat
     # array gives Xa[:,0] = row and Xa[:,1] = col.
     if fiber_mode == 2 and img_shape is not None and len(Xai) > 0:
         height, width = img_shape[0], img_shape[1]
@@ -292,7 +292,7 @@ def _build_fiber_dataframe(
                 )
 
         elif fiber_mode == 3:
-            # Endpoint mode: two rows per fiber ΓÇö one for each original endpoint.
+            # Endpoint mode: two rows per fiber — one for each original endpoint.
             # Mirrors MATLAB fibProcMeth == 2.
             if i < len(angle_xy):
                 theta_deg = _angle_rad_to_deg(float(angle_xy[i]))
@@ -307,7 +307,7 @@ def _build_fiber_dataframe(
                 "width": width,
             }
 
-            # Row A ΓÇö pt_a (MATLAB's "sp", last original vertex)
+            # Row A — pt_a (MATLAB's "sp", last original vertex)
             # Xa[:,0] = row, Xa[:,1] = col.
             rows.append(
                 {
@@ -316,7 +316,7 @@ def _build_fiber_dataframe(
                     "center_col": float(np.round(pt_a[1])) if not np.isnan(pt_a[1]) else np.nan,
                 }
             )
-            # Row B ΓÇö pt_b (MATLAB's "ep", first original vertex)
+            # Row B — pt_b (MATLAB's "ep", first original vertex)
             rows.append(
                 {
                     **scalar_feats,

@@ -13,6 +13,8 @@ from .pipelines import (
     CurveAlignPipelineResult,
     curvealign_curvelets_mode_pipeline,
     analyze_tacs_zone,
+    CTFirePipelineResult,
+    curvealign_ctfire_mode_pipeline,
 )
 from .config import TMEAnalysisParams, TMEAnalysisResult, AnalysisMode
 from .utils.alignment_utils import compute_fiber_alignment_to_roi
@@ -33,6 +35,8 @@ __all__ = [
     'CurveAlignPipelineResult',
     'curvealign_curvelets_mode_pipeline',
     'analyze_tacs_zone',
+    'CTFirePipelineResult',
+    'curvealign_ctfire_mode_pipeline',
     # Config
     'TMEAnalysisParams',
     'TMEAnalysisResult',

@@ -203,7 +203,14 @@ Napari is NOT here: napari calls INTO tme_quant (see Core / Plugin separation).
     (curvelet orientation grouping, density/alignment, ROI alignment, fiber feature table);
     ported from `pycurvelets/process_image.py`; no file I/O, returns result dict.
     `curvealign_pipeline` is a deprecated backward-compatible alias.
-    Future: `curvealign_ctfireMode_pipeline.py` for CT-FIRE individual fiber extraction.
+  - `curvealign_ctfireMode_pipeline.py` — `curvealign_ctfire_mode_pipeline()`:
+    in-memory CT-FIRE individual-fiber pipeline; lazy-imports `ctfire_py` (external
+    PoC bridge installed via Option 1 from `CLAUDE_CTFIRE.md`); returns
+    `CTFirePipelineResult` with full fiber morphology (length, curvature, width).
+    Requires `ctfire_py` built for the active environment — see Prerequisites in the
+    module docstring. To build for `.venv-curvelops` (MSYS2 UCRT64): use
+    `src/ctfire_py/CPP/Makefile.ucrt64` (created in the ctfire repo) then
+    `pip install -e H:/GitHub.06.2022/tmequant_ctfire/tme-quant --no-deps`.
 - `utils/` — `alignment_utils.py` (`compute_fiber_alignment_to_roi`; ported
   from `pycurvelets/get_alignment_to_roi.py`), `distance_utils.py`,
   `orientation_utils.py` (pixel-level boundary-relative orientation,

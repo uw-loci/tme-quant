@@ -8,6 +8,7 @@ examples/                              ← runnable demo scripts
 ├── example_ctfire_workflow_hierarchy.py ← CT-FIRE workflow with TMEHierarchy
 ├── example_curvealign_workflow.py     ← CurveAlign segment orientation + TACS workflow
 ├── example_curvealign_curvelets_mode_pipeline.py ← curvealign curvelets-mode + TACS + hierarchy
+├── example_curvealign_ctfire_pipeline.py         ← CT-FIRE individual-fiber pipeline + hierarchy (3 scenarios)
 ├── example_hierarchy_object_analysis.py
 └── roi_curvealign_orientation_example.py
 
@@ -108,7 +109,8 @@ src/tme_quant/
 │   │   ├── interaction_analysis_pipeline.py
 │   │   ├── standard_tme_pipeline.py
 │   │   ├── tacs_pipeline.py               ← analyze_tacs_zone(), plot_tacs_heatmap()
-│   │   └── curvealign_curveletsMode_pipeline.py  ← curvealign_curvelets_mode_pipeline(): in-memory CurveAlign curvelets-mode pipeline (curvealign_pipeline is a deprecated alias)
+│   │   ├── curvealign_curveletsMode_pipeline.py  ← curvealign_curvelets_mode_pipeline(): in-memory CurveAlign curvelets-mode pipeline (curvealign_pipeline is a deprecated alias)
+│   │   └── curvealign_ctfireMode_pipeline.py     ← curvealign_ctfire_mode_pipeline(): in-memory CT-FIRE individual-fiber pipeline; returns CTFirePipelineResult with full morphology
 │   ├── utils/
 │   │   ├── __init__.py
 │   │   ├── alignment_utils.py     ← compute_fiber_alignment_to_roi
