@@ -208,6 +208,9 @@ Napari is NOT here: napari calls INTO tme_quant (see Core / Plugin separation).
     in-memory CT-FIRE individual-fiber pipeline; lazy-imports `ctfire_py` (external
     PoC bridge installed via Option 1 from `CLAUDE_CTFIRE.md`); returns
     `CTFirePipelineResult` with full fiber morphology (length, curvature, width).
+    `use_ct_reconstruction=False` bypasses curvelet preprocessing and calls
+    `fire_2d_angle()` directly on the normalised image — **no curvelops or curvelet
+    library required** for this mode; only `ctfire_py` is needed.
     Catches `MemoryError` from C++ FIRE allocator and emits a `RuntimeWarning`.
     Requires `ctfire_py` built for the active environment — see Prerequisites in the
     module docstring. To build for `.venv-curvelops` (MSYS2 UCRT64): use

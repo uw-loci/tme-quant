@@ -158,6 +158,43 @@ requires no data files.
 python examples/examples_tmequant_complete_cl_usage_ctfire_curvealign.py
 ```
 
+### Example 3 — CT-FIRE pipeline (individual fibers + TACS viewer)
+
+Requires `ctfire_py` (the CT-FIRE Python bridge) built and installed in the
+environment.  See CLAUDE.md § "ctfire_py — Direct-call Python CT-FIRE module"
+for build and install instructions (MSYS2 UCRT64 / `.venv-curvelops` on
+Windows).
+
+Real image files needed at:
+
+```
+H:/GitHub.06.2022/tme-quant/tests/test_images/real1.tif
+H:/GitHub.06.2022/tme-quant/tests/test_images/CA_Boundary/mask_real1.tiff
+```
+
+Two modes are demonstrated:
+
+**Scenario 1 — Full CT-FIRE** (`use_ct_reconstruction=True`, default):
+Curvelet reconstruction → FIRE fiber extraction.  Requires curvelops (or
+another curvelet backend) in addition to `ctfire_py`.
+
+**Scenario 2 — FIRE only** (`use_ct_reconstruction=False`):
+`fire_2d_angle()` runs directly on the normalised image —
+**no curvelops or curvelet library required**; only `ctfire_py` is needed.
+Useful when curvelops is not available or the image is already pre-processed.
+
+Both scenarios perform full boundary analysis, TACS classification, build a
+`TMEHierarchy`, and launch an interactive matplotlib TACS viewer.
+
+```bash
+python examples/example_curvealign_ctfire_pipeline.py
+```
+
+Output files (overlay PNG, heatmap PNG, xlsx) are written to
+`examples/output/`.
+
+---
+
 ### Smoke test (no image files needed)
 
 Verifies all import chains, param construction, FiberAnalyzer 2-D/3-D, and
@@ -286,6 +323,23 @@ Install curvelops by repeating Step 2 once build tools are available.
 
 This appears when curvelops is absent.  Install curvelops (Step 2) to eliminate it
 and enable the full FDCT2D/FDCT3D volumetric curvelet transform.
+
+**`ImportError: No module named 'ctfire_py'`** (CT-FIRE pipeline example)
+
+`ctfire_py` must be built and installed separately — it is not on PyPI.
+See CLAUDE.md § "ctfire_py — Direct-call Python CT-FIRE module" for
+step-by-step MSYS2 UCRT64 build and `.pth` install instructions.
+
+**`RuntimeWarning: FIRE ran out of memory (std::bad_alloc)`**
+
+The C++ FIRE allocator exhausted heap memory — the image produced too many
+nucleation point candidates.  In `ctfire_params["value"]`, raise
+`thresh_LMPdist` (e.g. 8–15 px) to suppress nearby seed candidates, and/or
+raise `thresh_im2` (e.g. 30–80, out of 255) to reduce foreground pixels
+before the distance transform.  `thresh_LMPdist` is the more effective
+lever: seed count drops quadratically as the suppression radius grows.
+This warning is more likely in FIRE-only mode (`use_ct_reconstruction=False`)
+because the raw image is denser than the curvelet-reconstructed image.
 
 **`python-louvain` install fails**
 

@@ -8,7 +8,7 @@ examples/                              ← runnable demo scripts
 ├── example_ctfire_workflow_hierarchy.py ← CT-FIRE workflow with TMEHierarchy
 ├── example_curvealign_workflow.py     ← CurveAlign segment orientation + TACS workflow
 ├── example_curvealign_curvelets_mode_pipeline.py ← curvealign curvelets-mode + TACS + hierarchy
-├── example_curvealign_ctfire_pipeline.py         ← CT-FIRE individual-fiber pipeline + hierarchy (3 scenarios)
+├── example_curvealign_ctfire_pipeline.py         ← CT-FIRE pipeline: CT-FIRE mode (curvelets→FIRE) and FIRE-only mode (no curvelops needed), TACS viewer, saves overlay/heatmap/xlsx
 ├── example_hierarchy_object_analysis.py
 └── roi_curvealign_orientation_example.py
 

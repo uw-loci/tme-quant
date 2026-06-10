@@ -3,22 +3,23 @@ TMEQuant Example — curvealign_ctfire_mode_pipeline
 ===================================================
 
 Demonstrates the ``curvealign_ctfire_mode_pipeline`` on a real SHG image
-with a binary boundary mask.
+with a binary boundary mask.  Two scenarios are shown:
 
-The single scenario:
+**Scenario 1 — Full CT-FIRE** (``use_ct_reconstruction=True``, default):
 
-  • Runs CT-FIRE individual-fiber extraction on ``real1.tif``.
-  • Full boundary analysis: per-ROI alignment angles + global boundary metrics.
-  • TACS classification (TACS-1 / TACS-2 / TACS-3) using pre-computed boundary
-    angles and real fiber straightness from CT-FIRE morphology.
-  • TME hierarchy construction: ``ImageEntry → ROIObject → FiberObject`` nodes.
-  • Representative hierarchy queries (type lookup, ID lookup, ancestry).
-  • Interactive TACS viewer: matplotlib figure with
-      - ROI selector    (filter by boundary contour)
-      - TACS selector   (filter by TACS type)
-      - Fiber table     (per-fiber measurements, bidirectional selection)
-      - Association     (dashed lines from fiber center to boundary point)
+  • Curvelet reconstruction (``ct_reconstruction``) → FIRE fiber extraction.
+  • Requires curvelops / curvelet library in addition to ``ctfire_py``.
+  • Full boundary analysis, TACS classification, TMEHierarchy, TACS viewer.
 
+**Scenario 2 — FIRE only** (``use_ct_reconstruction=False``):
+
+  • ``fire_2d_angle`` called directly on the normalised image.
+  • **No curvelops or curvelet transform library required** — only
+    ``ctfire_py`` must be installed.  Useful for pre-processed images,
+    non-SHG modalities, or when isolating FIRE from curvelet effects.
+  • Same boundary analysis, TACS classification, hierarchy, and viewer.
+
+Both scenarios share helper functions and produce matching output files.
 Output files are written to an ``output/`` folder next to this script.
 
 Prerequisites
@@ -26,6 +27,7 @@ Prerequisites
   - ``ctfire_py`` must be available in the active Python environment.
     See the Prerequisites section of ``curvealign_ctfireMode_pipeline.py``
     for build and install instructions (MSYS2 UCRT64 / .venv-curvelops).
+  - Scenario 1 additionally requires curvelops (or another curvelet backend).
 
   - Real image files at:
       H:/GitHub.06.2022/tme-quant/tests/test_images/real1.tif
@@ -881,6 +883,10 @@ def scenario_real_image() -> None:
         "num_scales":             3,
         "fiber_threshold":        0.5,
         "widMAX":                 20,
+        # LL1: post-tracing minimum fiber arc-length (px); fibers shorter than this
+        # are removed by _build_fiber_dataframe after FIRE extraction.
+        # Default in ct_fire.py is 30; set to 0 to keep all traced fibers.
+        "LL1":                    30,
         "widcon": {
             "wid_mm":    1,
             "wid_mp":   10,
@@ -972,6 +978,169 @@ def scenario_real_image() -> None:
         )
 
 
+# ── Scenario: FIRE-only (no curvelet reconstruction) ─────────────────────────
+
+def scenario_fire_only() -> None:
+    """Run the FIRE-only pipeline (``use_ct_reconstruction=False``).
+
+    FIRE-only mode: no curvelops / curvelet library required.
+    Only ctfire_py (and its C++ fiber_backend extension) must be installed.
+
+    ``fire_2d_angle`` operates directly on the normalised image.  Without the
+    curvelet enhancement step, the FIRE seed-detection thresholds become the
+    primary lever for noise control.  Key parameters to tune:
+
+    * ``thresh_im2``   — absolute background threshold (out of 255); raise to
+                         suppress dim background pixels before seed detection.
+    * ``thresh_LMPdist`` — FIRE seed suppression radius (px); raise to reduce
+                           seed count on noisy raw images.
+    * ``thresh_flen``  — minimum fiber arc length (px) to keep after tracing.
+    """
+    print("=" * 60)
+    print("CT-FIRE pipeline — FIRE only (no curvelet reconstruction)")
+    print("=" * 60)
+
+    if not REAL_IMAGE_PATH.exists():
+        print(f"  SKIPPED — image not found: {REAL_IMAGE_PATH}")
+        return
+    if not REAL_MASK_PATH.exists():
+        print(f"  SKIPPED — mask not found: {REAL_MASK_PATH}")
+        return
+
+    img  = _load_grayscale(REAL_IMAGE_PATH)
+    mask = _load_binary_mask(REAL_MASK_PATH)
+    print(f"  Image shape : {img.shape}   Mask shape : {mask.shape}")
+
+    # Normalize to [0, 1] — the pipeline normalises internally to [0, 255].
+    if img.max() > 0:
+        img = img / img.max()
+
+    # ── FIRE-only parameters ──────────────────────────────────────────────────
+    # coefficient_percentile / num_scales are curvelet parameters — they are
+    # ignored when use_ct_reconstruction=False but kept here for documentation.
+    #
+    # In CT mode the curvelet reconstruction produces a sparse fiber-only image
+    # before FIRE runs, so seed density is naturally low.  In FIRE-only mode FIRE
+    # sees the raw normalised image; the two thresholds below are the main levers
+    # to keep seed count low enough to avoid a std::bad_alloc MemoryError:
+    #
+    #   thresh_im2    — absolute background threshold (out of 255 after
+    #                   normalisation).  Pixels below this are zeroed before
+    #                   the distance transform.  Start at 60 and tune down if
+    #                   too few fibers are detected.
+    #   thresh_LMPdist — FIRE seed suppression radius (px).  Any two local-max
+    #                   candidates within this radius collapse to one seed.
+    #                   Raising it is the most effective memory guard: it reduces
+    #                   seed count regardless of how many foreground pixels pass
+    #                   thresh_im2.  Use 10–15 on full-resolution SHG images.
+    #
+    # LL1: post-tracing minimum fiber arc-length filter (px).  Fibers shorter
+    # than LL1 are discarded by _build_fiber_dataframe.  Raise on noisy images.
+    fire_only_params = {
+        # curvelet keys (not used in this mode — included for reference):
+        "coefficient_percentile": 0.2,
+        "num_scales":             3,
+        "fiber_threshold":        0.5,
+        # post-processing filters:
+        "widMAX":                 20,
+        # LL1: post-tracing minimum fiber arc-length (px); same key as CT path.
+        "LL1":                    30,
+        "widcon": {
+            "wid_mm":    1,
+            "wid_mp":   10,
+            "wid_sigma": 1,
+            "wid_max":   0,
+            "wid_opt":   1,
+        },
+        # FIRE 2D parameters (forwarded directly to fire_2d_angle):
+        "value": {
+            "sigma_im":            0,      # image smoothing (0 = off)
+            "sigma_d":             0.3,    # distance-transform smoothing
+            "dtype":               "cityblock",
+            "thresh_im":           [],     # relative intensity threshold ([] = off)
+            "thresh_im2":          10,     # ← keep only brightest 76% of pixels;
+                                           #   lower if too few fibers extracted
+            "thresh_Dxlink":       1.5,
+            "s_xlinkbox":          8,
+            "thresh_LMP":          0.2,
+            "thresh_LMPdist":      8,     # ← large suppression radius: primary
+                                           #   guard against std::bad_alloc on raw
+                                           #   images; lower only if too few seeds
+            "thresh_ext":          0.342,
+            "lam_dirdecay":        0.5,
+            "s_minstep":           2,
+            "s_maxstep":           6,
+            "thresh_dang_aextend": 0.9848,
+            "thresh_dang_L":       15,
+            "thresh_short_L":      15,
+            "s_fiberdir":          4,
+            "thresh_linkd":        15,
+            "thresh_linka":        -0.866,
+            "thresh_flen":         20,     # ← slightly higher than CT mode (15)
+            "thresh_numv":         3,
+            "scale":               [1.0, 1.0, 1.0],
+            "s_boundthick":        10,
+            "blist":               1,
+            "s_maxspace":          5,
+            "lambda":              0.01,
+            "ang_interval":        3,
+        },
+    }
+
+    result = curvealign_ctfire_mode_pipeline(
+        image=img,
+        boundary_img=mask,
+        ctfire_params=fire_only_params,
+        use_ct_reconstruction=False,   # skip curvelet step — no curvelops needed
+        fiber_mode=2,
+        tif_boundary=3,
+        distance_threshold=100.0,
+    )
+
+    if result is None:
+        print("  No fibers detected — pipeline returned None.")
+        return
+
+    fs = result.fiber_structure
+    print(f"  Fibers detected       : {len(fs)}")
+    print(f"  boundary_measurement  : {result.boundary_measurement}")
+    print(f"  use_ct_reconstruction : {result.params.get('use_ct_reconstruction')}")
+    print(f"  fiber_structure cols  : {list(fs.columns)}")
+
+    if result.roi_summary_df is not None and not result.roi_summary_df.empty:
+        print(f"\n  ROI summary ({len(result.roi_summary_df)} ROIs):")
+        print(result.roi_summary_df.to_string(index=False))
+
+    coordinates = extract_boundary_coords_from_mask(mask)
+    print(f"\n  Boundary contours extracted: {list(coordinates.keys())}")
+
+    # Save overlay, heatmap, and xlsx to output/
+    _save_figures_and_xlsx("ctfire_fire_only", img, result, coordinates=coordinates)
+
+    # Build TMEHierarchy + FiberObjects with TACS classification
+    hier_result = _tacs_hierarchy_integration_ctfire(
+        tag="ctfire_fire_only",
+        img=img,
+        result=result,
+        distance_threshold=100.0,
+        pixel_size=1.0,
+        coordinates=coordinates,
+    )
+
+    # Launch interactive TACS viewer
+    if hier_result is not None:
+        hierarchy, fiber_roi_map = hier_result
+        fiber_objects = hierarchy.get_objects_by_type(TMEType.FIBER)
+        _launch_tacs_viewer(
+            tag="ctfire_fire_only",
+            img=img,
+            fiber_objects=fiber_objects,
+            coordinates=coordinates,
+            line_length=5.0,
+            fiber_roi_map=fiber_roi_map,
+        )
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -990,8 +1159,14 @@ def main() -> None:
         )
         sys.exit(1)
 
-    print("ctfire_py available — running scenario.")
-    scenario_real_image()
+    print("ctfire_py available — running scenarios.")
+
+    # Full CT-FIRE: curvelet reconstruction + FIRE (requires curvelops).
+    # scenario_real_image()
+
+    # FIRE-only: no curvelet step — no curvelops library required.
+    scenario_fire_only()
+
     print(f"\nDone. Output figures written to: {OUT_DIR}")
 
 
