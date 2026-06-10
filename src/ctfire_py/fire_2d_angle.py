@@ -24,7 +24,8 @@ from pycurvelets.utils.math import round_mlab
 
 # Import C++ backend
 try:
-    sys.path.insert(0, "src/ctfire_py/CPP")
+    import os as _os
+    sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
     import fiber_backend
 except ImportError:
     print("Warning: C++ fiber_backend not available. Please compile it first.")
