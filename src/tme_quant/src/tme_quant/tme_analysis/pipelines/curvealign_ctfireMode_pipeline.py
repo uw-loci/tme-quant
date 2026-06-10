@@ -164,6 +164,7 @@ def _run_ctfire_on_image(
     """
     from ctfire_py.ct_fire import ct_fire as _ct_fire
     from pycurvelets.get_fire import _build_fiber_dataframe, DEFAULT_CTFIRE_PARAMS
+    from pycurvelets.models import FeatureControlParameters
 
     resolved_params = (
         ctfire_params_dict if ctfire_params_dict is not None
@@ -172,24 +173,43 @@ def _run_ctfire_on_image(
 
     # ct_fire requires a valid save_path even with save_images=False; use a
     # temporary directory that is cleaned up automatically.
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        _fiber_out, ctfire_output = _ct_fire(
-            image_path=None,
-            image_name="pipeline_image",
-            save_path=tmp_dir,
-            control_params={
-                "show_plots": False,
-                "save_images": False,
-                "output_format": "tif",
-            },
-            ctfire_params=resolved_params,
-            img=image,
+    try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _fiber_out, ctfire_output = _ct_fire(
+                image_path=None,
+                image_name="pipeline_image",
+                save_path=tmp_dir,
+                control_params={
+                    "show_plots": False,
+                    "save_images": False,
+                    "output_format": "tif",
+                },
+                ctfire_params=resolved_params,
+                img=image,
+            )
+    except MemoryError:
+        import warnings
+        warnings.warn(
+            "CT-FIRE ran out of memory (std::bad_alloc) — the image likely has too many "
+            "fiber seed candidates. Try reducing image size, lowering coefficient_percentile, "
+            "or increasing thresh_LMPdist in ctfire_params['value'].",
+            RuntimeWarning,
+            stacklevel=4,
         )
+        return pd.DataFrame()
 
     if not ctfire_output or "data" not in ctfire_output:
         return pd.DataFrame()
 
-    fiber_df = _build_fiber_dataframe(ctfire_output["data"], fiber_mode)
+    LL1 = ctfire_output.get("cP", {}).get("LL1", 0.0)
+    feature_cp = FeatureControlParameters(
+        minimum_nearest_fibers=2, minimum_box_size=32, fiber_midpoint_estimate=1
+    )
+    fiber_df = _build_fiber_dataframe(
+        ctfire_output["data"], LL1, fiber_mode, feature_cp,
+        ctfire_params=resolved_params,
+        img_shape=image.shape,
+    )
     return fiber_df if fiber_df is not None else pd.DataFrame()
 
 
