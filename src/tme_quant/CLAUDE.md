@@ -283,20 +283,25 @@ A full Python conversion of the original CT-FIRE MATLAB code, living in
     see MSYS2 setup in `doc/DEVELOPMENT.md`)
 - **Source branch:** `32-convert-ctfire` in the ctfire fork repo
   (`H:\GitHub.06.2022\tmequant_ctfire\tme-quant`)
-- **Git tracking:** `src/ctfire_py/` is **not tracked** in this repo and is
-  listed in `.gitignore`. It lives locally for PoC use only. When
-  `32-convert-ctfire` is eventually merged into `main`, the folder will arrive
-  from that branch without conflicts.
-- **How to update locally** (pull a newer version from the fork branch):
+- **Git tracking:** `src/ctfire_py/` is **tracked** in this repo (removed
+  from `.gitignore` in commit `d3d0d12`). It is installed automatically when
+  you run `pip install -e .` — no separate install step needed.
+  Pre-built `fiber_backend` binaries for Windows UCRT64, Linux, and macOS
+  are included so the C++ extension works immediately after install.
+- **Rule:** Never modify ctfire_py files in this branch directly. All changes
+  must be made in the `32-convert-ctfire` branch of the ctfire fork repo.
+- **How to sync** (pull a newer version from the fork branch):
   ```bash
   # 1. Update the fork repo
   cd H:/GitHub.06.2022/tmequant_ctfire/tme-quant
   git checkout 32-convert-ctfire && git pull
 
-  # 2. Replace the local copy (no git commit needed — folder is gitignored)
+  # 2. Replace and commit (this branch tracks the files)
   cd H:/GitHub.06.2022/tme-quant
   rm -rf src/ctfire_py/
-  cp -r ../tmequant_ctfire/tme-quant/src/ctfire_py src/ctfire_py
+  cp -r H:/GitHub.06.2022/tmequant_ctfire/tme-quant/src/ctfire_py src/ctfire_py
+  git add src/ctfire_py/
+  git commit -m "sync: update ctfire_py from 32-convert-ctfire"
   ```
 
 ### Curvelet Transform (`curvelops` / `_curvelet_cpp`)

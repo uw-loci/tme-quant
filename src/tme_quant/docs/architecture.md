@@ -161,16 +161,31 @@ src/tme_quant/
 │
 └── napari-tme-quant/              ← napari plugin (separate installable package; co-located for prototyping)
 
-src/ctfire_py/                         ← direct-call CT-FIRE Python module (PoC bridge; source: 32-convert-ctfire)
+src/ctfire_py/                         ← CT-FIRE Python module; tracked here, changes made only in 32-convert-ctfire branch
 ├── __init__.py
 ├── ct_fire.py                         ← main entry point: ct_fire()
-├── ct_reconstruction.py               ← image preprocessing
-├── fire_2d_angle.py                   ← FIRE 2D angle computation
+├── ct_reconstruction.py               ← curvelet image preprocessing (requires curvelops)
+├── fire_2d_angle.py                   ← FIRE 2D angle computation (no curvelops needed)
 ├── parameter_mapping.py               ← MATLAB→Python parameter mapping
-└── CPP/                               ← C++ FIRE backend
+├── fiber_backend.*.pyd/.so            ← pre-built C++ extension (platform-specific)
+├── fiber_analysis/                    ← fiber geometry and statistics
+│   ├── fiber_angles.py
+│   ├── fiber_stats.py
+│   └── network_stats.py
+├── fiber_processing/                  ← FIRE graph-tracing pipeline stages
+│   ├── beamproc.py, check_danglers.py, curvealign_filter.py
+│   ├── fiber2beam.py, fiberbreak.py, fiberlink_py.py
+│   ├── fiberlinkgap_py.py, fiberproc.py, fiberremove.py
+│   └── remove_repeat.py
+├── utils/                             ← shared utilities
+│   ├── fiber_helpers.py, remove_repeat.py, trimxfv.py
+└── CPP/                               ← C++ FIRE backend source
     ├── Makefile                       ← macOS (Apple Silicon / M-chips)
     ├── Makefile.linux                 ← WSL / Linux
-    └── ...                            ← native Windows: MSYS2 UCRT64 GCC
+    ├── Makefile.ucrt64                ← Windows MSYS2 UCRT64
+    └── extend_xlink_native.cpp, fiberproc_native.cpp, findlocmax_native.cpp, …
+Inter-module note: ctfire_py imports from pycurvelets (round_mlab); pycurvelets must
+be installed separately (it lives in the 32-convert-ctfire repo, not in tme-quant).
     ├── pyproject.toml             ← declares napari-tme-quant distribution
     ├── src/
     │   └── napari_tme_quant/      ← plugin Python package (NOT part of tme_quant namespace)
