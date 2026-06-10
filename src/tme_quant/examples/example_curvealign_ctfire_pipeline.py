@@ -35,11 +35,15 @@ Prerequisites
 
 Usage
 -----
-  python examples/example_curvealign_ctfire_pipeline.py
+  python examples/example_curvealign_ctfire_pipeline.py                        # both (default)
+  python examples/example_curvealign_ctfire_pipeline.py --scenario ctfire      # CT-FIRE only
+  python examples/example_curvealign_ctfire_pipeline.py --scenario fire-only   # FIRE-only
+  python examples/example_curvealign_ctfire_pipeline.py --scenario both        # both
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -272,9 +276,9 @@ def _tacs_hierarchy_integration_ctfire(
         print(f"  [{tag}] No result — skipping hierarchy integration.\n")
         return None
 
-    print(f"\n{'─' * 60}")
+    print(f"\n{'-' * 60}")
     print(f"[{tag}] TACS + hierarchy integration")
-    print(f"{'─' * 60}")
+    print(f"{'-' * 60}")
 
     fs           = result.fiber_structure
     ffd          = result.fiber_features_df
@@ -1144,6 +1148,21 @@ def scenario_fire_only() -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="CT-FIRE pipeline example — choose which scenario to run."
+    )
+    parser.add_argument(
+        "--scenario",
+        choices=["ctfire", "fire-only", "both"],
+        default="both",
+        help=(
+            "ctfire    : full CT-FIRE (curvelet reconstruction + FIRE; requires curvelops)\n"
+            "fire-only : FIRE only (no curvelet step; no curvelops needed)\n"
+            "both      : run both in sequence (default)"
+        ),
+    )
+    args = parser.parse_args()
+
     # Check ctfire_py availability before running
     try:
         from ctfire_py.ct_fire import ct_fire  # noqa: F401
@@ -1159,13 +1178,12 @@ def main() -> None:
         )
         sys.exit(1)
 
-    print("ctfire_py available — running scenarios.")
+    print(f"ctfire_py available — running scenario: {args.scenario}")
 
-    # Full CT-FIRE: curvelet reconstruction + FIRE (requires curvelops).
-    # scenario_real_image()
-
-    # FIRE-only: no curvelet step — no curvelops library required.
-    scenario_fire_only()
+    if args.scenario in ("ctfire", "both"):
+        scenario_real_image()
+    if args.scenario in ("fire-only", "both"):
+        scenario_fire_only()
 
     print(f"\nDone. Output figures written to: {OUT_DIR}")
 
