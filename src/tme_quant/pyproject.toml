@@ -205,9 +205,9 @@ build-backend = "setuptools.build_meta"
 
 # ── Package discovery ──────────────────────────────────────────────────────────
 [tool.setuptools.packages.find]
-# Discover tme_quant and all sub-packages from src/
+# Discover tme_quant and ctfire_py (CT-FIRE bridge) from src/
 where = ["src"]
-include = ["tme_quant*"]
+include = ["tme_quant*", "ctfire_py*"]
 
 # ── uv configuration ───────────────────────────────────────────────────────────
 [tool.uv]

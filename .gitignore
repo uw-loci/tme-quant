@@ -215,9 +215,6 @@ src/tme_quant/.claude/sessions/
 # ── Local data directory ──────────────────────────────────────────────────────
 src/tme_quant/data/
 
-# ── ctfire_py PoC (untracked; updated by direct copy from 32-convert-ctfire) ──
-src/ctfire_py/
-
 # ── Plugin runtime outputs (napari test runs, overlay PNGs) ──────────────────
 src/tme_quant/*.png
 src/tme_quant/*.jpg

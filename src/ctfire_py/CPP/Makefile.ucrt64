@@ -1,0 +1,44 @@
+# MSYS2 UCRT64 build — run from MSYS2 UCRT64 shell with .venv-curvelops active
+#
+# Usage:
+#   source /h/GitHub.06.2022/tme-quant/src/tme_quant/.venv-curvelops/bin/activate
+#   pip install pybind11      # one-time; skip if already installed
+#   make -f Makefile.ucrt64
+#
+# After building, copy the extension next to fire_2d_angle.py so the package
+# can find it without a sys.path hack.  On MSYS2/Windows the extension is
+# a .pyd file, not .so — use the wildcard without extension:
+#   cp fiber_backend.* ../
+#
+# Do NOT use pip install -e from the repo root — that installs tme-quant 0.2.0
+# and overwrites the main tme_quant library.  Instead, add the src/ directory
+# to the venv via a .pth file (one-time setup, already done):
+#   echo "H:/GitHub.06.2022/tmequant_ctfire/tme-quant/src" \
+#     > .venv-curvelops/lib/python3.14/site-packages/ctfire_py_src.pth
+
+TARGET = fiber_backend$(shell python -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
+
+CXX      = g++
+CXXFLAGS = -O2 -Wall -shared -std=c++14 -fPIC
+
+PY_INCLUDES = $(shell python -m pybind11 --includes) \
+              $(shell python -c "import sysconfig; print('-I' + sysconfig.get_path('include'))")
+PY_LDFLAGS  = $(shell python -c \
+    "import sysconfig; d=sysconfig.get_config_var('LIBDIR'); print(('-L' + d) if d else '')")
+PY_LIB      = $(shell python -c \
+    "import sysconfig; print('-lpython' + sysconfig.get_python_version())")
+
+OMP_FLAGS = -fopenmp
+OMP_LIBS  = -lgomp
+
+SRCS = extend_xlink_native.cpp fiberproc_native.cpp findlocmax_native.cpp fire_utils.cpp
+
+all: $(TARGET)
+
+$(TARGET): $(SRCS) link_fibre.h
+	$(CXX) $(CXXFLAGS) $(PY_INCLUDES) $(OMP_FLAGS) $(SRCS) $(PY_LDFLAGS) $(PY_LIB) $(OMP_LIBS) -o $(TARGET)
+
+clean:
+	rm -f *.so *.pyd
+
+.PHONY: all clean
