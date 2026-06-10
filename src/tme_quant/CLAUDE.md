@@ -570,9 +570,55 @@ black src/ && ruff check src/ && mypy src/tme_quant/
 
 **General install instructions:** `docs/getting_started.md` Step 2 and Step 6.
 
-**On this machine (Windows — primary):** curvelops is installed in the MSYS2 UCRT64
-venv at `H:\GitHub.06.2022\tme-quant\src\tme_quant\.venv-curvelops` (Python 3.14,
-UCRT64 GCC).
+**On this machine (Windows — primary):** two MSYS2 UCRT64 environments:
+
+| venv | Location | Purpose |
+|------|----------|---------|
+| `.venv-curvelops` | `src/tme_quant/.venv-curvelops` | Full stack: curvelops + napari plugin (Python 3.14, UCRT64 GCC) |
+| `venv_fire_only` | `src/tme_quant/venv_fire_only` | Minimal fire-only pipeline — **no curvelops** (Python 3.14, UCRT64 GCC) |
+
+**Why `pip install` is not used for `venv_fire_only`:**
+
+Two reasons make normal installation unworkable here:
+
+1. **uv ignores the activated venv** — `uv pip install -e .` run from inside
+   `src/tme_quant/` always installs into the project's own `.venv`, regardless
+   of which venv is currently activated. `venv_fire_only` would be silently bypassed.
+2. **ctfire_py and pycurvelets are outside package discovery** — `pyproject.toml`
+   uses `where = ["src"]` (→ `src/tme_quant/src/`). `ctfire_py` and `pycurvelets`
+   live at the repo-level `src/`, one level above, so `pip install -e .` would never
+   make them importable regardless of which venv it targets.
+
+Instead, two `.pth` files written directly into site-packages tell Python where to
+find each package at startup, bypassing both issues.
+
+**Creating `venv_fire_only`** (from MSYS2 UCRT64 shell):
+
+```bash
+cd /h/GitHub.06.2022/tme-quant/src/tme_quant
+python -m venv --system-site-packages venv_fire_only
+source venv_fire_only/bin/activate
+
+# pth 1 — real tme_quant package (aa_ prefix = sorted first = wins namespace lookup)
+python -c "
+import sysconfig, pathlib, os
+site = sysconfig.get_paths()['purelib']
+pkg_src = str(pathlib.Path(os.getcwd()) / 'src')
+(pathlib.Path(site) / 'aa_tme_quant_pkg.pth').write_text(pkg_src + '\n')
+print('aa_tme_quant_pkg.pth ->', pkg_src)
+"
+
+# pth 2 — repo-level src/ for ctfire_py and pycurvelets
+python -c "
+import sysconfig, pathlib, os
+site = sysconfig.get_paths()['purelib']
+repo_src = str(pathlib.Path(os.getcwd()).parent.resolve())
+(pathlib.Path(site) / 'tme_quant_src.pth').write_text(repo_src + '\n')
+print('tme_quant_src.pth ->', repo_src)
+"
+python examples/example_curvealign_ctfire_pipeline.py --scenario fire-only
+```
+For step-by-step setup on a new Windows machine see `docs/fire_only_windows_setup.md`.
 
 **ABI incompatibility**: `.venv` (Python 3.11.9, Windows Store) uses the MSVC ABI and
 cannot load GCC-compiled C extensions. curvelops **cannot** be pip-installed into `.venv`.
