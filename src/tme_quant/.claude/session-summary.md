@@ -596,3 +596,669 @@ Commit 4 (session housekeeping) still needs to be done.
 
    After that, run `git log --oneline -6` to verify all 4 commits, then optionally run `pytest tests/ -v` to confirm no regressions.
 </summary>
+
+---
+## 2026-06-10T17:08:35Z
+
+<analysis>
+Let me chronologically analyze the conversation to create a comprehensive summary.
+
+## Session Start â€” Continuation from Previous Context
+
+The session resumed from a previous conversation that had been summarized. The prior work involved:
+- Creating `curvealign_ctfire_mode_pipeline()` with `CTFirePipelineResult`
+- Creating `example_curvealign_ctfire_pipeline.py` with a real-image scenario + TACS viewer
+- Fixing the PostCompact hook to append instead of overwrite
+- Making 4 commits (get_fire.py fix, pipeline + example, docs, session housekeeping)
+
+The session resumed by completing the 4th (final) commit from the previous session:
+- `2bc33c0 chore(claude): fix PostCompact hook to append and update session summary`
+
+## New Feature Request â€” use_ct_reconstruction option
+
+The user entered plan mode and requested: "Add an option in the ctfireMode pipeline that allows the user to run fire_2d_angle.py without ct_reconstruction. In the corresponding example, the user should also be able to update the parameters for the fire_2d_angle.py"
+
+### Planning Phase
+
+Two Explore agents were launched in parallel to understand:
+1. The current pipeline (`curvealign_ctfireMode_pipeline.py`) and `fire_2d_angle.py`
+2. The ctfire_py package structure and `get_fire.py`
+
+Key findings:
+- `fire_2d_angle(p, im, plotflag=0)` is the standalone FIRE entry point (no curvelets)
+- `ct_fire()` always runs: image normalization â†’ `ct_reconstruction()` â†’ apply mask â†’ reset `thresh_im2=0` â†’ `fire_2d_angle()`
+- There is NO existing bypass flag in `ct_fire()` â€” must call `fire_2d_angle()` directly
+- `ctfire_params["value"]` dict is forwarded to `fire_2d_angle` as the `p` parameter
+- `LL1` is a top-level key in `ctfire_params` (not inside `"value"`), default 30 in ct_fire.py
+
+The user also added: "also need to update the documents and comments to highlight that this fire_2d_angle function does not need a curvelops or curvelet transform library installation"
+
+Plan was approved with 2 commits:
+1. Pipeline core (`use_ct_reconstruction` param + `_run_fire_only_on_image` helper)
+2. Example + docs
+
+### Implementation
+
+**Pipeline changes** to `curvealign_ctfireMode_pipeline.py`:
+1. Updated module docstring Prerequisites section to distinguish CT vs FIRE-only mode
+2. Added `_run_fire_only_on_image(image, ctfire_params_dict, fiber_mode)` helper after `_run_ctfire_on_image`
+3. Added `use_ct_reconstruction: bool = True` parameter to main function signature
+4. Updated main function docstring
+5. Updated dispatch: if/else between `_run_ctfire_on_image` and `_run_fire_only_on_image`
+6. Updated `_params` dict to record `use_ct_reconstruction`
+
+The `_run_fire_only_on_image` function:
+```python
+def _run_fire_only_on_image(
+    image: np.ndarray,
+    ctfire_params_dict: Optional[dict],
+    fiber_mode: int,
+) -> pd.DataFrame:
+    from ctfire_py.fire_2d_angle import fire_2d_angle as _fire_2d_angle
+    from pycurvelets.get_fire import _build_fiber_dataframe, DEFAULT_CTFIRE_PARAMS
+    from pycurvelets.models import FeatureControlParameters
+
+    resolved_params = (ctfire_params_dict if ctfire_params_dict is not None
+                       else DEFAULT_CTFIRE_PARAMS.copy())
+    fire_params = resolved_params["value"].copy()
+
+    # Normalise to [0, 255] float32 â€” same convention as ct_fire.py
+    img = image.astype(np.float32)
+    if img.max() > 0:
+        img = img / img.max() * 255.0
+
+    # fire_2d_angle expects a 3-D array of shape (1, H, W).
+    im3 = img[np.newaxis, :, :]
+
+    try:
+        data = _fire_2d_angle(p=fire_params, im=im3, plotflag=0)
+    except MemoryError:
+        import warnings
+        warnings.warn(
+            "FIRE ran out of memory (std::bad_alloc) â€” ...",
+            RuntimeWarning, stacklevel=4,
+        )
+        return pd.DataFrame()
+
+    if not data:
+        return pd.DataFrame()
+
+    # LL1: post-tracing minimum fiber arc-length filter (same key as ct_fire.py)
+    # Default 30 matches ct_fire.py's default
+    LL1 = resolved_params.get("LL1", 30)
+    feature_cp = FeatureControlParameters(
+        minimum_nearest_fibers=2, minimum_box_size=32, fiber_midpoint_estimate=1
+    )
+    fiber_df = _build_fiber_dataframe(
+        data, LL1, fiber_mode, feature_cp,
+        ctfire_params=resolved_params,
+        img_shape=image.shape,
+    )
+    return fiber_df if fiber_df is not None else pd.DataFrame()
+```
+
+Key note: `thresh_im2` is NOT reset to 0 in FIRE-only path (unlike CT path where `ct_fire.py` resets it because masking already happened). The user's value is forwarded directly to `fire_2d_angle`.
+
+**Example changes** to `example_curvealign_ctfire_pipeline.py`:
+- Updated module docstring to describe 2 scenarios
+- Added `scenario_fire_only()` function with explicit `fire_only_params` dict
+- Added `"LL1": 30` to both `ctfire_params` (CT scenario) and `fire_only_params` (FIRE-only) with comments
+- Updated `main()` to call both `scenario_real_image()` and `scenario_fire_only()`
+
+**CLAUDE.md**: Updated pipeline bullet to mention `use_ct_reconstruction=False` and "no curvelops required"
+
+**API_CHANGES.md**: Added entry for new parameter
+
+### User interrupted commit (tool call rejected)
+
+The user interrupted the first commit attempt. Then asked: "how to update the LL1 from the user input?"
+
+**Answer given**: `LL1` is a top-level key in `ctfire_params` dict (same level as `"widMAX"`). Fixed `_run_fire_only_on_image` to use `resolved_params.get("LL1", 30)` (was `0.0`) to match `ct_fire.py` default. Added `"LL1": 30` explicitly to both params dicts in example with comments.
+
+### OOM Issue in FIRE-only Scenario
+
+User ran the example and got:
+```
+RuntimeWarning: FIRE ran out of memory (std::bad_alloc) â€” the image likely has too many fiber seed candidates.
+scenario_fire_only()
+No fibers detected â€” pipeline returned None.
+```
+
+User had already changed `thresh_im2` to 30. User asked: "Do I need to reset the memory?"
+
+**Answer**: No memory reset needed â€” each `fire_2d_angle` call is stateless/independent. The `std::bad_alloc` is per-call. The fix is to reduce seed count via `thresh_LMPdist`.
+
+Updated `fire_only_params` in example:
+- `thresh_im2`: 30 â†’ 60 (less foreground)
+- `thresh_LMPdist`: 4 â†’ 12 (primary memory lever)
+
+### thresh_im2 clarification
+
+User said: "the threshold 30 is already large for the image used in this example" and asked to verify if `thresh_im2` was reset to 0 before passing to `fire_2d_angle`.
+
+**Verification**: In `_run_fire_only_on_image`, `fire_params = resolved_params["value"].copy()` â€” `thresh_im2` is NOT reset, it's forwarded as-is. Contrast with `ct_fire.py` which explicitly sets `fire2d_params["thresh_im2"] = 0` after applying the mask.
+
+### thresh_LMPdist explanation
+
+User asked "what are the seeds limit? thousands of seeds is quite common."
+
+**Explanation**: `thresh_LMPdist` is a non-maximum suppression on distance-transform local maxima. It's the primary memory lever. Seed count drops quadratically with radius:
+- Distance transform on thresholded image â†’ local maxima = nucleation candidates
+- Suppress any two candidates within `thresh_LMPdist` px
+- Going from 2â†’12 can reduce 50,000 seeds to ~1,400
+
+User confirmed: "the thresh_LMPdist did the trick. But I am concerned that larger value of this parameter would make the local orientation tracking less accurate."
+
+**Clarification given**: `thresh_LMPdist` only affects WHERE fibers start (seed placement), not HOW they are traced. Tracing accuracy parameters are `s_fiberdir`, `thresh_ext`, `lam_dirdecay`, `s_minstep`/`s_maxstep`. Real tradeoff is coverage (missed fibers in dense bundles) not accuracy.
+
+User then asked: "does it affect how many nucleation points will be generated?"
+
+**Answer**: Yes, directly â€” it IS the control over surviving nucleation point count. Suppression area grows with square of radius. Also affected by `thresh_im2`, `thresh_Dxlink`, `s_xlinkbox`.
+
+### Final Wrap-up
+
+User said: "got it. Now it is working now. Could you update the user guide for the fire only pipeline, update the md files, and commit the changes"
+
+Plan was created and approved for:
+1. `docs/architecture.md` â€” fix stale example description
+2. `docs/getting_started.md` â€” add Example 3 section + troubleshooting entries
+3. 3 commits: pipeline core, example+docs, session housekeeping
+
+### Commits Made (this session)
+
+All 3 commits completed successfully:
+- `62a0d4c feat(tme_analysis): add use_ct_reconstruction option to CT-FIRE pipeline`
+- `6c5a44c feat(examples,docs): add FIRE-only scenario and update user guide`
+- `1796a41 chore(claude): update session summary`
+
+Full log now shows:
+```
+1796a41 chore(claude): update session summary
+6c5a44c feat(examples,docs): add FIRE-only scenario and update user guide
+62a0d4c feat(tme_analysis): add use_ct_reconstruction option to CT-FIRE pipeline
+2bc33c0 chore(claude): fix PostCompact hook to append and update session summary
+ca16f6a docs: update CLAUDE.md and add API_CHANGES.md for CT-FIRE pipeline
+751366e feat(tme_analysis): refine CT-FIRE pipeline and example
+```
+
+All work is complete. No pending tasks.
+</analysis>
+
+<summary>
+1. Primary Request and Intent:
+   - **Main feature**: Add `use_ct_reconstruction: bool = True` parameter to `curvealign_ctfire_mode_pipeline()` â€” when `False`, calls `fire_2d_angle()` directly on the normalized image, bypassing the curvelet preprocessing step. Must highlight in docs/comments that this mode does NOT require curvelops.
+   - **Example update**: Add `scenario_fire_only()` to `example_curvealign_ctfire_pipeline.py` with explicit FIRE-only parameters users can tune.
+   - **LL1 question**: How to expose `LL1` (post-tracing arc-length filter) from user input â€” answer: top-level key in `ctfire_params` dict, same level as `"widMAX"`.
+   - **OOM debugging**: User got `std::bad_alloc` in FIRE-only mode; diagnosed and fixed via `thresh_LMPdist` (seed suppression radius).
+   - **Documentation + commits**: Update `getting_started.md`, `architecture.md`, `CLAUDE.md`, `API_CHANGES.md` and commit in logical groups.
+
+2. Key Technical Concepts:
+   - `fire_2d_angle(p, im, plotflag=0)` â€” standalone FIRE entry point in `ctfire_py`; operates directly on image without curvelet preprocessing
+   - `ct_fire()` â€” full CT-FIRE pipeline: image normalization â†’ `ct_reconstruction()` â†’ mask â†’ **resets `thresh_im2=0`** â†’ `fire_2d_angle()`
+   - FIRE-only path: `thresh_im2` is NOT reset to 0 â€” forwarded as-is to `fire_2d_angle`, which applies it internally
+   - `thresh_LMPdist` â€” FIRE seed suppression radius; primary memory lever; seed count drops quadratically with radius; does NOT affect tracing accuracy, only coverage
+   - `thresh_im2` â€” absolute background threshold (out of 255 after normalization); reduces foreground pixels before distance transform
+   - `LL1` â€” top-level key in `ctfire_params` (not inside `"value"`); post-tracing minimum fiber arc-length filter; default 30 in `ct_fire.py`
+   - `_build_fiber_dataframe(data, LL1, fiber_mode, feature_cp, ...)` â€” shared by both CT and FIRE-only paths
+   - Image normalization: both paths normalize to float32 [0, 255] before calling `fire_2d_angle`
+   - `fire_2d_angle` expects shape `(1, H, W)` â€” 3D array with channel dim
+   - `std::bad_alloc` MemoryError: C++ FIRE allocator exhausts heap when too many seeds; caught and re-emitted as `RuntimeWarning`
+
+3. Files and Code Sections:
+   - **`h:\GitHub.06.2022\tme-quant\src\tme_quant\src\tme_quant\tme_analysis\pipelines\curvealign_ctfireMode_pipeline.py`**
+     - Added `use_ct_reconstruction: bool = True` parameter to `curvealign_ctfire_mode_pipeline()` (after `ctfire_params`, before `fiber_mode`)
+     - Added `_run_fire_only_on_image(image, ctfire_params_dict, fiber_mode)` helper after `_run_ctfire_on_image`
+     - Updated dispatch in main function body:
+       ```python
+       if use_ct_reconstruction:
+           _report(progress_callback, 1, 4, "Running CT-FIRE fiber extraction (with curvelet reconstruction)â€¦")
+           fiber_structure = _run_ctfire_on_image(image, ctfire_params, fiber_mode)
+       else:
+           _report(progress_callback, 1, 4, "Running FIRE fiber extraction (no curvelet reconstruction)â€¦")
+           fiber_structure = _run_fire_only_on_image(image, ctfire_params, fiber_mode)
+       ```
+     - Updated `_params` dict to include `"use_ct_reconstruction": use_ct_reconstruction`
+     - Updated module docstring Prerequisites section to distinguish CT vs FIRE-only mode
+     - Key implementation of `_run_fire_only_on_image`:
+       ```python
+       fire_params = resolved_params["value"].copy()
+       img = image.astype(np.float32)
+       if img.max() > 0:
+           img = img / img.max() * 255.0
+       im3 = img[np.newaxis, :, :]
+       try:
+           data = _fire_2d_angle(p=fire_params, im=im3, plotflag=0)
+       except MemoryError:
+           warnings.warn("FIRE ran out of memory...", RuntimeWarning, stacklevel=4)
+           return pd.DataFrame()
+       LL1 = resolved_params.get("LL1", 30)  # default 30 matches ct_fire.py
+       ```
+
+   - **`h:\GitHub.06.2022\tme-quant\src\tme_quant\examples\example_curvealign_ctfire_pipeline.py`**
+     - Updated module docstring to describe 2 scenarios (CT-FIRE and FIRE-only)
+     - Added `"LL1": 30` to `ctfire_params` in `scenario_real_image()` with comment
+     - Added `scenario_fire_only()` function with:
+       - `fire_only_params` dict using `thresh_im2=60`, `thresh_LMPdist=12` (tuned for raw image, avoiding OOM)
+       - Extensive inline comments explaining why these differ from CT mode values
+       - `"LL1": 30` top-level key with comment
+       - Calls `curvealign_ctfire_mode_pipeline(..., use_ct_reconstruction=False)`
+       - Same save/hierarchy/viewer pattern as `scenario_real_image()`
+       - Outputs to `output/ctfire_fire_only_*.{png,xlsx}`
+     - Updated `main()` to call both scenarios with comments
+     - Key `fire_only_params` structure:
+       ```python
+       fire_only_params = {
+           "coefficient_percentile": 0.2,  # ignored in FIRE-only mode
+           "num_scales": 3,                # ignored in FIRE-only mode
+           "fiber_threshold": 0.5,
+           "widMAX": 20,
+           "LL1": 30,                      # post-tracing min arc-length filter
+           "widcon": {...},
+           "value": {
+               "thresh_im2": 60,           # raised vs CT mode (no curvelet pre-filtering)
+               "thresh_LMPdist": 12,       # raised: primary guard against std::bad_alloc
+               "thresh_flen": 20,          # slightly higher than CT mode (15)
+               ...                         # other FIRE params same as CT mode
+           },
+       }
+       ```
+
+   - **`h:\GitHub.06.2022\tme-quant\src\tme_quant\docs\getting_started.md`**
+     - Added "Example 3 â€” CT-FIRE pipeline (individual fibers + TACS viewer)" subsection in Step 5
+     - Documents both Scenario 1 (CT-FIRE, needs curvelops) and Scenario 2 (FIRE-only, **no curvelops needed**)
+     - Added two troubleshooting entries:
+       - `ImportError: No module named 'ctfire_py'` â€” with pointer to CLAUDE.md
+       - `RuntimeWarning: FIRE ran out of memory (std::bad_alloc)` â€” with `thresh_LMPdist`/`thresh_im2` guidance
+
+   - **`h:\GitHub.06.2022\tme-quant\src\tme_quant\docs\architecture.md`**
+     - Fixed stale example description: `"CT-FIRE individual-fiber pipeline + hierarchy (3 scenarios)"` â†’ `"CT-FIRE pipeline: CT-FIRE mode (curveletsâ†’FIRE) and FIRE-only mode (no curvelops needed), TACS viewer, saves overlay/heatmap/xlsx"`
+
+   - **`h:\GitHub.06.2022\tme-quant\src\tme_quant\CLAUDE.md`**
+     - Updated pipeline bullet to include: `use_ct_reconstruction=False` bypasses curvelet preprocessing and calls `fire_2d_angle()` directly â€” **no curvelops or curvelet library required** for this mode
+
+   - **`h:\GitHub.06.2022\tme-quant\src\tme_quant\API_CHANGES.md`**
+     - Added entry: `curvealign_ctfire_mode_pipeline()`: added `use_ct_reconstruction: bool = True` parameter â€” when False, no curvelops needed
+
+4. Errors and Fixes:
+   - **`RuntimeWarning: FIRE ran out of memory (std::bad_alloc)` in `scenario_fire_only()`**:
+     - Root cause: Raw SHG image produces far more distance-transform local maxima than curvelet-reconstructed image; `thresh_LMPdist=4` left too many seeds for C++ FIRE allocator
+     - User had already raised `thresh_im2` to 30 (from 10)
+     - Fix: Raised `thresh_im2` to 60 and `thresh_LMPdist` to 12 in `fire_only_params`
+     - User confirmed `thresh_LMPdist` fix worked: "the thresh_LMPdist did the trick"
+   - **`LL1` default inconsistency**: `_run_fire_only_on_image` originally used `resolved_params.get("LL1", 0.0)` while `ct_fire.py` defaults to 30. Fixed to `get("LL1", 30)` to match.
+   - **User interrupted first commit attempt**: User rejected the Bash tool call for the first commit. No error â€” user was asking the LL1 question first. Resumed commits after all edits were complete.
+
+5. Problem Solving:
+   - The core architectural decision: In CT path, `ct_fire.py` applies masking BEFORE `fire_2d_angle` and resets `thresh_im2=0`. In FIRE-only path, `thresh_im2` must be kept as-is and forwarded to `fire_2d_angle` for internal thresholding.
+   - Image normalization: Both paths normalize to [0, 255] float32 so `thresh_im2` thresholds work consistently regardless of input range.
+   - Memory management: No state between calls â€” `std::bad_alloc` is per-call and per-seed-count. `thresh_LMPdist` is quadratically effective: doubling the radius quarters the seed count.
+   - `thresh_LMPdist` accuracy concern: Clarified that it only affects seed placement (coverage), not tracing accuracy. Tracing is governed by `s_fiberdir`, `thresh_ext`, `lam_dirdecay`, `s_minstep`/`s_maxstep`.
+
+6. All User Messages:
+   - "Add an option in the ctfireMode pipeline that allows the user to run fire_2d_angle.py without ct_reconstruction. In the corresponding example, the user should also be able to update the parameters for the fire_2d_angle.py"
+   - "also need to update the documents and comments to highlight that this fire_2d_angle function does not need a curvelops or curvelet transform library installation"
+   - [Approved plan via ExitPlanMode]
+   - "how to update the LL1 from the user input?"
+   - "in the fire only scenario, got no fiber extraction: ...RuntimeWarning: FIRE ran out of memory (std::bad_alloc)... I have changed the background threshold thresh_im2 to 30, that should reduce the fiber seeds. Do I need to reset the memory?"
+   - "[Request interrupted] can you double check if the thresh_im2 was reset to 0 before it passed to the fire_2d_angle?"
+   - "what are the seeds limit? thousands of seeds is quite common. the threshold 30 is already large for the image used in this example"
+   - "can you explain what thresh_LMPdist does?"
+   - "the thresh_LMPdist did the trick. But I am concerned about that larger value of this parameter would make the local orientation tracking less accurate"
+   - "does it affect how many nucleation points will be generated?"
+   - "got it. Now it is working now. Could you update the user guide for the fire only pipeline, update the md files, and commit the changes"
+   - [Approved plan via ExitPlanMode]
+
+7. Pending Tasks:
+   - None. All work is complete and committed.
+
+8. Current Work:
+   All three commits for this feature were made successfully:
+   - `62a0d4c feat(tme_analysis): add use_ct_reconstruction option to CT-FIRE pipeline`
+   - `6c5a44c feat(examples,docs): add FIRE-only scenario and update user guide`
+   - `1796a41 chore(claude): update session summary`
+
+   Full git log (most recent 6):
+   ```
+   1796a41 chore(claude): update session summary
+   6c5a44c feat(examples,docs): add FIRE-only scenario and update user guide
+   62a0d4c feat(tme_analysis): add use_ct_reconstruction option to CT-FIRE pipeline
+   2bc33c0 chore(claude): fix PostCompact hook to append and update session summary
+   ca16f6a docs: update CLAUDE.md and add API_CHANGES.md for CT-FIRE pipeline
+   751366e feat(tme_analysis): refine CT-FIRE pipeline and example
+   ```
+
+   The PostToolUse hook after the last commit reported a non-fatal permission error (can't run Bash in "don't ask" mode to check the diff). The commits themselves all succeeded. The hook's structural-change check is moot here â€” the session-summary commit contains only `.claude/session-summary.md` changes, no Python structural changes.
+
+9. Optional Next Step:
+   No pending tasks â€” the session's work is fully complete and committed. The user confirmed "it is working now" and the docs/commits wrap-up is done. No next step unless user initiates a new request.
+</summary>
+
+---
+## 2026-06-10T20:31:55Z
+
+<analysis>
+Let me chronologically analyze this conversation to create a thorough summary.
+
+## Session Overview
+
+This conversation continued from a previous session. The starting context was:
+- The primary repo is at `H:/GitHub.06.2022/tme-quant/src/tme_quant`
+- Branch: `prototype/hierarchy-model-for-CApy`
+- The previous session established: adding `--scenario` CLI flag, tracking ctfire_py, creating venv_fire_only, deployment guide
+
+## Key Technical Problem Inherited from Previous Session
+
+The previous session ended with an active problem: `pyproject.toml` had `where = ["src", ".."]` which caused the error:
+```
+error: package directory '..\tme_quant\cell_analysis' does not exist
+```
+
+## Session Timeline
+
+### 1. Initial fix â€” pyproject.toml revert
+The first action was reverting the broken `where = ["src", ".."]` back to `where = ["src"]`. The fix explanation:
+- Two-level src structure: `H:/GitHub.06.2022/tme-quant/src/` (repo level) contains ctfire_py, pycurvelets, tme_quant/
+- `H:/GitHub.06.2022/tme-quant/src/tme_quant/src/` (project level) contains actual tme_quant package
+- Adding `..` to `where` caused setuptools to find `tme_quant` project directory from repo-level src and tried to enumerate its subpackages at the wrong path
+
+User message: "maybe you need to start over to figure out the two src folders involved in this installation"
+
+### 2. .pth file approach decided
+Reverted pyproject.toml to `where = ["src"]`, `include = ["tme_quant*"]`. For ctfire_py and pycurvelets (which live at repo-level `src/`), use .pth files in site-packages.
+
+### 3. Updated fire_only_windows_setup.md
+Created/updated `H:/GitHub.06.2022/tme-quant/docs/fire_only_windows_setup.md` with:
+- Directory layout section explaining the two-level src structure
+- Step 6 with two .pth files (not pip install)
+- Step 7 verification
+
+### 4. Updated CLAUDE.md
+Updated `src/tme_quant/CLAUDE.md` with the two-pth-file approach for venv_fire_only.
+
+### 5. Actual venv_fire_only setup discovery
+
+Running `venv_fire_only/bin/python.exe -c "import ctfire_py"` initially failed.
+
+**Root cause discovered**: 
+- venv_fire_only was created but `uv pip install -e .` was never run
+- More critically: `uv pip install -e .` from `src/tme_quant/` always installs into `.venv` (project's configured venv), not into the activated `venv_fire_only`
+- Confirmed with `uv pip show tme-quant` â†’ Location: `.venv\Lib\site-packages`
+
+**Additional problem**: Adding `src/` (repo-level) to sys.path via .pth file caused Python to find the `tme_quant` project directory as a namespace package (`tme_quant.__file__ = None`), shadowing the real package.
+
+**Solution**: Two .pth files with alphabetical ordering:
+1. `aa_tme_quant_pkg.pth` â†’ `src/tme_quant/src/` (actual package, `aa_` prefix processed first)
+2. `tme_quant_src.pth` â†’ `src/` (repo-level, for ctfire_py and pycurvelets)
+
+Created both files:
+```bash
+VENV_SITE="H:/GitHub.06.2022/tme-quant/src/tme_quant/venv_fire_only/lib/python3.14/site-packages"
+echo "H:/GitHub.06.2022/tme-quant/src/tme_quant/src" > "$VENV_SITE/aa_tme_quant_pkg.pth"
+```
+
+Verification passed:
+```
+tme_quant: H:/GitHub.06.2022/tme-quant/src/tme_quant/src/tme_quant/__init__.py
+ctfire_py: H:/GitHub.06.2022/tme-quant/src/ctfire_py/__init__.py
+All imports OK â€” fire-only pipeline is ready.
+```
+
+### 6. Updated docs with "why no pip install" explanation
+
+Updated both docs to explain:
+1. **uv ignores activated venv** â€” always installs to `.venv`
+2. **ctfire_py/pycurvelets outside discovery path** â€” `where = ["src"]` only finds `src/tme_quant/src/`
+
+### 7. Running the fire-only example
+
+User ran: `python examples/example_curvealign_ctfire_pipeline.py --scenario fire-only`
+
+**Error 1**: `TypeError: only 0-dimensional arrays can be converted to Python scalars`
+- Location: `pycurvelets/utils/math/round_mlab.py` line 12
+- Called from: `fire_2d_angle.py` line 308: `ims = round_mlab(smooth(im, p.get("sigma_im")))`
+- Root cause: `im` is expanded to 3D (1, H, W) in fire_2d_angle.py line 300-301. `smooth` returns 3D. `round_mlab`'s `__iter__` branch iterates giving 2D rows, then `float(2d_row)` fails in numpy â‰¥ 1.24.
+
+**User rejected two edit attempts** to round_mlab.py, saying "I don't think this needs a change" and "remember it was working in my previous venv-curvelops environment"
+
+**Key discovery**: In `.venv-curvelops`, pycurvelets comes from `H:/GitHub.06.2022/tmequant_ctfire/tme-quant/src/pycurvelets/__init__.py` (the ctfire fork), NOT from `H:/GitHub.06.2022/tme-quant/src/pycurvelets/`.
+
+The ctfire fork's `round_mlab.py` already has the fix:
+```python
+if isinstance(num, np.ndarray):
+    return np.floor(num + 0.5).astype(int)
+```
+
+The repo's `pycurvelets/utils/math/round_mlab.py` had the stale version.
+
+**Fix**: Copied the fixed `round_mlab.py` from ctfire fork and cleaned duplicate `import math`.
+
+**Error 2**: `UnicodeEncodeError` on `â”€` (U+2500) in print statement
+- Fixed by changing `'â”€' * 60` to `'-' * 60` in `example_curvealign_ctfire_pipeline.py` (replace_all=True)
+
+**Final result**: Pipeline ran successfully:
+- 737 fibers extracted
+- TACS: TACS-1: 18.6%, TACS-2: 33.1%, TACS-3: 12.3%
+- Overlay, heatmap, xlsx saved to `examples/output/`
+- Hierarchy built (741 nodes)
+
+### 8. User asked why pip install not used
+
+Explained two reasons clearly. User then asked about moving ctfire_py/pycurvelets to `src/tme_quant/src/` â€” confirmed it would work with `include` update.
+
+### 9. Plan Mode â€” flat-layout alternative
+
+User requested: "add the option of moving the two folders to the src folder and a backup project.toml for that purpose for the end user to choose in the guide"
+
+Created plan:
+1. **New file**: `src/tme_quant/pyproject_flat.toml` â€” same as `pyproject.toml` but with `include = ["tme_quant*", "ctfire_py*", "pycurvelets*"]`
+2. **Edit**: `docs/fire_only_windows_setup.md` â€” add "Alternative: flat-layout pip install" section after Step 6 with comparison table, steps, and troubleshooting rows
+3. `pyproject.toml` and `CLAUDE.md` unchanged
+
+Plan was approved by user.
+
+## Current state of files
+
+### pyproject.toml (unchanged, correct state):
+```toml
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["tme_quant*"]
+```
+
+### pycurvelets/utils/math/round_mlab.py (fixed):
+```python
+import math
+import numpy as np
+
+def round_mlab(num):
+    if isinstance(num, np.ndarray):
+        return np.floor(num + 0.5).astype(int)
+    elif isinstance(num, (list, tuple)):
+        return [math.floor(x + 0.5) for x in num]
+    else:
+        return math.floor(num + 0.5)
+```
+
+### venv_fire_only site-packages (working):
+- `aa_tme_quant_pkg.pth` â†’ `H:/GitHub.06.2022/tme-quant/src/tme_quant/src`
+- `tme_quant_src.pth` â†’ `H:/GitHub.06.2022/tme-quant/src`
+
+## Pending tasks
+- Create `src/tme_quant/pyproject_flat.toml`
+- Add alternative section to `docs/fire_only_windows_setup.md`
+- Commit all changes
+
+## Security/rules constraints
+- "Never modify ctfire_py files in this branch directly. All changes must be made in the 32-convert-ctfire branch of the ctfire fork repo."
+- pycurvelets doesn't have the same explicit no-modify rule
+</analysis>
+
+<summary>
+1. Primary Request and Intent:
+   - **Ongoing**: Fix the `venv_fire_only` environment setup so `ctfire_py`, `pycurvelets`, and `tme_quant` are all importable without using `pip install -e .`
+   - **Ongoing**: Create and refine `docs/fire_only_windows_setup.md` as a deployment guide for new Windows users running the FIRE-only CT-FIRE pipeline
+   - **Completed this session**: Fix `round_mlab.py` in pycurvelets to handle 3D numpy arrays (copy from ctfire fork which already has the fix)
+   - **Completed this session**: Fix `UnicodeEncodeError` from `â”€` box-drawing character in `example_curvealign_ctfire_pipeline.py`
+   - **Completed this session**: Run `example_curvealign_ctfire_pipeline.py --scenario fire-only` successfully in `venv_fire_only`
+   - **Active (approved plan)**: Add a flat-layout alternative option to the guide: create `src/tme_quant/pyproject_flat.toml` (backup pyproject.toml with `include = ["tme_quant*", "ctfire_py*", "pycurvelets*"]`) and add a guide section explaining the alternative `python -m pip install -e .` workflow where ctfire_py and pycurvelets are copied into the project's `src/` directory
+
+2. Key Technical Concepts:
+   - **Two-level `src/` structure**: Repo-level `src/` at `tme-quant/src/` contains `ctfire_py/`, `pycurvelets/`, `tme_quant/` (project dir). Project-level `src/` at `tme-quant/src/tme_quant/src/` contains the actual `tme_quant` Python package.
+   - **uv always targets `.venv`**: `uv pip install -e .` run from inside a `pyproject.toml` directory always installs to the project's own `.venv`, ignoring any externally activated venv
+   - **`.pth` file mechanism**: Python reads all `.pth` files in `site-packages/` alphabetically at startup, appending each line to `sys.path`. Two files are needed: `aa_tme_quant_pkg.pth` (prefix `aa_` for alphabetical priority) for the actual tme_quant package, and `tme_quant_src.pth` for the repo-level `src/`
+   - **Namespace package shadowing**: Adding `src/` (repo-level) to sys.path before the project's `src/tme_quant/src/` causes Python to treat the `tme_quant/` project directory as a namespace package (`__file__ = None`), shadowing the real package. Fixed by `aa_` naming.
+   - **`round_mlab` numpy â‰¥ 1.24 incompatibility**: The old `hasattr(num, "__iter__")` branch iterated over a 3D array giving 2D rows; `float(2d_row)` raises `TypeError: only 0-dimensional arrays can be converted to Python scalars` in numpy â‰¥ 1.24
+   - **ctfire_py modification rule**: "Never modify ctfire_py files in this branch directly. All changes must be made in the `32-convert-ctfire` branch of the ctfire fork repo." pycurvelets has no such rule.
+   - **`fire_2d_angle.py` 3D expansion**: Line 300-301 adds `im[np.newaxis, :, :]` to make 2D input 3D (1, H, W); `smooth()` then returns 3D; `round_mlab()` must handle nd arrays
+   - **Windows CP1252 encoding**: `â”€` (U+2500) box-drawing characters in `print()` statements cause `UnicodeEncodeError` on Windows console with CP1252 encoding
+   - **Flat-layout alternative**: Moving ctfire_py/pycurvelets into `src/tme_quant/src/` plus updating `include` in pyproject.toml enables `python -m pip install -e .` to install all three packages
+
+3. Files and Code Sections:
+
+   - **`H:/GitHub.06.2022/tme-quant/src/tme_quant/pyproject.toml`**
+     - Reverted from broken `where = ["src", ".."]` back to correct state
+     - Final `[tool.setuptools.packages.find]`:
+       ```toml
+       [tool.setuptools.packages.find]
+       # tme_quant lives under the src/ layout (src/tme_quant/).
+       # ctfire_py and pycurvelets are sibling packages at the repo's src/ level
+       # (H:/GitHub.06.2022/tme-quant/src/), which is NOT under this project's src/.
+       # They are made importable by adding that directory to sys.path via a .pth file
+       # during venv setup â€” see docs/fire_only_windows_setup.md Step 6.
+       where = ["src"]
+       include = ["tme_quant*"]
+       ```
+
+   - **`H:/GitHub.06.2022/tme-quant/src/pycurvelets/utils/math/round_mlab.py`**
+     - Stale version had broken `__iter__` branch; fixed by copying from ctfire fork (`H:/GitHub.06.2022/tmequant_ctfire/tme-quant/src/pycurvelets/utils/math/round_mlab.py`) and cleaning duplicate import
+     - Final state:
+       ```python
+       import math
+       import numpy as np
+
+       def round_mlab(num):
+           """
+           Rounding function specifically made to follow the MATLAB standard rather than
+           Python's, where MATLAB rounds 0.5 up, while Python rounds 0.5 down.
+           """
+           if isinstance(num, np.ndarray):
+               return np.floor(num + 0.5).astype(int)
+           elif isinstance(num, (list, tuple)):
+               return [math.floor(x + 0.5) for x in num]
+           else:
+               return math.floor(num + 0.5)
+       ```
+
+   - **`H:/GitHub.06.2022/tme-quant/src/tme_quant/examples/example_curvealign_ctfire_pipeline.py`**
+     - Changed `'â”€' * 60` â†’ `'-' * 60` (replace_all=True, 2 occurrences in `_tacs_hierarchy_integration_ctfire`) to fix `UnicodeEncodeError` on Windows CP1252 console
+
+   - **`H:/GitHub.06.2022/tme-quant/docs/fire_only_windows_setup.md`**
+     - Rewrote to accurately document the two-level src structure, two-pth-file approach, and reasons pip install is not used
+     - Key sections added: "Directory layout and why we don't use `pip install`" with Problem 1 (uv ignores activated venv) and Problem 2 (ctfire_py outside discovery path) explained clearly
+     - Step 6 uses two .pth files (no `uv pip install`):
+       ```bash
+       # pth 1 â€” real tme_quant package at src/tme_quant/src/
+       python -c "
+       import sysconfig, pathlib, os
+       site = sysconfig.get_paths()['purelib']
+       pkg_src = str(pathlib.Path(os.getcwd()) / 'src')
+       (pathlib.Path(site) / 'aa_tme_quant_pkg.pth').write_text(pkg_src + '\n')
+       print('aa_tme_quant_pkg.pth ->', pkg_src)
+       "
+       # pth 2 â€” repo-level src/ for ctfire_py and pycurvelets
+       python -c "
+       import sysconfig, pathlib, os
+       site = sysconfig.get_paths()['purelib']
+       repo_src = str(pathlib.Path(os.getcwd()).parent.resolve())
+       (pathlib.Path(site) / 'tme_quant_src.pth').write_text(repo_src + '\n')
+       print('tme_quant_src.pth ->', repo_src)
+       "
+       ```
+     - Step 7 verification command checks `tme_quant.__file__` and `ctfire_py.__file__`
+
+   - **`H:/GitHub.06.2022/tme-quant/src/tme_quant/CLAUDE.md`**
+     - Updated `venv_fire_only` creation section to document both the two-pth approach AND the explanation of why pip install is not used (two-point list)
+     - Updated CLAUDE.md creation commands to match the `aa_tme_quant_pkg.pth` + `tme_quant_src.pth` approach
+
+   - **`H:/GitHub.06.2022/tme-quant/src/tme_quant/venv_fire_only/lib/python3.14/site-packages/aa_tme_quant_pkg.pth`** (created, not committed)
+     - Content: `H:/GitHub.06.2022/tme-quant/src/tme_quant/src`
+
+   - **`H:/GitHub.06.2022/tme-quant/src/tme_quant/venv_fire_only/lib/python3.14/site-packages/tme_quant_src.pth`** (created, not committed)
+     - Content: `H:/GitHub.06.2022/tme-quant/src`
+
+   - **`H:/GitHub.06.2022/tme-quant/src/tme_quant/pyproject_flat.toml`** (TO BE CREATED â€” pending task)
+     - Same as `pyproject.toml` but with: `include = ["tme_quant*", "ctfire_py*", "pycurvelets*"]`
+
+4. Errors and Fixes:
+
+   - **`error: package directory '..\tme_quant\cell_analysis' does not exist`**
+     - Cause: `where = ["src", ".."]` in pyproject.toml caused setuptools to find the `tme_quant` project directory at `src/` as a package and try to enumerate its subpackages at the wrong path
+     - Fix: Reverted to `where = ["src"]`, `include = ["tme_quant*"]`; used .pth files for ctfire_py/pycurvelets instead
+
+   - **`tme_quant.__file__ = None` (namespace package)**
+     - Cause: Single `.pth` file adding `src/` (repo-level) meant Python found `src/tme_quant/` (project directory) as a namespace package before finding the real `tme_quant` package
+     - Fix: Added second `.pth` file named `aa_tme_quant_pkg.pth` pointing to `src/tme_quant/src/`; `aa_` prefix ensures alphabetical processing order so real package is found first
+
+   - **`uv pip install -e .` installing to `.venv` not `venv_fire_only`**
+     - Cause: uv always targets the project's own configured venv when run from a project directory
+     - Confirmed: `uv pip show tme-quant` â†’ Location: `H:\GitHub.06.2022\tme-quant\src\tme_quant\.venv\Lib\site-packages`
+     - Fix: Do not use `uv pip install` at all; use `.pth` files directly
+
+   - **`TypeError: only 0-dimensional arrays can be converted to Python scalars`** in `round_mlab.py`
+     - Cause: `fire_2d_angle.py` line 301 expands image to 3D `(1, H, W)`, `smooth()` returns 3D, `round_mlab`'s `__iter__` branch iterates getting 2D rows, `float(2d_row)` fails in numpy â‰¥ 1.24
+     - User rejected direct fix to `round_mlab.py` twice, saying "I don't think this needs a change" and "remember it was working in my previous venv-curvelops environment"
+     - Key discovery: `.venv-curvelops` uses pycurvelets from `H:/GitHub.06.2022/tmequant_ctfire/tme-quant/src/pycurvelets/` (ctfire fork), which already has the fix: `if isinstance(num, np.ndarray): return np.floor(num + 0.5).astype(int)`
+     - Fix: Copied fixed `round_mlab.py` from ctfire fork to `src/pycurvelets/utils/math/round_mlab.py`; cleaned duplicate `import math`
+
+   - **`UnicodeEncodeError: 'charmap' codec can't encode characters`**
+     - Cause: `print(f"\n{'â”€' * 60}")` in `_tacs_hierarchy_integration_ctfire()` â€” `â”€` (U+2500) not encodable in Windows CP1252 console
+     - Fix: Replaced all occurrences of `'â”€' * 60` with `'-' * 60` using `replace_all=True`
+
+5. Problem Solving:
+
+   - **Two-level src structure problem**: The key insight was that the repo layout has TWO levels of `src/` â€” `tme-quant/src/` (repo-level with ctfire_py, pycurvelets, tme_quant project dir) and `tme-quant/src/tme_quant/src/` (project-level with actual tme_quant package). Any attempt to add `..` to setuptools `where` caused discovery of the project directory as a package. Solved by keeping `where = ["src"]` strictly for tme_quant and using `.pth` files for the sibling packages.
+
+   - **venv_fire_only fully working**: All three packages importable, fire-only pipeline runs end-to-end (737 fibers, TACS classification, overlay/heatmap/xlsx output).
+
+   - **Pending**: Create `pyproject_flat.toml` and add alternative guide section to `fire_only_windows_setup.md` (user-approved plan)
+
+6. All User Messages:
+   - "maybe you need to start over to figure out the two src folders involved in this installation"
+   - "I need to test this out by creating a new uv environment named venv_fire_only..." (from previous session context)
+   - "I want to test it first before I commit" (rejected git commit)
+   - (Error output): `self._finalize_license_expression() error: package directory '..\tme_quant\cell_analysis' does not exist`
+   - "This session is being continued from a previous conversation that ran out of context." (summary message â€” not a user request)
+   - "continue" (after the session summary, resuming work)
+   - (Error output about round_mlab): `ims = round_mlab(smooth(im, p.get("sigma_im"))) ... TypeError: only 0-dimensional arrays can be converted to Python scalars`
+   - (Rejected Edit tool): "I don't think this need a change" (re: round_mlab.py)
+   - (Rejected Grep tool): "remember it was working in my previous venv-curvelops environment"
+   - "continue"
+   - "I just tried the fire-only example in the venv-curvelops env, which went through successfully: (.venv-curvelops) ... $ python examples/example_curvealign_ctfire_pipeline.py --scenario fire-only"
+   - "can you remind me why we donot use pip install for the environment"
+   - "sounds good. Please update the md files and explain why we donot use pip install for the fire_only pipeline"
+   - "for the new users, where is the installation guide for the fire-only pipeline"
+   - "if the user copy the ctfire_py and pycurvelets folders to the H:\GitHub.06.2022\tme-quant\src\tme_quant\src, then the pip install would work, right?"
+   - "got it. now in this repo I need to keep ctfire_py clearly separated from the tme_quant package tree. However, can you add the option of moving the two folders to the src folder and a backup project.toml for that purpose for the end user to choose in the guide?"
+   - "Tool loaded." (after ExitPlanMode)
+
+7. Pending Tasks:
+   - **Immediate (approved plan)**: Create `H:/GitHub.06.2022/tme-quant/src/tme_quant/pyproject_flat.toml` â€” same as `pyproject.toml` but `include = ["tme_quant*", "ctfire_py*", "pycurvelets*"]`
+   - **Immediate (approved plan)**: Edit `H:/GitHub.06.2022/tme-quant/docs/fire_only_windows_setup.md` â€” add "Alternative: flat-layout pip install" section after Step 6, with: comparison table (pth vs flat layout), 3 prep steps (copy folders, swap pyproject), `python -m pip install -e .` command (NOT uv pip), uv note (goes to `.venv`), developer warning; add 2 troubleshooting rows
+   - **Not yet done**: Commit all changes (user said "I want to test it first" earlier; may need confirmation)
+
+8. Current Work:
+   The approved plan was just exited with `ExitPlanMode` and the user replied "Tool loaded." (acknowledging the tool schema was fetched). The immediate next task per the approved plan is to:
+   1. Create `src/tme_quant/pyproject_flat.toml`
+   2. Add the "Alternative: flat-layout pip install" section to `docs/fire_only_windows_setup.md`
+
+   The plan specifies:
+   - `pyproject_flat.toml`: identical to `pyproject.toml` except `[tool.setuptools.packages.find]` has `include = ["tme_quant*", "ctfire_py*", "pycurvelets*"]` with a comment saying "Flat-layout variant: ctfire_py and pycurvelets have been copied into src/"
+   - Guide section: comparison table, 3 copy steps, `python -m pip install -e .` (not `uv pip`), developer warning, 2 new troubleshooting table rows
+
+9. Optional Next Step:
+   The next step is to implement the approved plan: create `pyproject_flat.toml` and update `fire_only_windows_setup.md`.
+
+   From the approved plan: "Add an **'Alternative: flat-layout pip install'** section immediately after Step 6 (the `.pth` file approach)... Gives the install command: **`python -m pip install -e .`** (standard pip, not `uv pip install`, because uv ignores the activated venv)... Notes that this option is for **end-user deployment only** â€” developers should keep the original layout to avoid polluting the tme_quant source tree"
+
+   And: "New file: `src/tme_quant/pyproject_flat.toml` â€” A copy of `pyproject.toml` with one change â€” `[tool.setuptools.packages.find]`: `include = ["tme_quant*", "ctfire_py*", "pycurvelets*"]`"
+</summary>

@@ -161,6 +161,11 @@ src/tme_quant/
 │
 └── napari-tme-quant/              ← napari plugin (separate installable package; co-located for prototyping)
 
+docs/
+├── architecture.md                    ← canonical file tree (this file)
+├── getting_started.md                 ← install and first-run guide
+└── fire_only_windows_setup.md         ← FIRE-only pipeline setup on Windows MSYS2 UCRT64; explains two-level src structure, .pth file approach, and flat-layout alternative
+
 src/ctfire_py/                         ← CT-FIRE Python module; tracked here, changes made only in 32-convert-ctfire branch
 ├── __init__.py
 ├── ct_fire.py                         ← main entry point: ct_fire()
