@@ -205,9 +205,13 @@ build-backend = "setuptools.build_meta"
 
 # ── Package discovery ──────────────────────────────────────────────────────────
 [tool.setuptools.packages.find]
-# Discover tme_quant and ctfire_py (CT-FIRE bridge) from src/
+# tme_quant lives under the src/ layout (src/tme_quant/).
+# ctfire_py and pycurvelets are sibling packages at the repo's src/ level
+# (H:/GitHub.06.2022/tme-quant/src/), which is NOT under this project's src/.
+# They are made importable by adding that directory to sys.path via a .pth file
+# during venv setup — see docs/fire_only_windows_setup.md Step 6.
 where = ["src"]
-include = ["tme_quant*", "ctfire_py*"]
+include = ["tme_quant*"]
 
 # ── uv configuration ───────────────────────────────────────────────────────────
 [tool.uv]
