@@ -599,14 +599,27 @@ def curvealign_ctfire_mode_pipeline(
         Pre-computed ROI boundary coordinates mapping string keys to ``(N, 2)``
         ``[row, col]`` ndarrays.  When ``None`` and ``tif_boundary == 3``, they
         are extracted automatically from ``boundary_img``.
+
+        Providing ``coordinates`` alone (without ``boundary_img``) enables
+        **partial** boundary analysis: ``roi_measurements_df`` and
+        ``roi_summary_df`` are populated, but ``nearest_angles`` and
+        ``in_curvs_flag`` remain ``None`` (they require ``boundary_img`` for
+        region-membership lookup via :func:`extract_tif_boundary`).
     boundary_img : ndarray or None
-        Binary mask image.  Required when ``tif_boundary == 3`` and
-        ``coordinates`` is ``None``.
+        Binary mask image used for two purposes: (1) automatic coordinate
+        extraction when ``coordinates`` is ``None`` (via
+        :func:`extract_boundary_coords_from_mask`); (2) fiber region-membership
+        lookup in :func:`extract_tif_boundary`, which populates
+        ``nearest_angles`` and ``in_curvs_flag``.  Optional when
+        ``coordinates`` is already supplied — in that case only purpose (2) is
+        skipped and ROI-level stats are still computed.
     distance_threshold : float or None
         Maximum fiber-to-boundary distance (pixels) for boundary inclusion.
     tif_boundary : int
         Boundary mode.  0 — no boundary analysis.  3 — TIFF mask.
         1 / 2 — CSV modes (not yet ported; raises ``NotImplementedError``).
+        Supplying ``coordinates`` directly bypasses this flag: boundary ROI
+        analysis runs regardless of the ``tif_boundary`` value.
     exclude_fibers_in_mask : bool
         When ``True``, fibers whose centres lie inside the mask are excluded
         from boundary-angle statistics.
@@ -677,7 +690,7 @@ def curvealign_ctfire_mode_pipeline(
     roi_summary_df: Optional[pd.DataFrame] = None
     measured_boundary: Optional[pd.DataFrame] = None
 
-    if boundary_measurement and tif_boundary == 3:
+    if boundary_measurement:
         if coordinates is None and boundary_img is not None:
             coordinates = extract_boundary_coords_from_mask(boundary_img)
 
@@ -685,17 +698,18 @@ def curvealign_ctfire_mode_pipeline(
             roi_measurements_df, roi_summary_df = _process_tif_rois(
                 coordinates, fiber_structure, distance_threshold, image.shape
             )
-            boundary_results = _analyze_global_boundary(
-                coordinates,
-                boundary_img,
-                fiber_structure,
-                distance_threshold,
-                min_dist,
-                exclude_fibers_in_mask,
-            )
-            nearest_angles = boundary_results["nearest_angles"]
-            in_curvs_flag = boundary_results["in_curvs_flag"]
-            measured_boundary = boundary_results["measured_boundary"]
+            if boundary_img is not None:
+                boundary_results = _analyze_global_boundary(
+                    coordinates,
+                    boundary_img,
+                    fiber_structure,
+                    distance_threshold,
+                    min_dist,
+                    exclude_fibers_in_mask,
+                )
+                nearest_angles = boundary_results["nearest_angles"]
+                in_curvs_flag = boundary_results["in_curvs_flag"]
+                measured_boundary = boundary_results["measured_boundary"]
     elif not boundary_measurement:
         in_curvs_flag = np.ones(len(fiber_structure), dtype=bool)
 

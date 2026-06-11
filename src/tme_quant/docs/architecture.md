@@ -110,7 +110,7 @@ src/tme_quant/
 │   │   ├── standard_tme_pipeline.py
 │   │   ├── tacs_pipeline.py               ← analyze_tacs_zone(), plot_tacs_heatmap()
 │   │   ├── curvealign_curveletsMode_pipeline.py  ← curvealign_curvelets_mode_pipeline(): in-memory CurveAlign curvelets-mode pipeline (curvealign_pipeline is a deprecated alias)
-│   │   └── curvealign_ctfireMode_pipeline.py     ← curvealign_ctfire_mode_pipeline(): in-memory CT-FIRE individual-fiber pipeline; returns CTFirePipelineResult with full morphology
+│   │   └── curvealign_ctfireMode_pipeline.py     ← curvealign_ctfire_mode_pipeline(): in-memory CT-FIRE individual-fiber pipeline; returns CTFirePipelineResult with full morphology; coordinates-only boundary mode (no boundary_img) populates roi_measurements_df but skips nearest_angles/in_curvs_flag
 │   ├── utils/
 │   │   ├── __init__.py
 │   │   ├── alignment_utils.py     ← compute_fiber_alignment_to_roi

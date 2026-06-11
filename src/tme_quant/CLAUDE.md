@@ -216,6 +216,10 @@ Napari is NOT here: napari calls INTO tme_quant (see Core / Plugin separation).
     module docstring. To build for `.venv-curvelops` (MSYS2 UCRT64): use
     `src/ctfire_py/CPP/Makefile.ucrt64` (created in the ctfire repo) then
     `pip install -e H:/GitHub.06.2022/tmequant_ctfire/tme-quant --no-deps`.
+    **Boundary modes:** passing `coordinates` directly triggers boundary ROI analysis
+    regardless of `tif_boundary` value; `nearest_angles`/`in_curvs_flag` additionally
+    require `boundary_img` (region-membership lookup) — omitting it gives ROI-level
+    stats only (`roi_measurements_df`/`roi_summary_df` still populated).
 - `utils/` — `alignment_utils.py` (`compute_fiber_alignment_to_roi`; ported
   from `pycurvelets/get_alignment_to_roi.py`), `distance_utils.py`,
   `orientation_utils.py` (pixel-level boundary-relative orientation,
