@@ -477,6 +477,23 @@ tme_quant        ← (no dependency on napari, Qt, or magicgui)
 
 ---
 
+## Git Workflow Rules
+
+**One task per commit.** Each commit must address a single, self-contained task
+or issue. Never mix unrelated changes (e.g. a bug fix + a doc update + a
+refactor) into one commit. If you find yourself writing "and" in the commit
+message subject line, split it into separate commits.
+
+Examples of correctly scoped commits:
+- `fix(pipeline): allow coordinates-only boundary mode`
+- `docs: add MSYS2 reinstall recovery guide to CLAUDE.md`
+- `sync: update ctfire_py from 32-convert-ctfire`
+
+If multiple things changed together during development, stage and commit them
+file-by-file (`git add <file>`) rather than committing everything at once.
+
+---
+
 ## Development Setup
 
 ```bash
@@ -702,6 +719,143 @@ python -m pytest tests/ -v        # 239 passed, 7 skipped
 
 **On this machine (WSL — legacy):** curvelops 0.23 may be at `/home/yuming/miniconda3/`
 (not verified).
+
+#### Rebuilding after MSYS2 reinstall
+
+If MSYS2 becomes corrupted (e.g. `pacman.exe` missing, DLL load failures on
+matplotlib C extensions), a clean reinstall is required. The steps below restore
+both `.venv-curvelops` and `venv_fire_only` on this machine.
+
+**1 — Uninstall the broken MSYS2**
+
+Kill any running MSYS2 processes, then run the uninstaller:
+
+```powershell
+# In PowerShell (as Administrator)
+Stop-Process -Name "bash","mintty" -Force -ErrorAction SilentlyContinue
+Start-Process "C:\msys64\uninstall.exe" -Wait
+# If the uninstaller leaves files, delete the remainder:
+Remove-Item -Recurse -Force "C:\msys64"
+```
+
+If any file is still locked by a Python process, find and kill it:
+
+```powershell
+Get-Process python* | Select-Object Name, Id, Path
+Stop-Process -Id <PID> -Force
+Remove-Item -Recurse -Force "C:\msys64"
+```
+
+**2 — Fresh MSYS2 install**
+
+Download the installer from https://www.msys2.org and install to `C:\msys64`
+(default). Open the **MSYS2 UCRT64** shell and update:
+
+```bash
+pacman -Syu    # shell may close; reopen and run again
+pacman -Syu
+```
+
+**3 — Install packages and tools**
+
+```bash
+pacman -S --needed \
+  mingw-w64-ucrt-x86_64-gcc \
+  mingw-w64-ucrt-x86_64-git \
+  mingw-w64-ucrt-x86_64-pybind11 \
+  mingw-w64-ucrt-x86_64-python \
+  mingw-w64-ucrt-x86_64-python-pip \
+  mingw-w64-ucrt-x86_64-python-numpy \
+  mingw-w64-ucrt-x86_64-python-scipy \
+  mingw-w64-ucrt-x86_64-python-scikit-image \
+  mingw-w64-ucrt-x86_64-python-opencv \
+  mingw-w64-ucrt-x86_64-python-pandas \
+  mingw-w64-ucrt-x86_64-python-matplotlib \
+  mingw-w64-ucrt-x86_64-python-shapely \
+  mingw-w64-ucrt-x86_64-python-tifffile \
+  mingw-w64-ucrt-x86_64-python-openpyxl \
+  mingw-w64-ucrt-x86_64-python-imageio \
+  mingw-w64-ucrt-x86_64-python-pillow \
+  mingw-w64-ucrt-x86_64-python-networkx \
+  mingw-w64-ucrt-x86_64-python-scikit-learn
+```
+
+**4 — Rebuild `fiber_backend` C++ extension**
+
+The pre-built `fiber_backend.cp314-mingw_x86_64_ucrt_gnu.pyd` in both repos was
+compiled against the old MSYS2 DLLs and is now incompatible. Rebuild it:
+
+```bash
+cd /h/GitHub.06.2022/tme-quant/src/tme_quant
+source .venv-curvelops/bin/activate   # or create it first (step 5 below)
+
+cd /h/GitHub.06.2022/tmequant_ctfire/tme-quant/src/ctfire_py/CPP
+make -f Makefile.ucrt64 clean   # removes stale binary (make sees it as up-to-date otherwise)
+make -f Makefile.ucrt64         # rebuilds against new GCC
+cp fiber_backend.* ../           # place next to fire_2d_angle.py in the fork repo
+
+# Sync the fresh binary into the main repo (used by venv_fire_only)
+cp fiber_backend.cp314-mingw_x86_64_ucrt_gnu.pyd \
+   /h/GitHub.06.2022/tme-quant/src/ctfire_py/
+```
+
+Verify both load correctly:
+
+```bash
+python -c "from ctfire_py.fire_2d_angle import fire_2d_angle; print('OK')"
+```
+
+**5 — Recreate `.venv-curvelops`**
+
+```bash
+cd /h/GitHub.06.2022/tme-quant/src/tme_quant
+rm -rf .venv-curvelops
+python -m venv --system-site-packages .venv-curvelops
+source .venv-curvelops/bin/activate
+
+# curvelops (requires FFTW and CurveLab pre-built; paths below are this machine's locations)
+FFTW=H:/GitHub.06.2022/utils/fftw-2.1.5 \
+FDCT=H:/GitHub.06.2022/utils/CurveLab-2.1.3 \
+CXXFLAGS="-fpermissive -Wno-error -Wno-class-memaccess -std=gnu++14 -D_USE_MATH_DEFINES" \
+pip install --no-build-isolation \
+  "curvelops @ git+https://github.com/PyLops/curvelops@0.23.4"
+
+pip install -e . --no-deps
+
+# Add the fork repo's ctfire_py to the venv's path
+echo "H:/GitHub.06.2022/tmequant_ctfire/tme-quant/src" > \
+  .venv-curvelops/lib/python3.14/site-packages/ctfire_py_src.pth
+```
+
+**6 — Fix `venv_fire_only` editable install path**
+
+After MSYS2 reinstall, `venv_fire_only` itself survives (it lives in the repo
+directory). However, if `pip install -e .` was ever run from a different repo
+(e.g. `TMEQuant_fire_only`), the auto-generated
+`__editable__.tme_quant-0.2.0.pth` in the venv's site-packages will point to
+that wrong location — causing `ctfire_py` to be imported from there, which has
+an old incompatible `fiber_backend` binary.
+
+Check and fix:
+
+```bash
+cat venv_fire_only/lib/python3.14/site-packages/__editable__.tme_quant-0.2.0.pth
+# Should read: H:/GitHub.06.2022/tme-quant/src/tme_quant/src
+# If it shows a different repo path, overwrite it:
+echo "H:/GitHub.06.2022/tme-quant/src/tme_quant/src" > \
+  venv_fire_only/lib/python3.14/site-packages/__editable__.tme_quant-0.2.0.pth
+```
+
+Verify the correct `ctfire_py` is loaded:
+
+```bash
+source venv_fire_only/bin/activate
+python -c "
+import ctfire_py.fire_2d_angle as m
+print('fire_2d_angle from:', m.__file__)
+# Should show: H:/GitHub.06.2022/tme-quant/src/ctfire_py/fire_2d_angle.py
+"
+```
 
 #### VS Code terminal profile for MSYS2 UCRT64
 
