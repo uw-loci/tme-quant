@@ -111,6 +111,60 @@ Before adding `v - 1` (or any index offset) to array lookups:
 
 ---
 
+## Incident Record: The Non-Square-Image Indexing Bugs
+
+### What happened
+
+Running FIRE 2D on a non-square image (391×487) produced fiber traces that didn't follow
+real image structure (a "horizontal-fiber" artifact). All existing regression fixtures
+(`real1.tif`, `syn1_20fibers.png`, `syn2_35fibers.png`) are 512×512 squares, so two
+independent indexing bugs in the C++ backend had gone unnoticed:
+
+- **`findlocmax_native.cpp`**: the flat-index formulas used column-major (Fortran-order)
+  addressing (`flat_idx = col*sizey + row`), but Python passes a row-major (C-order) buffer
+  via `dsm.flatten()`. Column-major-on-row-major-data degenerates to a harmless transpose
+  only when height==width; for any non-square image it scrambles pixel correspondence
+  outright. Fixed to `flat_idx = row*sizez + col` (and the matching Phase-2 local-max
+  offset/neighbor-offset formulas), with output order kept as `(row, col)`.
+- **`extend_xlink_native.cpp`**: the single 2D-engine call site passed `(sizey, sizez)` —
+  i.e. `(height, width)` — into the engine's `(sizex, sizey)` constructor parameters, the
+  reverse of what the engine's own bounds checks and stride usage expect. Fixed to
+  `engine(sizez, sizey, ...)`.
+
+A third, unrelated bug surfaced during testing on the non-square image: an intermittent
+`std::bad_alloc` crash in `fiberproc_native.cpp`'s `remove_repeat_cpp`. That function holds
+`vi_list`/`vj_list` from `F[fi].v`/`F[fj].v` while splitting overlapping fiber pairs via
+`F.push_back(...)`. The push_back can reallocate `F`'s backing storage; when `vi_list`/
+`vj_list` were `const auto&` references (not copies), a reallocation between the two
+push_back calls left them dangling, and reading `.size()`/iterators off the freed memory
+triggered `std::bad_alloc` on inputs that happened to have overlapping fiber pairs. Fixed by
+copying instead of referencing (`std::vector<int> vi_list = F[fi].v;`). This also matters
+beyond crash-avoidance: `remove_repeat_cpp` de-duplicates overlapping fiber segments so the
+following `fiberlink` stage can merge fiber endpoints meeting at a shared vertex into one
+longer fiber — a crash or corrupted split here left fibers fragmented instead of merged.
+
+### Why this should not have happened
+
+- The C++ backend made *contradictory* assumptions about the same shared flat buffer
+  (`findlocmax_native.cpp` wrote/read it column-major; `extend_xlink_native.cpp`'s own
+  header comment states the buffer is row-major). Square test fixtures could not detect
+  this because a column-major read of row-major data is exactly a transpose, and isotropic
+  fiber networks on a square canvas look the same either way.
+- Holding a `const auto&` reference into a `std::vector` element across a call that can
+  resize that same vector is a classic iterator/reference-invalidation bug; it is silent on
+  small inputs (no reallocation needed) and only manifests once growth crosses a capacity
+  boundary, explaining the intermittent crash.
+
+### Rule for future changes
+
+1. Any non-square test image is a regression test for row/col-vs-col/row mistakes; square
+   fixtures alone cannot catch them. (See "Action items" follow-up tasks in the corresponding
+   plan/PR for adding such cases to `tests/test_fire_2d_angle.py` and `tests/test_ct_fire.py`.)
+2. Never hold a reference or iterator into a `std::vector`/container across a call that can
+   mutate or reallocate that same container — copy first if the call can grow it.
+
+---
+
 ## Fiber Overlay (`plot_fiber_overlay` in `test_fire_2d.py`)
 
 - Background: normalize image to `[0, 1]` with `img / img.max()` (do **not** use histogram equalization — it makes the background look unrealistic/saturated).
@@ -122,9 +176,9 @@ Before adding `v - 1` (or any index offset) to array lookups:
 
 ## C++ Backend Notes
 
-- **`findlocmax_native`**: outputs `xlink[:,0]` = row, `xlink[:,1]` = col (verified empirically). The column naming in the C++ source (`i`=col, `j`=row) is misleading because the flat array is passed row-major from Python, making `i` iterate rows.
+- **`findlocmax_native`**: outputs `xlink[:,0]` = row, `xlink[:,1]` = col. The flat-index formulas (`flat_idx = row*sizez + col`, sizez=width) are row-major, matching the row-major buffer Python passes via `dsm.flatten()`. (Until the fix recorded in "Incident Record: The Non-Square-Image Indexing Bugs" below, these formulas were column-major — wrong for any non-square image.)
 - **`fiberproc_native / trimxfv_cpp`**: explicitly does **not** renumber vertices. Unused vertex slots remain; their `V[v].f` is empty.
-- **`extend_xlink_native`**: the 2D constructor is called as `ExtendXLink(sizey=J=height, sizez=I=width, ...)`. Image is accessed row-major (`image[p[0]*sizex + p[1]]`).
+- **`extend_xlink_native`**: the 2D constructor is called as `ExtendXLink(sizex=I=width, sizey=J=height, ...)` — i.e. `engine(sizez, sizey, ...)` at the call site, since `sizez` holds width and `sizey` holds height. Image is accessed row-major (`image[p[0]*sizex + p[1]]`).
 
 ---
 

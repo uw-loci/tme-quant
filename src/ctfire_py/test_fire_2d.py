@@ -285,22 +285,118 @@ def test_fire_2d_with_real_image():
         return False
 
 
+def test_fire_2d_with_nonsquare_image():
+    """Test with a non-square real image if available"""
+    print("\n" + "=" * 60)
+    print("Testing with Non-Square Image (if available)")
+    print("=" * 60)
+
+    # Try to load the non-square image
+    try:
+        # Try common test image locations
+        test_paths = [
+            "tests/test_images/real1_rect.tif",
+            "test_images/real1_rect.tif",
+            "../tests/test_images/real1_rect.tif",
+        ]
+
+        image = None
+        for path in test_paths:
+            try:
+                from PIL import Image
+
+                img = Image.open(path)
+                image = np.array(img, dtype=np.float32)
+                print(f"\n✓ Loaded image from: {path}")
+                break
+            except:
+                continue
+
+        if image is None:
+            print("\n⊘ No non-square test image found, skipping test")
+            return None
+
+        print(f"   Image shape: {image.shape}")
+        print(f"   Image range: [{image.min():.1f}, {image.max():.1f}]")
+        h, w = image.shape[:2]
+        print(f"   Non-square check: height={h}, width={w}, equal={h == w}")
+
+        # Create parameters
+        params = create_default_params()
+
+        # Run FIRE
+        print("\nRunning FIRE extraction on non-square image...")
+        data = fire_2d_angle(params, image, plotflag=0)
+
+        print("\nResults:")
+        print(f"   - Nucleation points: {data['xlink'].shape[0]}")
+        print(f"   - Vertices: {data['Xa'].shape[0]}")
+        print(f"   - Fibers: {len(data['Fa'])}")
+
+        print("\nGenerating fiber overlay...")
+        plot_fiber_overlay(
+            image,
+            data["Xf"],
+            data["Ff"],
+            title="Non-square image — filtered fibers",
+            save_path="fiber_overlay_nonsquare.png",
+        )
+
+        print("\n✓ Non-square image test completed!")
+        return True
+
+    except Exception as e:
+        print(f"\n✗ Non-square image test failed: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
+
+
+TESTS = {
+    "basic": ("Basic test", test_fire_2d_basic),
+    "real": ("Real image test", test_fire_2d_with_real_image),
+    "nonsquare": ("Non-square image test", test_fire_2d_with_nonsquare_image),
+}
+
+
+def parse_args():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="FIRE 2D Test Suite")
+    parser.add_argument(
+        "tests",
+        nargs="*",
+        choices=list(TESTS.keys()) + ["all"],
+        default=["all"],
+        help="Which test(s) to run (default: all)",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = parse_args()
+    selected = list(TESTS.keys()) if "all" in args.tests else args.tests
+
     print("\n" + "=" * 60)
     print("FIRE 2D Test Suite")
     print("=" * 60)
 
-    # Run tests
-    test1 = test_fire_2d_basic()
-    test2 = test_fire_2d_with_real_image()
+    # Run selected tests
+    results = {}
+    for key in selected:
+        label, test_fn = TESTS[key]
+        results[key] = test_fn()
 
     # Summary
     print("\n" + "=" * 60)
     print("Test Summary")
     print("=" * 60)
-    print(f"Basic test: {'PASSED' if test1 else 'FAILED'}")
-    if test2 is not None:
-        print(f"Real image test: {'PASSED' if test2 else 'FAILED'}")
-    else:
-        print("Real image test: SKIPPED")
+    for key in selected:
+        label, _ = TESTS[key]
+        result = results[key]
+        if result is None:
+            print(f"{label}: SKIPPED")
+        else:
+            print(f"{label}: {'PASSED' if result else 'FAILED'}")
     print("=" * 60)

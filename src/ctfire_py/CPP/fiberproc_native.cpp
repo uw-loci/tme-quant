@@ -415,8 +415,14 @@ static void remove_repeat_cpp(
                     if (fi == fj) continue;
                     if (fj < 0 || fj >= (int)F.size() || F[fj].v.empty()) continue;
 
-                    const auto& vi_list = F[fi].v;
-                    const auto& vj_list = F[fj].v;
+                    // Copy (not reference) F[fi].v / F[fj].v: the F.push_back()
+                    // calls below can reallocate F's backing storage, which
+                    // would leave a reference into F[fj].v dangling between the
+                    // first and second push_back (observed as a sporadic
+                    // std::bad_alloc when the stale vj_list.size()/iterators
+                    // were read from freed memory).
+                    std::vector<int> vi_list = F[fi].v;
+                    std::vector<int> vj_list = F[fj].v;
                     std::unordered_set<int> vi_set(vi_list.begin(), vi_list.end());
 
                     int min_ij = -1, max_ij = -1;

@@ -45,22 +45,24 @@ struct FindLocalMax {
         //      outer loop = col  (slower, varies last)
         //      inner loop = row  (faster, varies first)
         //    So pixel (row, col) receives draw number (col * height + row + 1).
+        //    The draw-assignment loop order below is kept identical to MATLAB's to
+        //    preserve which draw lands on which logical pixel.
         //
-        //    The flat array passed from Python is COLUMN-MAJOR (numpy Fortran-order,
-        //    dsm.flatten(order='F')), so pixel (row, col) is at flat position:
-        //      flat_idx = col * sizey + row     (sizey = J = height)
-        //    This matches MATLAB's column-major layout exactly: both Phase 1 and
-        //    Phase 2 address the same memory position for pixel (row, col), and
-        //    both agree with MATLAB's rand() draw-to-pixel assignment.
+        //    The flat array passed from Python is ROW-MAJOR (numpy C-order,
+        //    dsm.flatten() default), so pixel (row, col) is actually at flat position:
+        //      flat_idx = row * sizez + col     (sizez = I = width, the row stride)
+        //    Phase 1 and Phase 2 must address the same memory position for pixel
+        //    (row, col), so both use this row-major formula.
         {
             std::mt19937 rng(100);
             // Outer loop over columns (MATLAB's slower/outer dimension for a
-            // [height, width] matrix stored column-major).
+            // [height, width] matrix stored column-major) — loop order preserved
+            // for RNG-draw parity even though the destination is row-major.
             for (int col = 0; col < sizez; ++col) {   // sizez = I = width
                 // Inner loop over rows (MATLAB's faster/inner dimension).
                 for (int row = 0; row < sizey; ++row) {   // sizey = J = height
                     // Row-major flat index for Python's C-contiguous dsm array.
-                    const uint64_t flat_idx = (uint64_t)col * sizey + row;
+                    const uint64_t flat_idx = (uint64_t)row * sizez + col;
                     // genrand_res53: two uint32 outputs → double in [0,1),
                     // matching MATLAB's rand() output exactly for seed 100.
                     const uint32_t a = rng() >> 5;   // top 27 bits
@@ -78,7 +80,7 @@ struct FindLocalMax {
         for (int i = 0; i < sizez; ++i) {
             const int tid = omp_get_thread_num();
             for (int j = 0; j < sizey; ++j) {
-                const uint64_t offset = (uint64_t)sizey * i + j; // column-major: col*J + row, matches Fortran-order dsm_flat
+                const uint64_t offset = (uint64_t)sizez * j + i; // row-major: row*width + col, matches C-order dsm_flat
                 if (image[offset] < dmin) continue;
 
                 bool local_max = true;
@@ -89,16 +91,16 @@ struct FindLocalMax {
                             if (ii == 0 && jj == 0) continue;
                             const int y = jj + j;
                             if (y >= 0 && y < sizey) {
-                                uint64_t neighbor_offset = (uint64_t)z * sizey + y;
+                                uint64_t neighbor_offset = (uint64_t)sizez * y + z;
                                 if (image[offset] <= image[neighbor_offset])
                                     local_max = false;
                             }
                         }
                     }
                 }
-                // +1 for 1-based indexing (matches MATLAB MEX output)
+                // Output as (row, col): i ranges over columns, j ranges over rows.
                 if (local_max)
-                    thread_buffer[tid].push_back({i, j});
+                    thread_buffer[tid].push_back({j, i});
             }
         }
 
@@ -139,8 +141,8 @@ py::array_t<int32_t> findlocmax_native(
 
         #pragma omp parallel for
         for (int i = 0; i < N; ++i) {
-            out_ptr[i * 3 + 0] = pts[i][0]; // z index (0-based)
-            out_ptr[i * 3 + 1] = pts[i][1]; // y index (0-based)
+            out_ptr[i * 3 + 0] = pts[i][0]; // row index (0-based)
+            out_ptr[i * 3 + 1] = pts[i][1]; // col index (0-based)
             out_ptr[i * 3 + 2] = 0;         // x = 0 (since sizex == 1)
         }
         return result;

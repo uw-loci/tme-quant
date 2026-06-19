@@ -187,12 +187,12 @@ struct ExtendXLink {
                         // Extend the fiber
                         std::array<int, d> p_current(p);
                         bool found_next = true;
-                        
+
                         while (found_next) {
                             found_next = false;  // Reset - will be set to true if we find next point
                             bool found_nucleation = false;
                             std::array<int, d> nucleation_pt{};
-                            
+
                             const int r_curr = ceil(image[p_current[0] * sizex + p_current[1]]);
                             const std::array<int, d> cur_min = {p_current[0] - r_curr, p_current[1] - r_curr};
                             const std::array<int, d> cur_max = {p_current[0] + r_curr, p_current[1] + r_curr};
@@ -570,8 +570,9 @@ py::tuple extend_xlink_native(int sizex, int sizey, int sizez,
 
     {
         py::gil_scoped_release release;
-        // Note: For 2D (sizex==1), pass sizey and sizez as dimensions
-        ExtendXLink<float, 2> engine(sizey, sizez, img_ptr, pts,
+        // Note: For 2D (sizex==1), the engine's 2D ctor takes (sizex=width, sizey=height);
+        // sizez holds width and sizey holds height here, so pass (sizez, sizey).
+        ExtendXLink<float, 2> engine(sizez, sizey, img_ptr, pts,
                                     thresh_LMPdist, thresh_LMP, thresh_ext, 
                                     lam_dirdecay, thresh_linkd, thresh_linka, s_fiberdir,
                                     X, R, F, Xfe, Xf, Xvall, Ff);

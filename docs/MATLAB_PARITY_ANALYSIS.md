@@ -47,6 +47,32 @@ The RNG fix for `findlocmax` was the largest single improvement, taking nucleati
 
 `fiberproc` (trimxfv → remove_repeat → fiberlink × 5 → fiberlinkgap → fiberremove) is a direct MATLAB port in C++ and is correct. It simply operates on a slightly different input from `extend_xlink`.
 
+### Non-square images: two indexing bugs (fixed)
+
+All fixtures in this analysis (`real1.tif`, `syn1_20fibers.png`, `syn2_35fibers.png`) are
+512×512 squares. Two C++ indexing bugs were invisible on square inputs and only surfaced
+when testing a non-square image (391×487):
+
+- `findlocmax_native.cpp` addressed its flat pixel buffer column-major (Fortran-order),
+  while Python actually supplies it row-major (C-order) via `dsm.flatten()`. A
+  column-major read of row-major data is exactly a transpose, which a square canvas cannot
+  distinguish from correct output — for height≠width it scrambles pixel correspondence.
+  Fixed to row-major addressing throughout (`flat_idx = row*width + col`).
+- `extend_xlink_native.cpp`'s single 2D-engine call site passed `(height, width)` into the
+  engine's `(sizex, sizey)` constructor slots — the two dimensions were swapped. Fixed to
+  pass `(width, height)`, matching the engine's own bounds-check/stride convention.
+
+A separate `fiberproc_native.cpp` bug was also found and fixed during this testing: an
+intermittent `std::bad_alloc` in `remove_repeat_cpp`, caused by holding references into a
+`std::vector<Fiber>` across a `push_back()` that could reallocate it. Fixed by copying
+instead of referencing. This is unrelated to the row/col bugs above but affects the same
+pipeline stage that resolves overlapping fiber segments before `fiberlink` merges them.
+
+None of the metrics in the "Summary" table above are affected — those fixtures are square,
+so this fix is a no-op transpose-cancellation for them (output is now computed directly
+instead of via two canceling transposes, so exact byte-for-byte coordinates can differ
+slightly, but fiber count / overlap / EMD are unchanged within existing tolerances).
+
 ### `check_danglers`: already a no-op in both
 
 MATLAB's `check_danglers.m` contains a logic bug:
