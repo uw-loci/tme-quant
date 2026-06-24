@@ -340,11 +340,12 @@ def test_findlocmax_validate_struct(test_name, test_case):
     assert xlink.dtype in [np.int32, np.int64], "Output should be integer type"
     assert len(xlink) > 0, "Should detect at least one nucleation point"
     
-    # Check coordinate ranges (1-based indexing from C++)
-    # For 2D images (K=1), z coordinates represent row indices (1 to J)
-    assert np.all(xlink[:, 0] >= 1) and np.all(xlink[:, 0] <= J), "Z coordinates out of range"
-    assert np.all(xlink[:, 1] >= 1) and np.all(xlink[:, 1] <= I), "Y coordinates out of range"
-    assert np.all(xlink[:, 2] >= 1) and np.all(xlink[:, 2] <= K), "X coordinates out of range"
+    # Check coordinate ranges (0-based indexing from C++)
+    # For 2D images (K=1), column 0 = row (0..J-1), column 1 = col (0..I-1),
+    # column 2 = x depth which is always 0 since K==1.
+    assert np.all(xlink[:, 0] >= 0) and np.all(xlink[:, 0] < J), "Z coordinates out of range"
+    assert np.all(xlink[:, 1] >= 0) and np.all(xlink[:, 1] < I), "Y coordinates out of range"
+    assert np.all(xlink[:, 2] >= 0) and np.all(xlink[:, 2] < K), "X coordinates out of range"
 
 
 @pytest.mark.skipif(not CPP_AVAILABLE or not SCIPY_AVAILABLE, 

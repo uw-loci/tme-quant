@@ -851,7 +851,7 @@ def test_implementation_status_documented():
     
     assert doc_path.exists(), "MATLAB_PARITY_ANALYSIS.md documentation not found"
     
-    with open(doc_path, "r") as f:
+    with open(doc_path, "r", encoding="utf-8") as f:
         doc_content = f.read()
     
     # Check that key differences are documented

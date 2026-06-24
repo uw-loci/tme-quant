@@ -62,7 +62,7 @@ def test_pipeline_end_to_end(test_case, params):
     4. Produce valid output structures
     """
     # Load MATLAB reference with distance map
-    import h5py
+    h5py = pytest.importorskip("h5py")
     mat_path = Path(__file__).parent / "test_results" / "cpp_test_files" / test_case
     if not mat_path.exists():
         pytest.skip(f"MATLAB reference not found: {mat_path}")
