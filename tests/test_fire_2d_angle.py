@@ -863,7 +863,7 @@ class TestSoftIoU:
         if mat_totL > 0 and py_totL > 0:
             # ±10% tolerance (matches ct_fire): the ~9% Python/MATLAB length drift
             # comes from check_danglers / short-fiber handling differences documented
-            # in docs/MATLAB_PARITY_ANALYSIS.md, not from spatial divergence (IoU passes).
+            # in doc/MATLAB_PARITY_ANALYSIS.md, not from spatial divergence (IoU passes).
             assert 0.90 * mat_totL <= py_totL <= 1.10 * mat_totL, (
                 f"total length {py_totL:.1f} not within 10% of MATLAB {mat_totL:.1f}"
             )
@@ -932,7 +932,7 @@ def test_implementation_status_documented():
     
     This reminds developers about known differences between Python and MATLAB.
     """
-    doc_path = Path(__file__).parent.parent / "docs" / "MATLAB_PARITY_ANALYSIS.md"
+    doc_path = Path(__file__).parent.parent / "doc" / "MATLAB_PARITY_ANALYSIS.md"
     
     assert doc_path.exists(), "MATLAB_PARITY_ANALYSIS.md documentation not found"
     
