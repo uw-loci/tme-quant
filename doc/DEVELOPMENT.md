@@ -78,3 +78,4 @@ commits are logged too. Edit or expand any entry by hand when a change deserves 
 than one line.
 
 - 2026-07-06 fa6deb3 fix: correct row/col indexing and use-after-free in FIRE 2D C++ backend
+- 2026-07-06 b8b4dc9 fix: use matplotlib.colormaps API instead of deprecated get_cmap
