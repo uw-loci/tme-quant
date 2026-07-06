@@ -73,6 +73,11 @@ so this fix is a no-op transpose-cancellation for them (output is now computed d
 instead of via two canceling transposes, so exact byte-for-byte coordinates can differ
 slightly, but fiber count / overlap / EMD are unchanged within existing tolerances).
 
+**Regression coverage (added):** `test_fire_2d_handles_non_square_image` and
+`test_ct_fire_handles_non_square_image` now exercise the 391×487 crop `real1_rect.tif`
+with the square-`real1` parameters and assert every fiber vertex stays within `[0,H)×[0,W)`,
+so a future reintroduction of either indexing bug fails a test instead of going unnoticed.
+
 ### `check_danglers`: already a no-op in both
 
 MATLAB's `check_danglers.m` contains a logic bug:
