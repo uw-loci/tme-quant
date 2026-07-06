@@ -179,6 +179,9 @@ lastPATH_CTF.mat
 src/**/*.png
 src/**/*.tif
 src/**/*.tiff
+
+# generated overlay PNGs under test_results (fixtures stay tracked; images do not)
+tests/test_results/**/*.png
 src/**/*.jpg
 src/**/*.jpeg
 
