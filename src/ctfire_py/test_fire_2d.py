@@ -38,7 +38,7 @@ def plot_fiber_overlay(im, X, F, title="Fiber Overlay", save_path=None):
 
     n_fibers = len(F)
     if n_fibers > 0:
-        cmap = plt.get_cmap("hsv", n_fibers)
+        cmap = matplotlib.colormaps["hsv"].resampled(n_fibers)
         colors = [cmap(i)[:3] for i in range(n_fibers)]
         X_arr = np.asarray(X)
 
