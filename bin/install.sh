@@ -220,6 +220,14 @@ try:
     print('  ✓ napari_curvealign')
 except ImportError as e:
     errors.append(f'napari_curvealign: {e}')
+try:
+    import ctfire_py
+    print('  ✓ ctfire_py')
+    print(f'    HAS_FIBER_BACKEND = {ctfire_py.HAS_FIBER_BACKEND}')
+    if not ctfire_py.HAS_FIBER_BACKEND:
+        errors.append('ctfire_py: HAS_FIBER_BACKEND is False (C++ fiber_backend not built; check the C++/OpenMP toolchain)')
+except ImportError as e:
+    errors.append(f'ctfire_py: {e}')
 if errors:
     print('\\n✗ Validation failed:')
     for e in errors:
