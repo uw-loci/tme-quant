@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# post-commit — log important commits to doc/DEVELOPMENT.md.
+#
+# Appends a dated one-line entry for feat/fix/perf/refactor commits to the
+# "## Development log" section, then STAGES the file. It never commits, so
+# there is no history rewrite and no recursion; the log line rides into your
+# next commit. Works for both agent-made and manual terminal commits.
+#
+# Enable (per clone):  git config core.hooksPath .githooks
+
+repo=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+notes="$repo/doc/DEVELOPMENT.md"
+[ -f "$notes" ] || exit 0
+
+subject=$(git log -1 --format=%s 2>/dev/null) || exit 0
+
+# Only substantive change types.
+printf '%s\n' "$subject" | grep -Eq '^(feat|fix|perf|refactor)(\([^)]+\))?!?:' || exit 0
+
+sha=$(git rev-parse --short HEAD 2>/dev/null) || exit 0
+
+# Idempotent: never log the same commit twice.
+grep -qF " $sha " "$notes" 2>/dev/null && exit 0
+
+header="## Development log"
+if ! grep -qF "$header" "$notes" 2>/dev/null; then
+    printf '\n%s\n\n_Auto-appended by .githooks/post-commit for feat/fix/perf/refactor commits._\n\n' "$header" >> "$notes"
+fi
+
+# Guarantee the file ends in a newline so the entry starts on its own line.
+[ -n "$(tail -c1 "$notes")" ] && printf '\n' >> "$notes"
+
+printf -- '- %s %s %s\n' "$(date +%Y-%m-%d)" "$sha" "$subject" >> "$notes"
+git add -- "$notes" 2>/dev/null || true
