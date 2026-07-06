@@ -198,4 +198,5 @@ tests/test_images/CA_Out/
 src/ctfire_py/ctFIREout/
 
 # local-only dev notes (kept on disk, not tracked in GitHub)
-CLAUDE_CTFIRE.md  
+CLAUDE_CTFIRE.md
+.claude/session-summary.md
