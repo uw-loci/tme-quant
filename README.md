@@ -45,6 +45,11 @@ Windows options:
 
 See [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) for plugin setup and troubleshooting. Running tests:
 
+Development notes policy:
+- For `feat` / `fix` / `perf` / `refactor` changes, update `doc/DEVELOPMENT.md` while your draft PR (or standard PR) is open.
+- Keep the note human-reviewed and rewrite it for clarity before merge.
+- Note updates are not committed automatically.
+
 - Headless (no GUI): set Qt to offscreen
   - macOS/Linux: `export QT_QPA_PLATFORM=offscreen`
   - Windows/PowerShell: `$env:QT_QPA_PLATFORM = 'offscreen'`

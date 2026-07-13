@@ -64,18 +64,16 @@ rather than fail, hiding regressions.
 
 ## Development log
 
-Important changes (`feat` / `fix` / `perf` / `refactor` commits) are appended here
-automatically by [`.githooks/post-commit`](../.githooks/post-commit). Enable the hook
-once per clone:
+Important changes (`feat` / `fix` / `perf` / `refactor`) should be summarized here
+while a draft pull request (or standard pull request) is open.
 
-```bash
-git config core.hooksPath .githooks
-```
+Workflow:
+- Add or refine entries during PR preparation.
+- Keep entries human-reviewed and editable until the PR is approved.
+- Do not auto-commit development-note updates.
 
-The hook appends a dated one-liner and **stages** `doc/DEVELOPMENT.md` — it never
-commits on its own, so the new line rides into your next commit. Manual terminal
-commits are logged too. Edit or expand any entry by hand when a change deserves more
-than one line.
+Use concise entries that capture what changed and why it matters. Reword entries during
+review so this section stays useful for future troubleshooting.
 
 - 2026-07-06 fa6deb3 fix: correct row/col indexing and use-after-free in FIRE 2D C++ backend
 - 2026-07-06 b8b4dc9 fix: use matplotlib.colormaps API instead of deprecated get_cmap
