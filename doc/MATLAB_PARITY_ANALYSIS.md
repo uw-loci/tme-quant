@@ -96,6 +96,15 @@ end
 
 The inner `if length(fi)==1` is unreachable when the outer guard `length(V(vi).f)>1` is satisfied. Python's `faithful_matlab_danglers=True` mode matches this exactly (trimxfv only).
 
+Python **does** ship a *corrected* `check_danglers` (commit `74c35cd`,
+`src/ctfire_py/fiber_processing/check_danglers.py`) that implements the intended
+dangler-removal algorithm. It is currently **gated off**: `fire_2d_angle.py` forces
+`faithful_matlab=True` at the call site ([line 420](../src/ctfire_py/fire_2d_angle.py#L420)),
+overriding the `faithful_matlab_danglers` param, so at runtime both pipelines remain no-ops
+(only `trimxfv` runs). Consequently `check_danglers` does **not** contribute to the ~9%
+total-length shortfall vs. MATLAB — that difference comes from the separate short-fiber
+("shorties") handling, not from dangler removal.
+
 ---
 
 ## Why `extend_xlink` Cannot Be Made Exact

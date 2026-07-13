@@ -80,7 +80,7 @@ the napari plugin or the CurveAlign / curvelet ports — those already live in `
 
 - 2026-03-10 67ebfa5 feat: port CTrec_1.m → ct_reconstruction.py (curvelet preprocessing for FIRE)
 - 2026-03-10 8fc74e4 feat: begin fire_2d_angle — FIRE 2D fiber-extraction port (through smoothing)
-- 2026-04-07 74c35cd feat: implement check_danglers for fire_2d_angle
+- 2026-04-07 74c35cd feat: add a corrected check_danglers that fixes a dead-code bug in MATLAB's check_danglers.m (kept gated off by default for MATLAB-faithful parity)
 - 2026-04-26 12cdbd5 feat: port core FIRE routines to the C++ fiber_backend (local maxima, distance transform, fiberlinkgap, link extension)
 - 2026-04-28 47ed821 refactor: split fiber analysis and angle modules
 - 2026-05-13 f1191cf fix: settle on 0-based vertex indexing across trimxfv/analysis/processing (MATLAB parity)
