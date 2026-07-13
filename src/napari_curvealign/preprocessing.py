@@ -66,6 +66,35 @@ class PreprocessingOptions:
         apply_gaussian: bool = False,
         gaussian_sigma: float = 1.0,
     ):
+        """
+        Initialize preprocessing options.
+
+        Parameters
+        ----------
+        apply_tubeness : bool, default False
+            Whether to apply tubeness-style fiber enhancement.
+        tubeness_sigma : float, default 1.0
+            Sigma value used by the tubeness filter.
+        apply_frangi : bool, default False
+            Whether to apply the Frangi vesselness filter.
+        frangi_sigma_range : tuple of float, default (1.0, 10.0)
+            Minimum and maximum sigma values used by the Frangi filter.
+        frangi_beta : float, default 0.5
+            Frangi beta correction parameter.
+        frangi_gamma : float, default 15.0
+            Frangi gamma correction parameter.
+        apply_threshold : bool, default False
+            Whether to threshold the image after enhancement.
+        threshold_method : ThresholdMethod, default ThresholdMethod.OTSU
+            Thresholding algorithm to use when thresholding is enabled.
+        threshold_value : float, optional
+            Manual threshold value used when ``threshold_method`` is
+            ``ThresholdMethod.MANUAL``.
+        apply_gaussian : bool, default False
+            Whether to smooth the image before enhancement.
+        gaussian_sigma : float, default 1.0
+            Sigma value used for Gaussian smoothing.
+        """
         self.apply_tubeness = apply_tubeness
         self.tubeness_sigma = tubeness_sigma
         self.apply_frangi = apply_frangi
@@ -316,4 +345,3 @@ def preprocess_image(
         result = (result * 255).astype(np.uint8)
     
     return result
-

@@ -422,9 +422,15 @@ class FijiBridge:
 _fiji_bridge = None
 
 def get_fiji_bridge() -> FijiBridge:
-    """Get or create global Fiji bridge instance."""
+    """
+    Get or create the global Fiji bridge instance.
+
+    Returns
+    -------
+    FijiBridge
+        Shared bridge used for ImageJ/Fiji integration.
+    """
     global _fiji_bridge
     if _fiji_bridge is None:
         _fiji_bridge = FijiBridge()
     return _fiji_bridge
-

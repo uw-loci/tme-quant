@@ -127,10 +127,22 @@ def bin_relative_angles(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Bin relative angles for histogram plotting.
-    
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        DataFrame containing a ``relative_angle`` column in degrees.
+    bins : int, default 9
+        Number of histogram bins spanning 0 to 90 degrees.
+
     Returns
     -------
-    counts, bin_edges
+    counts : numpy.ndarray
+        Histogram counts for each angle bin. Returns an empty array when the
+        required column is missing.
+    bin_edges : numpy.ndarray
+        Histogram bin edges. Returns an empty array when the required column is
+        missing.
     """
     if 'relative_angle' not in df.columns:
         return np.array([]), np.array([])

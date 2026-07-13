@@ -165,6 +165,21 @@ class ROI:
 
     @staticmethod
     def _ensure_grayscale(image: np.ndarray) -> np.ndarray:
+        """
+        Convert an ROI source image to grayscale when needed.
+
+        Parameters
+        ----------
+        image : numpy.ndarray
+            Input 2D grayscale, RGB, RGBA, or stacked image.
+
+        Returns
+        -------
+        numpy.ndarray
+            Two-dimensional grayscale image. RGB/RGBA images are converted with
+            ``skimage.color.rgb2gray`` when available, otherwise by channel
+            averaging.
+        """
         if image.ndim == 2:
             return image
         if image.ndim >= 3:
@@ -572,17 +587,50 @@ class ROIManager:
         return combined_roi
     
     def get_roi(self, roi_id: int) -> Optional[ROI]:
-        """Get ROI by ID."""
+        """
+        Return an ROI by identifier.
+
+        Parameters
+        ----------
+        roi_id : int
+            Identifier assigned to the ROI.
+
+        Returns
+        -------
+        ROI or None
+            Matching ROI when present, otherwise ``None``.
+        """
         for roi in self.rois:
             if roi.id == roi_id:
                 return roi
         return None
 
     def get_all_roi_ids(self) -> List[int]:
+        """
+        Return identifiers for all registered ROIs.
+
+        Returns
+        -------
+        list of int
+            ROI identifiers in manager order.
+        """
         return [roi.id for roi in self.rois]
 
     def get_roi_summary(self, roi_id: int) -> Dict:
-        """Return metadata summary for UI."""
+        """
+        Return display metadata for a single ROI.
+
+        Parameters
+        ----------
+        roi_id : int
+            Identifier of the ROI to summarize.
+
+        Returns
+        -------
+        dict
+            Summary fields used by the ROI details UI. Returns an empty
+            dictionary when the ROI is not found.
+        """
         roi = self.get_roi(roi_id)
         if roi is None:
             return {}
@@ -1113,6 +1161,30 @@ class ROIManager:
         image: np.ndarray,
         histogram_bins: int = 32
     ) -> Optional[Dict[str, Any]]:
+        """
+        Measure morphology and intensity statistics for an ROI.
+
+        Parameters
+        ----------
+        roi_id : int
+            Identifier of the ROI to measure.
+        image : numpy.ndarray
+            Source image used for intensity measurements.
+        histogram_bins : int, default 32
+            Number of bins for the normalized intensity histogram.
+
+        Returns
+        -------
+        dict or None
+            ROI metrics including area, perimeter, centroid, bounding box,
+            intensity summaries, and histogram data. Returns ``None`` when the
+            ROI is missing or has an empty mask.
+
+        Raises
+        ------
+        ImportError
+            If scikit-image is unavailable.
+        """
         if not HAS_SKIMAGE:
             raise ImportError("scikit-image is required for ROI measurements")
         roi = self.get_roi(roi_id)
@@ -1248,6 +1320,28 @@ class ROIManager:
         roi_ids: Sequence[int],
         intensity_image: Optional[np.ndarray] = None,
     ) -> List[Dict[str, Any]]:
+        """
+        Compute tabular measurements for multiple ROIs.
+
+        Parameters
+        ----------
+        roi_ids : sequence of int
+            ROI identifiers to measure.
+        intensity_image : numpy.ndarray, optional
+            Image used for intensity statistics. RGB/RGBA images are converted
+            to grayscale before measurement.
+
+        Returns
+        -------
+        list of dict
+            One metrics dictionary per measurable ROI, containing morphology
+            fields and optional intensity fields.
+
+        Raises
+        ------
+        ValueError
+            If the manager does not have a current image shape.
+        """
         if self.current_image_shape is None:
             raise ValueError("Image shape is not set; call set_image_shape first")
 
@@ -1307,6 +1401,22 @@ class ROIManager:
         roi_ids: Optional[Sequence[int]] = None,
         intensity_image: Optional[np.ndarray] = None,
     ) -> pd.DataFrame:
+        """
+        Return ROI measurements as a DataFrame.
+
+        Parameters
+        ----------
+        roi_ids : sequence of int, optional
+            ROI identifiers to include. When omitted, all ROIs are measured.
+        intensity_image : numpy.ndarray, optional
+            Image used for intensity statistics.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Tabular ROI metrics. Returns an empty DataFrame when no metrics are
+            available.
+        """
         if roi_ids is None:
             roi_ids = self.get_all_roi_ids()
         data = self.compute_roi_metrics(roi_ids, intensity_image=intensity_image)
@@ -1346,6 +1456,20 @@ class ROIManager:
         return pd.DataFrame(rows)
 
     def get_metrics(self, roi_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Return cached measurement metrics for an ROI.
+
+        Parameters
+        ----------
+        roi_id : int
+            Identifier of the ROI.
+
+        Returns
+        -------
+        dict or None
+            Cached metrics dictionary, or ``None`` when no metrics have been
+            computed.
+        """
         roi = self.get_roi(roi_id)
         if roi is None:
             return None
@@ -2087,6 +2211,20 @@ class ROIManager:
         loaded_rois: List[ROI] = []
 
         def _parse_polygon_coords(coords_payload: Sequence) -> Optional[np.ndarray]:
+            """
+            Parse QuPath polygon coordinate payloads into an array.
+
+            Parameters
+            ----------
+            coords_payload : sequence
+                Coordinate payload from a GeoJSON polygon or ring.
+
+            Returns
+            -------
+            numpy.ndarray or None
+                ``N x 2`` coordinate array with duplicate closing point removed,
+                or ``None`` when parsing fails.
+            """
             if not coords_payload:
                 return None
             # coords_payload can be [[x,y], ...] or [[[x,y], ...], ...]
@@ -2463,4 +2601,3 @@ class ROIManager:
         x1, x2 = np.where(cols)[0][[0, -1]]
         
         return (y1, x1, y2 + 1, x2 + 1)
-
