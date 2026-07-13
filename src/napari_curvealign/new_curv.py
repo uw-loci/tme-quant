@@ -18,7 +18,21 @@ except ImportError:
     print("Warning: pycurvelets not available. Using mock analysis.")
 
 def _convert_features_to_dataframe(features: dict, stats: dict) -> pd.DataFrame:
-    """Convert CurveAlign features and stats to a DataFrame for display."""
+    """
+    Convert CurveAlign features and stats to a display table.
+
+    Parameters
+    ----------
+    features : dict
+        Mapping of feature names to arrays produced by CurveAlign analysis.
+    stats : dict
+        Mapping of summary statistic names to scalar values.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Two-column table with ``Feature`` and ``Value`` columns.
+    """
     measurements = []
     
     # Add summary statistics
@@ -54,6 +68,21 @@ def _convert_features_to_dataframe_full(
     - Alignment features (nearest neighbors: 2, 4, 8, 16; box sizes: 32, 64, 128)
     - Boundary features (if available)
     - Circular statistics
+
+    Parameters
+    ----------
+    features : dict
+        Mapping of feature names to arrays produced by CurveAlign analysis.
+    stats : dict
+        Mapping of summary statistic names to scalar values.
+    curvelets : list
+        Curvelet-like objects with ``angle_deg`` and optional ``weight``
+        attributes.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table of scalar measurements and feature distribution summaries.
     """
     measurements = []
     
@@ -212,7 +241,38 @@ def run_analysis(
     advanced_params: dict,  # Added advanced parameters
     analysis_mode: str = "curvelets"  # "curvelets", "ctfire", or "both"
 ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
-    """Main analysis function that returns two images and measurements"""
+    """
+    Run CurveAlign-style fiber analysis for an image.
+
+    Parameters
+    ----------
+    image_path : str
+        Path to the image file being analyzed.
+    image_name : str
+        Display name used in output labels and optional histogram files.
+    boundary_type : Enum
+        Boundary mode selected by the widget.
+    curve_threshold : float
+        Curvelet retention threshold passed to pycurvelets when available.
+    distance_boundary : int
+        Distance from boundary used by boundary-aware analysis options.
+    output_options : dict
+        Mapping of output option names to enabled flags.
+    advanced_params : dict
+        Additional numeric parameters used by the fallback analysis path.
+    analysis_mode : str, default "curvelets"
+        Analysis mode name. Supported values are intended to include
+        ``"curvelets"``, ``"ctfire"``, and ``"both"``.
+
+    Returns
+    -------
+    overlay_img : numpy.ndarray
+        RGB overlay image showing detected fiber positions or fallback overlay.
+    heatmap_img : numpy.ndarray
+        Angle map or fallback heatmap image.
+    measurements : pandas.DataFrame
+        Measurement table containing fiber and image summary statistics.
+    """
     print("\nRunning analysis with parameters:")
     print(f"Image: {image_name} ({image_path})")
     print(f"Boundary type: {boundary_type.value}")

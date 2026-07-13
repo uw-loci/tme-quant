@@ -74,6 +74,14 @@ class LogTab(Enum):
 class AdvancedParametersDialog(QDialog):
     """Advanced parameters dialog with getter method"""
     def __init__(self, parent=None):
+        """
+        Initialize the advanced parameter dialog.
+
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent Qt widget.
+        """
         super().__init__(parent)
         self.setWindowTitle("Advanced Parameters")
         
@@ -118,6 +126,17 @@ class AdvancedParametersDialog(QDialog):
 class ROIMetricsDialog(QDialog):
     """Dialog presenting ROI measurement statistics and histogram."""
     def __init__(self, metrics: Dict[str, Any], parent: Optional[QWidget] = None):
+        """
+        Initialize a metrics dialog for one ROI.
+
+        Parameters
+        ----------
+        metrics : dict
+            ROI measurement dictionary containing scalar values and optional
+            histogram data.
+        parent : QWidget, optional
+            Parent Qt widget.
+        """
         super().__init__(parent)
         self.setWindowTitle(f"ROI {metrics.get('roi_id')} Measurements")
         self.metrics = metrics
@@ -165,6 +184,14 @@ class ROIMetricsDialog(QDialog):
         layout.addWidget(button_box)
 
     def _export_metrics(self):
+        """
+        Export displayed ROI metrics to a CSV file.
+
+        Returns
+        -------
+        None
+            Writes the selected CSV file when the user chooses a path.
+        """
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Export ROI Metrics",
@@ -188,17 +215,69 @@ class ROIMetricsDialog(QDialog):
 class ResultsTableModel(QAbstractTableModel):
     """Table model for displaying measurement results"""
     def __init__(self, data, parent=None):
+        """
+        Initialize a table model from tabular data.
+
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            DataFrame displayed in the Qt table view.
+        parent : QObject, optional
+            Parent Qt object.
+        """
         super().__init__(parent)
         self._data = data
         self._headers = list(data.columns) if data is not None else []
     
     def rowCount(self, parent=None):
+        """
+        Return the number of table rows.
+
+        Parameters
+        ----------
+        parent : QModelIndex, optional
+            Parent index supplied by Qt.
+
+        Returns
+        -------
+        int
+            Number of rows in the backing DataFrame.
+        """
         return len(self._data)
     
     def columnCount(self, parent=None):
+        """
+        Return the number of table columns.
+
+        Parameters
+        ----------
+        parent : QModelIndex, optional
+            Parent index supplied by Qt.
+
+        Returns
+        -------
+        int
+            Number of columns in the backing DataFrame.
+        """
         return len(self._headers)
     
     def data(self, index, role=Qt.DisplayRole):
+        """
+        Return table cell data for a Qt display role.
+
+        Parameters
+        ----------
+        index : QModelIndex
+            Table index requested by Qt.
+        role : int, default Qt.DisplayRole
+            Qt data role.
+
+        Returns
+        -------
+        str or QColor or None
+            String cell value, alternating-row background color, or ``None`` for
+            unsupported roles.
+        """
         if not index.isValid():
             return None
         
@@ -214,6 +293,24 @@ class ResultsTableModel(QAbstractTableModel):
         return None
     
     def headerData(self, section, orientation, role=Qt.DisplayRole):
+        """
+        Return table header labels for Qt.
+
+        Parameters
+        ----------
+        section : int
+            Row or column index.
+        orientation : Qt.Orientation
+            Header orientation requested by Qt.
+        role : int, default Qt.DisplayRole
+            Qt data role.
+
+        Returns
+        -------
+        str or None
+            Column name, one-based row number, or ``None`` for unsupported
+            roles.
+        """
         if role != Qt.DisplayRole:
             return None
             
@@ -225,6 +322,16 @@ class ResultsTableModel(QAbstractTableModel):
 class ResultsDialog(QDialog):
     """Dialog to display measurement results in a table"""
     def __init__(self, data, parent=None):
+        """
+        Initialize a dialog for CurveAlign analysis results.
+
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            Analysis results displayed in the table.
+        parent : QWidget, optional
+            Parent Qt widget.
+        """
         super().__init__(parent)
         self.setWindowTitle("Analysis Results")
         self.setMinimumSize(600, 400)
@@ -255,6 +362,16 @@ class MetricsDialog(QDialog):
     """Dialog for displaying ROI measurements with export support."""
 
     def __init__(self, data: pd.DataFrame, parent=None):
+        """
+        Initialize a dialog for ROI measurement tables.
+
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            ROI measurement table.
+        parent : QWidget, optional
+            Parent Qt widget.
+        """
         super().__init__(parent)
         self.setWindowTitle("ROI Measurements")
         self.df = data
@@ -275,6 +392,14 @@ class MetricsDialog(QDialog):
         self.setLayout(layout)
 
     def _export_csv(self):
+        """
+        Export the ROI measurements table to CSV.
+
+        Returns
+        -------
+        None
+            Writes a CSV file when the user selects a path.
+        """
         path, _ = QFileDialog.getSaveFileName(self, "Export Measurements", "", "CSV Files (*.csv)")
         if path:
             self.df.to_csv(path, index=False)
@@ -282,6 +407,16 @@ class MetricsDialog(QDialog):
 class CurveAlignWidget(QWidget):
     """Main CurveAlign widget implemented with pure Qt"""
     def __init__(self, viewer: "napari.viewer.Viewer" = None, parent=None):
+        """
+        Initialize the CurveAlign dock widget.
+
+        Parameters
+        ----------
+        viewer : napari.viewer.Viewer, optional
+            Napari viewer instance controlled by the widget.
+        parent : QWidget, optional
+            Parent Qt widget.
+        """
         super().__init__(parent)
         
         # Apply style to center text in all buttons
@@ -781,6 +916,21 @@ class CurveAlignWidget(QWidget):
         original_world_to_data = layer.world_to_data
 
         def clamped_world_to_data(*args, **kwargs):
+            """
+            Convert world coordinates to data coordinates and clamp to bounds.
+
+            Parameters
+            ----------
+            *args
+                Positional arguments passed to the original napari method.
+            **kwargs
+                Keyword arguments passed to the original napari method.
+
+            Returns
+            -------
+            tuple or numpy.ndarray
+                Data coordinates clipped to the active image extent.
+            """
             coords = original_world_to_data(*args, **kwargs)
             return self._clip_coords_to_active_image_bounds(coords)
 
@@ -895,6 +1045,19 @@ class CurveAlignWidget(QWidget):
 
         # Define the callback here to have access to self methods
         def on_data_change(event):
+            """
+            Synchronize ROI state after shapes layer data changes.
+
+            Parameters
+            ----------
+            event : Event
+                Napari layer event emitted after shape data changes.
+
+            Returns
+            -------
+            None
+                Updates ROI manager state and UI lists in place.
+            """
             # Prevent recursion
             if hasattr(self, '_syncing_shapes') and self._syncing_shapes:
                 return
@@ -966,6 +1129,21 @@ class CurveAlignWidget(QWidget):
             return
 
         def guard_last_cursor_position(layer, event):
+            """
+            Preserve cursor position while drawing freehand shapes.
+
+            Parameters
+            ----------
+            layer : napari.layers.Shapes
+                Shapes layer receiving the mouse move event.
+            event : Event
+                Mouse move event containing the cursor position.
+
+            Returns
+            -------
+            None
+                Updates the layer's private cursor state when needed.
+            """
             try:
                 mode_value = self._normalize_layer_mode(getattr(layer, "mode", ""))
                 if mode_value in {"add_path", "add_polygon_lasso"} and layer._last_cursor_position is None:
@@ -1816,6 +1994,15 @@ class CurveAlignWidget(QWidget):
         self.pull_fiji_btn.clicked.connect(self._pull_rois_from_fiji)
         
     def _build_annotation_group(self) -> QGroupBox:
+        """
+        Build controls for annotation-driven region analysis.
+
+        Returns
+        -------
+        QGroupBox
+            Group box containing annotation conversion, detection, and TACS
+            controls.
+        """
         group = QGroupBox("Region Analysis (Advanced)")
         group.setToolTip("Advanced feature: Use drawn ROIs as boundary regions (e.g., tumor areas) to detect objects within them")
         layout = QVBoxLayout()
@@ -1906,6 +2093,14 @@ class CurveAlignWidget(QWidget):
         return group
 
     def _build_roi_details_group(self) -> QGroupBox:
+        """
+        Build the selected-ROI details panel.
+
+        Returns
+        -------
+        QGroupBox
+            Group box containing labels for ROI metadata and analysis status.
+        """
         group = QGroupBox("ROI Details")
         layout = QVBoxLayout()
         self.roi_detail_labels = {}
@@ -1920,6 +2115,14 @@ class CurveAlignWidget(QWidget):
         return group
 
     def _build_object_group(self) -> QGroupBox:
+        """
+        Build controls for filtering and selecting detected objects.
+
+        Returns
+        -------
+        QGroupBox
+            Group box containing object filter controls and object list.
+        """
         group = QGroupBox("Objects")
         layout = QVBoxLayout()
         
@@ -1949,6 +2152,15 @@ class CurveAlignWidget(QWidget):
         return group
 
     def _on_roi_list_selection(self):
+        """
+        Handle ROI list selection changes.
+
+        Returns
+        -------
+        None
+            Updates details, highlights, post-processing plots, and region label
+            state.
+        """
         selected = self.roi_list.selectedItems()
         if not selected:
             self._update_roi_details(None)
@@ -1970,6 +2182,19 @@ class CurveAlignWidget(QWidget):
         self._sync_region_label()
 
     def _roi_list_context_menu(self, pos):
+        """
+        Show context actions for the ROI list.
+
+        Parameters
+        ----------
+        pos : QPoint
+            Position of the context-menu request in list-widget coordinates.
+
+        Returns
+        -------
+        None
+            Performs the selected ROI action when one is chosen.
+        """
         menu = QMenu(self.roi_list)
         rename_action = menu.addAction("Rename ROI")
         delete_action = menu.addAction("Delete ROI")
@@ -1995,6 +2220,19 @@ class CurveAlignWidget(QWidget):
             self._analyze_roi_by_id(roi_id, ctfire=True)
 
     def _rename_roi_dialog(self, roi_id: int):
+        """
+        Prompt for and apply a new ROI name.
+
+        Parameters
+        ----------
+        roi_id : int
+            Identifier of the ROI to rename.
+
+        Returns
+        -------
+        None
+            Updates the ROI list when a new name is accepted.
+        """
         roi = self.roi_manager.get_roi(roi_id)
         if roi is None:
             return
@@ -2004,6 +2242,19 @@ class CurveAlignWidget(QWidget):
             self._update_roi_list()
 
     def _update_roi_details(self, roi_id: Optional[int]):
+        """
+        Refresh the ROI details panel.
+
+        Parameters
+        ----------
+        roi_id : int, optional
+            ROI identifier to display. When ``None``, the panel is cleared.
+
+        Returns
+        -------
+        None
+            Mutates the detail labels in place.
+        """
         if roi_id is None:
             for label in self.roi_detail_labels.values():
                 label.setText("-")
@@ -2233,6 +2484,19 @@ class CurveAlignWidget(QWidget):
         self._sync_post_panel(update_plots=self._post_tab_active())
     
     def _roi_id_from_item(self, item: QListWidgetItem) -> Optional[int]:
+        """
+        Extract an ROI identifier from a list widget item.
+
+        Parameters
+        ----------
+        item : QListWidgetItem
+            ROI list item.
+
+        Returns
+        -------
+        int or None
+            ROI identifier stored in item data or parsed from text.
+        """
         roi_id = item.data(Qt.UserRole)
         if roi_id is None:
             try:
@@ -2316,6 +2580,19 @@ class CurveAlignWidget(QWidget):
             # This is a workaround for napari's sticky "add_polygon" mode
             @layer.bind_key('Escape', overwrite=True)
             def finish_drawing(layer):
+                """
+                Finish polygon drawing when Escape is pressed.
+
+                Parameters
+                ----------
+                layer : napari.layers.Shapes
+                    Shapes layer currently in drawing mode.
+
+                Returns
+                -------
+                None
+                    Commits the current polygon and restores drawing behavior.
+                """
                 # Finishing the shape will trigger the data event which adds the ROI
                 # We then manually toggle mode to 'select' and back to 'add_polygon' if desired
                 # But our auto-sync logic generally handles the "add to list" part.
@@ -2764,6 +3041,21 @@ class CurveAlignWidget(QWidget):
         self._analyze_roi_by_id(roi_id, ctfire=ctfire)
 
     def _analyze_roi_by_id(self, roi_id: int, ctfire: bool = False):
+        """
+        Run analysis for a specific ROI.
+
+        Parameters
+        ----------
+        roi_id : int
+            Identifier of the ROI to analyze.
+        ctfire : bool, default False
+            If True, use CT-FIRE mode instead of curvelet mode.
+
+        Returns
+        -------
+        None
+            Stores results on the ROI manager and refreshes the ROI list.
+        """
         if self.viewer and len(self.viewer.layers) > 0:
             image_layer = self.viewer.layers[0]
             if hasattr(image_layer, 'data'):
@@ -2908,12 +3200,34 @@ class CurveAlignWidget(QWidget):
         return self.tab_widget.currentWidget() == self.post_tab
 
     def _on_tab_changed(self, index: int):
+        """
+        Handle tab changes in the main widget.
+
+        Parameters
+        ----------
+        index : int
+            Index of the newly selected tab.
+
+        Returns
+        -------
+        None
+            Synchronizes post-processing plots when the post tab is selected.
+        """
         if not hasattr(self, "tab_widget"):
             return
         if self.tab_widget.widget(index) == self.post_tab:
             self._sync_post_panel(update_plots=True)
 
     def _get_selected_roi_for_post(self):
+        """
+        Return the ROI selected for post-processing views.
+
+        Returns
+        -------
+        tuple
+            ``(roi_id, roi)`` for the selected ROI, or ``(None, None)`` when no
+            ROI is selected.
+        """
         if not hasattr(self, "roi_list"):
             return None, None
         items = self.roi_list.selectedItems()
@@ -2924,6 +3238,19 @@ class CurveAlignWidget(QWidget):
         return roi_id, roi
 
     def _set_post_selected_label(self, roi):
+        """
+        Update the post-processing selected-ROI label.
+
+        Parameters
+        ----------
+        roi : ROI or None
+            ROI to display in the label.
+
+        Returns
+        -------
+        None
+            Updates the label text in place.
+        """
         if not hasattr(self, "post_selected_label"):
             return
         if roi is None:
@@ -2945,6 +3272,19 @@ class CurveAlignWidget(QWidget):
         )
 
     def _clear_post_plots(self, message: str):
+        """
+        Clear post-processing plots and display a message.
+
+        Parameters
+        ----------
+        message : str
+            Text shown in the empty plot area.
+
+        Returns
+        -------
+        None
+            Redraws the post-processing canvas.
+        """
         if not hasattr(self, "post_fig") or not hasattr(self, "post_canvas"):
             return
         self.post_fig.clear()
@@ -3032,6 +3372,19 @@ class CurveAlignWidget(QWidget):
         return ids
 
     def _get_active_image_data(self, grayscale: bool = False) -> Optional[np.ndarray]:
+        """
+        Return image data from the active image layer.
+
+        Parameters
+        ----------
+        grayscale : bool, default False
+            Whether to convert multichannel image data to grayscale.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            Active image data, or ``None`` when no image layer is available.
+        """
         layer = self._get_active_image_layer()
         if layer is None:
             return None
@@ -3069,6 +3422,14 @@ class CurveAlignWidget(QWidget):
         return None
 
     def _open_measurements(self):
+        """
+        Open a dialog with measurements for selected or all ROIs.
+
+        Returns
+        -------
+        None
+            Displays a metrics dialog or an informational message.
+        """
         roi_ids = self._selected_roi_ids()
         if not roi_ids:
             roi_ids = self.roi_manager.get_all_roi_ids()
@@ -3241,6 +3602,19 @@ class CurveAlignWidget(QWidget):
         self._sync_region_label()
 
     def _populate_roi_table(self, rows: List[List[str]]):
+        """
+        Populate the ROI table widget from row data.
+
+        Parameters
+        ----------
+        rows : list of list of str
+            Table rows to display.
+
+        Returns
+        -------
+        None
+            Updates the table widget in place.
+        """
         if not hasattr(self, "roi_table_view"):
             return
         self.roi_table_view.setRowCount(len(rows))
@@ -3259,5 +3633,17 @@ class CurveAlignWidget(QWidget):
 
 # Factory function to create the widget
 def create_curve_align_widget(viewer: "napari.viewer.Viewer" = None):
-    """Factory function to create the CurveAlign widget"""
+    """
+    Create a CurveAlign widget instance.
+
+    Parameters
+    ----------
+    viewer : napari.viewer.Viewer, optional
+        Viewer instance passed by napari.
+
+    Returns
+    -------
+    CurveAlignWidget
+        Configured widget instance.
+    """
     return CurveAlignWidget(viewer=viewer)
