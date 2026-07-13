@@ -75,5 +75,22 @@ Workflow:
 Use concise entries that capture what changed and why it matters. Reword entries during
 review so this section stays useful for future troubleshooting.
 
-- 2026-07-06 fa6deb3 fix: correct row/col indexing and use-after-free in FIRE 2D C++ backend
+This branch converts the MATLAB **ctFIRE** pipeline to Python + C++ (it does not develop
+the napari plugin or the CurveAlign / curvelet ports — those already live in `main`).
+
+- 2026-03-10 67ebfa5 feat: port CTrec_1.m → ct_reconstruction.py (curvelet preprocessing for FIRE)
+- 2026-03-10 8fc74e4 feat: begin fire_2d_angle — FIRE 2D fiber-extraction port (through smoothing)
+- 2026-04-07 74c35cd feat: implement check_danglers for fire_2d_angle
+- 2026-04-26 12cdbd5 feat: port core FIRE routines to the C++ fiber_backend (local maxima, distance transform, fiberlinkgap, link extension)
+- 2026-04-28 47ed821 refactor: split fiber analysis and angle modules
+- 2026-05-13 f1191cf fix: settle on 0-based vertex indexing across trimxfv/analysis/processing (MATLAB parity)
+- 2026-05-15 4adc2e3 fix: calc_fiberlen off-by-one and angle_xy axis swap, with MATLAB regression tests
+- 2026-05-17 835a902 fix: correct row/col axis convention in calc_fiberang2
+- 2026-05-28 659968d feat: assemble the ct_fire pipeline (ct_reconstruction + fire_2d) — 56 parity tests passing
+- 2026-06-07 0c5e701 refactor: lazy-load ct_reconstruction inside functions (avoid hard curvelops import)
+- 2026-06-07 db956ff fix: gracefully skip curvelops-dependent ct_fire tests/imports on CI
+- 2026-06-19 fa6deb3 fix: correct row/col indexing and use-after-free in the FIRE 2D C++ backend
+- 2026-07-06 aee3609 test: add non-square image handling tests for ct_fire and fire_2d_angle
+- 2026-07-06 cc912a4 build: compile fiber_backend as a pybind11 extension during install
 - 2026-07-06 b8b4dc9 fix: use matplotlib.colormaps API instead of deprecated get_cmap
+- 2026-07-13 510e587 build: make the native C++ extension build optional; decouple GUI deps
