@@ -180,7 +180,7 @@ create_env_and_install() {
   export LDFLAGS="-L${FFTW}/lib"
 
   print_info "Syncing uv environment..."
-  uv sync --extra curvelops &&
+  uv sync --extra curvelops --extra gui &&
   print_success "Environment configured."
 
   print_info "Installing tme-quant..."
@@ -202,38 +202,46 @@ verify_installation() {
   uv run python -c "
 import sys
 errors = []
+warnings = []
 try:
     import pycurvelets as pc
     print('  ✓ pycurvelets')
     print(f'    HAS_CURVELETS = {pc.HAS_CURVELETS}')
     if not pc.HAS_CURVELETS:
-        errors.append('pycurvelets: HAS_CURVELETS is False (curvelet backend not functional; check FFTW/FDCT)')
+        warnings.append('pycurvelets: HAS_CURVELETS is False (curvelet backend not functional; check FFTW/FDCT)')
 except ImportError as e:
     errors.append(f'pycurvelets: {e}')
 try:
     import curvelops
     print(f'  ✓ curvelops {curvelops.__version__}')
 except ImportError as e:
-    errors.append(f'curvelops: {e}')
+    warnings.append(f'curvelops: {e} (optional; required only for curvelet reconstruction)')
 try:
     import napari_curvealign
     print('  ✓ napari_curvealign')
 except ImportError as e:
-    errors.append(f'napari_curvealign: {e}')
+    warnings.append(f'napari_curvealign: {e} (optional; required only for Napari GUI plugin)')
 try:
     import ctfire_py
     print('  ✓ ctfire_py')
     print(f'    HAS_FIBER_BACKEND = {ctfire_py.HAS_FIBER_BACKEND}')
     if not ctfire_py.HAS_FIBER_BACKEND:
-        errors.append('ctfire_py: HAS_FIBER_BACKEND is False (C++ fiber_backend not built; check the C++/OpenMP toolchain)')
+        warnings.append('ctfire_py: HAS_FIBER_BACKEND is False (C++ fiber_backend not built; check the C++/OpenMP toolchain)')
 except ImportError as e:
     errors.append(f'ctfire_py: {e}')
+
+if warnings:
+    print('\\n! Validation warnings (optional features missing):')
+    for w in warnings:
+        print(f'  - {w}')
+
 if errors:
-    print('\\n✗ Validation failed:')
+    print('\\n✗ Validation failed (critical features missing):')
     for e in errors:
         print(f'  - {e}')
     sys.exit(1)
-print('\\n✅ All imports successful!')
+
+print('\\n✅ Core installation verified successfully!')
 "
 
   if [ $? -eq 0 ]; then

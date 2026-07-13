@@ -79,23 +79,41 @@ class FiberBackendBuildExt(build_ext):
     def run(self):
         try:
             super().run()
-        except Exception as exc:  # noqa: BLE001 — re-raised after guidance
+        except Exception as exc:  # noqa: BLE001
+            import os
+            # If strict mode is requested, re-raise the exception to fail the build
+            if os.environ.get("REQUIRE_FIBER_BACKEND", "").lower() in ("1", "true", "yes"):
+                sys.stderr.write(
+                    "\n"
+                    "============================================================\n"
+                    "ERROR: REQUIRE_FIBER_BACKEND is set, but compiling the C++\n"
+                    "extension 'fiber_backend' failed. Aborting installation.\n"
+                    f"Underlying error: {exc}\n"
+                    "============================================================\n"
+                )
+                raise
+
             sys.stderr.write(
                 "\n"
                 "============================================================\n"
-                "ERROR: failed to build the required C++ extension "
+                "WARNING: failed to build the optional C++ extension "
                 "'fiber_backend'.\n"
+                "The package will be installed WITHOUT native C++ backend support.\n"
                 "\n"
-                "ctfire_py has no pure-Python fallback, so installation cannot\n"
-                "continue without it. This usually means a C++ compiler or\n"
-                "OpenMP is missing. To fix:\n"
+                "ctfire_py has no pure-Python fallback, so you will not be able\n"
+                "to run the FIRE fiber extraction. Other features (like CurveAlign\n"
+                "and PyCurvelets) will still work.\n"
                 "\n"
                 f"{_toolchain_help()}\n"
                 "\n"
                 f"Underlying error: {exc}\n"
                 "============================================================\n"
             )
-            raise
+            # Clear extensions so downstream packaging steps do not attempt to
+            # package or copy the missing compiled binaries.
+            self.extensions = []
+            if hasattr(self, "distribution") and self.distribution:
+                self.distribution.ext_modules = []
 
 
 setup(

@@ -182,6 +182,20 @@ src/**/*.tiff
 
 # generated overlay PNGs under test_results (fixtures stay tracked; images do not)
 tests/test_results/**/*.png
+
+# compiled C++ fiber_backend — built locally / on CI, never committed
+*.pyd
+*.so
+*.pyd-bak
+*.so-bak
+*.dSYM/
+
+# root-level generated fiber overlays (dev scratch)
+/fiber_overlay_*.png
+/fire_2d_soft_iou_overlay*.png
+
+# machine-specific manual build helper (hardcoded local paths) — keep local
+src/ctfire_py/CPP/Makefile.ucrt64
 src/**/*.jpg
 src/**/*.jpeg
 
