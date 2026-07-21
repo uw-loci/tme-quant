@@ -597,6 +597,87 @@ def test_ct_fire_network_statistics(test_name, test_case):
         )
 
 
+# ============================================================================
+# Non-square (rectangular) image handling
+# ============================================================================
+
+
+def test_ct_fire_handles_non_square_image():
+    """ct_fire runs on a non-square image and emits in-bounds coordinates.
+
+    Uses the exact parameters of the square ``real1_default`` case but on a
+    rectangular crop (``real1_rect.tif``).  On a square image a row/col
+    transposition is invisible; here H != W, so every fiber vertex must satisfy
+    ``0 <= row < H`` and ``0 <= col < W`` or the swap is exposed.  A green
+    skeleton overlay is saved for visual inspection.
+    """
+    if not CPP_AVAILABLE:
+        pytest.skip("C++ backend not available")
+
+    # Reuse the real1 ctfire_params verbatim; only swap the image and give the
+    # case a distinct name so it does not collide with the real1_default cache.
+    _, real1_case = next(
+        (n, tc) for n, tc in load_test_cases() if n == "real1_default"
+    )
+    case = copy.deepcopy(real1_case)
+    case["name"] = "real1_rect_nonsquare"
+    case["image"] = "real1_rect.tif"
+
+    img = load_test_image("real1_rect.tif")
+    img_2d = img[0] if img.ndim == 3 else img
+    H, W = img_2d.shape
+    assert H != W, (
+        f"real1_rect.tif must be non-square to exercise row/col handling, got {H}x{W}"
+    )
+
+    ctfire_out = run_ct_fire_case(case, img=img)
+    data_py = ctfire_out["data"]
+
+    # Structure smoke check (mirrors test_ct_fire_basic_execution).
+    for field in ("X", "F", "R", "Xa", "Fa", "Va", "Ra", "M"):
+        assert field in data_py, f"Missing required field: {field}"
+    assert len(data_py["Fa"]) > 0, "No fibers detected on rectangular image"
+
+    # Core non-square check: every referenced vertex lies inside the rectangle.
+    Xa = np.asarray(data_py["Xa"], dtype=float)
+    referenced = set()
+    for fiber in data_py["Fa"]:
+        v = fiber["v"] if isinstance(fiber, dict) else list(fiber)
+        referenced.update(int(idx) for idx in v)
+    referenced = [i for i in referenced if 0 <= i < len(Xa)]
+    assert referenced, "Fa references no valid vertices in Xa"
+    rows = Xa[referenced, 0]
+    cols = Xa[referenced, 1]
+    assert rows.min() >= 0 and rows.max() < H, (
+        f"Fiber row coords out of bounds for H={H}: [{rows.min()}, {rows.max()}]"
+    )
+    assert cols.min() >= 0 and cols.max() < W, (
+        f"Fiber col coords out of bounds for W={W}: [{cols.min()}, {cols.max()}]"
+    )
+
+    # Visual overlay: green Python skeleton over the rescaled rectangular image.
+    from skimage import exposure
+
+    py_skel = _rasterize_fibers(data_py["Xa"], data_py["Fa"], (H, W))
+    overlay_rgba = np.zeros((H, W, 4), dtype=np.float32)
+    overlay_rgba[py_skel] = [0.0, 1.0, 0.0, 1.0]  # green: Python skeleton
+    image_eq = exposure.rescale_intensity(
+        img_2d, in_range=tuple(np.percentile(img_2d, (2, 98)))
+    )
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.imshow(image_eq, cmap="gray")
+    ax.imshow(overlay_rgba)
+    ax.set_title(
+        f"real1_rect  {H}x{W}  fibers={len(data_py['Fa'])}  (green=Python skeleton)"
+    )
+    ax.axis("off")
+    plt.tight_layout()
+    overlay_path = _CT_FIRE_RESULTS_DIR / "overlay_real1_rect_nonsquare.png"
+    fig.savefig(str(overlay_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"\nSaved non-square overlay: {overlay_path}")
+
+
 @pytest.mark.parametrize(
     "test_name,test_case",
     load_test_cases(matlab_only=False),
@@ -846,11 +927,11 @@ def test_ct_fire_matches_matlab_fiber_count(test_name, test_case):
 
     if fiber_count_mat > 0:
         rel_diff = abs(fiber_count_py - fiber_count_mat) / fiber_count_mat
-        assert fiber_count_py >= fiber_count_mat * 0.70, (
+        assert fiber_count_py >= fiber_count_mat * 0.85, (
             f"Too few fibers: py={fiber_count_py}, mat={fiber_count_mat} "
             f"(diff={rel_diff:.1%})"
         )
-        assert fiber_count_py <= fiber_count_mat * 1.80, (
+        assert fiber_count_py <= fiber_count_mat * 1.15, (
             f"Too many fibers: py={fiber_count_py}, mat={fiber_count_mat} "
             f"(diff={rel_diff:.1%})"
         )
@@ -882,11 +963,11 @@ def test_ct_fire_matches_matlab_fiber_length(test_name, test_case):
 
     if avgL_mat > 0 and avgL_py > 0:
         rel_diff = abs(avgL_py - avgL_mat) / avgL_mat
-        assert avgL_py >= avgL_mat * 0.45, (
+        assert avgL_py >= avgL_mat * 0.90, (
             f"Python fibers too short: py={avgL_py:.2f}, mat={avgL_mat:.2f} "
             f"(diff={rel_diff:.1%})"
         )
-        assert avgL_py <= avgL_mat * 1.20, (
+        assert avgL_py <= avgL_mat * 1.10, (
             f"Python fibers too long: py={avgL_py:.2f}, mat={avgL_mat:.2f}"
         )
         print(

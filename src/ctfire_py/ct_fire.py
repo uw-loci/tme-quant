@@ -3,6 +3,7 @@ import json
 import cv2
 import os
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
@@ -166,7 +167,7 @@ def _save_overlay_tiff(
     ax.imshow(img_display, cmap="gray", origin="upper")
     ax.axis("off")
 
-    _cmap = cm.get_cmap("hsv")
+    _cmap = matplotlib.colormaps["hsv"]
     _norm = mcolors.Normalize(vmin=0, vmax=180)
 
     def _to_deg(rad: float) -> float:
@@ -443,7 +444,7 @@ def _visualize_fiber_output(
     ax.imshow(img_display, cmap="gray", origin="upper")
     ax.axis("off")
 
-    cmap = cm.get_cmap("hsv")
+    cmap = matplotlib.colormaps["hsv"]
     norm = mcolors.Normalize(vmin=0, vmax=180)
 
     drawn = 0

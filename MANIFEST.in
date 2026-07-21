@@ -1,0 +1,4 @@
+# Ship the C++ backend sources so a from-source install can compile
+# `fiber_backend` (see setup.py). The .cpp files are auto-included as Extension
+# sources, but the link_fibre.h header is only #include'd, so list it explicitly.
+recursive-include src/ctfire_py/CPP *.cpp *.h
