@@ -25,6 +25,8 @@ dependencies = [
 [dependency-groups]
 dev = [
   "build",
+  "h5py>=3.16.0",
+  "pybind11>=3.0.4",
   "pytest",
   "ruff",
 ]
