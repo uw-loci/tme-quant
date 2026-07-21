@@ -340,11 +340,10 @@ def test_findlocmax_validate_struct(test_name, test_case):
     assert xlink.dtype in [np.int32, np.int64], "Output should be integer type"
     assert len(xlink) > 0, "Should detect at least one nucleation point"
     
-    # Check coordinate ranges (1-based indexing from C++)
-    # For 2D images (K=1), z coordinates represent row indices (1 to J)
-    assert np.all(xlink[:, 0] >= 1) and np.all(xlink[:, 0] <= J), "Z coordinates out of range"
-    assert np.all(xlink[:, 1] >= 1) and np.all(xlink[:, 1] <= I), "Y coordinates out of range"
-    assert np.all(xlink[:, 2] >= 1) and np.all(xlink[:, 2] <= K), "X coordinates out of range"
+    # Check coordinate ranges. C++ returns 0-based [row, col, depth].
+    assert np.all(xlink[:, 0] >= 0) and np.all(xlink[:, 0] < J), "Row coordinates out of range"
+    assert np.all(xlink[:, 1] >= 0) and np.all(xlink[:, 1] < I), "Col coordinates out of range"
+    assert np.all(xlink[:, 2] >= 0) and np.all(xlink[:, 2] < K), "Depth coordinates out of range"
 
 
 @pytest.mark.skipif(not CPP_AVAILABLE or not SCIPY_AVAILABLE, 
@@ -363,7 +362,7 @@ def test_findlocmax_matches_matlab_reference(test_name, test_case):
     ref_path = Path(__file__).parent / "test_results" / "cpp_test_files" / test_case["matlab_reference_mat"]
     ref_data = load_matlab_reference(ref_path)
     
-    matlab_xlink = ref_data['xlink']
+    matlab_xlink = ref_data['xlink'] - 1  # MATLAB reference is 1-based; C++ output is 0-based.
     matlab_dsm = ref_data['dsm']
     
     # Prepare C++ inputs (use MATLAB dsm for exact comparison)

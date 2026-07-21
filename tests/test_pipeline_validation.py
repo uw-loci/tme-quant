@@ -89,9 +89,9 @@ def test_pipeline_end_to_end(test_case, params):
     print(f"  Nucleation points detected: {len(xlink)}")
     assert len(xlink) > 0, "No nucleation points detected"
     assert xlink.shape[1] == 3, "Invalid xlink shape"
-    assert np.all(xlink[:, 0] >= 1) and np.all(xlink[:, 0] <= J), "Invalid row coordinates"
-    assert np.all(xlink[:, 1] >= 1) and np.all(xlink[:, 1] <= I), "Invalid col coordinates"
-    assert np.all(xlink[:, 2] == 1), "Invalid depth coordinates"
+    assert np.all(xlink[:, 0] >= 0) and np.all(xlink[:, 0] < J), "Invalid row coordinates"
+    assert np.all(xlink[:, 1] >= 0) and np.all(xlink[:, 1] < I), "Invalid col coordinates"
+    assert np.all(xlink[:, 2] == 0), "Invalid depth coordinates"
     
     # Stage 3: Extend fibers
     print("\nStage 2: Fiber extension")
