@@ -53,6 +53,15 @@ Development notes policy:
 - Headless (no GUI): set Qt to offscreen
   - macOS/Linux: `export QT_QPA_PLATFORM=offscreen`
   - Windows/PowerShell: `$env:QT_QPA_PLATFORM = 'offscreen'`
+ 
+- To run all tests, C++ backend must be compiled. In src/ctfire_py/cpp:
+```bash
+make
+```
+- Mac users may need to download OpenMP.
+```bash
+brew install libomp
+```
 
 - Core tests (no curvelets):
 ```bash
@@ -117,3 +126,4 @@ jobs:
 - Qt error ("No Qt bindings could be found"): ensure `uv sync` completed; pyproject includes PyQt6.
 - Segfault on Viewer creation: avoid creating a `napari.Viewer()` in tests; we only import napari and run offscreen.
 - curvelops build errors: ensure `FFTW` and `FDCT` point to your install roots and the 2D/3D libraries were built.
+- curvelet tests skipping even with curvelops installed: run `uv sync --extra curvelops`
