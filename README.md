@@ -53,6 +53,15 @@ Development notes policy:
 - Headless (no GUI): set Qt to offscreen
   - macOS/Linux: `export QT_QPA_PLATFORM=offscreen`
   - Windows/PowerShell: `$env:QT_QPA_PLATFORM = 'offscreen'`
+ 
+- To run all tests, C++ backend must be compiled. In src/ctfire_py/cpp:
+```bash
+make
+```
+- Mac users may need to download OpenMP.
+```bash
+brew install libomp
+```
 
 - Core tests (no curvelets):
 ```bash
