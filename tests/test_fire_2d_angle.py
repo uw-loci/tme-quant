@@ -747,17 +747,17 @@ def test_fire_2d_segment_angle_mean(test_name, test_case):
         )
         print(f"Long fiber angle std — max: {max_std:.3f} rad, mean: {np.mean(long_stds):.3f} rad")
 
-    # Sub-check B: mean |segment angle| is within 20° of MATLAB endpoint mean |angle|.
-    # MATLAB stores endpoint angles (one per fiber); mean segment angles differ for
-    # non-straight fibers, so a scalar proximity check is more robust than histogram shape.
-    if len(mean_seg) > 0 and len(mat_angles) > 0:
-        py_mean_abs  = np.degrees(np.mean(mean_seg % np.pi))
+    # Sub-check B: Python endpoint-angle mean is within 20° of MATLAB endpoint
+    # mean. Segment-angle means are validated against Python endpoints above;
+    # MATLAB stores endpoint angles here, so compare like with like.
+    if len(endpoint_angles) > 0 and len(mat_angles) > 0:
+        py_mean_abs  = np.degrees(np.mean(endpoint_angles % np.pi))
         mat_mean_abs = np.degrees(np.mean(mat_angles % np.pi))
         delta_deg = abs(py_mean_abs - mat_mean_abs)
         assert delta_deg < 20.0, (
-            f"Mean segment angle {py_mean_abs:.1f}° differs from MATLAB {mat_mean_abs:.1f}° by {delta_deg:.1f}° > 20°"
+            f"Mean endpoint angle {py_mean_abs:.1f}° differs from MATLAB {mat_mean_abs:.1f}° by {delta_deg:.1f}° > 20°"
         )
-        print(f"Mean segment angle [0-180°] - Python: {py_mean_abs:.1f}°, MATLAB: {mat_mean_abs:.1f}°, delta: {delta_deg:.1f}°")
+        print(f"Mean endpoint angle [0-180°] - Python: {py_mean_abs:.1f}°, MATLAB: {mat_mean_abs:.1f}°, delta: {delta_deg:.1f}°")
 
 
 # ============================================================================
