@@ -126,6 +126,52 @@
         "note": "High fiber count expected: Python bypasses check_danglers"
       },
       "matlab_reference_mat": "test_fire_2d_real1_default.mat"
+    },
+    {
+      "name": "image0_fire_params",
+      "image": "image0.tif",
+      "description": "Test with image0 image used in curvelet tests",
+      "params": {
+        "sigma_im": 0,
+        "sigma_d": 0.3,
+        "dtype": "cityblock",
+        "thresh_im": [],
+        "thresh_im2": 5,
+        "thresh_Dxlink": 1.5,
+        "s_xlinkbox": 8,
+        "thresh_LMP": 0.2,
+        "thresh_LMPdist": 2,
+        "thresh_ext": 0.342,
+        "lam_dirdecay": 0.5,
+        "s_minstep": 2,
+        "s_maxstep": 6,
+        "thresh_dang_aextend": 0.9848,
+        "thresh_dang_L": 15,
+        "thresh_short_L": 15,
+        "s_fiberdir": 4,
+        "thresh_linkd": 15,
+        "thresh_linka": -0.866,
+        "thresh_flen": 15,
+        "thresh_numv": 3,
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "s_boundthick": 10,
+        "blist": 1,
+        "s_maxspace": 5,
+        "lambda": 0.01,
+        "ang_interval": 3
+      },
+      "expected_outputs": {
+        "min_fiber_count": 50,
+        "max_fiber_count": 1000,
+        "min_avg_length": 10,
+        "max_avg_length": 120,
+        "note": "High fiber count expected: Python bypasses check_danglers"
+      },
+      "matlab_reference_mat": "test_fire_2d_image0_default.mat"
     }
   ],
   "tolerances": {
