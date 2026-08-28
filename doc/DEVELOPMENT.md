@@ -12,6 +12,8 @@ After `uv pip install -e .`, run `uv run napari` and open **Plugins → napari-c
 
 ## Running tests
 
+See [TESTING.md](TESTING.md) for the full OS-specific test instructions.
+
 ```bash
 make test
 ```
