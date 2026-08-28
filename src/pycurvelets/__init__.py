@@ -13,9 +13,16 @@ from .SHG_HE_registration import (
     shg_he_registration,
 )
 from .tumor_annotation_from_HE import (
+    BDcreationHE,
     BDcreationHE2,
     TumorAnnotationFromHEParameters,
     tumor_annotation_from_he,
+)
+from ._registration_quality import (
+    compute_mask_boundary_metrics,
+    compute_registration_quality_metrics,
+    compute_shg_alignment_metrics,
+    make_checkerboard,
 )
 
 __all__ = [
@@ -28,4 +35,9 @@ __all__ = [
     "TumorAnnotationFromHEParameters",
     "tumor_annotation_from_he",
     "BDcreationHE2",
+    "BDcreationHE",
+    "compute_registration_quality_metrics",
+    "compute_shg_alignment_metrics",
+    "compute_mask_boundary_metrics",
+    "make_checkerboard",
 ]

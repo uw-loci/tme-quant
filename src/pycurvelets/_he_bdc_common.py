@@ -20,6 +20,41 @@ NUCLEI_MIN_AREA = 150
 COLLAGEN_MIN_AREA = 100
 
 
+def matlab_rgb2hsv(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
+    """
+    MATLAB-compatible ``rgb2hsv`` for float RGB in ``[0, 1]``.
+
+    Matches MathWorks' channel ordering (H, S, V) and hue wrap to ``[0, 1]``.
+    Used instead of ``skimage.color.rgb2hsv`` for CurveAlign parity (F2/D1).
+    """
+    arr = np.moveaxis(np.asarray(rgb, dtype=np.float64), axis, -1)
+    if arr.ndim != 3 or arr.shape[-1] < 3:
+        raise ValueError(f"Expected RGB image, got shape {rgb.shape}.")
+    arr = np.clip(arr[..., :3], 0.0, 1.0)
+    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    v = np.maximum(np.maximum(r, g), b)
+    m = np.minimum(np.minimum(r, g), b)
+    delta = v - m
+    s = np.zeros_like(v)
+    nonzero_v = v > 0
+    s[nonzero_v] = delta[nonzero_v] / v[nonzero_v]
+
+    h = np.zeros_like(v)
+    mask = delta > 0
+    # Avoid division by zero; only fill where delta > 0.
+    r_eq = mask & (v == r)
+    g_eq = mask & (v == g) & ~r_eq
+    b_eq = mask & (v == b) & ~r_eq & ~g_eq
+    h[r_eq] = np.mod((g[r_eq] - b[r_eq]) / delta[r_eq], 6.0) / 6.0
+    h[g_eq] = ((b[g_eq] - r[g_eq]) / delta[g_eq] + 2.0) / 6.0
+    h[b_eq] = ((r[b_eq] - g[b_eq]) / delta[b_eq] + 4.0) / 6.0
+    h = np.clip(h, 0.0, 1.0)
+    out = np.stack([h, s, v], axis=-1)
+    if axis != -1:
+        out = np.moveaxis(out, -1, axis)
+    return out
+
+
 def matlab_round(x: float | np.ndarray) -> float | np.ndarray:
     """MATLAB ``round``: half-integers round away from zero (unlike ``numpy.round``)."""
     arr = np.asarray(x, dtype=np.float64)
@@ -367,7 +402,7 @@ def make_nuclei_mask(
     saturation_channel: int = 1,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Generate nuclei mask and masked nuclei RGB image from adjusted HE."""
-    hsv = color.rgb2hsv(he_rgb_adjusted)
+    hsv = matlab_rgb2hsv(he_rgb_adjusted)
     sat_thresh = matlab_graythresh(hsv[..., saturation_channel])
 
     nuclei_raw = (
@@ -391,7 +426,7 @@ def make_collagen_mask(
     saturation_channel: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Generate collagen mask and non-background mask from adjusted HE."""
-    hsv = color.rgb2hsv(he_rgb_adjusted)
+    hsv = matlab_rgb2hsv(he_rgb_adjusted)
     sat_thresh = matlab_graythresh(hsv[..., saturation_channel])
 
     collagen = (
@@ -403,8 +438,11 @@ def make_collagen_mask(
 
     if enhanced_postprocessing:
         # Morphology radii are MATLAB-derived heuristics in units of pixel/micron.
+        # BDcreationHE2.m: strel('disk', ceil(ppm)) then strel('disk', round(3*ppm)).
         collagen = morphology.dilation(collagen, disk_se(np.ceil(pix_per_mic)))
-        collagen = morphology.closing(collagen, disk_se(3.0 * pix_per_mic))
+        collagen = morphology.closing(
+            collagen, disk_se(float(matlab_round(3.0 * pix_per_mic)))
+        )
 
     no_background = hsv[..., saturation_channel] >= sat_thresh
     return collagen.astype(bool), no_background.astype(bool), sat_thresh

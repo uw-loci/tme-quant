@@ -2,38 +2,33 @@
 
 Default algorithm (``registration_method="mi_ncc"``):
 
-1. Build the same binary collagen mask (``HE_moving``) that MATLAB uses
-   (``make_collagen_mask`` minus the dilated nuclei mask).
-2. Use SimpleITK's Mattes Mutual Information optimizer (grid search over
-   angle/scale/translation -> Nelder-Mead similarity -> Nelder-Mead affine)
-   to find the correct registration *basin*. MI is robust to the
-   binary-mask vs grayscale-SHG modality mismatch that defeats NCC-from-
-   scratch.
-3. Polish the affine with a tightly-bounded Normalized Cross-Correlation
-   trust-region step on Gaussian-blurred images. Two accept gates:
-   smoothed-NCC SSE must decrease (the LM objective) AND raw-NCC must not
-   decrease (proxy for RGB pixel match). If either gate fails the refined
-   transform is discarded and the MI seed is used.
-4. Warp the raw HE RGB onto the SHG grid via :func:`matlab_imwarp_bilinear`,
+1. Build an ECM moving image from the H&E (controlled by ``ecm_method``).
+2. Use SimpleITK's Mattes MI with a deterministic grid search over
+   angle/scale/translation, then Nelder-Mead similarity and affine
+   refinement, followed by a bounded NCC trust-region sub-pixel polish.
+3. Warp the raw HE RGB onto the SHG grid via :func:`matlab_imwarp_bilinear`,
    which matches MATLAB ``imref2d`` + ``imwarp`` conventions (pixel-centre,
    half-pixel-extended input domain, fill-value halo at boundaries).
 
 Other ``registration_method`` values (kept for debugging / fallback):
 
+* ``"oneplusone"`` - Multiresolution Mattes MI with a stochastic (1+1)
+  evolutionary optimizer (paper/MATLAB-inspired). Available as an option.
 * ``"mi"`` - Mattes MI alone (skip NCC polish). Slightly worse on average
   but useful when the polish would be untrusted.
 * ``"ncc"`` (alias ``"dice"``) - Fully deterministic NCC-on-blurred-masks
   TRF pipeline. No SimpleITK dependency, but mask<->grayscale NCC is
   non-convex without MI-style histogram matching, so it tends to land in
   worse local minima. Used automatically if SimpleITK is missing.
-* ``"oneplusone"`` - Multiresolution Mattes MI with a stochastic (1+1)
-  evolutionary optimizer inspired by the original MATLAB/paper workflow.
 
 ECM extraction is controlled separately by ``ecm_method``:
 
 * ``"hsv"`` - default BDcreation_reg2.m HSV thresholding.
 * ``"rgb"`` - BDcreation_reg.m-style decorrelation stretch + fixed RGB cuts.
 * ``"lab"`` - BDcreation_reg.m-style RGB eosin gate + LAB k-means refinement.
+* ``"gray"`` - inverted HE luma (smoother MI surface than binary collagen).
+* ``"auto"`` - try hsv/rgb/lab/gray; pick the ECM with highest unregistered
+  SHG MI, then run the full optimizer once on that moving image.
 
 The pipeline requires no MATLAB licence at runtime.
 
@@ -49,7 +44,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from scipy.ndimage import binary_fill_holes, gaussian_filter
+from scipy.ndimage import binary_fill_holes, center_of_mass, gaussian_filter
 from scipy.optimize import least_squares
 from scipy.optimize import minimize as _scipy_minimize
 from skimage import io, morphology, registration
@@ -70,6 +65,7 @@ from ._he_bdc_common import (
     remove_small_components,
     resize_like,
 )
+from ._registration_quality import compute_shg_alignment_metrics
 
 try:
     import SimpleITK as sitk  # type: ignore[import-untyped]
@@ -91,10 +87,13 @@ class SHGHERegistrationParameters:
     pixelpermicron: float
     SHGfilepath: str
     areaThreshold: float | None = None
-    # "mi_ncc" (default): SITK Mattes MI for basin finding + two-stage
-    #                     bounded NCC TRF refinement for sub-pixel polish.
-    #                     Empirically best match to MATLAB output on our
-    #                     regression fixtures. Requires SimpleITK.
+    # "mi_ncc" (default): SITK Mattes MI grid+Nelder-Mead basin finder +
+    #                     bounded NCC TRF sub-pixel polish. Deterministic,
+    #                     best empirical match to MATLAB output.
+    # "oneplusone"      : Multiresolution Mattes MI with a stochastic
+    #                     (1+1)-evolutionary optimizer. Closest to the
+    #                     paper/MATLAB ``imregtform('multimodal')`` workflow.
+    #                     Available as an option per Yuming's request.
     # "mi"              : MI only (no polish). Slightly worse than ``mi_ncc``
     #                     but faster; kept for debugging.
     # "ncc"             : Deterministic NCC on blurred masks + bounded TRF.
@@ -102,14 +101,14 @@ class SHGHERegistrationParameters:
     #                     mask<->grayscale NCC is non-convex without MI-style
     #                     histogram matching; used as a fallback when SITK
     #                     is unavailable.
-    # "oneplusone"      : Multiresolution Mattes MI with a stochastic (1+1)
-    #                     evolutionary optimizer (paper/MATLAB-inspired path).
     registration_method: str = "mi_ncc"
     # ECM extraction method:
     # "hsv" (default): BDcreation_reg2.m-style HSV thresholding.
     # "rgb"          : BDcreation_reg.m-style decorrelation stretch + fixed
     #                  RGB thresholds for nuclei/eosin.
     # "lab"          : BDcreation_reg.m-style RGB eosin gate then LAB k-means.
+    # "gray"         : inverted HE luma * (~nuclei); continuous moving image.
+    # "auto"         : try hsv/rgb/lab/gray; keep best SHG histogram-MI.
     ecm_method: str = "hsv"
     # Used by stochastic methods (e.g. oneplusone optimizer / LAB k-means).
     random_state: int = 0
@@ -703,22 +702,35 @@ def _register_mi(
     fixed_shg: np.ndarray,
 ) -> tuple[np.ndarray, dict[str, Any]]:
     """
-    Legacy path: SITK Mattes MI + grid search + Nelder-Mead.
+    Mattes MI + grid search + Nelder-Mead registration.
 
-    Preserved so developers can compare the old optimizer's local minimum
-    against the new Dice-based one. Not used by default.
+    Improvements vs the original narrow grid:
+    - Wider angle/scale/translation ranges (C1).
+    - Multi-start translation seeds: identity, phase correlation, mask
+      centroid offset (C2).
+    - Affine stage kept only when it improves MI over similarity (C6).
     """
-    if not _HAS_SITK:  # pragma: no cover - guard only exists in this branch
+    if not _HAS_SITK:  # pragma: no cover
         raise RuntimeError(
             "registration_method='mi' requires SimpleITK; install it or "
             "switch to the default 'dice' path."
         )
 
     fixed = fixed_shg.astype(np.float64)
+    moving = he_moving.astype(np.float64)
+    if float(moving.max()) - float(moving.min()) < 1e-12:
+        forward_2x3 = np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float64)
+        return forward_2x3, {"mi_degenerate_moving": True}
+
     fixed_sitk = sitk.GetImageFromArray(fixed)
-    moving_sitk = sitk.GetImageFromArray(he_moving.astype(np.float64))
+    moving_sitk = sitk.GetImageFromArray(moving)
     fixed_sitk = sitk.Cast(fixed_sitk, sitk.sitkFloat64)
     moving_sitk = sitk.Cast(moving_sitk, sitk.sitkFloat64)
+
+    H, W = fixed.shape[:2]
+    # C1: wider search ranges (was 0.3 * size / +/-45 deg / [0.80, 1.25]).
+    tx_range = max(60, int(0.40 * W))
+    ty_range = max(60, int(0.40 * H))
 
     geom_init = sitk.CenteredTransformInitializer(
         fixed_sitk, moving_sitk,
@@ -744,7 +756,10 @@ def _register_mi(
         probe.SetCenter(center)
         probe.SetTranslation([float(tx), float(ty)])
         eval_method.SetInitialTransform(probe)
-        return eval_method.MetricEvaluate(fixed_sitk, moving_sitk)
+        try:
+            return eval_method.MetricEvaluate(fixed_sitk, moving_sitk)
+        except RuntimeError:
+            return float("inf")
 
     def _probe_angle_scale(angle_range, scale_range):
         nonlocal best_angle, best_scale, best_metric
@@ -756,7 +771,8 @@ def _register_mi(
                     best_angle = float(angle_deg)
                     best_scale = float(scale_val)
 
-    _probe_angle_scale(range(-45, 46, 2), np.arange(0.80, 1.25, 0.02))
+    # C1: wider angle/scale coarse grid.
+    _probe_angle_scale(range(-55, 56, 3), np.arange(0.72, 1.36, 0.03))
     _probe_angle_scale(
         np.arange(best_angle - 3, best_angle + 3.01, 0.5),
         np.arange(best_scale - 0.04, best_scale + 0.041, 0.005),
@@ -766,20 +782,50 @@ def _register_mi(
         np.arange(best_scale - 0.005, best_scale + 0.0051, 0.001),
     )
 
-    for tx in np.arange(-50, 51, 5):
-        for ty in np.arange(-50, 51, 5):
+    # C2: multi-start translation seeds before the dense grid.
+    translation_seeds: list[tuple[float, float, str]] = [(0.0, 0.0, "identity")]
+    try:
+        shift, _, _ = registration.phase_cross_correlation(
+            fixed, moving, upsample_factor=1
+        )
+        # phase_cross_correlation returns (row, col) shift of moving -> fixed.
+        translation_seeds.append((float(-shift[1]), float(-shift[0]), "phase_corr"))
+    except Exception:
+        pass
+    moving_mask = moving > (0.01 * float(moving.max()) if float(moving.max()) > 0 else 0.01)
+    fixed_mask = fixed > (0.01 * float(fixed.max()) if float(fixed.max()) > 0 else 0.01)
+    if moving_mask.any() and fixed_mask.any():
+        my, mx = center_of_mass(moving_mask)
+        fy, fx = center_of_mass(fixed_mask)
+        translation_seeds.append((float(fx - mx), float(fy - my), "centroid"))
+
+    seed_metrics: dict[str, float] = {}
+    for tx0, ty0, name in translation_seeds:
+        val = _eval_similarity(best_angle, best_scale, tx0, ty0)
+        seed_metrics[name] = float(val)
+        if val < best_metric:
+            best_metric = val
+            best_tx = float(tx0)
+            best_ty = float(ty0)
+
+    # Translation search proportional to image size (wider).
+    coarse_step = max(5, int(min(tx_range, ty_range) / 10))
+    for tx in np.arange(-tx_range, tx_range + 1, coarse_step):
+        for ty in np.arange(-ty_range, ty_range + 1, coarse_step):
             val = _eval_similarity(best_angle, best_scale, tx, ty)
             if val < best_metric:
                 best_metric = val
                 best_tx = float(tx)
                 best_ty = float(ty)
-    for tx in np.arange(best_tx - 5, best_tx + 5.01, 1):
-        for ty in np.arange(best_ty - 5, best_ty + 5.01, 1):
+    for tx in np.arange(best_tx - coarse_step, best_tx + coarse_step + 0.01, 1):
+        for ty in np.arange(best_ty - coarse_step, best_ty + coarse_step + 0.01, 1):
             val = _eval_similarity(best_angle, best_scale, tx, ty)
             if val < best_metric:
                 best_metric = val
                 best_tx = float(tx)
                 best_ty = float(ty)
+
+    # Joint fine sweep.
     for scale_val in np.arange(best_scale - 0.003, best_scale + 0.0031, 0.001):
         for angle_deg in np.arange(best_angle - 0.3, best_angle + 0.31, 0.1):
             for tx in np.arange(best_tx - 1.5, best_tx + 1.51, 0.5):
@@ -833,6 +879,13 @@ def _register_mi(
     opt_scale = float(sim_opt.x[1])
     opt_tx = float(sim_opt.x[2])
     opt_ty = float(sim_opt.x[3])
+    sim_metric = float(_similarity_cost(sim_opt.x))
+
+    # Similarity forward 2x3 (moving -> fixed) for optional C6 keep.
+    A_sim_inv = _similarity_fixed_to_moving(
+        opt_angle, opt_scale, opt_tx, opt_ty, (float(center[0]), float(center[1]))
+    )
+    sim_forward = _forward_from_fixed_to_moving(A_sim_inv)
 
     cos_t, sin_t = float(np.cos(opt_angle)), float(np.sin(opt_angle))
     sim_matrix = [
@@ -884,18 +937,48 @@ def _register_mi(
         },
     )
     p = aff_opt.x
-    # SITK AffineTransform applied here is fixed->moving directly; convert
-    # to 2x3 forward by taking its inverse so the rest of the pipeline is
-    # backend-agnostic.
+    aff_metric = float(_affine_cost(p))
     A_inv = np.eye(3, dtype=np.float64)
     A_inv[:2, :2] = np.array([[p[0], p[1]], [p[2], p[3]]], dtype=np.float64)
     A_inv[:2, 2] = np.array([p[4], p[5]], dtype=np.float64)
-    forward_2x3 = _forward_from_fixed_to_moving(A_inv)
+    aff_forward = _forward_from_fixed_to_moving(A_inv)
+
+    # C6: keep affine only if it improves (lower) Mattes MI cost vs similarity.
+    if aff_metric <= sim_metric:
+        forward_2x3 = aff_forward
+        kept_stage = "affine"
+        final_metric = aff_metric
+    else:
+        forward_2x3 = sim_forward
+        kept_stage = "similarity"
+        final_metric = sim_metric
+
+    grid_metric = float(best_metric)
     debug = {
         "mi_sim_params": (opt_angle, opt_scale, opt_tx, opt_ty),
         "mi_aff_params": tuple(p.tolist()),
+        "mi_grid_metric": grid_metric,
+        "mi_grid_tx_range": tx_range,
+        "mi_grid_ty_range": ty_range,
+        "mi_seed_metrics": seed_metrics,
+        "mi_sim_metric": float(sim_metric),
+        "mi_aff_metric": float(aff_metric),
+        "mi_kept_stage": kept_stage,
+        "mi_final_metric": float(final_metric),
     }
     return forward_2x3, debug
+
+
+def _affine_m_t0_from_transform(tx: Any) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Extract fixed->moving affine ``x' = Mx + t0`` from any SITK transform,
+    including CompositeTransform, by probing transformed basis points.
+    """
+    p00 = np.array(tx.TransformPoint((0.0, 0.0)), dtype=np.float64)
+    p10 = np.array(tx.TransformPoint((1.0, 0.0)), dtype=np.float64)
+    p01 = np.array(tx.TransformPoint((0.0, 1.0)), dtype=np.float64)
+    m = np.column_stack((p10 - p00, p01 - p00))
+    return m, p00
 
 
 def _register_oneplusone_mi(
@@ -905,12 +988,19 @@ def _register_oneplusone_mi(
     random_state: int = 0,
 ) -> tuple[np.ndarray, dict[str, Any]]:
     """
-    Multiresolution Mattes-MI registration with a (1+1)-evolutionary optimizer.
+    Two-stage multiresolution (1+1)-ES with Mattes MI, matching MATLAB.
 
-    This mirrors the paper's optimization strategy more closely than the legacy
-    grid + Nelder-Mead path.
+    Replicates the ``BDcreation_reg2.m`` workflow:
+      1. ``imregconfig('multimodal')`` -> OnePlusOneEvolutionary + MattesMI
+      2. ``optimizer.InitialRadius = optimizer.InitialRadius / 3.5``
+      3. ``optimizer.MaximumIterations = 700``
+      4. Stage 1: ``imregtform(..., 'similarity')`` from geometry init
+      5. Stage 2: ``imregtform(..., 'affine', 'InitialTransformation', sim)``
+
+    MATLAB's ``imregtform`` internally builds a 3-level Gaussian pyramid
+    (shrink factors [4,2,1]) and runs the (1+1)-ES at each level.
     """
-    if not _HAS_SITK:  # pragma: no cover - guarded by call site
+    if not _HAS_SITK:  # pragma: no cover
         raise RuntimeError(
             "registration_method='oneplusone' requires SimpleITK; "
             "install it or choose 'ncc'."
@@ -918,78 +1008,111 @@ def _register_oneplusone_mi(
 
     fixed = fixed_shg.astype(np.float64)
     moving = he_moving.astype(np.float64)
+    if float(moving.max()) - float(moving.min()) < 1e-12:
+        forward_2x3 = np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float64)
+        return forward_2x3, {"oneplusone_degenerate_moving": True}
+
     fixed_sitk = sitk.Cast(sitk.GetImageFromArray(fixed), sitk.sitkFloat64)
     moving_sitk = sitk.Cast(sitk.GetImageFromArray(moving), sitk.sitkFloat64)
 
     seed = max(1, int(random_state))
-    # Match the MATLAB code intent: InitialRadius is reduced by /3.5.
-    initial_radius = 1.0 / 3.5
+    # MATLAB multimodal default InitialRadius = 6.25e-3.
+    # The /3.5 reduction in BDcreation_reg2.m happens AFTER a warm-up
+    # imregister call; the first imregtform('similarity') still uses the
+    # full radius. We use the full radius for Stage 1 (exploration) and
+    # the reduced radius for Stage 2 (refinement).
+    radius_explore = 6.25e-3
+    radius_refine = 6.25e-3 / 3.5
     shrink_factors = [4, 2, 1]
     smoothing_sigmas = [2, 1, 0]
 
-    def _affine_m_t0_from_transform(tx: Any) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Extract fixed->moving affine ``x' = Mx + t0`` from any SITK transform.
-
-        Works for Affine/Similarity and CompositeTransform chains by probing the
-        transformed basis points.
-        """
-        p00 = np.array(tx.TransformPoint((0.0, 0.0)), dtype=np.float64)
-        p10 = np.array(tx.TransformPoint((1.0, 0.0)), dtype=np.float64)
-        p01 = np.array(tx.TransformPoint((0.0, 1.0)), dtype=np.float64)
-        m = np.column_stack((p10 - p00, p01 - p00))
-        t0 = p00
-        return m, t0
-
-    def _configure_registration(seed_value: int) -> Any:
+    def _make_reg(
+        transform: Any,
+        seed_val: int,
+        *,
+        n_iter: int = 2000,
+        radius: float = radius_explore,
+    ) -> Any:
         reg = sitk.ImageRegistrationMethod()
         reg.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
         reg.SetMetricSamplingStrategy(reg.NONE)
         reg.SetInterpolator(sitk.sitkLinear)
         reg.SetOptimizerAsOnePlusOneEvolutionary(
-            numberOfIterations=700,
+            numberOfIterations=n_iter,
             epsilon=1.5e-6,
-            initialRadius=initial_radius,
+            initialRadius=radius,
             growthFactor=1.05,
-            shrinkFactor=0.95,
-            seed=seed_value,
+            shrinkFactor=np.power(1.05, -1.5),
+            seed=seed_val,
         )
+        reg.SetOptimizerScalesFromPhysicalShift()
         reg.SetShrinkFactorsPerLevel(shrink_factors)
         reg.SetSmoothingSigmasPerLevel(smoothing_sigmas)
         reg.SmoothingSigmasAreSpecifiedInPhysicalUnitsOff()
+        reg.SetInitialTransform(transform, inPlace=False)
         return reg
 
-    # Use legacy MI solution as basin initializer, then run oneplusone affine
-    # refinement from that seed (paper-inspired optimizer, robust start).
+    # Use the MI grid+NM search to find the correct basin (robust to the
+    # large, non-convex MI surface), then run two-stage (1+1)-ES from that
+    # seed for stochastic refinement matching the paper's optimizer.
     mi_seed_forward, mi_seed_debug = _register_mi(he_moving, fixed_shg)
-    A_seed_inv = _affine_fixed_to_moving_from_forward(mi_seed_forward)
 
+    # Stage 1: similarity (1+1)-ES from the MI seed.
+    mi_inv = _affine_fixed_to_moving_from_forward(mi_seed_forward)
+    mi_mat = mi_inv[:2, :2]
+    mi_t = mi_inv[:2, 2]
+    # Decompose into similarity parameters for Similarity2DTransform.
+    sx = float(np.sqrt(mi_mat[0, 0] ** 2 + mi_mat[1, 0] ** 2))
+    angle = float(np.arctan2(mi_mat[1, 0], mi_mat[0, 0]))
+    center = [(fixed.shape[1] - 1) / 2.0, (fixed.shape[0] - 1) / 2.0]
+    center_arr = np.array(center, dtype=np.float64)
+    t_from_center = mi_t + mi_mat @ center_arr - center_arr
+
+    sim_init = sitk.Similarity2DTransform()
+    sim_init.SetScale(float(sx))
+    sim_init.SetAngle(float(angle))
+    sim_init.SetCenter(center)
+    sim_init.SetTranslation(t_from_center.tolist())
+
+    sim_reg = _make_reg(sim_init, seed, n_iter=2000, radius=radius_explore)
+    sim_result = sim_reg.Execute(fixed_sitk, moving_sitk)
+    sim_metric = float(sim_reg.GetMetricValue())
+    sim_stop = str(sim_reg.GetOptimizerStopConditionDescription())
+
+    # Convert similarity result to an AffineTransform for Stage 2.
+    sim_mat, sim_t0 = _affine_m_t0_from_transform(sim_result)
     aff_init = sitk.AffineTransform(2)
     aff_init.SetCenter([0.0, 0.0])
-    aff_init.SetMatrix(A_seed_inv[:2, :2].reshape(-1).tolist())
-    aff_init.SetTranslation(A_seed_inv[:2, 2].tolist())
+    aff_init.SetMatrix(sim_mat.ravel().tolist())
+    aff_init.SetTranslation(sim_t0.tolist())
 
-    aff_reg = _configure_registration(seed)
-    aff_reg.SetInitialTransform(aff_init, inPlace=False)
-    aff_t = aff_reg.Execute(fixed_sitk, moving_sitk)
-    best_aff_metric = float(aff_reg.GetMetricValue())
-    best_aff_matrix, best_aff_t0 = _affine_m_t0_from_transform(aff_t)
+    # Stage 2: affine (1+1)-ES refinement (reduced radius).
+    aff_reg = _make_reg(aff_init, seed + 1, n_iter=2000, radius=radius_refine)
+    aff_result = aff_reg.Execute(fixed_sitk, moving_sitk)
+    aff_metric = float(aff_reg.GetMetricValue())
+    aff_stop = str(aff_reg.GetOptimizerStopConditionDescription())
+
+    aff_matrix, aff_t0 = _affine_m_t0_from_transform(aff_result)
 
     A_inv = np.eye(3, dtype=np.float64)
-    A_inv[:2, :2] = best_aff_matrix
-    A_inv[:2, 2] = best_aff_t0
+    A_inv[:2, :2] = aff_matrix
+    A_inv[:2, 2] = aff_t0
     forward_2x3 = _forward_from_fixed_to_moving(A_inv)
+
     debug = {
         "oneplusone_random_state": int(random_state),
         "oneplusone_seed": int(seed),
-        "oneplusone_initial_radius": float(initial_radius),
+        "oneplusone_radius_explore": float(radius_explore),
+        "oneplusone_radius_refine": float(radius_refine),
         "oneplusone_shrink_factors": tuple(shrink_factors),
         "oneplusone_smoothing_sigmas": tuple(smoothing_sigmas),
-        "oneplusone_affine_metric": float(best_aff_metric),
-        "oneplusone_mi_seed_forward_2x3": mi_seed_forward.tolist(),
+        "oneplusone_sim_metric": float(sim_metric),
+        "oneplusone_sim_stop": sim_stop,
+        "oneplusone_aff_metric": float(aff_metric),
+        "oneplusone_aff_stop": aff_stop,
         "oneplusone_mi_seed_debug": mi_seed_debug,
-        "oneplusone_affine_matrix": best_aff_matrix.tolist(),
-        "oneplusone_affine_t0": best_aff_t0.tolist(),
+        "oneplusone_affine_matrix": aff_matrix.tolist(),
+        "oneplusone_affine_t0": aff_t0.tolist(),
     }
     return forward_2x3, debug
 
@@ -997,6 +1120,173 @@ def _register_oneplusone_mi(
 # ---------------------------------------------------------------------------
 # Core pipeline.
 # ---------------------------------------------------------------------------
+
+
+def _refine_nuclei_filled(
+    masked_nuclei_image: np.ndarray,
+    pixpermic: float,
+) -> np.ndarray:
+    """Shared nuclei cleanup used before collagen/ECM isolation."""
+    gray_nuclei = matlab_rgb2gray(masked_nuclei_image)
+    ksize = max(1, int(np.floor(pixpermic)))
+    nuclei_filtered = gaussian_filter_matlab_like(
+        gray_nuclei, sigma=0.5, kernel_size=ksize, boundary="zero"
+    )
+    bw_nuclei = nuclei_filtered > 0.001
+    bw_nuclei_discard = remove_small_components(
+        bw_nuclei, int(np.ceil(50.0 * pixpermic**2))
+    )
+    bw_nuclei_dilated = morphology.dilation(
+        bw_nuclei_discard, disk_se(np.floor(pixpermic))
+    )
+    return binary_fill_holes(bw_nuclei_dilated)
+
+
+def _build_he_moving(
+    he_scaled: np.ndarray,
+    he_adjusted: np.ndarray,
+    he_decorr: np.ndarray,
+    pixpermic: float,
+    ecm_mode: str,
+    random_state: int = 0,
+) -> tuple[np.ndarray, str, dict[str, Any]]:
+    """
+    Build the moving image for registration from one ECM method.
+
+    Returns ``(he_moving, resolved_mode, extras)``.
+    """
+    mode = (ecm_mode or "hsv").lower()
+    extras: dict[str, Any] = {}
+    _MIN_MASK_COVERAGE = 0.02
+
+    if mode == "hsv":
+        _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask(he_adjusted, pixpermic)
+        bw_collagen, _bw_no_background, _sat_thresh = make_collagen_mask(
+            he_adjusted, pixpermic, enhanced_postprocessing=False
+        )
+        bw_nuclei_filled = _refine_nuclei_filled(masked_nuclei_image, pixpermic)
+        he_collagen_bw = bw_collagen & (~bw_nuclei_filled)
+        he_collagen_bw = remove_small_components(
+            he_collagen_bw, int(np.ceil(pixpermic**2))
+        )
+        he_moving = he_collagen_bw.astype(np.float64)
+        mask_coverage = float(he_moving.mean())
+        extras["mask_coverage"] = mask_coverage
+        if mask_coverage < _MIN_MASK_COVERAGE:
+            he_gray_inv = 1.0 - matlab_rgb2gray(he_adjusted)
+            tissue_mask = (~bw_nuclei_filled).astype(np.float64)
+            he_moving_fb = he_gray_inv * tissue_mask
+            fb_coverage = float((he_moving_fb > 0.01).mean())
+            if fb_coverage > mask_coverage:
+                he_moving = he_moving_fb
+                mode = "hsv->gray_fallback"
+                extras["mask_coverage"] = fb_coverage
+        return he_moving, mode, extras
+
+    if mode == "gray":
+        # B5: continuous inverted luma (optionally nuclei-suppressed).
+        _, masked_nuclei_image = make_nuclei_mask(he_adjusted, pixpermic)
+        bw_nuclei_filled = _refine_nuclei_filled(masked_nuclei_image, pixpermic)
+        he_gray_inv = 1.0 - matlab_rgb2gray(he_adjusted)
+        he_moving = he_gray_inv * (~bw_nuclei_filled).astype(np.float64)
+        extras["mask_coverage"] = float((he_moving > 0.01).mean())
+        return he_moving, mode, extras
+
+    if mode == "rgb":
+        _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask_rgb(he_decorr, pixpermic)
+        he_collagen_gray, _bw_collagen = make_ecm_mask_rgb(he_decorr, pixpermic)
+    elif mode == "lab":
+        _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask_rgb(he_decorr, pixpermic)
+        he_collagen_gray, _bw_collagen = make_ecm_mask_lab(
+            he_scaled, he_decorr, pixpermic, random_state=random_state
+        )
+    else:
+        raise ValueError(
+            f"Unknown ecm_method={ecm_mode!r}; expected one of "
+            f"'hsv', 'rgb', 'lab', 'gray', 'auto'."
+        )
+
+    bw_nuclei_filled = _refine_nuclei_filled(masked_nuclei_image, pixpermic)
+    he_collagen_exclude = he_collagen_gray * (~bw_nuclei_filled).astype(np.float64)
+    he_collagen_bw = he_collagen_exclude > 0.01
+    he_collagen_bw = remove_small_components(
+        he_collagen_bw, int(np.ceil(pixpermic**2))
+    )
+    he_moving = he_collagen_exclude * he_collagen_bw.astype(np.float64)
+    extras["mask_coverage"] = float((he_moving > 0.01).mean())
+    return he_moving, mode, extras
+
+
+def _run_optimizer(
+    he_moving: np.ndarray,
+    fixed: np.ndarray,
+    method: str,
+    random_state: int,
+) -> tuple[np.ndarray, str, dict[str, Any]]:
+    """Dispatch one registration optimizer; returns forward_2x3, backend, debug."""
+    debug: dict[str, Any] = {}
+    forward_2x3: np.ndarray | None = None
+    backend: str
+
+    if method == "mi" and _HAS_SITK:
+        forward_2x3, mi_debug = _register_mi(he_moving, fixed)
+        debug.update(mi_debug)
+        backend = "simpleitk_mattes"
+    elif method == "oneplusone" and _HAS_SITK:
+        forward_2x3, one_debug = _register_oneplusone_mi(
+            he_moving, fixed, random_state=random_state
+        )
+        debug.update(one_debug)
+        backend = "oneplusone_mattes"
+    elif method in ("ncc", "dice"):
+        forward_2x3, ncc_debug = _register_dice(he_moving, fixed)
+        debug.update(ncc_debug)
+        backend = "ncc_trf"
+    elif method == "mi_ncc" and _HAS_SITK:
+        mi_fwd, mi_debug = _register_mi(he_moving, fixed)
+        debug.update(mi_debug)
+        forward_2x3, refine_debug = _refine_fwd_with_ncc(
+            he_moving, fixed, mi_fwd,
+            matrix_delta=0.05, translation_delta_px=10.0,
+        )
+        debug.update(refine_debug)
+        backend = "mi_then_ncc"
+    else:
+        forward_2x3 = None
+        backend = "unset"
+
+    if forward_2x3 is None and method in ("mi", "oneplusone", "mi_ncc") and not _HAS_SITK:
+        forward_2x3, ncc_debug = _register_dice(he_moving, fixed)
+        debug.update(ncc_debug)
+        backend = "ncc_trf"
+
+    if forward_2x3 is None:
+        shift, _, _ = registration.phase_cross_correlation(fixed, he_moving)
+        forward_2x3 = np.array(
+            [[1.0, 0.0, float(-shift[1])], [0.0, 1.0, float(-shift[0])]],
+            dtype=np.float64,
+        )
+        backend = "skimage_ecc_fallback"
+
+    return forward_2x3, backend, debug
+
+
+def _score_forward_vs_shg(
+    he_moving: np.ndarray,
+    fixed: np.ndarray,
+    forward_2x3: np.ndarray,
+) -> dict[str, Any]:
+    """Warp moving image with ``forward_2x3`` and score against SHG."""
+    A_inv = _affine_fixed_to_moving_from_forward(forward_2x3)
+    warped = matlab_imwarp_bilinear(
+        he_moving.astype(np.float64),
+        fixed.shape[:2],
+        A_inv,
+        fill_value=0.0,
+    )
+    return compute_shg_alignment_metrics(
+        warped, fixed, forward_2x3=forward_2x3
+    )
 
 
 def _shg_he_registration_core(
@@ -1016,9 +1306,9 @@ def _shg_he_registration_core(
     registered_img
         Float RGB in ``[0, 1]``, shape matching original SHG (H, W, 3).
     backend
-        ``"dice_lm"``, ``"simpleitk_mattes"`` or ``"skimage_ecc_fallback"``.
+        Optimizer backend label.
     debug
-        Intermediate registration parameters (transform matrices, residuals).
+        Intermediate registration parameters (transform matrices, SHG scores).
     """
     he_path = os.path.join(he_filepath, he_filename)
     shg_path = os.path.join(shg_filepath, he_filename)
@@ -1033,114 +1323,80 @@ def _shg_he_registration_core(
         he_img, shg_img, float(pixelpermicron)
     )
 
-    ecm_mode = (ecm_method or "hsv").lower()
     he_adjusted = adjust_rgb_mean_std(he_scaled)
     he_decorr = decorrelation_stretch(he_adjusted, tol=0.01)
-
-    if ecm_mode == "hsv":
-        _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask(he_adjusted, pixpermic)
-        bw_collagen, _bw_no_background, _sat_thresh = make_collagen_mask(
-            he_adjusted, pixpermic, enhanced_postprocessing=False
-        )
-    elif ecm_mode == "rgb":
-        _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask_rgb(he_decorr, pixpermic)
-        he_collagen_gray, bw_collagen = make_ecm_mask_rgb(he_decorr, pixpermic)
-    elif ecm_mode == "lab":
-        _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask_rgb(he_decorr, pixpermic)
-        he_collagen_gray, bw_collagen = make_ecm_mask_lab(
-            he_scaled, he_decorr, pixpermic, random_state=random_state
-        )
-    else:
-        raise ValueError(
-            f"Unknown ecm_method={ecm_method!r}; expected one of 'hsv', 'rgb', 'lab'."
-        )
-
-    gray_nuclei = matlab_rgb2gray(masked_nuclei_image)
-    ksize = max(1, int(np.floor(pixpermic)))
-    nuclei_filtered = gaussian_filter_matlab_like(
-        gray_nuclei, sigma=0.5, kernel_size=ksize, boundary="zero"
-    )
-    bw_nuclei = nuclei_filtered > 0.001
-    bw_nuclei_discard = remove_small_components(
-        bw_nuclei, int(np.ceil(50.0 * pixpermic**2))
-    )
-    bw_nuclei_dilated = morphology.dilation(
-        bw_nuclei_discard, disk_se(np.floor(pixpermic))
-    )
-    bw_nuclei_filled = binary_fill_holes(bw_nuclei_dilated)
-
-    if ecm_mode == "hsv":
-        he_collagen_bw = bw_collagen & (~bw_nuclei_filled)
-        he_collagen_bw = remove_small_components(
-            he_collagen_bw, int(np.ceil(pixpermic**2))
-        )
-        he_moving = he_collagen_bw.astype(np.float64)
-    else:
-        he_collagen_exclude = he_collagen_gray * (~bw_nuclei_filled).astype(np.float64)
-        he_collagen_bw = he_collagen_exclude > 0.01
-        he_collagen_bw = remove_small_components(
-            he_collagen_bw, int(np.ceil(pixpermic**2))
-        )
-        he_moving = he_collagen_exclude * he_collagen_bw.astype(np.float64)
 
     fixed = fixed_shg.astype(np.float64)
     if fixed.ndim == 3:
         fixed = matlab_rgb2gray(fixed)
 
+    method = (registration_method or "mi_ncc").lower()
+    ecm_requested = (ecm_method or "hsv").lower()
+
     debug: dict[str, Any] = {
-        "registration_method_requested": registration_method,
-        "ecm_method_requested": ecm_mode,
+        "registration_method_requested": method,
+        "ecm_method_requested": ecm_requested,
         "pixpermic_working": float(pixpermic),
         "fixed_shape": tuple(int(x) for x in fixed.shape),
     }
 
-    method = (registration_method or "mi_ncc").lower()
-
-    forward_2x3: np.ndarray | None = None
-    backend: str
-
-    if method == "mi" and _HAS_SITK:
-        forward_2x3, mi_debug = _register_mi(he_moving, fixed)
-        debug.update(mi_debug)
-        backend = "simpleitk_mattes"
-    elif method == "oneplusone" and _HAS_SITK:
-        forward_2x3, one_debug = _register_oneplusone_mi(
-            he_moving, fixed, random_state=random_state
+    # B3: auto-pick ECM by SHG histogram MI of the *unregistered* moving
+    # image (cheap), then run the full optimizer once on the winner.
+    if ecm_requested == "auto":
+        candidates = ("hsv", "rgb", "lab", "gray")
+        best_mi = -np.inf
+        best_moving: np.ndarray | None = None
+        best_mode = "hsv"
+        best_extras: dict[str, Any] = {}
+        auto_scores: dict[str, float] = {}
+        identity = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64)
+        for cand in candidates:
+            try:
+                moving_c, mode_c, extras_c = _build_he_moving(
+                    he_scaled, he_adjusted, he_decorr, pixpermic, cand, random_state
+                )
+            except Exception as exc:
+                auto_scores[cand] = float("nan")
+                debug.setdefault("ecm_auto_errors", {})[cand] = str(exc)
+                continue
+            score_c = _score_forward_vs_shg(moving_c, fixed, identity)
+            auto_scores[mode_c] = float(score_c["shg_mi"])
+            if float(score_c["shg_mi"]) > best_mi:
+                best_mi = float(score_c["shg_mi"])
+                best_moving = moving_c
+                best_mode = mode_c
+                best_extras = extras_c
+        debug["ecm_auto_shg_mi"] = auto_scores
+        if best_moving is None:
+            raise RuntimeError("ecm_method='auto' failed for all ECM candidates.")
+        he_moving = best_moving
+        ecm_mode = best_mode
+        debug.update(best_extras)
+        debug["ecm_method_selected"] = ecm_mode
+        forward_2x3, backend, opt_debug = _run_optimizer(
+            he_moving, fixed, method, random_state
         )
-        debug.update(one_debug)
-        backend = "oneplusone_mattes"
-    elif method in ("ncc", "dice"):
-        forward_2x3, ncc_debug = _register_dice(he_moving, fixed)
-        debug.update(ncc_debug)
-        backend = "ncc_trf"
-    elif method == "mi_ncc" and _HAS_SITK:
-        # Hybrid: MI finds the correct basin, bounded NCC polishes sub-pixel.
-        # Bounds are tight on purpose: wider bounds let NCC escape into worse
-        # local minima (empirically verified on the regression fixtures).
-        mi_fwd, mi_debug = _register_mi(he_moving, fixed)
-        debug.update(mi_debug)
-        forward_2x3, refine_debug = _refine_fwd_with_ncc(
-            he_moving, fixed, mi_fwd,
-            matrix_delta=0.05, translation_delta_px=10.0,
+        debug.update(opt_debug)
+    else:
+        he_moving, ecm_mode, extras = _build_he_moving(
+            he_scaled, he_adjusted, he_decorr, pixpermic, ecm_requested, random_state
         )
-        debug.update(refine_debug)
-        backend = "mi_then_ncc"
-
-    if forward_2x3 is None and method in ("mi", "oneplusone") and not _HAS_SITK:
-        forward_2x3, ncc_debug = _register_dice(he_moving, fixed)
-        debug.update(ncc_debug)
-        backend = "ncc_trf"
-
-    if forward_2x3 is None:
-        # Final fallback: skimage phase cross-correlation translation only.
-        shift, _, _ = registration.phase_cross_correlation(fixed, he_moving)
-        forward_2x3 = np.array(
-            [[1.0, 0.0, float(-shift[1])], [0.0, 1.0, float(-shift[0])]],
-            dtype=np.float64,
+        debug.update(extras)
+        debug["ecm_method_selected"] = ecm_mode
+        forward_2x3, backend, opt_debug = _run_optimizer(
+            he_moving, fixed, method, random_state
         )
-        backend = "skimage_ecc_fallback"
+        debug.update(opt_debug)
 
     debug["forward_2x3"] = forward_2x3.tolist()
+
+    # A1: always report SHG alignment of the moving image under the chosen transform.
+    shg_metrics = _score_forward_vs_shg(he_moving, fixed, forward_2x3)
+    debug["shg_alignment"] = shg_metrics
+    identity = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64)
+    debug["shg_alignment_identity_mi"] = float(
+        _score_forward_vs_shg(he_moving, fixed, identity)["shg_mi"]
+    )
 
     A_inv = _affine_fixed_to_moving_from_forward(forward_2x3)
 
@@ -1154,6 +1410,15 @@ def _shg_he_registration_core(
 
     registered_img = resize_like(registered, original_shg_shape)
     registered_img = np.clip(registered_img, 0.0, 1.0)
+
+    # Also score registered HE luma vs original SHG (full-res).
+    reg_luma = matlab_rgb2gray(registered_img)
+    shg_full = shg_img.astype(np.float64)
+    if shg_full.ndim == 3:
+        shg_full = matlab_rgb2gray(shg_full)
+    debug["shg_alignment_fullres"] = compute_shg_alignment_metrics(
+        reg_luma, shg_full, forward_2x3=None
+    )
     return registered_img, backend, debug
 
 

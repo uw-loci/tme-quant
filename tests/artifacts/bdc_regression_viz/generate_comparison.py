@@ -4,6 +4,10 @@ Usage:
     python tests/artifacts/bdc_regression_viz/generate_comparison.py [output_dir]
 
 Default output_dir: tests/artifacts/bdc_regression_viz/new
+
+Generates one figure per (case, ecm_method) combination.
+Override REGISTRATION_METHOD and ECM_METHODS at the top of this script
+to compare different configurations (e.g. oneplusone, rgb, lab).
 """
 from __future__ import annotations
 
@@ -18,7 +22,11 @@ from skimage import io
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
 
-from pycurvelets._registration_quality import compute_registration_quality_metrics
+from pycurvelets._he_bdc_common import matlab_rgb2gray
+from pycurvelets._registration_quality import (
+    compute_registration_quality_metrics,
+    make_checkerboard,
+)
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
     shg_he_registration,
@@ -33,6 +41,9 @@ CASES = [
     ("test2", 2.0, "HE_registered_test2"),
     ("test3", 3.0, "HE_registered_test3"),
 ]
+
+REGISTRATION_METHOD = "mi_ncc"
+ECM_METHODS = ["hsv"]
 
 
 def _load_uint8(path: Path) -> np.ndarray:
@@ -53,7 +64,15 @@ def _checkerboard(a: np.ndarray, b: np.ndarray, block: int = 64) -> np.ndarray:
     return out
 
 
-def generate(case_id: str, ppm: float, golden_folder: str, out_dir: Path) -> None:
+def generate(
+    case_id: str,
+    ppm: float,
+    golden_folder: str,
+    out_dir: Path,
+    *,
+    registration_method: str = REGISTRATION_METHOD,
+    ecm_method: str = "hsv",
+) -> None:
     he_raw = _load_uint8(HE_DIR / "patient_001.tif")
     shg_raw = _load_uint8(SHG_DIR / "patient_001.tif")
     matlab_golden = _load_uint8(HE_DIR / golden_folder / "patient_001.tif")
@@ -64,9 +83,16 @@ def generate(case_id: str, ppm: float, golden_folder: str, out_dir: Path) -> Non
         pixelpermicron=ppm,
         SHGfilepath=str(SHG_DIR),
         areaThreshold=5000.0,
+        registration_method=registration_method,
+        ecm_method=ecm_method,
     )
-    py_float = shg_he_registration(params, save_output=False, return_debug=False)
+    py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
     py_uint8 = (np.clip(py_float, 0, 1) * 255).astype(np.uint8)
+    shg_align = debug.get("shg_alignment") or {}
+    shg_mi = float(shg_align.get("shg_mi", float("nan")))
+    shg_ncc = float(shg_align.get("shg_ncc", float("nan")))
+    shg_id_mi = float(debug.get("shg_alignment_identity_mi", float("nan")))
+    shg_mi_delta = shg_mi - shg_id_mi if np.isfinite(shg_mi) and np.isfinite(shg_id_mi) else float("nan")
 
     diff_signed = py_uint8.astype(np.float64) - matlab_golden.astype(np.float64)
     diff_abs = np.abs(diff_signed)
@@ -81,16 +107,26 @@ def generate(case_id: str, ppm: float, golden_folder: str, out_dir: Path) -> Non
     psnr = float(metrics["psnr"])
     ssim = float(metrics["ssim"])
 
+    ecm_label = {
+        "hsv": "HSV (BDcreation_reg2)",
+        "rgb": "RGB (BDcreation_reg)",
+        "lab": "LAB k-means",
+        "gray": "inverted luma",
+        "auto": "auto (best SHG MI)",
+    }
+    ecm_display = ecm_label.get(ecm_method, ecm_method)
+    ecm_selected = debug.get("ecm_method_selected", ecm_method)
+
     fig, axes = plt.subplots(3, 4, figsize=(20, 15), facecolor="white")
     fig.suptitle(
-        f"{case_id}  |  pixelpermicron = {ppm}  |  MAE = {mae:.1f}  |  "
-        f"RMSE = {rmse:.1f}  |  Exact = {exact_pct:.1f}%  |  "
-        f"PSNR = {psnr:.1f} dB  |  SSIM = {ssim:.4f}",
-        fontsize=14,
+        f"{case_id}  |  pixelpermicron = {ppm}  |  method={registration_method}  |  ecm={ecm_display}\n"
+        f"MAE={mae:.1f}  |  RMSE={rmse:.1f}  |  Exact={exact_pct:.1f}%  |  "
+        f"PSNR={psnr:.1f} dB  |  SSIM={ssim:.4f}  |  "
+        f"SHG MI={shg_mi:.4f} (Δid={shg_mi_delta:+.4f})  |  SHG NCC={shg_ncc:.4f}",
+        fontsize=13,
         fontweight="bold",
     )
 
-    # Row 1: Raw HE | SHG | MATLAB Golden | Python Output
     ax1 = axes[0, 0]
     ax1.imshow(he_raw)
     ax1.set_title("Raw HE Input", fontsize=10)
@@ -112,7 +148,6 @@ def generate(case_id: str, ppm: float, golden_folder: str, out_dir: Path) -> Non
     ax4.set_title("Python Output", fontsize=10)
     ax4.axis("off")
 
-    # Row 2: Side-by-side | Checkerboard | 50/50 Blend | (empty)
     ax5 = axes[1, 0]
     h_img = matlab_golden.shape[0]
     w_img = matlab_golden.shape[1]
@@ -134,12 +169,27 @@ def generate(case_id: str, ppm: float, golden_folder: str, out_dir: Path) -> Non
         np.uint8
     )
     ax7.imshow(blend)
-    ax7.set_title("50/50 Blend", fontsize=10)
+    ax7.set_title("50/50 Blend (MATLAB / Python)", fontsize=10)
     ax7.axis("off")
 
-    axes[1, 3].axis("off")
+    ax_shg = axes[1, 3]
+    py_luma = matlab_rgb2gray(py_uint8.astype(np.float64) / 255.0)
+    shg_f = shg_raw.astype(np.float64)
+    if shg_f.max() > 1.0:
+        shg_f = shg_f / 255.0
+    if shg_f.ndim == 3:
+        shg_f = matlab_rgb2gray(shg_f)
+    shg_rgb = np.stack([shg_f, shg_f, shg_f], axis=-1)
+    py_rgb01 = py_uint8.astype(np.float64) / 255.0
+    if shg_rgb.shape[:2] != py_rgb01.shape[:2]:
+        from pycurvelets._he_bdc_common import resize_like
 
-    # Row 3: |Diff|x3 | Per-pixel Mean|Diff| heatmap | Histogram | Stats
+        shg_rgb = resize_like(shg_rgb, py_rgb01.shape[:2])
+    he_shg_checker = make_checkerboard(py_rgb01, shg_rgb, block=64)
+    ax_shg.imshow(np.clip(he_shg_checker, 0, 1))
+    ax_shg.set_title("Python HE vs SHG checkerboard", fontsize=10)
+    ax_shg.axis("off")
+
     ax8 = axes[2, 0]
     diff_x3 = np.clip(diff_abs * 3, 0, 255).astype(np.uint8)
     ax8.imshow(diff_x3)
@@ -165,19 +215,31 @@ def generate(case_id: str, ppm: float, golden_folder: str, out_dir: Path) -> Non
     ax11.axis("off")
     ax11.set_title("Summary Statistics", fontsize=10)
     stats_text = (
-        f"Shape: {py_uint8.shape}\n"
-        f"MAE:  {mae:.2f} / 255\n"
-        f"RMSE: {rmse:.2f} / 255\n"
-        f"PSNR: {psnr:.2f} dB\n"
-        f"SSIM: {ssim:.4f}\n"
-        f"Max |Diff|: {max_diff}\n"
-        f"Exact match: {exact_pct:.1f}%\n"
-        f"Within  5: {w5:.1f}%\n"
-        f"Within 10: {w10:.1f}%\n"
-        f"Within 20: {w20:.1f}%"
+        f"registration: {registration_method}\n"
+        f"ecm requested: {ecm_method}\n"
+        f"ecm selected:  {ecm_selected}\n"
+        f"ppm:           {ppm}\n"
+        f"\n"
+        f"vs MATLAB golden\n"
+        f"  Shape: {py_uint8.shape}\n"
+        f"  MAE:  {mae:.2f} / 255\n"
+        f"  RMSE: {rmse:.2f} / 255\n"
+        f"  PSNR: {psnr:.2f} dB\n"
+        f"  SSIM: {ssim:.4f}\n"
+        f"  Max |Diff|: {max_diff}\n"
+        f"  Exact match: {exact_pct:.1f}%\n"
+        f"  Within  5: {w5:.1f}%\n"
+        f"  Within 10: {w10:.1f}%\n"
+        f"  Within 20: {w20:.1f}%\n"
+        f"\n"
+        f"vs SHG (ECM moving image)\n"
+        f"  SHG MI:     {shg_mi:.4f}\n"
+        f"  Identity MI:{shg_id_mi:.4f}\n"
+        f"  MI Δid:     {shg_mi_delta:+.4f}\n"
+        f"  SHG NCC:    {shg_ncc:.4f}"
     )
     box = FancyBboxPatch(
-        (0.05, 0.15), 0.9, 0.7,
+        (0.05, 0.08), 0.9, 0.84,
         boxstyle="round,pad=0.05",
         facecolor="#f0f0f0",
         edgecolor="gray",
@@ -187,21 +249,23 @@ def generate(case_id: str, ppm: float, golden_folder: str, out_dir: Path) -> Non
     ax11.text(
         0.5, 0.5, stats_text,
         transform=ax11.transAxes,
-        fontsize=9,
+        fontsize=7,
         fontfamily="monospace",
         verticalalignment="center",
         horizontalalignment="center",
     )
 
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
-    out_path = out_dir / f"comparison_{case_id}_ppm{ppm}.png"
+    fig.tight_layout(rect=[0, 0, 1, 0.93])
+    out_path = out_dir / f"comparison_{case_id}_ppm{ppm}_{registration_method}_{ecm_method}.png"
     fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved {out_path}")
     print(
-        f"  {case_id} ppm={ppm}: MAE={mae:.2f}, RMSE={rmse:.2f}, "
+        f"  {case_id} ppm={ppm} method={registration_method} ecm={ecm_method}: "
+        f"MAE={mae:.2f}, RMSE={rmse:.2f}, "
         f"PSNR={psnr:.2f}dB, SSIM={ssim:.4f}, "
-        f"Exact={exact_pct:.1f}%, Within5={w5:.1f}%, Within10={w10:.1f}%, Within20={w20:.1f}%"
+        f"Exact={exact_pct:.1f}%, Within5={w5:.1f}%, Within10={w10:.1f}%, Within20={w20:.1f}%, "
+        f"SHG_MI={shg_mi:.4f} (Δid={shg_mi_delta:+.4f}), SHG_NCC={shg_ncc:.4f}"
     )
 
 
@@ -212,8 +276,16 @@ def main() -> None:
         out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "new"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    for case_id, ppm, folder in CASES:
-        generate(case_id, ppm, folder, out_dir)
+    for ecm_method in ECM_METHODS:
+        for case_id, ppm, folder in CASES:
+            generate(
+                case_id,
+                ppm,
+                folder,
+                out_dir,
+                registration_method=REGISTRATION_METHOD,
+                ecm_method=ecm_method,
+            )
 
 
 if __name__ == "__main__":

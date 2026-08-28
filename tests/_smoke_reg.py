@@ -5,7 +5,7 @@ where case_id is one of test1/test2/test3; defaults to all three.
 
 Override the algorithm via env vars:
 ``SMOKE_METHOD`` -> ``mi_ncc`` (default), ``mi``, ``ncc``, ``oneplusone``.
-``SMOKE_ECM`` -> ``hsv`` (default), ``rgb``, ``lab``.
+``SMOKE_ECM`` -> ``hsv`` (default), ``rgb``, ``lab``, ``gray``, ``auto``.
 """
 from __future__ import annotations
 
@@ -17,7 +17,12 @@ from typing import Any
 import numpy as np
 from skimage import io
 
-from pycurvelets._registration_quality import compute_registration_quality_metrics
+from pycurvelets._registration_quality import (
+    compute_registration_quality_metrics,
+    compute_shg_alignment_metrics,
+    make_checkerboard,
+)
+from pycurvelets._he_bdc_common import matlab_rgb2gray
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
     shg_he_registration,
@@ -71,17 +76,29 @@ def _run_case(case_id: str, ppm: float, gold_folder: str) -> None:
     psnr = float(metrics["psnr"])
     ssim = float(metrics["ssim"])
 
+    shg_path = _FIXTURE / "SHG" / "patient_001.tif"
+    shg = io.imread(str(shg_path)).astype(np.float64)
+    if shg.max() > 1.0:
+        shg = shg / 255.0
+    if shg.ndim == 3:
+        shg = matlab_rgb2gray(shg)
+    shg_m = debug.get("shg_alignment_fullres") or compute_shg_alignment_metrics(
+        matlab_rgb2gray(reg_float), shg
+    )
+
     print(
         f"[{case_id}] ppm={ppm} shape={reg_uint8.shape} "
         f"backend={debug.get('registration_backend')} "
         f"method={params_kwargs.get('registration_method', 'mi_ncc')} "
-        f"ecm={params_kwargs.get('ecm_method', 'hsv')}"
+        f"ecm={debug.get('ecm_method_selected', params_kwargs.get('ecm_method', 'hsv'))}"
     )
     print(f"    runtime      : {dt:6.2f} s")
     print(f"    MAE          : {mae:6.3f} / 255")
     print(f"    RMSE         : {rmse:6.3f} / 255")
     print(f"    PSNR         : {psnr:6.3f} dB")
     print(f"    SSIM         : {ssim:6.4f}")
+    print(f"    SHG MI       : {float(shg_m['shg_mi']):6.4f}")
+    print(f"    SHG NCC      : {float(shg_m['shg_ncc']):6.4f}")
     print(f"    exact match  : {exact*100:5.2f} %")
     print(f"    within  5    : {within5*100:5.2f} %")
     print(f"    within 10    : {within10*100:5.2f} %")
@@ -91,6 +108,8 @@ def _run_case(case_id: str, ppm: float, gold_folder: str) -> None:
     fwd = debug.get("forward_2x3")
     if fwd is not None:
         print(f"    forward_2x3  : {fwd}")
+    # Touch checkerboard helper so smoke stays a one-stop visual metric entry.
+    _ = make_checkerboard(reg_float, np.stack([shg, shg, shg], axis=-1) if shg.ndim == 2 else shg)
     print()
 
 
