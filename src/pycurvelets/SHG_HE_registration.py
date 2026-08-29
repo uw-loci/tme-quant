@@ -44,7 +44,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from scipy.ndimage import binary_fill_holes, center_of_mass, gaussian_filter
+from scipy.ndimage import binary_fill_holes, gaussian_filter
 from scipy.optimize import least_squares
 from scipy.optimize import minimize as _scipy_minimize
 from skimage import io, morphology, registration
@@ -704,11 +704,10 @@ def _register_mi(
     """
     Mattes MI + grid search + Nelder-Mead registration.
 
-    Improvements vs the original narrow grid:
-    - Wider angle/scale/translation ranges (C1).
-    - Multi-start translation seeds: identity, phase correlation, mask
-      centroid offset (C2).
-    - Affine stage kept only when it improves MI over similarity (C6).
+    Search ranges match the basin that agrees with MATLAB ``BDcreation_reg2``
+    goldens on patient_001 (angle ±45°, scale 0.80–1.25, translation ±50 px).
+    A wider grid was tried and left that basin on the ppm=3 case. Affine is
+    kept only when it improves Mattes MI over similarity (C6).
     """
     if not _HAS_SITK:  # pragma: no cover
         raise RuntimeError(
@@ -726,11 +725,6 @@ def _register_mi(
     moving_sitk = sitk.GetImageFromArray(moving)
     fixed_sitk = sitk.Cast(fixed_sitk, sitk.sitkFloat64)
     moving_sitk = sitk.Cast(moving_sitk, sitk.sitkFloat64)
-
-    H, W = fixed.shape[:2]
-    # C1: wider search ranges (was 0.3 * size / +/-45 deg / [0.80, 1.25]).
-    tx_range = max(60, int(0.40 * W))
-    ty_range = max(60, int(0.40 * H))
 
     geom_init = sitk.CenteredTransformInitializer(
         fixed_sitk, moving_sitk,
@@ -771,8 +765,8 @@ def _register_mi(
                     best_angle = float(angle_deg)
                     best_scale = float(scale_val)
 
-    # C1: wider angle/scale coarse grid.
-    _probe_angle_scale(range(-55, 56, 3), np.arange(0.72, 1.36, 0.03))
+    # MATLAB-parity grid (do not widen: ppm=3 left the golden basin).
+    _probe_angle_scale(range(-45, 46, 2), np.arange(0.80, 1.25, 0.02))
     _probe_angle_scale(
         np.arange(best_angle - 3, best_angle + 3.01, 0.5),
         np.arange(best_scale - 0.04, best_scale + 0.041, 0.005),
@@ -782,43 +776,15 @@ def _register_mi(
         np.arange(best_scale - 0.005, best_scale + 0.0051, 0.001),
     )
 
-    # C2: multi-start translation seeds before the dense grid.
-    translation_seeds: list[tuple[float, float, str]] = [(0.0, 0.0, "identity")]
-    try:
-        shift, _, _ = registration.phase_cross_correlation(
-            fixed, moving, upsample_factor=1
-        )
-        # phase_cross_correlation returns (row, col) shift of moving -> fixed.
-        translation_seeds.append((float(-shift[1]), float(-shift[0]), "phase_corr"))
-    except Exception:
-        pass
-    moving_mask = moving > (0.01 * float(moving.max()) if float(moving.max()) > 0 else 0.01)
-    fixed_mask = fixed > (0.01 * float(fixed.max()) if float(fixed.max()) > 0 else 0.01)
-    if moving_mask.any() and fixed_mask.any():
-        my, mx = center_of_mass(moving_mask)
-        fy, fx = center_of_mass(fixed_mask)
-        translation_seeds.append((float(fx - mx), float(fy - my), "centroid"))
-
-    seed_metrics: dict[str, float] = {}
-    for tx0, ty0, name in translation_seeds:
-        val = _eval_similarity(best_angle, best_scale, tx0, ty0)
-        seed_metrics[name] = float(val)
-        if val < best_metric:
-            best_metric = val
-            best_tx = float(tx0)
-            best_ty = float(ty0)
-
-    # Translation search proportional to image size (wider).
-    coarse_step = max(5, int(min(tx_range, ty_range) / 10))
-    for tx in np.arange(-tx_range, tx_range + 1, coarse_step):
-        for ty in np.arange(-ty_range, ty_range + 1, coarse_step):
+    for tx in np.arange(-50, 51, 5):
+        for ty in np.arange(-50, 51, 5):
             val = _eval_similarity(best_angle, best_scale, tx, ty)
             if val < best_metric:
                 best_metric = val
                 best_tx = float(tx)
                 best_ty = float(ty)
-    for tx in np.arange(best_tx - coarse_step, best_tx + coarse_step + 0.01, 1):
-        for ty in np.arange(best_ty - coarse_step, best_ty + coarse_step + 0.01, 1):
+    for tx in np.arange(best_tx - 5, best_tx + 5.01, 1):
+        for ty in np.arange(best_ty - 5, best_ty + 5.01, 1):
             val = _eval_similarity(best_angle, best_scale, tx, ty)
             if val < best_metric:
                 best_metric = val
@@ -958,9 +924,6 @@ def _register_mi(
         "mi_sim_params": (opt_angle, opt_scale, opt_tx, opt_ty),
         "mi_aff_params": tuple(p.tolist()),
         "mi_grid_metric": grid_metric,
-        "mi_grid_tx_range": tx_range,
-        "mi_grid_ty_range": ty_range,
-        "mi_seed_metrics": seed_metrics,
         "mi_sim_metric": float(sim_metric),
         "mi_aff_metric": float(aff_metric),
         "mi_kept_stage": kept_stage,
