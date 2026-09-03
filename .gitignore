@@ -184,7 +184,18 @@ pycurvelets/opt/*.*
 
 # test tmp folder
 tests/test_images/CA_Out/
-tests/artifacts/
+# ...except the BDcreation registration comparison figures for tests 1-9 and
+# the scripts that generate them. bdc_regression_viz/current is the canonical
+# set produced with the default registration_method; output dirs from ad-hoc
+# `--method ...` runs stay ignored. (`dir/*` rather than `dir/` so children
+# can be re-included.)
+tests/artifacts/*
+!tests/artifacts/bdc_regression_viz/
+tests/artifacts/bdc_regression_viz/*
+!tests/artifacts/bdc_regression_viz/*.py
+!tests/artifacts/bdc_regression_viz/README.md
+!tests/artifacts/bdc_regression_viz/current/
+.mplconfig/
 
 # referenced MATLAB files
 *.m
