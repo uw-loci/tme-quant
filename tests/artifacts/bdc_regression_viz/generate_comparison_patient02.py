@@ -88,6 +88,7 @@ def generate(
     matlab_reg: str,
     notes: str,
     out_dir: Path,
+    registration_method: str = "mi_ncc",
 ) -> dict:
     he_path = HE_DIR / he_filename
     shg_path = SHG_DIR / he_filename
@@ -108,7 +109,7 @@ def generate(
         pixelpermicron=ppm,
         SHGfilepath=str(SHG_DIR),
         areaThreshold=5000.0,
-        registration_method="mi_ncc",
+        registration_method=registration_method,
     )
     py_float = shg_he_registration(params, save_output=False, return_debug=False)
     py_uint8 = np.round(np.clip(py_float, 0, 1) * 255).astype(np.uint8)  # im2uint8 rounds
@@ -245,16 +246,28 @@ def generate(
 
 
 def main() -> None:
-    if len(sys.argv) > 1:
-        out_dir = Path(sys.argv[1])
-    else:
-        out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "new_patient02"
+    """``[out_dir] [--method M] [--cases id1,id2]``."""
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "new_patient02"
+    method = "mi_ncc"
+    selected: list[str] | None = None
+    it = iter(sys.argv[1:])
+    for a in it:
+        if a == "--method":
+            method = next(it)
+        elif a == "--cases":
+            selected = next(it).split(",")
+        elif a.startswith("--"):
+            raise SystemExit(f"unknown option {a}")
+        else:
+            out_dir = Path(a)
     out_dir.mkdir(parents=True, exist_ok=True)
+    cases = [c for c in CASES if selected is None or c[0] in selected]
 
-    print(f"Running {len(CASES)} patient_02 test cases (mi_ncc + HSV)...\n")
+    print(f"Running {len(cases)} patient_02 test cases ({method} + HSV)...\n")
     all_metrics = {}
-    for case_id, he_fn, ppm, golden, matlab_reg, notes in CASES:
-        m = generate(case_id, he_fn, ppm, golden, matlab_reg, notes, out_dir)
+    for case_id, he_fn, ppm, golden, matlab_reg, notes in cases:
+        m = generate(case_id, he_fn, ppm, golden, matlab_reg, notes, out_dir,
+                     registration_method=method)
         if m:
             all_metrics[case_id] = m
         print()

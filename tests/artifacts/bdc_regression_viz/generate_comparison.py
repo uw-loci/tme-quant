@@ -269,21 +269,36 @@ def generate(
     )
 
 
+def _parse_cli(argv: list[str]) -> tuple[Path, str, list[str]]:
+    """``[out_dir] [--method M] [--ecm a,b]`` - defaults keep old behaviour."""
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "new"
+    method = REGISTRATION_METHOD
+    ecm_methods = list(ECM_METHODS)
+    it = iter(argv)
+    for a in it:
+        if a == "--method":
+            method = next(it)
+        elif a == "--ecm":
+            ecm_methods = next(it).split(",")
+        elif a.startswith("--"):
+            raise SystemExit(f"unknown option {a}")
+        else:
+            out_dir = Path(a)
+    return out_dir, method, ecm_methods
+
+
 def main() -> None:
-    if len(sys.argv) > 1:
-        out_dir = Path(sys.argv[1])
-    else:
-        out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "new"
+    out_dir, method, ecm_methods = _parse_cli(sys.argv[1:])
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    for ecm_method in ECM_METHODS:
+    for ecm_method in ecm_methods:
         for case_id, ppm, folder in CASES:
             generate(
                 case_id,
                 ppm,
                 folder,
                 out_dir,
-                registration_method=REGISTRATION_METHOD,
+                registration_method=method,
                 ecm_method=ecm_method,
             )
 
