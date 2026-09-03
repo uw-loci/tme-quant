@@ -12,6 +12,7 @@ Test case definitions:
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -23,6 +24,11 @@ from skimage import io
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
 
+from pycurvelets._registration_gt_eval import (
+    gt_forward_to_working_grid,
+    gt_report,
+    ssim_vs_reference_rgb,
+)
 from pycurvelets._registration_quality import compute_registration_quality_metrics
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
@@ -32,6 +38,14 @@ from pycurvelets.SHG_HE_registration import (
 NEW_DATA = ROOT / "tests" / "test_for_shg_he_registration_BDcreation" / "new_test_datasets_tests4-5-6-7"
 HE_DIR = NEW_DATA / "HE"
 SHG_DIR = NEW_DATA / "SHG"
+# Ground truth: the un-transformed HE ROI (already on the SHG grid) and the
+# affine recovered between input HE and that ROI (tests/matlab_parity/dumps).
+GT_AFFINE_DIR = ROOT / "tests" / "matlab_parity" / "dumps"
+
+
+def _gt_reference_path(he_filename: str) -> Path:
+    roi = he_filename.replace("patient_02_", "").replace(".tif", "")  # e.g. roi2
+    return NEW_DATA / f"patient_02_HE_original-{roi}.tif"
 
 # (case_id, he_filename, ppm, golden_folder, matlab_reg, notes)
 CASES = [
@@ -111,8 +125,26 @@ def generate(
         areaThreshold=5000.0,
         registration_method=registration_method,
     )
-    py_float = shg_he_registration(params, save_output=False, return_debug=False)
+    py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
     py_uint8 = np.round(np.clip(py_float, 0, 1) * 255).astype(np.uint8)  # im2uint8 rounds
+
+    # Ground-truth scoring (synthetic cases only): transform error vs the
+    # recovered GT affine and SSIM vs the untransformed HE ROI.
+    gt_metrics: dict | None = None
+    gt_ref: np.ndarray | None = None
+    gt_json = GT_AFFINE_DIR / f"gt_affine_{case_id.split('_')[0]}.json"
+    gt_ref_path = _gt_reference_path(he_filename)
+    if gt_json.is_file() and gt_ref_path.is_file():
+        gt = json.loads(gt_json.read_text())
+        work = tuple(debug["fixed_shape"])
+        G = gt_forward_to_working_grid(
+            np.asarray(gt["forward_2x3_input_grid_0based"]),
+            tuple(gt["src_shape"]), tuple(gt["dst_shape"]), work,
+        )
+        gt_metrics = gt_report(np.asarray(debug["forward_2x3"]), G, work)
+        gt_ref = _load_uint8(gt_ref_path)[..., :3]
+        gt_metrics["ssim_vs_gt"] = ssim_vs_reference_rgb(py_uint8, gt_ref)
+        gt_metrics["matlab_ssim_vs_gt"] = ssim_vs_reference_rgb(matlab_golden, gt_ref)
 
     diff_signed = py_uint8.astype(np.float64) - matlab_golden.astype(np.float64)
     diff_abs = np.abs(diff_signed)
@@ -131,7 +163,7 @@ def generate(
 
     fig, axes = plt.subplots(3, 4, figsize=(20, 15), facecolor="white")
     fig.suptitle(
-        f"{case_id}  |  ppm={ppm}  |  method=mi_ncc  |  ecm=HSV\n"
+        f"{case_id}  |  ppm={ppm}  |  method={registration_method}  |  ecm=HSV\n"
         f"MAE={mae:.1f}  |  RMSE={rmse:.1f}  |  Exact={exact_pct:.1f}%  |  "
         f"PSNR={psnr:.1f} dB  |  SSIM={ssim:.4f}",
         fontsize=13,
@@ -173,6 +205,9 @@ def generate(
     axes[1, 2].set_title("50/50 Blend", fontsize=10)
     axes[1, 2].axis("off")
 
+    if gt_ref is not None:
+        axes[1, 3].imshow(_checkerboard(gt_ref, py_uint8, block=64))
+        axes[1, 3].set_title("Ground truth (HE_original) vs Python checkerboard", fontsize=10)
     axes[1, 3].axis("off")
 
     diff_x3 = np.clip(diff_abs * 3, 0, 255).astype(np.uint8)
@@ -197,7 +232,7 @@ def generate(
     ax11.axis("off")
     ax11.set_title("Summary Statistics", fontsize=10)
     stats_text = (
-        f"registration: mi_ncc\n"
+        f"registration: {registration_method}\n"
         f"ecm_method:   hsv\n"
         f"ppm:          {ppm}\n"
         f"file:         {he_filename}\n"
@@ -215,6 +250,16 @@ def generate(
         f"Within 10: {w10:.1f}%\n"
         f"Within 20: {w20:.1f}%"
     )
+    if gt_metrics is not None:
+        stats_text += (
+            f"\n\nvs GROUND TRUTH (synthetic)\n"
+            f"corner disp:  {gt_metrics['corner_disp_px']:.1f} px "
+            f"(identity {gt_metrics['identity_corner_disp_px']:.1f})\n"
+            f"d angle:      {gt_metrics['d_angle_deg']:+.2f} deg\n"
+            f"d scale:      {gt_metrics['d_scale']:+.3f}\n"
+            f"SSIM vs GT:   {gt_metrics['ssim_vs_gt']:.4f} "
+            f"(MATLAB {gt_metrics['matlab_ssim_vs_gt']:.4f})"
+        )
     box = FancyBboxPatch(
         (0.05, 0.05), 0.9, 0.88,
         boxstyle="round,pad=0.05",
@@ -242,6 +287,15 @@ def generate(
         f"PSNR={psnr:.2f}dB, SSIM={ssim:.4f}, "
         f"Exact={exact_pct:.1f}%"
     )
+    if gt_metrics is not None:
+        metrics = dict(metrics)
+        metrics.update({f"gt_{k}": v for k, v in gt_metrics.items()})
+        print(
+            f"  {case_id} vs GT: corner_disp={gt_metrics['corner_disp_px']:.2f}px "
+            f"(identity {gt_metrics['identity_corner_disp_px']:.1f}px), "
+            f"dAngle={gt_metrics['d_angle_deg']:+.2f}deg, dScale={gt_metrics['d_scale']:+.3f}, "
+            f"SSIM_vs_GT={gt_metrics['ssim_vs_gt']:.4f} (MATLAB {gt_metrics['matlab_ssim_vs_gt']:.4f})"
+        )
     return metrics
 
 
@@ -276,17 +330,27 @@ def main() -> None:
         print("=" * 80)
         print("SUMMARY")
         print("=" * 80)
-        print(f"{'Case':<35s} {'MAE':>6s} {'RMSE':>7s} {'PSNR':>7s} {'SSIM':>7s} {'Exact%':>7s}")
+        print(
+            f"{'Case':<35s} {'MAE':>6s} {'RMSE':>7s} {'PSNR':>7s} {'SSIM':>7s} {'Exact%':>7s} | "
+            f"{'GTdisp':>7s} {'GTssim':>7s} {'MLssim':>7s}"
+        )
         print("-" * 80)
         for cid, m in all_metrics.items():
+            gt_cols = (
+                f"{m['gt_corner_disp_px']:7.2f} {m['gt_ssim_vs_gt']:7.4f} {m['gt_matlab_ssim_vs_gt']:7.4f}"
+                if "gt_corner_disp_px" in m else f"{'n/a':>7s} {'n/a':>7s} {'n/a':>7s}"
+            )
             print(
                 f"{cid:<35s} "
                 f"{m['mae_uint8']:6.2f} "
                 f"{m['rmse_uint8']:7.2f} "
                 f"{m['psnr']:7.2f} "
                 f"{m['ssim']:7.4f} "
-                f"{m['exact_frac']*100:6.1f}%"
+                f"{m['exact_frac']*100:6.1f}% | {gt_cols}"
             )
+        print("GTdisp = mean corner displacement (px, working grid) of the Python transform vs the")
+        print("recovered ground-truth affine; GTssim/MLssim = SSIM of Python / MATLAB output vs the")
+        print("untransformed HE ROI (true alignment). Only defined for the synthetic patient_02 cases.")
 
 
 if __name__ == "__main__":
