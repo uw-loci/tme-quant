@@ -8,9 +8,9 @@
         512
       ],
       "fixed_shg_max_abs_diff": 0.0,
-      "dice_he_moving": 0.9578179511576277,
+      "dice_he_moving": 1.0,
       "matlab_mask_coverage": 0.03133392333984375,
-      "python_mask_coverage": 0.028804779052734375,
+      "python_mask_coverage": 0.03133392333984375,
       "matlab_similarity": {
         "scale_x": 0.8591163486621984,
         "scale_y": 0.8591163486621984,
@@ -40,7 +40,7 @@
         ]
       ],
       "engine_on_matlab_inputs": {
-        "seconds": 15.639676094055176,
+        "seconds": 15.740077257156372,
         "similarity": {
           "scale_x": 0.8591163486621991,
           "scale_y": 0.8591163486621938,
@@ -124,30 +124,30 @@
       },
       "engine_on_python_mask": {
         "affine": {
-          "scale_x": 0.8561664682392631,
-          "scale_y": 0.8702818031025727,
-          "shear": -0.025467000964299793,
-          "angle_deg": -5.102038468271303,
-          "tx": 36.48545766901839,
-          "ty": 56.64866728022662
+          "scale_x": 0.8554619455948413,
+          "scale_y": 0.8727659454444519,
+          "shear": -0.025278506726630474,
+          "angle_deg": -5.070336930206491,
+          "tx": 36.92011018305308,
+          "ty": 56.00096629197301
         },
         "affine_error_vs_matlab": {
-          "max_abs_dM": 0.002489257579768145,
-          "max_abs_dt": 0.6477009882533196,
-          "d_angle_deg": -0.03170153806531939,
-          "d_scale": 0.0007045226444228891,
-          "mean_corner_disp_px": 0.6156693477591024
+          "max_abs_dM": 7.632783294297951e-15,
+          "max_abs_dt": 2.913225216616411e-13,
+          "d_angle_deg": -5.071498776487715e-13,
+          "d_scale": 1.1102230246251565e-15,
+          "mean_corner_disp_px": 3.0692471564754554e-12
         },
         "forward_2x3_0based": [
           [
-            0.8527742528739103,
-            0.05567632648446456,
-            36.39390824837676
+            0.8521144837544965,
+            0.05559366495042721,
+            36.82781833175801
           ],
           [
-            -0.07613865623083389,
-            0.8687726846302598,
-            56.441301308626045
+            -0.07560454309576413,
+            0.8712619422100256,
+            55.79662369108727
           ]
         ]
       }
@@ -160,9 +160,9 @@
         512
       ],
       "fixed_shg_max_abs_diff": 0.0,
-      "dice_he_moving": 0.9539545308997759,
+      "dice_he_moving": 1.0,
       "matlab_mask_coverage": 0.03102874755859375,
-      "python_mask_coverage": 0.028537750244140625,
+      "python_mask_coverage": 0.03102874755859375,
       "matlab_similarity": {
         "scale_x": 0.859427921179137,
         "scale_y": 0.8594279211791369,
@@ -192,7 +192,7 @@
         ]
       ],
       "engine_on_matlab_inputs": {
-        "seconds": 3.175481081008911,
+        "seconds": 3.1617331504821777,
         "similarity": {
           "scale_x": 0.8594279211791367,
           "scale_y": 0.8594279211791421,
@@ -228,30 +228,30 @@
       },
       "engine_on_python_mask": {
         "affine": {
-          "scale_x": 0.8567971558637185,
-          "scale_y": 0.8579675258233409,
-          "shear": -0.012882272467481474,
-          "angle_deg": -5.228992763161911,
-          "tx": 31.721188766040985,
-          "ty": 62.71791570807588
+          "scale_x": 0.8601428995804774,
+          "scale_y": 0.885414159351075,
+          "shear": -0.01227197300796035,
+          "angle_deg": -5.1217321972659136,
+          "tx": 29.744880612846366,
+          "ty": 51.91398940371727
         },
         "affine_error_vs_matlab": {
-          "max_abs_dM": 0.02741833539098204,
-          "max_abs_dt": 10.803926304358981,
-          "d_angle_deg": -0.1072605658956709,
-          "d_scale": -0.0033457437167587756,
-          "mean_corner_disp_px": 6.399673057530237
+          "max_abs_dM": 4.884981308350689e-15,
+          "max_abs_dt": 3.694822225952521e-13,
+          "d_angle_deg": 3.268496584496461e-13,
+          "d_scale": 1.1102230246251565e-16,
+          "mean_corner_disp_px": 2.758748966659695e-12
         },
         "forward_2x3_0based": [
           [
-            0.8532315167825621,
-            0.06720060098100061,
-            31.64162088380455
+            0.8567085866386536,
+            0.06852926542738629,
+            29.670118464912406
           ],
           [
-            -0.0780854984301531,
-            0.8554029348079739,
-            62.4952331444537
+            -0.07678675197136442,
+            0.8828212701989602,
+            51.720023921944865
           ]
         ]
       }
@@ -263,10 +263,10 @@
         342,
         342
       ],
-      "fixed_shg_max_abs_diff": null,
-      "dice_he_moving": NaN,
+      "fixed_shg_max_abs_diff": 6.661338147750939e-16,
+      "dice_he_moving": 1.0,
       "matlab_mask_coverage": 0.027307547621490375,
-      "python_mask_coverage": 0.026435961163044693,
+      "python_mask_coverage": 0.027307547621490375,
       "matlab_similarity": {
         "scale_x": 0.8588792035595524,
         "scale_y": 0.8588792035595524,
@@ -296,7 +296,7 @@
         ]
       ],
       "engine_on_matlab_inputs": {
-        "seconds": 1.975229024887085,
+        "seconds": 2.0104682445526123,
         "similarity": {
           "scale_x": 0.8588792035595527,
           "scale_y": 0.8588792035595526,
@@ -329,6 +329,35 @@
         },
         "sim_stop": "OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (700) exceeded.",
         "aff_stop": "OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (700) exceeded."
+      },
+      "engine_on_python_mask": {
+        "affine": {
+          "scale_x": 0.8617103891984162,
+          "scale_y": 0.8542820793011767,
+          "shear": 0.008183817095788807,
+          "angle_deg": -4.695286970593008,
+          "tx": 16.529970144586773,
+          "ty": 40.984586890990094
+        },
+        "affine_error_vs_matlab": {
+          "max_abs_dM": 1.1102230246251565e-15,
+          "max_abs_dt": 2.842170943040401e-14,
+          "d_angle_deg": -1.1546319456101628e-14,
+          "d_scale": 3.3306690738754696e-16,
+          "mean_corner_disp_px": 2.1678721323928932e-13
+        },
+        "forward_2x3_0based": [
+          [
+            0.8588185955830643,
+            0.07695697845740249,
+            16.46574571862724
+          ],
+          [
+            -0.0705366198029019,
+            0.8508379553811666,
+            40.76488822656836
+          ]
+        ]
       }
     },
     "test4": {
@@ -338,10 +367,10 @@
         394,
         394
       ],
-      "fixed_shg_max_abs_diff": 0.07549009232461179,
-      "dice_he_moving": 0.9757331949130548,
+      "fixed_shg_max_abs_diff": 8.881784197001252e-16,
+      "dice_he_moving": 1.0,
       "matlab_mask_coverage": 0.050845164781365144,
-      "python_mask_coverage": 0.0484359298100956,
+      "python_mask_coverage": 0.050845164781365144,
       "matlab_similarity": {
         "scale_x": 1.0055942075286004,
         "scale_y": 1.0055942075286004,
@@ -371,7 +400,7 @@
         ]
       ],
       "engine_on_matlab_inputs": {
-        "seconds": 2.5446929931640625,
+        "seconds": 2.479017972946167,
         "similarity": {
           "scale_x": 1.0055942075286002,
           "scale_y": 1.0055942075286002,
@@ -407,30 +436,30 @@
       },
       "engine_on_python_mask": {
         "affine": {
-          "scale_x": 0.941576308913826,
-          "scale_y": 0.9483930073123507,
-          "shear": -0.018724474908440054,
-          "angle_deg": 5.6566521072505695,
-          "tx": 35.71363191173557,
-          "ty": 30.524072717317058
+          "scale_x": 1.0052686839171312,
+          "scale_y": 0.9937808997074576,
+          "shear": 0.028822580641979557,
+          "angle_deg": -3.495741807033366,
+          "tx": -41.71916082124458,
+          "ty": 43.42332309399817
         },
         "affine_error_vs_matlab": {
-          "max_abs_dM": 0.20054050511787797,
-          "max_abs_dt": 77.43279273297998,
-          "d_angle_deg": 9.152393914284213,
-          "d_scale": -0.06369237500330005,
-          "mean_corner_disp_px": 49.181944879109416
+          "max_abs_dM": 7.438494264988549e-15,
+          "max_abs_dt": 1.7763568394002505e-13,
+          "d_angle_deg": 2.7755575615628914e-13,
+          "d_scale": 5.10702591327572e-15,
+          "mean_corner_disp_px": 2.717822700485517e-12
         },
         "forward_2x3_0based": [
           [
-            0.936991234217981,
-            -0.11102482634690018,
-            35.53959831960665
+            1.0033982134110653,
+            0.08951567877097566,
+            -41.62624692906254
           ],
           [
-            0.0928082566717494,
-            0.9420369523317874,
-            30.558917926320593
+            -0.06129561312168484,
+            0.9901651063929144,
+            43.3521925872694
           ]
         ]
       },
@@ -486,17 +515,17 @@
           "mean_corner_disp_px": 5.525848281590797
         },
         "python_matlab_engine_error_vs_gt": {
-          "max_abs_dM": 0.19815780282382164,
-          "max_abs_dt": 73.85631041632674,
-          "d_angle_deg": 10.659498799611416,
-          "d_scale": -0.05833176880038371,
-          "mean_corner_disp_px": 51.38320211573114
+          "max_abs_dM": 0.025901608504875426,
+          "max_abs_dt": 3.5764823166534114,
+          "d_angle_deg": 1.5071048853274798,
+          "d_scale": 0.005360606202921447,
+          "mean_corner_disp_px": 5.525848281592188
         },
         "mattes_mi_at": {
           "identity": 0.00436468105767636,
           "matlab_tform": 0.049841372162295575,
           "gt_tform": 0.041051506231314844,
-          "python_tform_on_matlab_mask": 0.025159411601608447
+          "python_tform_on_matlab_mask": 0.04984137216229375
         }
       }
     },
@@ -508,9 +537,9 @@
         504
       ],
       "fixed_shg_max_abs_diff": 0.0,
-      "dice_he_moving": 0.9893881388944858,
+      "dice_he_moving": 1.0,
       "matlab_mask_coverage": 0.07211390997622881,
-      "python_mask_coverage": 0.07059945556322368,
+      "python_mask_coverage": 0.07211390997622881,
       "matlab_similarity": {
         "scale_x": 0.8647122284838611,
         "scale_y": 0.8647122284838611,
@@ -540,7 +569,7 @@
         ]
       ],
       "engine_on_matlab_inputs": {
-        "seconds": 3.3182520866394043,
+        "seconds": 2.7313363552093506,
         "similarity": {
           "scale_x": 0.8647122284838608,
           "scale_y": 0.8647122284838608,
@@ -576,30 +605,30 @@
       },
       "engine_on_python_mask": {
         "affine": {
-          "scale_x": 0.8512534090741991,
-          "scale_y": 0.8708469412381443,
-          "shear": 0.08828216083689533,
-          "angle_deg": -3.7500126291872697,
-          "tx": -33.2045685747514,
-          "ty": 40.0647104890031
+          "scale_x": 0.8562706580975228,
+          "scale_y": 0.8462402537313969,
+          "shear": 0.06424437030900372,
+          "angle_deg": -5.701532638483266,
+          "tx": -35.29415339477864,
+          "ty": 50.84438406231424
         },
         "affine_error_vs_matlab": {
-          "max_abs_dM": 0.029392555126576042,
-          "max_abs_dt": 10.7796735733112,
-          "d_angle_deg": 1.9515200092962206,
-          "d_scale": -0.005017249023322901,
-          "mean_corner_disp_px": 6.7857448242971
+          "max_abs_dM": 3.2612801348363973e-15,
+          "max_abs_dt": 5.684341886080802e-14,
+          "d_angle_deg": 2.2470914018413168e-13,
+          "d_scale": 7.771561172376096e-16,
+          "mean_corner_disp_px": 1.0660222357691258e-12
         },
         "forward_2x3_0based": [
           [
-            0.8494307979100967,
-            0.13194589290026373,
-            -33.22319188394104
+            0.8520346125218142,
+            0.13880932200943374,
+            -35.30330946024739
           ],
           [
-            -0.055674823953581754,
-            0.864067284772351,
-            39.87310294982186
+            -0.08506737908015453,
+            0.8365887292374671,
+            50.59590541247155
           ]
         ]
       },
@@ -655,17 +684,17 @@
           "mean_corner_disp_px": 68.67470709966855
         },
         "python_matlab_engine_error_vs_gt": {
-          "max_abs_dM": 0.21740838401220192,
-          "max_abs_dt": 28.999990441361312,
-          "d_angle_deg": 11.2453087507818,
-          "d_scale": -0.20418073044044494,
-          "mean_corner_disp_px": 72.51397837574707
+          "max_abs_dM": 0.18801582888562912,
+          "max_abs_dt": 26.91040562133407,
+          "d_angle_deg": 9.293788741485805,
+          "d_scale": -0.19916348141712126,
+          "mean_corner_disp_px": 68.674707099669
         },
         "mattes_mi_at": {
           "identity": 0.004154756409233825,
           "matlab_tform": 0.01737805100308371,
           "gt_tform": 0.026290478828693613,
-          "python_tform_on_matlab_mask": 0.017441958154964212
+          "python_tform_on_matlab_mask": 0.01737805100308432
         }
       }
     },
@@ -676,10 +705,10 @@
         319,
         388
       ],
-      "fixed_shg_max_abs_diff": null,
-      "dice_he_moving": NaN,
+      "fixed_shg_max_abs_diff": 4.440892098500626e-16,
+      "dice_he_moving": 1.0,
       "matlab_mask_coverage": 0.05633745919917267,
-      "python_mask_coverage": 0.05430201646891007,
+      "python_mask_coverage": 0.05633745919917267,
       "matlab_similarity": {
         "scale_x": 1.022179884953977,
         "scale_y": 1.0221798849539772,
@@ -709,7 +738,7 @@
         ]
       ],
       "engine_on_matlab_inputs": {
-        "seconds": 2.2914700508117676,
+        "seconds": 2.222689151763916,
         "similarity": {
           "scale_x": 1.0221798849539763,
           "scale_y": 1.022179884953975,
@@ -742,6 +771,35 @@
         },
         "sim_stop": "OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (700) exceeded.",
         "aff_stop": "OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (700) exceeded."
+      },
+      "engine_on_python_mask": {
+        "affine": {
+          "scale_x": 1.0761909050965723,
+          "scale_y": 0.9757739934785828,
+          "shear": -0.014058190149102331,
+          "angle_deg": -14.630087362707469,
+          "tx": -50.14458432360084,
+          "ty": 25.47879312946377
+        },
+        "affine_error_vs_matlab": {
+          "max_abs_dM": 2.7200464103316335e-15,
+          "max_abs_dt": 7.105427357601002e-14,
+          "d_angle_deg": 0.0,
+          "d_scale": 2.4424906541753444e-15,
+          "mean_corner_disp_px": 3.9710083216297694e-13
+        },
+        "forward_2x3_0based": [
+          [
+            1.0412972117086923,
+            0.2318197922009043,
+            -49.87146731969124
+          ],
+          [
+            -0.27182159792827754,
+            0.9479574705133361,
+            25.154929002048828
+          ]
+        ]
       },
       "gt_affine": {
         "forward_2x3_input_grid_0based": [
@@ -794,10 +852,18 @@
           "d_scale": 0.020693397456186036,
           "mean_corner_disp_px": 9.408663372270407
         },
+        "python_matlab_engine_error_vs_gt": {
+          "max_abs_dM": 0.06599554254114026,
+          "max_abs_dt": 10.34967570095883,
+          "d_angle_deg": 0.3780704433399489,
+          "d_scale": 0.020693397456188478,
+          "mean_corner_disp_px": 9.408663372270587
+        },
         "mattes_mi_at": {
           "identity": 0.0074324146989573035,
           "matlab_tform": 0.03338383499761003,
-          "gt_tform": 0.03014593296593808
+          "gt_tform": 0.03014593296593808,
+          "python_tform_on_matlab_mask": 0.03338383499761007
         }
       }
     },
@@ -808,10 +874,10 @@
         376,
         504
       ],
-      "fixed_shg_max_abs_diff": null,
-      "dice_he_moving": NaN,
+      "fixed_shg_max_abs_diff": 9.992007221626409e-16,
+      "dice_he_moving": 1.0,
       "matlab_mask_coverage": 0.04290674603174603,
-      "python_mask_coverage": 0.039925778661365145,
+      "python_mask_coverage": 0.04290674603174603,
       "matlab_similarity": {
         "scale_x": 1.0055720305073552,
         "scale_y": 1.0055720305073552,
@@ -841,7 +907,7 @@
         ]
       ],
       "engine_on_matlab_inputs": {
-        "seconds": 2.879300117492676,
+        "seconds": 2.8526902198791504,
         "similarity": {
           "scale_x": 1.0055720305073566,
           "scale_y": 1.0055720305073563,
@@ -874,6 +940,35 @@
         },
         "sim_stop": "OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (700) exceeded.",
         "aff_stop": "OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (700) exceeded."
+      },
+      "engine_on_python_mask": {
+        "affine": {
+          "scale_x": 1.0747394827600256,
+          "scale_y": 0.9774838995834658,
+          "shear": 0.018410170476695933,
+          "angle_deg": -8.844972551223128,
+          "tx": -45.42888769006559,
+          "ty": 36.60688216652664
+        },
+        "affine_error_vs_matlab": {
+          "max_abs_dM": 2.1094237467877974e-15,
+          "max_abs_dt": 2.8421709430404007e-13,
+          "d_angle_deg": 1.4210854715202004e-14,
+          "d_scale": 8.881784197001252e-16,
+          "mean_corner_disp_px": 5.712847642759463e-13
+        },
+        "forward_2x3_0based": [
+          [
+            1.061958676029601,
+            0.16985020000318066,
+            -45.19707881403281
+          ],
+          [
+            -0.16525352101769086,
+            0.9628173111888602,
+            36.404445956697806
+          ]
+        ]
       },
       "gt_affine": {
         "forward_2x3_input_grid_0based": [
@@ -926,10 +1021,18 @@
           "d_scale": 0.016648349884362812,
           "mean_corner_disp_px": 7.498478444452346
         },
+        "python_matlab_engine_error_vs_gt": {
+          "max_abs_dM": 0.019929355776400204,
+          "max_abs_dt": 4.801242687915121,
+          "d_angle_deg": 1.1509823456759882,
+          "d_scale": 0.0166483498843637,
+          "mean_corner_disp_px": 7.4984784444528545
+        },
         "mattes_mi_at": {
           "identity": 0.0029397622537068275,
           "matlab_tform": 0.03307910664334201,
-          "gt_tform": 0.025486398112907583
+          "gt_tform": 0.025486398112907583,
+          "python_tform_on_matlab_mask": 0.03307910664334252
         }
       }
     }

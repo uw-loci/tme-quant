@@ -49,9 +49,17 @@
     "d_scale": 0.020693397456186036,
     "mean_corner_disp_px": 9.408663372270407
   },
+  "python_matlab_engine_error_vs_gt": {
+    "max_abs_dM": 0.06599554254114026,
+    "max_abs_dt": 10.34967570095883,
+    "d_angle_deg": 0.3780704433399489,
+    "d_scale": 0.020693397456188478,
+    "mean_corner_disp_px": 9.408663372270587
+  },
   "mattes_mi_at": {
     "identity": 0.0074324146989573035,
     "matlab_tform": 0.03338383499761003,
-    "gt_tform": 0.03014593296593808
+    "gt_tform": 0.03014593296593808,
+    "python_tform_on_matlab_mask": 0.03338383499761007
   }
 }

@@ -50,16 +50,16 @@
     "mean_corner_disp_px": 68.67470709966855
   },
   "python_matlab_engine_error_vs_gt": {
-    "max_abs_dM": 0.21740838401220192,
-    "max_abs_dt": 28.999990441361312,
-    "d_angle_deg": 11.2453087507818,
-    "d_scale": -0.20418073044044494,
-    "mean_corner_disp_px": 72.51397837574707
+    "max_abs_dM": 0.18801582888562912,
+    "max_abs_dt": 26.91040562133407,
+    "d_angle_deg": 9.293788741485805,
+    "d_scale": -0.19916348141712126,
+    "mean_corner_disp_px": 68.674707099669
   },
   "mattes_mi_at": {
     "identity": 0.004154756409233825,
     "matlab_tform": 0.01737805100308371,
     "gt_tform": 0.026290478828693613,
-    "python_tform_on_matlab_mask": 0.017441958154964212
+    "python_tform_on_matlab_mask": 0.01737805100308432
   }
 }
