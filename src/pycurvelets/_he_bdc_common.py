@@ -351,10 +351,12 @@ def prepare_registration_pair(
         raise ValueError(f"Expected 2-D SHG image, got shape {g.shape}.")
 
     if pix > 2.0:
-        scale = 2.0 / pix
-        new_h = int(round(g.shape[0] * scale))
-        new_w = int(round(g.shape[1] * scale))
-        fixed_shg = resize_like(g, (new_h, new_w))
+        # MATLAB ``imresize(SHG, 2/ppm)``: output size is ceil(scale*size) and
+        # the *same* scalar scale is used for the kernel on both axes. Using
+        # round() + output_shape here produced a 1-px smaller grid for e.g.
+        # ppm=3 (341 vs 342), which put the whole registration on a different
+        # image than MATLAB's.
+        fixed_shg = matlab_imresize(g, scalar_scale=2.0 / pix, method="bicubic")
         pix = 2.0
     else:
         fixed_shg = g
