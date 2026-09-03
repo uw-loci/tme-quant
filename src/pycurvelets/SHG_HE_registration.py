@@ -10,8 +10,14 @@ Default algorithm (``registration_method="mi_ncc"``):
    which matches MATLAB ``imref2d`` + ``imwarp`` conventions (pixel-centre,
    half-pixel-extended input domain, fill-value halo at boundaries).
 
-Other ``registration_method`` values (kept for debugging / fallback):
+Other ``registration_method`` values:
 
+* ``"matlab"`` - Bit-for-bit port of MATLAB ``imregtform`` as used by
+  ``BDcreation_reg2.m``: ITK v3 multiresolution Mattes MI + (1+1)-ES with
+  MATLAB's scales, centre, seed (12345) and per-level radius/epsilon refiner,
+  driven through the ``itk`` package (no MATLAB involved). Reproduces the
+  MATLAB goldens' transforms exactly when the collagen mask matches; see
+  :mod:`pycurvelets._itk_v3_matlab_engine`. Requires ``itk``.
 * ``"oneplusone"`` - Multiresolution Mattes MI with a stochastic (1+1)
   evolutionary optimizer (paper/MATLAB-inspired). Available as an option.
 * ``"mi"`` - Mattes MI alone (skip NCC polish). Slightly worse on average
@@ -90,6 +96,11 @@ class SHGHERegistrationParameters:
     # "mi_ncc" (default): SITK Mattes MI grid+Nelder-Mead basin finder +
     #                     bounded NCC TRF sub-pixel polish. Deterministic,
     #                     best empirical match to MATLAB output.
+    # "matlab"          : Exact port of MATLAB imregtform (ITK v3 engine via
+    #                     the `itk` package): same metric, optimizer, scales,
+    #                     seed and per-level refiner as BDcreation_reg2.m.
+    #                     Reproduces MATLAB transforms to float precision on
+    #                     identical masks. Ignores random_state (seed=12345).
     # "oneplusone"      : Multiresolution Mattes MI with a stochastic
     #                     (1+1)-evolutionary optimizer. Closest to the
     #                     paper/MATLAB ``imregtform('multimodal')`` workflow.
@@ -1180,6 +1191,41 @@ def _build_he_moving(
     return he_moving, mode, extras
 
 
+def _register_matlab_itk_v3(
+    he_moving: np.ndarray,
+    fixed: np.ndarray,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """
+    MATLAB-parity registration: ITK v3 framework configured exactly like
+    ``imregtform`` (see :mod:`pycurvelets._itk_v3_matlab_engine`).
+
+    Given the same ``he_moving``/``fixed`` arrays MATLAB used, this reproduces
+    ``BDcreation_reg2.m``'s ``tformSimilarity`` and ``tform`` to floating-point
+    precision (validated iteration-by-iteration against MATLAB's
+    ``DisplayOptimization`` trace in ``tests/matlab_parity``). It requires the
+    ``itk`` package; SimpleITK cannot expose the v3 classes.
+    """
+    from ._itk_v3_matlab_engine import (
+        DEFAULT_SEED,
+        has_itk,
+        register_bdcreation_reg2_matlab,
+    )
+
+    if not has_itk():
+        raise RuntimeError(
+            "registration_method='matlab' requires the 'itk' package "
+            "(pip install itk, or the 'matlab-parity' optional dependency group)."
+        )
+    if not np.any(he_moving > 0):
+        forward_2x3 = np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float64)
+        return forward_2x3, {"matlab_degenerate_moving": True}
+
+    forward_2x3, ml_debug = register_bdcreation_reg2_matlab(
+        he_moving.astype(np.float64), fixed.astype(np.float64), seed=DEFAULT_SEED
+    )
+    return forward_2x3, ml_debug
+
+
 def _run_optimizer(
     he_moving: np.ndarray,
     fixed: np.ndarray,
@@ -1191,7 +1237,11 @@ def _run_optimizer(
     forward_2x3: np.ndarray | None = None
     backend: str
 
-    if method == "mi" and _HAS_SITK:
+    if method == "matlab":
+        forward_2x3, ml_debug = _register_matlab_itk_v3(he_moving, fixed)
+        debug.update(ml_debug)
+        backend = "itk_v3_matlab_parity"
+    elif method == "mi" and _HAS_SITK:
         forward_2x3, mi_debug = _register_mi(he_moving, fixed)
         debug.update(mi_debug)
         backend = "simpleitk_mattes"

@@ -39,6 +39,12 @@ segmentation = [
   "cellcast",
   "cellpose",
 ]
+# ITK (v3 registration classes) for registration_method="matlab": bit-exact
+# port of MATLAB imregtform used by BDcreation_reg2. SimpleITK cannot expose
+# these classes. Wheels exist for macOS arm64 / Linux / Windows, Python 3.11+.
+matlab-parity = [
+  "itk>=5.3.0,<5.5",
+]
 
 [project.entry-points."napari.manifest"]
 napari-curvealign = "napari_curvealign:napari.yaml"

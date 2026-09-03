@@ -1,0 +1,563 @@
+### NEAR_IDENTITY levels=1
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Frobenius norm too small after 1 iterations. Current Frobenius norm (1.024e-09) is less than epsilon (1.5e-06).
+
+tform_A =
+  0.99999999999858269  4.9109188451891932e-14  7.1221295905174705e-10
+  -4.9109188451891932e-14  0.99999999999858269  -6.475602276614421e-10
+  0  0  1
+### NEAR_IDENTITY levels=3
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Frobenius norm too small after 1 iterations. Current Frobenius norm (1.6384e-08) is less than epsilon (0.00015).
+
+Pyramid Level: 2
+
+Iteration    Mattes Mutual Information
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Frobenius norm too small after 1 iterations. Current Frobenius norm (4.096e-09) is less than epsilon (1.5e-05).
+
+Pyramid Level: 3
+
+Iteration    Mattes Mutual Information
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Frobenius norm too small after 1 iterations. Current Frobenius norm (1.024e-09) is less than epsilon (1.5e-06).
+
+tform_A =
+  0.99999999997552447  2.4485146888176687e-12  1.2864107699620551e-08
+  -2.4485146888176687e-12  0.99999999997552447  -1.4590796126542025e-08
+  0  0  1
+### STEPS type=translation levels=1 radius=0.0017857142857142859 iters=1
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01017779    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (1) exceeded. 
+
+tform_A =
+  1  0  -1.832523924079895
+  0  1  -0.063502827369938106
+  0  0  1
+### STEPS type=translation levels=1 radius=0.0017857142857142859 iters=2
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01017779    
+2            0.01017779    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (2) exceeded. 
+
+tform_A =
+  1  0  -1.832523924079895
+  0  1  -0.063502827369938106
+  0  0  1
+### STEPS type=translation levels=1 radius=0.0017857142857142859 iters=3
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01017779    
+2            0.01017779    
+3            0.01071009    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (3) exceeded. 
+
+tform_A =
+  1  0  -2.4453952396026906
+  0  1  -0.59839865006045501
+  0  0  1
+### STEPS type=translation levels=1 radius=0.0017857142857142859 iters=5
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01017779    
+2            0.01017779    
+3            0.01071009    
+4            0.01071009    
+5            0.01071009    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (5) exceeded. 
+
+tform_A =
+  1  0  -2.4453952396026906
+  0  1  -0.59839865006045501
+  0  0  1
+### STEPS type=translation levels=1 radius=0.050000000000000003 iters=1
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00849149    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (1) exceeded. 
+
+tform_A =
+  1  0  -0
+  0  1  -0
+  0  0  1
+### STEPS type=translation levels=1 radius=0.050000000000000003 iters=2
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00849149    
+2            0.00849149    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (2) exceeded. 
+
+tform_A =
+  1  0  -0
+  0  1  -0
+  0  0  1
+### STEPS type=translation levels=1 radius=0.050000000000000003 iters=3
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00849149    
+2            0.00849149    
+3            0.01117178    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (3) exceeded. 
+
+tform_A =
+  1  0  -16.115646260610916
+  0  1  -14.940879079426823
+  0  0  1
+### STEPS type=translation levels=1 radius=0.050000000000000003 iters=5
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00849149    
+2            0.00849149    
+3            0.01117178    
+4            0.01117178    
+5            0.01117178    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (5) exceeded. 
+
+tform_A =
+  1  0  -16.115646260610916
+  0  1  -14.940879079426823
+  0  0  1
+### STEPS type=similarity levels=1 radius=0.0017857142857142859 iters=1
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01001759    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (1) exceeded. 
+
+tform_A =
+  0.99747554511948155  8.748031966541104e-05  1.2684392022421354
+  -8.748031966541104e-05  0.99747554511948155  -1.153534511711483
+  0  0  1
+### STEPS type=similarity levels=1 radius=0.0017857142857142859 iters=2
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01001759    
+2            0.01022821    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (2) exceeded. 
+
+tform_A =
+  0.99657626890900208  0.00083058834852969582  1.9681375009610391
+  -0.00083058834852969582  0.99657626890900208  -3.0811566650664757
+  0  0  1
+### STEPS type=similarity levels=1 radius=0.0017857142857142859 iters=3
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01001759    
+2            0.01022821    
+3            0.01022821    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (3) exceeded. 
+
+tform_A =
+  0.99657626890900208  0.00083058834852969582  1.9681375009610391
+  -0.00083058834852969582  0.99657626890900208  -3.0811566650664757
+  0  0  1
+### STEPS type=similarity levels=1 radius=0.0017857142857142859 iters=5
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01001759    
+2            0.01022821    
+3            0.01022821    
+4            0.01024050    
+5            0.01024878    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (5) exceeded. 
+
+tform_A =
+  0.99828091905849781  -0.0006786677073162817  1.8603367512691007
+  0.0006786677073162817  0.99828091905849781  -5.0677286550226217
+  0  0  1
+### STEPS type=similarity levels=1 radius=0.050000000000000003 iters=1
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00864588    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (1) exceeded. 
+
+tform_A =
+  0.93382299941750047  0.0022931452997220886  33.137435902469868
+  -0.0022931452997220886  0.93382299941750047  -30.277047040786311
+  0  0  1
+### STEPS type=similarity levels=1 radius=0.050000000000000003 iters=2
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00864588    
+2            0.00917121    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (2) exceeded. 
+
+tform_A =
+  0.91200717215375438  0.021286797299458548  48.09230480982005
+  -0.021286797299458548  0.91200717215375438  -79.63626792352197
+  0  0  1
+### STEPS type=similarity levels=1 radius=0.050000000000000003 iters=3
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00864588    
+2            0.00917121    
+3            0.00981113    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (3) exceeded. 
+
+tform_A =
+  0.89984333512788595  0.053553862005063839  20.982478292808985
+  -0.053553862005063839  0.89984333512788595  -52.870484355850543
+  0  0  1
+### STEPS type=similarity levels=1 radius=0.050000000000000003 iters=5
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00864588    
+2            0.00917121    
+3            0.00981113    
+4            0.00981113    
+5            0.00981113    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (5) exceeded. 
+
+tform_A =
+  0.89984333512788595  0.053553862005063839  20.982478292808985
+  -0.053553862005063839  0.89984333512788595  -52.870484355850543
+  0  0  1
+### STEPS type=affine levels=1 radius=0.0017857142857142859 iters=1
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01013402    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (1) exceeded. 
+
+tform_A =
+  0.99747547140426962  -8.7260010492950463e-05  0.089862383441010496
+  0.00088649994912633678  0.99748161317787154  -0.1180195263374558
+  0  0  1
+### STEPS type=affine levels=1 radius=0.0017857142857142859 iters=2
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01013402    
+2            0.01036122    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (2) exceeded. 
+
+tform_A =
+  0.99834477850197612  -0.0032254302773496602  -0.057929694985925942
+  0.00040240072663640184  0.99618313558464489  0.86488989313296627
+  0  0  1
+### STEPS type=affine levels=1 radius=0.0017857142857142859 iters=3
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01013402    
+2            0.01036122    
+3            0.01036122    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (3) exceeded. 
+
+tform_A =
+  0.99834477850197612  -0.0032254302773496602  -0.057929694985925942
+  0.00040240072663640184  0.99618313558464489  0.86488989313296627
+  0  0  1
+### STEPS type=affine levels=1 radius=0.0017857142857142859 iters=5
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.01013402    
+2            0.01036122    
+3            0.01036122    
+4            0.01047378    
+5            0.01058512    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (5) exceeded. 
+
+tform_A =
+  0.99379665461628175  -0.0028857295846017247  -1.168425733526165
+  -0.0010717980913407491  0.99881392938251801  2.3687720035456112
+  0  0  1
+### STEPS type=affine levels=1 radius=0.050000000000000003 iters=1
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00882644    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (1) exceeded. 
+
+tform_A =
+  0.93377592192560221  -0.0021416316833663034  2.3622926595646785
+  0.021757462182576275  0.9339266601258791  -3.0412124519591921
+  0  0  1
+### STEPS type=affine levels=1 radius=0.050000000000000003 iters=2
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00882644    
+2            0.00882644    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (2) exceeded. 
+
+tform_A =
+  0.93377592192560221  -0.0021416316833663034  2.3622926595646785
+  0.021757462182576275  0.9339266601258791  -3.0412124519591921
+  0  0  1
+### STEPS type=affine levels=1 radius=0.050000000000000003 iters=3
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00882644    
+2            0.00882644    
+3            0.01435504    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (3) exceeded. 
+
+tform_A =
+  0.93079658766262663  0.0039019480886732707  36.628575982957656
+  0.052142441519073539  0.92634299832247702  16.982265295274601
+  0  0  1
+### STEPS type=affine levels=1 radius=0.050000000000000003 iters=5
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.00882644    
+2            0.00882644    
+3            0.01435504    
+4            0.01435504    
+5            0.01609969    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (5) exceeded. 
+
+tform_A =
+  0.85794955721802335  0.037136948757526496  46.908209862130327
+  0.035362344449114839  0.91111203498601656  -2.1015489778306327
+  0  0  1
+### STEPS type=translation levels=3 radius=0.050000000000000003 iters=1
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Frobenius norm too small after 1 iterations. Current Frobenius norm (0) is less than epsilon (0.00015).
+[Warning: Registration has failed to converge.
+Check the optimizer and metric configurations.
+It may also be helpful to adjust the 'InitialTransformation' parameter.] 
+[> In <a href="matlab:matlab.lang.internal.introspective.errorDocCallback('imregtform', '/Applications/MATLAB_R2025b.app/toolbox/images/images/imregtform.m', 100)" style="font-weight:bold">imregtform</a> (<a href="matlab: opentoline('/Applications/MATLAB_R2025b.app/toolbox/images/images/imregtform.m',100,0)">line 100</a>)
+In <a href="matlab:matlab.lang.internal.introspective.errorDocCallback('probe_es_steps', '/Users/hydrablaster/Desktop/Eliceiri_lab/tme-quant/tests/matlab_parity/probe_es_steps.m', 53)" style="font-weight:bold">probe_es_steps</a> (<a href="matlab: opentoline('/Users/hydrablaster/Desktop/Eliceiri_lab/tme-quant/tests/matlab_parity/probe_es_steps.m',53,0)">line 53</a>)] 
+
+tform_A =
+  1  0  -0
+  0  1  -0
+  0  0  1
+### STEPS type=translation levels=3 radius=0.050000000000000003 iters=2
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Frobenius norm too small after 1 iterations. Current Frobenius norm (0) is less than epsilon (0.00015).
+[Warning: Registration has failed to converge.
+Check the optimizer and metric configurations.
+It may also be helpful to adjust the 'InitialTransformation' parameter.] 
+[> In <a href="matlab:matlab.lang.internal.introspective.errorDocCallback('imregtform', '/Applications/MATLAB_R2025b.app/toolbox/images/images/imregtform.m', 100)" style="font-weight:bold">imregtform</a> (<a href="matlab: opentoline('/Applications/MATLAB_R2025b.app/toolbox/images/images/imregtform.m',100,0)">line 100</a>)
+In <a href="matlab:matlab.lang.internal.introspective.errorDocCallback('probe_es_steps', '/Users/hydrablaster/Desktop/Eliceiri_lab/tme-quant/tests/matlab_parity/probe_es_steps.m', 53)" style="font-weight:bold">probe_es_steps</a> (<a href="matlab: opentoline('/Users/hydrablaster/Desktop/Eliceiri_lab/tme-quant/tests/matlab_parity/probe_es_steps.m',53,0)">line 53</a>)] 
+
+tform_A =
+  1  0  -0
+  0  1  -0
+  0  0  1
+### STEPS type=affine levels=3 radius=0.050000000000000003 iters=1
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.08085111    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (1) exceeded. 
+
+Pyramid Level: 2
+
+Iteration    Mattes Mutual Information
+1            0.04014336    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (1) exceeded. 
+
+Pyramid Level: 3
+
+Iteration    Mattes Mutual Information
+1            0.01933958    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Maximum number of iterations (1) exceeded. 
+
+tform_A =
+  0.46703313019100007  -0.0086107302850352545  19.304132590369793
+  0.087478925529593479  0.4676391942478193  -21.274302205841035
+  0  0  1
+### STEPS type=affine levels=3 radius=0.050000000000000003 iters=2
+
+Maximizing Mutual Information...
+
+Pyramid Level: 1
+
+Iteration    Mattes Mutual Information
+1            0.08085111    
+
+Stopping condition:
+    OnePlusOneEvolutionaryOptimizer: Registered image does not overlap sufficiently with fixed image. Halting optimization.
+[Warning: Registration failed because optimization diverged. Try reducing the
+InitialRadius property of the optimizer.] 
+[> In <a href="matlab:matlab.lang.internal.introspective.errorDocCallback('imregtform', '/Applications/MATLAB_R2025b.app/toolbox/images/images/imregtform.m', 100)" style="font-weight:bold">imregtform</a> (<a href="matlab: opentoline('/Applications/MATLAB_R2025b.app/toolbox/images/images/imregtform.m',100,0)">line 100</a>)
+In <a href="matlab:matlab.lang.internal.introspective.errorDocCallback('probe_es_steps', '/Users/hydrablaster/Desktop/Eliceiri_lab/tme-quant/tests/matlab_parity/probe_es_steps.m', 53)" style="font-weight:bold">probe_es_steps</a> (<a href="matlab: opentoline('/Users/hydrablaster/Desktop/Eliceiri_lab/tme-quant/tests/matlab_parity/probe_es_steps.m',53,0)">line 53</a>)] 
+
+tform_A =
+  0.46703313019100007  -0.0086107302850352545  19.304132590369793
+  0.087478925529593479  0.4676391942478193  -21.274302205841035
+  0  0  1
+### REPEAT_CALLS maxabsdiff=0
