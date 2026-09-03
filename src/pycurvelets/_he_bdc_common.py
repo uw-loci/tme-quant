@@ -77,34 +77,42 @@ def matlab_rgb2gray(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
 
 def matlab_graythresh(image: np.ndarray, nbins: int = 256) -> float:
     """
-    MATLAB ``graythresh`` for ``double`` images in ``[0, 1]``: 256-bin histogram on
-    ``[0, 1]``, then Otsu threshold (bin center of optimal split).
+    Exact port of MATLAB ``graythresh`` / ``otsuthresh`` for ``double`` images.
+
+    MATLAB does ``counts = imhist(im2uint8(I(:)), 256)`` - i.e. one bin per
+    uint8 level after ``round(I * 255)`` - then Otsu on bin indices ``1..256``
+    with ties resolved by averaging the arg-max indices, and returns
+    ``(idx - 1) / 255``. (An earlier version used 256 equal-width bins on
+    ``[0, 1]`` and returned the bin *centre*, which shifted thresholds by up to
+    ~0.002 and changed a few hundred mask pixels.)
     """
+    if nbins != 256:
+        raise ValueError("MATLAB graythresh always uses 256 bins.")
     arr = np.asarray(image, dtype=np.float64).ravel()
-    arr = np.clip(arr, 0.0, 1.0)
     if arr.size == 0:
         raise ValueError("Cannot compute graythresh for empty image.")
-    hist, bin_edges = np.histogram(arr, bins=nbins, range=(0.0, 1.0))
-    hist = hist.astype(np.float64)
-    total = float(hist.sum())
+    # im2uint8 for double input: clip to [0, 1], scale by 255, round half away
+    # from zero (values are non-negative here so np.floor(x + 0.5) matches).
+    levels = np.floor(np.clip(arr, 0.0, 1.0) * 255.0 + 0.5).astype(np.int64)
+    counts = np.bincount(levels, minlength=256).astype(np.float64)
+    total = counts.sum()
     if total <= 0:
         raise ValueError("Cannot compute graythresh for empty histogram.")
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
-    w0 = np.cumsum(hist)
-    w1 = total - w0
-    sum_b = np.cumsum(hist * bin_centers)
-    mu_t = sum_b[-1]
-    between = np.zeros(nbins, dtype=np.float64)
-    for t in range(nbins):
-        w0_t = w0[t]
-        w1_t = w1[t]
-        if w0_t <= 0 or w1_t <= 0:
-            continue
-        m0 = sum_b[t] / w0_t
-        m1 = (mu_t - sum_b[t]) / w1_t
-        between[t] = w0_t * w1_t * (m0 - m1) ** 2
-    idx = int(np.argmax(between))
-    return float(bin_centers[idx])
+    p = counts / total
+    omega = np.cumsum(p)
+    mu = np.cumsum(p * np.arange(1, 257, dtype=np.float64))
+    mu_t = mu[-1]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        sigma_b_squared = (mu_t * omega - mu) ** 2 / (omega * (1.0 - omega))
+    # MATLAB max() ignores NaN (0/0 at omega==0 or 1) but propagates Inf.
+    not_nan = ~np.isnan(sigma_b_squared)
+    if not not_nan.any():
+        return 0.0
+    maxval = np.max(sigma_b_squared[not_nan])
+    if not np.isfinite(maxval):
+        return 0.0
+    idx = np.mean(np.flatnonzero(sigma_b_squared == maxval)) + 1.0  # 1-based
+    return float((idx - 1.0) / 255.0)
 
 
 def matlab_fspecial_gaussian(size: int, sigma: float) -> np.ndarray:
