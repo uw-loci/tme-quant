@@ -7,17 +7,23 @@ Default algorithm (``registration_method="mi_ncc"``):
    angle/scale/translation, then Nelder-Mead similarity and affine
    refinement, followed by a bounded NCC trust-region sub-pixel polish.
 3. Warp the raw HE RGB onto the SHG grid via :func:`matlab_imwarp_bilinear`,
-   which matches MATLAB ``imref2d`` + ``imwarp`` conventions (pixel-centre,
-   half-pixel-extended input domain, fill-value halo at boundaries).
+   which matches MATLAB ``imref2d`` + ``imwarp`` conventions (pixel-centre
+   sampling, pixel-centre inside test, no fill blending, ``FillValues=255``).
 
 Other ``registration_method`` values:
 
 * ``"matlab"`` - Bit-for-bit port of MATLAB ``imregtform`` as used by
   ``BDcreation_reg2.m``: ITK v3 multiresolution Mattes MI + (1+1)-ES with
   MATLAB's scales, centre, seed (12345) and per-level radius/epsilon refiner,
-  driven through the ``itk`` package (no MATLAB involved). Reproduces the
-  MATLAB goldens' transforms exactly when the collagen mask matches; see
-  :mod:`pycurvelets._itk_v3_matlab_engine`. Requires ``itk``.
+  driven through the ``itk`` package (no MATLAB involved). Together with the
+  MATLAB-exact preprocessing in :mod:`pycurvelets._he_bdc_common`
+  (``imresize``, ``graythresh``, ``imfilter``, ``rgb2gray``, ``imwarp``) it
+  reproduces the ``BDcreation_reg2`` golden TIFFs pixel-for-pixel on all
+  seven reference cases (``tests/test_shg_he_registration_matlab_parity.py``).
+  See :mod:`pycurvelets._itk_v3_matlab_engine`. Requires ``itk``
+  (``pip install "pycurvelets[matlab-parity]"``). Note this faithfully
+  reproduces MATLAB's *result*, including cases where MATLAB itself lands in a
+  poor local optimum (patient_02 test5 is ~69 px from ground truth in both).
 * ``"oneplusone"`` - Multiresolution Mattes MI with a stochastic (1+1)
   evolutionary optimizer (paper/MATLAB-inspired). Available as an option.
 * ``"mi"`` - Mattes MI alone (skip NCC polish). Slightly worse on average
@@ -94,13 +100,14 @@ class SHGHERegistrationParameters:
     SHGfilepath: str
     areaThreshold: float | None = None
     # "mi_ncc" (default): SITK Mattes MI grid+Nelder-Mead basin finder +
-    #                     bounded NCC TRF sub-pixel polish. Deterministic,
-    #                     best empirical match to MATLAB output.
+    #                     bounded NCC TRF sub-pixel polish. Deterministic;
+    #                     approximates MATLAB output.
     # "matlab"          : Exact port of MATLAB imregtform (ITK v3 engine via
     #                     the `itk` package): same metric, optimizer, scales,
     #                     seed and per-level refiner as BDcreation_reg2.m.
-    #                     Reproduces MATLAB transforms to float precision on
-    #                     identical masks. Ignores random_state (seed=12345).
+    #                     Reproduces the MATLAB golden TIFFs pixel-for-pixel
+    #                     (tests/test_shg_he_registration_matlab_parity.py).
+    #                     Ignores random_state (seed=12345). Needs `itk`.
     # "oneplusone"      : Multiresolution Mattes MI with a stochastic
     #                     (1+1)-evolutionary optimizer. Closest to the
     #                     paper/MATLAB ``imregtform('multimodal')`` workflow.
