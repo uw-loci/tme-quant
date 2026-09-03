@@ -1,14 +1,24 @@
 """Generate comparison visualizations for patient_02 test cases (tests 4-9).
 
 Usage:
-    python tests/artifacts/bdc_regression_viz/generate_comparison_patient02.py [output_dir]
+    python tests/artifacts/bdc_regression_viz/generate_comparison_patient02.py \
+        [output_dir] [--method matlab|mi_ncc|oneplusone|mi|ncc] [--cases id1,id2]
 
-Default output_dir: tests/artifacts/bdc_regression_viz/new_patient02
+Default output_dir: tests/artifacts/bdc_regression_viz/current
+Default method:     "matlab" (the package default - ITK v3 (1+1)-ES port).
 
 Test case definitions:
-  Tests 4-7 use BDcreation_reg2.m goldens (HSV-based registration).
-  Tests 8-9 use BDcreation_reg.m goldens (RGB-based registration).
-  Both are compared against the Python mi_ncc + HSV pipeline.
+  Tests 4-7 use BDcreation_reg2.m goldens (HSV-based registration); the
+          default Python path reproduces them pixel-for-pixel.
+  Tests 8-9 use BDcreation_reg.m goldens (RGB / decorrstretch pipeline that
+          the Python port does not implement), so a mismatch vs the golden is
+          expected there; the ground-truth (GT) panel is the meaningful score.
+Every case is also scored against ground truth (the un-transformed HE ROI +
+``tests/matlab_parity/dumps/gt_affine_<case>.json``): corner displacement in
+px, angle/scale error and SSIM vs the GT-aligned HE, for both Python and
+MATLAB.
+
+Output: ``comparison_<case>_<method>_hsv.png`` per case.
 """
 from __future__ import annotations
 
@@ -46,6 +56,23 @@ GT_AFFINE_DIR = ROOT / "tests" / "matlab_parity" / "dumps"
 def _gt_reference_path(he_filename: str) -> Path:
     roi = he_filename.replace("patient_02_", "").replace(".tif", "")  # e.g. roi2
     return NEW_DATA / f"patient_02_HE_original-{roi}.tif"
+
+
+# The GT affine lives on the *input* HE grid, so it depends only on the ROI,
+# not on ppm or on which MATLAB script produced the golden. Tests 8/9 (reg1
+# goldens, roi4) therefore reuse the roi4 GT recovered for test6.
+_GT_CASE_FOR_ROI = {
+    "patient_02_roi2.tif": "test4",
+    "patient_02_roi4.tif": "test6",
+    "patient_02_roi5.tif": "test7",
+}
+
+
+def _gt_affine_path(case_id: str, he_filename: str) -> Path:
+    own = GT_AFFINE_DIR / f"gt_affine_{case_id.split('_')[0]}.json"
+    if own.is_file():
+        return own
+    return GT_AFFINE_DIR / f"gt_affine_{_GT_CASE_FOR_ROI.get(he_filename, 'none')}.json"
 
 # (case_id, he_filename, ppm, golden_folder, matlab_reg, notes)
 CASES = [
@@ -102,7 +129,7 @@ def generate(
     matlab_reg: str,
     notes: str,
     out_dir: Path,
-    registration_method: str = "mi_ncc",
+    registration_method: str = "matlab",
 ) -> dict:
     he_path = HE_DIR / he_filename
     shg_path = SHG_DIR / he_filename
@@ -132,7 +159,7 @@ def generate(
     # recovered GT affine and SSIM vs the untransformed HE ROI.
     gt_metrics: dict | None = None
     gt_ref: np.ndarray | None = None
-    gt_json = GT_AFFINE_DIR / f"gt_affine_{case_id.split('_')[0]}.json"
+    gt_json = _gt_affine_path(case_id, he_filename)
     gt_ref_path = _gt_reference_path(he_filename)
     if gt_json.is_file() and gt_ref_path.is_file():
         gt = json.loads(gt_json.read_text())
@@ -278,7 +305,7 @@ def generate(
     )
 
     fig.tight_layout(rect=[0, 0, 1, 0.93])
-    out_path = out_dir / f"comparison_{case_id}.png"
+    out_path = out_dir / f"comparison_{case_id}_{registration_method}_hsv.png"
     fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved {out_path}")
@@ -301,8 +328,8 @@ def generate(
 
 def main() -> None:
     """``[out_dir] [--method M] [--cases id1,id2]``."""
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "new_patient02"
-    method = "mi_ncc"
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
+    method = "matlab"
     selected: list[str] | None = None
     it = iter(sys.argv[1:])
     for a in it:

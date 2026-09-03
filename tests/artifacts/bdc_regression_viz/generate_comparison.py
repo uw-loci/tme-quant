@@ -1,13 +1,17 @@
-"""Generate comparison visualizations for BDcreation_reg2 regression tests.
+"""Generate comparison visualizations for BDcreation_reg2 regression tests
+(patient_001, tests 1-3: MATLAB golden vs Python at ppm 1.5 / 2.0 / 3.0).
 
 Usage:
-    python tests/artifacts/bdc_regression_viz/generate_comparison.py [output_dir]
+    python tests/artifacts/bdc_regression_viz/generate_comparison.py \
+        [output_dir] [--method matlab|mi_ncc|oneplusone|mi|ncc] [--ecm hsv,rgb,...]
 
-Default output_dir: tests/artifacts/bdc_regression_viz/new
+Default output_dir: tests/artifacts/bdc_regression_viz/current
+Default method:     "matlab" (the package default - ITK v3 (1+1)-ES port,
+                    pixel-exact vs MATLAB). Pass ``--method mi_ncc`` etc. to
+                    picture a backup method instead.
 
-Generates one figure per (case, ecm_method) combination.
-Override REGISTRATION_METHOD and ECM_METHODS at the top of this script
-to compare different configurations (e.g. oneplusone, rgb, lab).
+Generates one figure per (case, ecm_method) combination named
+``comparison_<case>_ppm<ppm>_<method>_<ecm>.png``.
 """
 from __future__ import annotations
 
@@ -42,7 +46,7 @@ CASES = [
     ("test3", 3.0, "HE_registered_test3"),
 ]
 
-REGISTRATION_METHOD = "mi_ncc"
+REGISTRATION_METHOD = "matlab"
 ECM_METHODS = ["hsv"]
 
 
@@ -149,7 +153,6 @@ def generate(
     ax4.axis("off")
 
     ax5 = axes[1, 0]
-    h_img = matlab_golden.shape[0]
     w_img = matlab_golden.shape[1]
     split = np.copy(matlab_golden)
     split[:, w_img // 2 :] = py_uint8[:, w_img // 2 :]
@@ -173,7 +176,6 @@ def generate(
     ax7.axis("off")
 
     ax_shg = axes[1, 3]
-    py_luma = matlab_rgb2gray(py_uint8.astype(np.float64) / 255.0)
     shg_f = shg_raw.astype(np.float64)
     if shg_f.max() > 1.0:
         shg_f = shg_f / 255.0
@@ -271,7 +273,7 @@ def generate(
 
 def _parse_cli(argv: list[str]) -> tuple[Path, str, list[str]]:
     """``[out_dir] [--method M] [--ecm a,b]`` - defaults keep old behaviour."""
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "new"
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
     method = REGISTRATION_METHOD
     ecm_methods = list(ECM_METHODS)
     it = iter(argv)
