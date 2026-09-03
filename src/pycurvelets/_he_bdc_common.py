@@ -141,8 +141,17 @@ def matlab_imfilter(
     """
     img = np.asarray(image, dtype=np.float64)
     k = np.asarray(kernel, dtype=np.float64)
+    if k.ndim != img.ndim:
+        raise ValueError(f"kernel ndim {k.ndim} != image ndim {img.ndim}")
+    # MATLAB places the kernel centre at floor((size+1)/2) (1-based), i.e. the
+    # top-left of the two middle elements for even sizes, whereas scipy uses
+    # size//2 (bottom-right). origin=-1 on even axes realigns them; this
+    # matters for fspecial('gaussian', floor(ppm)) with ppm = 2 (2x2 kernel).
+    origin = tuple(-1 if (s % 2 == 0) else 0 for s in k.shape)
     if boundary == "zero":
-        return ndimage.correlate(img, k, mode="constant", cval=0.0).astype(np.float64)
+        return ndimage.correlate(
+            img, k, mode="constant", cval=0.0, origin=origin
+        ).astype(np.float64)
     if boundary == "replicate":
         return ndimage.correlate(img, k, mode="nearest").astype(np.float64)
     raise ValueError(f"boundary must be 'zero' or 'replicate', got {boundary!r}")
