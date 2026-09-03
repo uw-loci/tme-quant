@@ -158,7 +158,7 @@ def matlab_imfilter(
             img, k, mode="constant", cval=0.0, origin=origin
         ).astype(np.float64)
     if boundary == "replicate":
-        return ndimage.correlate(img, k, mode="nearest").astype(np.float64)
+        return ndimage.correlate(img, k, mode="nearest", origin=origin).astype(np.float64)
     raise ValueError(f"boundary must be 'zero' or 'replicate', got {boundary!r}")
 
 
