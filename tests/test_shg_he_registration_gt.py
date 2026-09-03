@@ -12,7 +12,7 @@ What is asserted:
 * ``registration_method="matlab"`` reproduces MATLAB's *own* GT error on each
   case (5.5 / 68.7 / 9.4 / 7.5 px). This pins down that MATLAB fails test5 and
   that Python matches MATLAB rather than truth there.
-* the default ``mi_ncc`` path is scored against GT too. Today it leaves the
+* the backup ``mi_ncc`` path is scored against GT too. Today it leaves the
   basin on test4/5/6 (83 / 80 / 112 px, worse than identity on two of them),
   so those are ``xfail(strict=False)``: they document the deficiency and flip
   to XPASS once the optimiser improves, without blocking CI.
@@ -28,6 +28,7 @@ number, not a boolean. Tests skip without fixtures / itk.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +49,15 @@ from pycurvelets.SHG_HE_registration import (
     has_simpleitk,
     shg_he_registration,
 )
+
+# Developer-only validation (needs the untracked patient_02 fixture tree and
+# runs every registration method); off by default. Enable locally with:
+#   TMEQ_RUN_MATLAB_PARITY=1 pytest -q tests/test_shg_he_registration_gt.py
+if os.environ.get("TMEQ_RUN_MATLAB_PARITY") != "1":
+    pytest.skip(
+        "GT evaluation tests disabled (set TMEQ_RUN_MATLAB_PARITY=1 to enable)",
+        allow_module_level=True,
+    )
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"
@@ -172,7 +182,7 @@ def test_matlab_method_gt_error_matches_matlab(case_id, fname, ppm, roi) -> None
 
 
 # ---------------------------------------------------------------------------
-# GT error of the default mi_ncc path (known-bad cases are xfail, not hidden)
+# GT error of the backup mi_ncc path (known-bad cases are xfail, not hidden)
 # ---------------------------------------------------------------------------
 
 

@@ -13,10 +13,19 @@ Three layers, so a regression points at one stage:
 
 All MATLAB artefacts were generated offline (``tests/matlab_parity/*.m``);
 nothing here needs MATLAB. Tests skip when ``itk`` or fixtures are missing.
+
+This is a developer validation suite (bit-exactness against MATLAB dumps,
+tens of seconds of ITK per case), not a CI gate. It is skipped unless::
+
+    TMEQ_RUN_MATLAB_PARITY=1 pytest -q tests/test_shg_he_registration_matlab_parity.py
+
+The CI-facing regression for the default path lives in
+``tests/test_shg_he_registration.py``.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +53,14 @@ from pycurvelets.SHG_HE_registration import (
     _build_he_moving,
     shg_he_registration,
 )
+
+# Developer-only validation; off by default (CI). Enable locally with:
+#   TMEQ_RUN_MATLAB_PARITY=1 pytest -q tests/test_shg_he_registration_matlab_parity.py
+if os.environ.get("TMEQ_RUN_MATLAB_PARITY") != "1":
+    pytest.skip(
+        "MATLAB parity tests disabled (set TMEQ_RUN_MATLAB_PARITY=1 to enable)",
+        allow_module_level=True,
+    )
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"
