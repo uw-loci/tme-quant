@@ -967,19 +967,27 @@ def _register_oneplusone_mi(
     fixed_shg: np.ndarray,
     *,
     random_state: int = 0,
+    init: str = "mi_seed",
 ) -> tuple[np.ndarray, dict[str, Any]]:
     """
-    Two-stage multiresolution (1+1)-ES with Mattes MI, matching MATLAB.
+    Two-stage multiresolution (1+1)-ES with Mattes MI via SimpleITK (ITK v4/v5).
 
-    Replicates the ``BDcreation_reg2.m`` workflow:
-      1. ``imregconfig('multimodal')`` -> OnePlusOneEvolutionary + MattesMI
-      2. ``optimizer.InitialRadius = optimizer.InitialRadius / 3.5``
-      3. ``optimizer.MaximumIterations = 700``
-      4. Stage 1: ``imregtform(..., 'similarity')`` from geometry init
+    MATLAB-*like* configuration of ``BDcreation_reg2.m``:
+      1. ``imregconfig('multimodal')`` -> OnePlusOneEvolutionary + MattesMI(50 bins)
+      2. ``optimizer.InitialRadius = 6.25e-3 / 3.5`` (the optimizer is a value
+         object, so the reduced radius applies to *both* imregtform calls)
+      3. ``optimizer.MaximumIterations = 700`` (per pyramid level)
+      4. Stage 1: ``imregtform(..., 'similarity')`` from identity (+centre offset)
       5. Stage 2: ``imregtform(..., 'affine', 'InitialTransformation', sim)``
+    with MATLAB's optimizer scales (``[1,1,(1,1,)1/maxT,1/maxT]``), shrink
+    factor ``GrowthFactor^-0.25``, 3-level pyramid [4,2,1] and a fixed seed.
 
-    MATLAB's ``imregtform`` internally builds a 3-level Gaussian pyramid
-    (shrink factors [4,2,1]) and runs the (1+1)-ES at each level.
+    This is **not** bit-exact with MATLAB (v4 Mattes MI, no per-level
+    radius/epsilon refiner, different RNG); use ``registration_method="matlab"``
+    for that. ``init="identity"`` is MATLAB's start point, but with the v4 ES
+    it frequently misses the golden basin (patient_001 ppm=2: MAE 32 vs 5.3
+    with ``init="mi_seed"``), so the default seeds from the deterministic MI
+    grid search and uses the ES for stochastic refinement only.
     """
     if not _HAS_SITK:  # pragma: no cover
         raise RuntimeError(
@@ -997,57 +1005,61 @@ def _register_oneplusone_mi(
     moving_sitk = sitk.Cast(sitk.GetImageFromArray(moving), sitk.sitkFloat64)
 
     seed = max(1, int(random_state))
-    # MATLAB multimodal default InitialRadius = 6.25e-3.
-    # The /3.5 reduction in BDcreation_reg2.m happens AFTER a warm-up
-    # imregister call; the first imregtform('similarity') still uses the
-    # full radius. We use the full radius for Stage 1 (exploration) and
-    # the reduced radius for Stage 2 (refinement).
-    radius_explore = 6.25e-3
-    radius_refine = 6.25e-3 / 3.5
+    # MATLAB: imregconfig('multimodal') InitialRadius 6.25e-3, then /3.5 in
+    # BDcreation_reg2.m before both imregtform calls; GrowthFactor 1.05,
+    # ShrinkFactor = GrowthFactor^-0.25, Epsilon 1.5e-6, 700 iterations/level.
+    growth_factor = 1.05
+    shrink_factor = float(growth_factor) ** -0.25
+    radius = 6.25e-3 / 3.5
+    epsilon = 1.5e-6
+    n_iter_per_level = 700
     shrink_factors = [4, 2, 1]
     smoothing_sigmas = [2, 1, 0]
+    # computeDefaultRegmexSettings.m: translation scale = 1 / hypot(W, H).
+    fh, fw = fixed.shape[:2]
+    translation_scale = 1.0 / float(np.hypot(fw, fh))
 
-    def _make_reg(
-        transform: Any,
-        seed_val: int,
-        *,
-        n_iter: int = 2000,
-        radius: float = radius_explore,
-    ) -> Any:
+    def _make_reg(transform: Any, seed_val: int, scales: list[float]) -> Any:
         reg = sitk.ImageRegistrationMethod()
         reg.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
         reg.SetMetricSamplingStrategy(reg.NONE)
         reg.SetInterpolator(sitk.sitkLinear)
         reg.SetOptimizerAsOnePlusOneEvolutionary(
-            numberOfIterations=n_iter,
-            epsilon=1.5e-6,
+            numberOfIterations=n_iter_per_level,
+            epsilon=epsilon,
             initialRadius=radius,
-            growthFactor=1.05,
-            shrinkFactor=np.power(1.05, -1.5),
+            growthFactor=growth_factor,
+            shrinkFactor=shrink_factor,
             seed=seed_val,
         )
-        reg.SetOptimizerScalesFromPhysicalShift()
+        reg.SetOptimizerScales(scales)
         reg.SetShrinkFactorsPerLevel(shrink_factors)
         reg.SetSmoothingSigmasPerLevel(smoothing_sigmas)
         reg.SmoothingSigmasAreSpecifiedInPhysicalUnitsOff()
         reg.SetInitialTransform(transform, inPlace=False)
         return reg
 
-    # Use the MI grid+NM search to find the correct basin (robust to the
-    # large, non-convex MI surface), then run two-stage (1+1)-ES from that
-    # seed for stochastic refinement matching the paper's optimizer.
-    mi_seed_forward, mi_seed_debug = _register_mi(he_moving, fixed_shg)
-
-    # Stage 1: similarity (1+1)-ES from the MI seed.
-    mi_inv = _affine_fixed_to_moving_from_forward(mi_seed_forward)
-    mi_mat = mi_inv[:2, :2]
-    mi_t = mi_inv[:2, 2]
-    # Decompose into similarity parameters for Similarity2DTransform.
-    sx = float(np.sqrt(mi_mat[0, 0] ** 2 + mi_mat[1, 0] ** 2))
-    angle = float(np.arctan2(mi_mat[1, 0], mi_mat[0, 0]))
     center = [(fixed.shape[1] - 1) / 2.0, (fixed.shape[0] - 1) / 2.0]
     center_arr = np.array(center, dtype=np.float64)
-    t_from_center = mi_t + mi_mat @ center_arr - center_arr
+    mi_seed_debug: dict[str, Any] | None = None
+    if init == "mi_seed":
+        mi_seed_forward, mi_seed_debug = _register_mi(he_moving, fixed_shg)
+        mi_inv = _affine_fixed_to_moving_from_forward(mi_seed_forward)
+        init_mat = mi_inv[:2, :2]
+        init_t = mi_inv[:2, 2]
+    elif init == "identity":
+        # MATLAB initial: identity linear part, translation = offset between
+        # the moving and fixed image centres (zero when the grids match).
+        mh, mw = moving.shape[:2]
+        init_mat = np.eye(2, dtype=np.float64)
+        init_t = np.array([(mw - fw) / 2.0, (mh - fh) / 2.0], dtype=np.float64)
+    else:
+        raise ValueError(f"init must be 'identity' or 'mi_seed', got {init!r}")
+
+    # Decompose into Similarity2DTransform parameters (scale, angle, t).
+    sx = float(np.sqrt(init_mat[0, 0] ** 2 + init_mat[1, 0] ** 2))
+    angle = float(np.arctan2(init_mat[1, 0], init_mat[0, 0]))
+    t_from_center = init_t + init_mat @ center_arr - center_arr
 
     sim_init = sitk.Similarity2DTransform()
     sim_init.SetScale(float(sx))
@@ -1055,20 +1067,21 @@ def _register_oneplusone_mi(
     sim_init.SetCenter(center)
     sim_init.SetTranslation(t_from_center.tolist())
 
-    sim_reg = _make_reg(sim_init, seed, n_iter=2000, radius=radius_explore)
+    sim_scales = [1.0, 1.0, translation_scale, translation_scale]
+    sim_reg = _make_reg(sim_init, seed, sim_scales)
     sim_result = sim_reg.Execute(fixed_sitk, moving_sitk)
     sim_metric = float(sim_reg.GetMetricValue())
     sim_stop = str(sim_reg.GetOptimizerStopConditionDescription())
 
-    # Convert similarity result to an AffineTransform for Stage 2.
+    # Stage 2: affine about the same centre, initialised from the similarity.
     sim_mat, sim_t0 = _affine_m_t0_from_transform(sim_result)
     aff_init = sitk.AffineTransform(2)
-    aff_init.SetCenter([0.0, 0.0])
+    aff_init.SetCenter(center)
     aff_init.SetMatrix(sim_mat.ravel().tolist())
-    aff_init.SetTranslation(sim_t0.tolist())
+    aff_init.SetTranslation((sim_t0 + sim_mat @ center_arr - center_arr).tolist())
 
-    # Stage 2: affine (1+1)-ES refinement (reduced radius).
-    aff_reg = _make_reg(aff_init, seed + 1, n_iter=2000, radius=radius_refine)
+    aff_scales = [1.0, 1.0, 1.0, 1.0, translation_scale, translation_scale]
+    aff_reg = _make_reg(aff_init, seed, aff_scales)
     aff_result = aff_reg.Execute(fixed_sitk, moving_sitk)
     aff_metric = float(aff_reg.GetMetricValue())
     aff_stop = str(aff_reg.GetOptimizerStopConditionDescription())
@@ -1083,8 +1096,13 @@ def _register_oneplusone_mi(
     debug = {
         "oneplusone_random_state": int(random_state),
         "oneplusone_seed": int(seed),
-        "oneplusone_radius_explore": float(radius_explore),
-        "oneplusone_radius_refine": float(radius_refine),
+        "oneplusone_init": init,
+        "oneplusone_radius": float(radius),
+        "oneplusone_growth_factor": float(growth_factor),
+        "oneplusone_shrink_factor": float(shrink_factor),
+        "oneplusone_epsilon": float(epsilon),
+        "oneplusone_iterations_per_level": int(n_iter_per_level),
+        "oneplusone_translation_scale": float(translation_scale),
         "oneplusone_shrink_factors": tuple(shrink_factors),
         "oneplusone_smoothing_sigmas": tuple(smoothing_sigmas),
         "oneplusone_sim_metric": float(sim_metric),

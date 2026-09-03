@@ -119,7 +119,7 @@ def test_shg_he_registration_matches_matlab_golden_patient001(
     python_float, debug = shg_he_registration(
         params, save_output=False, return_debug=True
     )
-    python_uint8 = (np.clip(python_float, 0, 1) * 255).astype(np.uint8)
+    python_uint8 = np.round(np.clip(python_float, 0, 1) * 255).astype(np.uint8)  # im2uint8
 
     assert python_uint8.shape == matlab_golden.shape, (
         f"[{case_id}] Shape mismatch: python {python_uint8.shape} vs golden {matlab_golden.shape}"
@@ -188,7 +188,7 @@ def test_shg_he_registration_oneplusone_backend_is_reasonable() -> None:
         random_state=0,
     )
     python_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
-    python_uint8 = (np.clip(python_float, 0, 1) * 255).astype(np.uint8)
+    python_uint8 = np.round(np.clip(python_float, 0, 1) * 255).astype(np.uint8)  # im2uint8
 
     assert python_uint8.shape == matlab_golden.shape
     assert debug.get("registration_backend") == "oneplusone_mattes"
@@ -270,7 +270,7 @@ def test_shg_he_registration_patient02(
     python_float, debug = shg_he_registration(
         params, save_output=False, return_debug=True
     )
-    python_uint8 = (np.clip(python_float, 0, 1) * 255).astype(np.uint8)
+    python_uint8 = np.round(np.clip(python_float, 0, 1) * 255).astype(np.uint8)  # im2uint8
 
     assert python_uint8.shape == matlab_golden.shape, (
         f"[{case_id}] Shape mismatch: python {python_uint8.shape} "
