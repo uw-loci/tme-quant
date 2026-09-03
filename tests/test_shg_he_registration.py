@@ -20,6 +20,7 @@ import pytest
 from skimage import io
 
 from pycurvelets._registration_quality import compute_registration_quality_metrics
+from pycurvelets._itk_v3_matlab_engine import has_itk
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
     has_simpleitk,
@@ -39,17 +40,22 @@ REGRESSION_CASES: tuple[tuple[str, float, str], ...] = (
     ("test3", 3.0, "HE_registered_test3"),
 )
 
-# uint8-scale regression bounds for the *approximate* default ``mi_ncc`` path
+# uint8-scale regression bounds for the *approximate* backup ``mi_ncc`` path
 # (empirically measured against the MATLAB golden ``BDcreation_reg2`` outputs,
 # ~15% headroom). Re-baselined after preprocessing became MATLAB-exact
-# (measured: test1 6.02, test2 2.12, test3 9.55). Pixel-exact parity is
-# asserted separately for ``registration_method="matlab"`` in
-# ``test_shg_he_registration_matlab_parity.py``.
+# (measured: test1 6.02, test2 2.12, test3 9.55).
 _MAX_MAE_UINT8: dict[str, float] = {
     "test1": 7.0,
     "test2": 3.0,
     "test3": 11.0,
 }
+# The default ``registration_method="matlab"`` (ITK v3 (1+1)-ES port) is
+# pixel-exact on macOS arm64 (MAE 0.0, asserted in the dev-only
+# ``test_shg_he_registration_matlab_parity.py``). Here we keep a small margin
+# so that last-ulp floating-point differences on other platforms/ITK builds do
+# not turn into a red CI; anything larger means the ES trajectory diverged and
+# must be investigated.
+_MAX_MAE_UINT8_MATLAB: float = 1.0
 _MIN_EXACT_FRAC_UINT8: dict[str, float] = {
     "test1": 0.35,
     "test2": 0.40,
@@ -101,14 +107,15 @@ def _require_registration_fixtures(case_folder: str) -> Path:
     REGRESSION_CASES,
     ids=[c[0] for c in REGRESSION_CASES],
 )
-@pytest.mark.skipif(not has_simpleitk(), reason="MATLAB-parity path uses SimpleITK Mattes MI")
-def test_shg_he_registration_matches_matlab_golden_patient001(
+@pytest.mark.skipif(not has_simpleitk(), reason="mi_ncc backup path requires SimpleITK")
+def test_shg_he_registration_mi_ncc_backup_close_to_matlab_golden_patient001(
     case_id: str,
     pixelpermicron: float,
     he_registered_folder: str,
 ) -> None:
     """
-    Dual-gate: SHG alignment floors + MATLAB golden PSNR/SSIM/MAE floors.
+    Backup ``mi_ncc`` path. Dual-gate: SHG alignment floors + MATLAB golden
+    PSNR/SSIM/MAE floors.
     """
     golden_path = _require_registration_fixtures(he_registered_folder)
     matlab_golden = _load_tif_uint8(golden_path)
@@ -119,12 +126,14 @@ def test_shg_he_registration_matches_matlab_golden_patient001(
         pixelpermicron=pixelpermicron,
         SHGfilepath=str(_SHG_INPUT.parent),
         areaThreshold=5000.0,
+        registration_method="mi_ncc",
     )
     python_float, debug = shg_he_registration(
         params, save_output=False, return_debug=True
     )
     python_uint8 = np.round(np.clip(python_float, 0, 1) * 255).astype(np.uint8)  # im2uint8
 
+    assert debug.get("registration_backend") == "mi_then_ncc"
     assert python_uint8.shape == matlab_golden.shape, (
         f"[{case_id}] Shape mismatch: python {python_uint8.shape} vs golden {matlab_golden.shape}"
     )
@@ -172,6 +181,53 @@ def test_shg_he_registration_matches_matlab_golden_patient001(
     assert ssim >= _MIN_SSIM[case_id], (
         f"[{case_id}] ppm={pixelpermicron}: SSIM={ssim:.4f} "
         f"is below required {_MIN_SSIM[case_id]:.4f}."
+    )
+
+
+@pytest.mark.parametrize(
+    "case_id,pixelpermicron,he_registered_folder",
+    REGRESSION_CASES,
+    ids=[c[0] for c in REGRESSION_CASES],
+)
+@pytest.mark.skipif(not has_itk(), reason="default 'matlab' path requires itk")
+def test_shg_he_registration_default_matches_matlab_golden_patient001(
+    case_id: str,
+    pixelpermicron: float,
+    he_registered_folder: str,
+) -> None:
+    """
+    Default parameters (``registration_method`` unset -> ``"matlab"``) must
+    reproduce the MATLAB ``BDcreation_reg2`` golden TIFF (near-)exactly.
+    """
+    golden_path = _require_registration_fixtures(he_registered_folder)
+    matlab_golden = _load_tif_uint8(golden_path)
+
+    params = SHGHERegistrationParameters(
+        HEfilepath=str(_HE_INPUT.parent),
+        HEfilename="patient_001.tif",
+        pixelpermicron=pixelpermicron,
+        SHGfilepath=str(_SHG_INPUT.parent),
+        areaThreshold=5000.0,
+    )
+    python_float, debug = shg_he_registration(
+        params, save_output=False, return_debug=True
+    )
+    python_uint8 = np.round(np.clip(python_float, 0, 1) * 255).astype(np.uint8)  # im2uint8
+
+    assert debug.get("registration_backend") == "itk_v3_matlab_parity", (
+        f"[{case_id}] default did not dispatch to the ITK v3 engine: "
+        f"{debug.get('registration_backend')} "
+        f"(fallback reason: {debug.get('matlab_fallback_reason')})"
+    )
+    assert python_uint8.shape == matlab_golden.shape, (
+        f"[{case_id}] Shape mismatch: python {python_uint8.shape} vs golden {matlab_golden.shape}"
+    )
+    metrics = compute_registration_quality_metrics(python_uint8, matlab_golden)
+    mae = float(metrics["mae_uint8"])
+    assert mae <= _MAX_MAE_UINT8_MATLAB, (
+        f"[{case_id}] ppm={pixelpermicron}: default 'matlab' path MAE={mae:.3f} "
+        f"exceeds {_MAX_MAE_UINT8_MATLAB} (exact={metrics['exact_frac']*100:.1f}%, "
+        f"SSIM={metrics['ssim']:.4f}). Final tform.A: {debug.get('aff_matlab_tform_A')}"
     )
 
 
@@ -247,7 +303,10 @@ def _require_p02_fixtures(he_filename: str, golden_folder: str) -> Path:
     PATIENT02_CASES,
     ids=[c[0] for c in PATIENT02_CASES],
 )
-@pytest.mark.skipif(not has_simpleitk(), reason="mi_ncc path requires SimpleITK")
+@pytest.mark.skipif(
+    not (has_itk() or has_simpleitk()),
+    reason="needs itk (default 'matlab') or SimpleITK (fallback 'mi_ncc')",
+)
 def test_shg_he_registration_patient02(
     case_id: str,
     he_filename: str,
