@@ -1414,11 +1414,15 @@ def _shg_he_registration_core(
     A_inv = _affine_fixed_to_moving_from_forward(forward_2x3)
 
     rgb_for_warp = resize_like(he_img, fixed.shape[:2])
+    # MATLAB: imwarp(RGB, ..., 'FillValues', 255) on a *double* image, then
+    # imresize(B, size(SHG)) and imwrite (clip to [0, 1]). Blending 255 rather
+    # than 1.0 at the border saturates the halo band to white exactly as
+    # MATLAB does; clipping happens after the final resize, like imwrite.
     registered = matlab_imwarp_bilinear(
         rgb_for_warp.astype(np.float64),
         fixed.shape[:2],
         A_inv,
-        fill_value=1.0,
+        fill_value=255.0,
     )
 
     registered_img = resize_like(registered, original_shg_shape)

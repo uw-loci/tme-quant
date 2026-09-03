@@ -642,17 +642,16 @@ def matlab_imwarp_bilinear(
     - Output pixel ``(r, c)`` center is at world ``(c, r)`` (0-based world
       coords, which differ from MATLAB's 1-based world only by a constant
       offset that cancels out when both domains share the same convention).
-    - A source sample ``(x, y)`` is "inside" iff ``-0.5 <= x <= W_in - 0.5``
-      and ``-0.5 <= y <= H_in - 0.5`` (half-pixel extension of the intrinsic
-      grid, matching MATLAB's ``[0.5, N+0.5]`` world limits).
-    - Bilinear interpolation blends ``fill_value`` for any of the four
-      neighbours that fall outside the intrinsic grid, which reproduces
-      MATLAB's boundary halo behaviour.
-
-    Implemented with vectorised NumPy rather than
-    ``scipy.ndimage.map_coordinates`` because the latter treats the grid as
-    ``[0, N-1]`` with no half-pixel extension, diverging from ``imwarp`` at
-    the outermost band.
+    - A source sample ``(x, y)`` is "inside" iff ``0 <= x <= W_in - 1`` and
+      ``0 <= y <= H_in - 1`` (0-based pixel-*centre* range, i.e. MATLAB's
+      ``1 <= x <= W``); anything else gets ``fill_value`` outright. There is
+      **no** blending with the fill value at the border. This was verified
+      against ``images.internal.interp2d(..., 'linear', fill)`` with
+      ``SmoothEdges=false`` (imwarp's default) on a dense probe grid
+      (``tests/matlab_parity/probe_interp2d.m``): inside samples never touch
+      the fill, samples in the half-pixel band ``[0.5, 1)`` are pure fill.
+    - Padding with ``fill_value`` below only guards the ``x == W_in - 1``
+      edge, where the right neighbour has weight exactly 0.
     """
     src_arr = np.asarray(src, dtype=np.float64)
     if src_arr.ndim not in (2, 3):
@@ -682,12 +681,14 @@ def matlab_imwarp_bilinear(
     x_in = pts_in[0].reshape(H_out, W_out)
     y_in = pts_in[1].reshape(H_out, W_out)
 
-    # Inside = half-pixel-extended input domain (MATLAB imref2d limits).
+    # Inside = pixel-centre range (MATLAB interp2d rule, see Notes). Using the
+    # half-pixel-extended [-0.5, N-0.5] range here produced a one-pixel band
+    # of fill-blended values that MATLAB does not have.
     inside = (
-        (x_in >= -0.5)
-        & (x_in <= (W_in - 1) + 0.5)
-        & (y_in >= -0.5)
-        & (y_in <= (H_in - 1) + 0.5)
+        (x_in >= 0.0)
+        & (x_in <= (W_in - 1))
+        & (y_in >= 0.0)
+        & (y_in <= (H_in - 1))
     )
 
     # Bilinear: floor + ceil neighbours in intrinsic coords.
