@@ -1,31 +1,35 @@
 """H&E <-> SHG registration - Python port of MATLAB ``BDcreation_reg2.m``.
 
-Default algorithm (``registration_method="mi_ncc"``):
+Default algorithm (``registration_method="matlab"``) - the original (1+1)-ES:
 
-1. Build an ECM moving image from the H&E (controlled by ``ecm_method``).
-2. Use SimpleITK's Mattes MI with a deterministic grid search over
-   angle/scale/translation, then Nelder-Mead similarity and affine
-   refinement, followed by a bounded NCC trust-region sub-pixel polish.
+1. Build the collagen moving image from the H&E exactly as ``BDcreation_reg2``
+   does (``imresize`` / ``imadjust`` / ``rgb2hsv`` / ``graythresh`` /
+   ``bwareaopen`` / ``strel`` / ``imfilter`` / ``imfill`` ports).
+2. Register with a bit-for-bit port of MATLAB ``imregtform``: ITK v3
+   multiresolution Mattes MI + (1+1) evolutionary optimizer with MATLAB's
+   scales, centre, seed (12345) and per-level radius/epsilon refiner, run
+   through the ``itk`` package (no MATLAB involved). Stage 1 similarity, stage
+   2 affine initialised from it. See :mod:`pycurvelets._itk_v3_matlab_engine`.
 3. Warp the raw HE RGB onto the SHG grid via :func:`matlab_imwarp_bilinear`,
    which matches MATLAB ``imref2d`` + ``imwarp`` conventions (pixel-centre
    sampling, pixel-centre inside test, no fill blending, ``FillValues=255``).
 
-Other ``registration_method`` values:
+This reproduces the ``BDcreation_reg2`` golden TIFFs pixel-for-pixel on all
+seven reference cases (``tests/test_shg_he_registration_matlab_parity.py``,
+dev-only). Note it faithfully reproduces MATLAB's *result*, including cases
+where MATLAB itself lands in a poor local optimum (patient_02 test5 is ~69 px
+from ground truth in both). If ``itk`` cannot be imported the pipeline warns
+and falls back to ``"mi_ncc"``.
 
-* ``"matlab"`` - Bit-for-bit port of MATLAB ``imregtform`` as used by
-  ``BDcreation_reg2.m``: ITK v3 multiresolution Mattes MI + (1+1)-ES with
-  MATLAB's scales, centre, seed (12345) and per-level radius/epsilon refiner,
-  driven through the ``itk`` package (no MATLAB involved). Together with the
-  MATLAB-exact preprocessing in :mod:`pycurvelets._he_bdc_common`
-  (``imresize``, ``graythresh``, ``imfilter``, ``rgb2gray``, ``imwarp``) it
-  reproduces the ``BDcreation_reg2`` golden TIFFs pixel-for-pixel on all
-  seven reference cases (``tests/test_shg_he_registration_matlab_parity.py``).
-  See :mod:`pycurvelets._itk_v3_matlab_engine`. Requires ``itk``
-  (``pip install "pycurvelets[matlab-parity]"``). Note this faithfully
-  reproduces MATLAB's *result*, including cases where MATLAB itself lands in a
-  poor local optimum (patient_02 test5 is ~69 px from ground truth in both).
-* ``"oneplusone"`` - Multiresolution Mattes MI with a stochastic (1+1)
-  evolutionary optimizer (paper/MATLAB-inspired). Available as an option.
+Backup ``registration_method`` values (SimpleITK based, approximate):
+
+* ``"mi_ncc"`` - SimpleITK Mattes MI with a deterministic grid search over
+  angle/scale/translation, then Nelder-Mead similarity and affine refinement,
+  followed by a bounded NCC trust-region sub-pixel polish. Deterministic and
+  close to MATLAB on patient_001 (MAE 2-10 gray levels) but leaves the basin
+  on three of the four synthetic patient_02 cases.
+* ``"oneplusone"`` - SimpleITK (v4) multiresolution Mattes MI + (1+1)-ES with
+  the BDcreation_reg2 optimizer settings, seeded from the MI grid search.
 * ``"mi"`` - Mattes MI alone (skip NCC polish). Slightly worse on average
   but useful when the polish would be untrusted.
 * ``"ncc"`` (alias ``"dice"``) - Fully deterministic NCC-on-blurred-masks
@@ -52,6 +56,7 @@ Public entry points: :func:`shg_he_registration`, :func:`BDcreation_reg2`
 from __future__ import annotations
 
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -99,19 +104,20 @@ class SHGHERegistrationParameters:
     pixelpermicron: float
     SHGfilepath: str
     areaThreshold: float | None = None
-    # "mi_ncc" (default): SITK Mattes MI grid+Nelder-Mead basin finder +
-    #                     bounded NCC TRF sub-pixel polish. Deterministic;
-    #                     approximates MATLAB output.
-    # "matlab"          : Exact port of MATLAB imregtform (ITK v3 engine via
-    #                     the `itk` package): same metric, optimizer, scales,
-    #                     seed and per-level refiner as BDcreation_reg2.m.
-    #                     Reproduces the MATLAB golden TIFFs pixel-for-pixel
+    # "matlab" (default): Exact port of MATLAB imregtform (ITK v3 engine via
+    #                     the `itk` package): same metric, (1+1)-ES optimizer,
+    #                     scales, seed and per-level refiner as
+    #                     BDcreation_reg2.m. Reproduces the MATLAB golden
+    #                     TIFFs pixel-for-pixel
     #                     (tests/test_shg_he_registration_matlab_parity.py).
-    #                     Ignores random_state (seed=12345). Needs `itk`.
-    # "oneplusone"      : Multiresolution Mattes MI with a stochastic
-    #                     (1+1)-evolutionary optimizer. Closest to the
-    #                     paper/MATLAB ``imregtform('multimodal')`` workflow.
-    #                     Available as an option per Yuming's request.
+    #                     Ignores random_state (seed=12345). Needs `itk`;
+    #                     warns and falls back to "mi_ncc" if it is missing.
+    # "mi_ncc"          : SITK Mattes MI grid+Nelder-Mead basin finder +
+    #                     bounded NCC TRF sub-pixel polish. Deterministic;
+    #                     approximates MATLAB output. Backup option.
+    # "oneplusone"      : SimpleITK multiresolution Mattes MI with a
+    #                     stochastic (1+1)-evolutionary optimizer using the
+    #                     BDcreation_reg2 settings (approximate, v4 metric).
     # "mi"              : MI only (no polish). Slightly worse than ``mi_ncc``
     #                     but faster; kept for debugging.
     # "ncc"             : Deterministic NCC on blurred masks + bounded TRF.
@@ -119,7 +125,7 @@ class SHGHERegistrationParameters:
     #                     mask<->grayscale NCC is non-convex without MI-style
     #                     histogram matching; used as a fallback when SITK
     #                     is unavailable.
-    registration_method: str = "mi_ncc"
+    registration_method: str = "matlab"
     # ECM extraction method:
     # "hsv" (default): BDcreation_reg2.m-style HSV thresholding.
     # "rgb"          : BDcreation_reg.m-style decorrelation stretch + fixed
@@ -1239,7 +1245,7 @@ def _register_matlab_itk_v3(
     if not has_itk():
         raise RuntimeError(
             "registration_method='matlab' requires the 'itk' package "
-            "(pip install itk, or the 'matlab-parity' optional dependency group)."
+            "(pip install itk; it is a declared dependency of tme-quant)."
         )
     if not np.any(he_moving > 0):
         forward_2x3 = np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float64)
@@ -1263,9 +1269,27 @@ def _run_optimizer(
     backend: str
 
     if method == "matlab":
-        forward_2x3, ml_debug = _register_matlab_itk_v3(he_moving, fixed)
-        debug.update(ml_debug)
-        backend = "itk_v3_matlab_parity"
+        from ._itk_v3_matlab_engine import has_itk
+
+        if has_itk():
+            forward_2x3, ml_debug = _register_matlab_itk_v3(he_moving, fixed)
+            debug.update(ml_debug)
+            backend = "itk_v3_matlab_parity"
+        else:
+            # itk is a declared dependency, but keep the pipeline usable if
+            # it is missing (e.g. an unsupported wheel platform): fall back to
+            # the deterministic mi_ncc path and record that we did so.
+            warnings.warn(
+                "registration_method='matlab' needs the 'itk' package; falling back "
+                "to 'mi_ncc' (approximate, not MATLAB-exact). pip install itk",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            debug["matlab_fallback_reason"] = "itk not importable"
+            method = "mi_ncc"
+
+    if method == "matlab":
+        pass  # handled above
     elif method == "mi" and _HAS_SITK:
         forward_2x3, mi_debug = _register_mi(he_moving, fixed)
         debug.update(mi_debug)
@@ -1332,7 +1356,7 @@ def _shg_he_registration_core(
     he_filename: str,
     shg_filepath: str,
     pixelpermicron: float,
-    registration_method: str = "mi_ncc",
+    registration_method: str = "matlab",
     ecm_method: str = "hsv",
     random_state: int = 0,
 ) -> tuple[np.ndarray, str, dict[str, Any]]:
@@ -1368,7 +1392,7 @@ def _shg_he_registration_core(
     if fixed.ndim == 3:
         fixed = matlab_rgb2gray(fixed)
 
-    method = (registration_method or "mi_ncc").lower()
+    method = (registration_method or "matlab").lower()
     ecm_requested = (ecm_method or "hsv").lower()
 
     debug: dict[str, Any] = {

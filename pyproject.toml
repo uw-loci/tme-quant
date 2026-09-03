@@ -22,6 +22,10 @@ dependencies = [
   "scikit-learn>=1.7.1",
   "scipy>=1.15.2",
   "SimpleITK>=2.3.0",
+  # ITK v3 registration classes for the default registration_method="matlab"
+  # (bit-exact port of MATLAB imregtform used by BDcreation_reg2). SimpleITK
+  # cannot expose these classes. Wheels: macOS arm64 / Linux / Windows, py3.11+.
+  "itk>=5.3.0,<5.5",
 ]
 
 [dependency-groups]
@@ -39,9 +43,7 @@ segmentation = [
   "cellcast",
   "cellpose",
 ]
-# ITK (v3 registration classes) for registration_method="matlab": bit-exact
-# port of MATLAB imregtform used by BDcreation_reg2. SimpleITK cannot expose
-# these classes. Wheels exist for macOS arm64 / Linux / Windows, Python 3.11+.
+# Kept for backwards compatibility: itk is now a core dependency.
 matlab-parity = [
   "itk>=5.3.0,<5.5",
 ]
