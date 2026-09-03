@@ -188,3 +188,11 @@ tests/artifacts/
 
 # referenced MATLAB files
 *.m
+
+# MATLAB-parity harness for BDcreation_reg2: keep the MATLAB dump/probe
+# scripts and the small dumps analyze_dumps.py reads (images.mat, tform txt,
+# traces, probes). Regenerable bulk (intermediates.mat, ~8 MB each) and run
+# logs stay ignored. Must come after the *.m / *.mat / *.tif rules above.
+!tests/matlab_parity/**
+tests/matlab_parity/dumps/*/intermediates.mat
+tests/matlab_parity/dumps/*.log

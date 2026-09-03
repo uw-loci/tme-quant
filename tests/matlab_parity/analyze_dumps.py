@@ -5,6 +5,8 @@ Usage (from tme-quant root, after ``dump_bdc_reg2.m`` has run)::
     .venv/bin/python tests/matlab_parity/analyze_dumps.py            # all cases
     .venv/bin/python tests/matlab_parity/analyze_dumps.py test1 test4  # subset
     .venv/bin/python tests/matlab_parity/analyze_dumps.py --no-engine  # skip ITK runs
+    .venv/bin/python tests/matlab_parity/analyze_dumps.py --preproc    # step-by-step
+                                                                         # mask parity
 
 For every case this reports
 
@@ -261,6 +263,7 @@ def _recover_gt_affine(he_path: Path, gt_path: Path) -> dict | None:
         kp2, desc2 = sift.keypoints, sift.descriptors
     except Exception as exc:  # pragma: no cover
         return {"error": f"SIFT failed: {exc}"}
+
     if desc1 is None or desc2 is None or len(desc1) < 4 or len(desc2) < 4:
         return {"error": "too few SIFT descriptors"}
     matches = match_descriptors(desc1, desc2, max_ratio=0.8, cross_check=True)
@@ -319,6 +322,120 @@ def _gt_to_working_grid(
 
 
 # ---------------------------------------------------------------------------
+# preprocessing step-by-step parity (needs intermediates.mat)
+# ---------------------------------------------------------------------------
+
+
+def compare_preprocessing(case_id: str, he_dir: Path, he_file: str, shg_dir: Path, ppm: float) -> dict[str, Any]:
+    """Compare every MATLAB preprocessing intermediate with the Python equivalent.
+
+    Returns ``{step: {"max_abs_diff" | "dice" | "n_diff_px": ...}}`` in pipeline
+    order so the *first* divergent step is obvious.
+    """
+    from scipy.ndimage import binary_fill_holes
+    from skimage import morphology
+
+    from pycurvelets._he_bdc_common import (
+        disk_se,
+        gaussian_filter_matlab_like,
+        make_collagen_mask,
+        make_nuclei_mask,
+        matlab_graythresh,
+        matlab_rgb2hsv,
+        remove_small_components,
+    )
+
+    dump = DUMPS / case_id
+    mat = dump / "intermediates.mat"
+    if not mat.is_file():
+        return {"status": "missing intermediates.mat"}
+    m = sio.loadmat(str(mat))
+
+    he = io.imread(str(he_dir / he_file)).astype(np.float64) / 255.0
+    shg = io.imread(str(shg_dir / he_file)).astype(np.float64) / 255.0
+    if shg.ndim == 3:
+        shg = matlab_rgb2gray(shg)
+    he_scaled, _fixed, pix = prepare_registration_pair(he, shg, float(ppm))
+    he_adj = adjust_rgb_mean_std(he_scaled)
+
+    out: dict[str, Any] = {}
+
+    def cmp_float(name: str, py: np.ndarray, ml: np.ndarray) -> None:
+        if py.shape != ml.shape:
+            out[name] = {"shape_py": list(py.shape), "shape_ml": list(ml.shape)}
+        else:
+            out[name] = {"max_abs_diff": float(np.abs(py - ml).max())}
+
+    def cmp_mask(name: str, py: np.ndarray, ml: np.ndarray) -> None:
+        py_b = np.asarray(py).astype(bool)
+        ml_b = np.asarray(ml).astype(bool)
+        if py_b.shape != ml_b.shape:
+            out[name] = {"shape_py": list(py_b.shape), "shape_ml": list(ml_b.shape)}
+        else:
+            out[name] = {"dice": _dice(py_b, ml_b), "n_diff_px": int((py_b != ml_b).sum())}
+
+    cmp_float("RGB (imresize HE)", he_scaled, m["RGB"])
+    out["HIGH_IN"] = {
+        "matlab": [float(m["HIGH_IN_r"].item()), float(m["HIGH_IN_g"].item()), float(m["HIGH_IN_b"].item())],
+    }
+    cmp_float("HEdata (imadjust)", he_adj, m["HEdata"])
+
+    hsv = matlab_rgb2hsv(he_adj)
+    sat_thresh = matlab_graythresh(hsv[..., 1])
+    out["channel2Min (graythresh S)"] = {
+        "python": sat_thresh, "matlab": float(m["channel2Min"].item()),
+        "matlab_collagen": float(m["channel2Min_c"].item()),
+    }
+    nuclei_raw = (
+        (hsv[..., 0] >= 0.500) & (hsv[..., 0] <= 0.790)
+        & (hsv[..., 1] >= sat_thresh) & (hsv[..., 1] <= 1.0)
+    )
+    nuclei_raw = remove_small_components(nuclei_raw, 150)
+    cmp_mask("BW (nuclei raw + bwareaopen150)", nuclei_raw, m["BW"])
+    bw_nuclei, masked = make_nuclei_mask(he_adj, pix)
+    cmp_mask("BW_nuclei (imopen)", bw_nuclei, m["BW_nuclei"])
+    bw_col, _, _ = make_collagen_mask(he_adj, pix, enhanced_postprocessing=False)
+    cmp_mask("BW_collagen", bw_col, m["BW_collagen"])
+
+    gray_nuclei = matlab_rgb2gray(masked)
+    cmp_float("gray_nuclei (rgb2gray masked)", gray_nuclei, m["gray_nuclei"])
+    ksize = max(1, int(np.floor(pix)))
+    nuclei_filtered = gaussian_filter_matlab_like(gray_nuclei, sigma=0.5, kernel_size=ksize, boundary="zero")
+    cmp_float("nuclei_filtered (imfilter gaussian)", nuclei_filtered, m["nuclei_filtered"])
+    bw_n2 = nuclei_filtered > 0.001
+    cmp_mask("BW_nuclei2 (im2bw 0.001)", bw_n2, m["BW_nuclei2"])
+    bw_disc = remove_small_components(bw_n2, int(np.ceil(50.0 * pix**2)))
+    cmp_mask("BW_nuclei_discard (bwareaopen)", bw_disc, m["BW_nuclei_discard"])
+    bw_dil = morphology.dilation(bw_disc, disk_se(np.floor(pix)))
+    cmp_mask("BW_nuclei_dilated (imdilate)", bw_dil, m["BW_nuclei_dilated"])
+    bw_fill = binary_fill_holes(bw_dil)
+    cmp_mask("BW_nuclei_filled (imfill holes)", bw_fill, m["BW_nuclei_filled"])
+    he_col = bw_col & (~bw_fill)
+    cmp_mask("HE_collagen_BW", he_col, m["HE_collagen_BW"])
+    bw_discard = remove_small_components(he_col, int(np.ceil(pix**2)))
+    cmp_mask("BW_discard / HEmoving", bw_discard, m["BW_discard"])
+    return out
+
+
+def print_preprocessing_report(cases: list) -> dict[str, Any]:
+    report: dict[str, Any] = {}
+    for case_id, he_dir, he_file, shg_dir, ppm, _roi in cases:
+        res = compare_preprocessing(case_id, he_dir, he_file, shg_dir, ppm)
+        report[case_id] = res
+        print(f"\n== {case_id} (ppm={ppm}) preprocessing step parity ==")
+        for step, v in res.items():
+            if "max_abs_diff" in v:
+                flag = "" if v["max_abs_diff"] < 1e-9 else "   <-- differs"
+                print(f"  {step:40s} max|diff|={v['max_abs_diff']:.3e}{flag}")
+            elif "dice" in v:
+                flag = "" if v["n_diff_px"] == 0 else "   <-- differs"
+                print(f"  {step:40s} dice={v['dice']:.5f} n_diff={v['n_diff_px']}{flag}")
+            else:
+                print(f"  {step:40s} {v}")
+    return report
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
@@ -327,6 +444,12 @@ def main(argv: list[str]) -> None:
     run_engine = "--no-engine" not in argv
     selected = [a for a in argv if not a.startswith("--")]
     cases = [c for c in CASES if not selected or c[0] in selected]
+    if "--preproc" in argv:
+        report = print_preprocessing_report(cases)
+        out = DUMPS / "preprocessing_parity.json"
+        out.write_text(json.dumps(report, indent=2, default=float))
+        print(f"\nWrote {out}")
+        return
     if run_engine and not has_itk():
         print("itk not importable -> engine checks disabled (--no-engine).")
         run_engine = False
