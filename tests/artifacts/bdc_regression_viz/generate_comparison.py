@@ -87,7 +87,7 @@ def generate(
         ecm_method=ecm_method,
     )
     py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
-    py_uint8 = (np.clip(py_float, 0, 1) * 255).astype(np.uint8)
+    py_uint8 = np.round(np.clip(py_float, 0, 1) * 255).astype(np.uint8)  # im2uint8 rounds
     shg_align = debug.get("shg_alignment") or {}
     shg_mi = float(shg_align.get("shg_mi", float("nan")))
     shg_ncc = float(shg_align.get("shg_ncc", float("nan")))

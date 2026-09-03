@@ -1467,7 +1467,8 @@ def shg_he_registration(
         save_path = os.path.join(p.HEfilepath, "HE_registered")
         os.makedirs(save_path, exist_ok=True)
         output_path = os.path.join(save_path, p.HEfilename)
-        registered_uint8 = (np.clip(registered_img, 0, 1) * 255).astype(np.uint8)
+        # MATLAB imwrite(double) == im2uint8: round(x*255), not truncate.
+        registered_uint8 = np.round(np.clip(registered_img, 0, 1) * 255).astype(np.uint8)
         io.imsave(output_path, registered_uint8, check_contrast=False)
         print(f"Registered image {p.HEfilename} was saved at {save_path}")
 

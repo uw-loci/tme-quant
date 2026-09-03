@@ -111,7 +111,7 @@ def generate(
         registration_method="mi_ncc",
     )
     py_float = shg_he_registration(params, save_output=False, return_debug=False)
-    py_uint8 = (np.clip(py_float, 0, 1) * 255).astype(np.uint8)
+    py_uint8 = np.round(np.clip(py_float, 0, 1) * 255).astype(np.uint8)  # im2uint8 rounds
 
     diff_signed = py_uint8.astype(np.float64) - matlab_golden.astype(np.float64)
     diff_abs = np.abs(diff_signed)

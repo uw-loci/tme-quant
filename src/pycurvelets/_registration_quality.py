@@ -14,7 +14,7 @@ def _to_uint8_rgb(arr: np.ndarray) -> np.ndarray:
         return out
     if np.issubdtype(out.dtype, np.floating):
         out = np.clip(out, 0.0, 1.0)
-        return (out * 255.0).astype(np.uint8)
+        return np.round(out * 255.0).astype(np.uint8)  # im2uint8 rounds
     out = np.clip(out, 0, 255).astype(np.uint8)
     return out
 
