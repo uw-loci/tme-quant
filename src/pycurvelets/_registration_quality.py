@@ -73,7 +73,12 @@ def compute_registration_quality_metrics(
     within10 = float(np.mean(abs_diff <= 10.0))
     within20 = float(np.mean(abs_diff <= 20.0))
 
-    psnr = float(peak_signal_noise_ratio(gt_f, py_f, data_range=1.0))
+    # Identical images (MSE = 0) are the normal outcome of the MATLAB-exact path;
+    # report +inf explicitly instead of letting skimage emit a divide-by-zero.
+    if rmse == 0.0:
+        psnr = float("inf")
+    else:
+        psnr = float(peak_signal_noise_ratio(gt_f, py_f, data_range=1.0))
     ssim = float(
         structural_similarity(gt_f, py_f, data_range=1.0, channel_axis=-1)
     )
