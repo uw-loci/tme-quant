@@ -65,14 +65,19 @@ def matlab_round(x: float | np.ndarray) -> float | np.ndarray:
 
 
 def matlab_rgb2gray(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
-    """MATLAB ``rgb2gray``: Rec.601 luma ``[0.2989, 0.5870, 0.1140]``."""
+    """
+    MATLAB ``rgb2gray`` for double input. MATLAB uses the full-precision
+    Rec.601 coefficients below (``rgb2gray.m``: ``T = inv([1 0.956 0.621; 1
+    -0.272 -0.647; 1 -1.106 1.703])``, first row), not the rounded
+    ``[0.2989, 0.5870, 0.1140]``; the rounded set differs by up to ~1e-4.
+    """
     if rgb.ndim == 2:
         return rgb.astype(np.float64)
     arr = np.moveaxis(rgb, axis, -1).astype(np.float64)
     if arr.shape[-1] < 3:
         raise ValueError(f"Expected RGB with >=3 channels, got shape {rgb.shape}.")
     r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
-    return 0.2989 * r + 0.5870 * g + 0.1140 * b
+    return 0.298936021293775 * r + 0.587043074451121 * g + 0.114020904255103 * b
 
 
 def matlab_graythresh(image: np.ndarray, nbins: int = 256) -> float:
