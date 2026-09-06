@@ -43,10 +43,6 @@ segmentation = [
   "cellcast",
   "cellpose",
 ]
-# Kept for backwards compatibility: itk is now a core dependency.
-matlab-parity = [
-  "itk>=5.3.0,<5.5",
-]
 
 [project.entry-points."napari.manifest"]
 napari-curvealign = "napari_curvealign:napari.yaml"
@@ -61,6 +57,9 @@ namespaces = false
 
 [tool.setuptools.package-data]
 napari_curvealign = ["napari.yaml"]
+# sRGB ICC profile TRC/colorant/adaptation constants for the MATLAB
+# makecform('srgb2lab') port (BDcreation_reg); see tests/matlab_parity.
+pycurvelets = ["data/*.npz"]
 
 [tool.pytest.ini_options]
 testpaths = [
