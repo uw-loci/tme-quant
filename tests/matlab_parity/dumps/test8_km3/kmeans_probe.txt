@@ -1,0 +1,6 @@
+seed=0 same_collagen_mask_as_seed0=1 n_collagen=14580 centers=[128 128;154.246 124.677;165.548 128.519]
+seed=1 same_collagen_mask_as_seed0=1 n_collagen=14580 centers=[128 128;154.246 124.677;165.548 128.519]
+seed=2 same_collagen_mask_as_seed0=1 n_collagen=14580 centers=[128 128;154.246 124.677;165.548 128.519]
+seed=3 same_collagen_mask_as_seed0=0 n_collagen=15034 centers=[128 128;154.072 124.607;165.371 128.469]
+seed=42 same_collagen_mask_as_seed0=1 n_collagen=14580 centers=[128 128;154.246 124.677;165.548 128.519]
+seed=12345 same_collagen_mask_as_seed0=1 n_collagen=14580 centers=[128 128;154.246 124.677;165.548 128.519]

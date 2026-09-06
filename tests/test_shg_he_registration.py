@@ -315,9 +315,11 @@ def test_shg_he_registration_patient02(
     matlab_reg: str,
 ) -> None:
     """
-    Patient_02: primary assert is SHG MI/NCC; MATLAB MAE is a catastrophic ceiling.
+    Patient_02: primary assert is SHG MI/NCC.
 
-    Uses ``ecm_method='auto'`` so hsv/rgb/lab/gray compete on SHG MI (B3).
+    Tests 4-7 reproduce ``BDcreation_reg2`` (``pipeline="reg2"``). Tests 8-9
+    reproduce ``BDcreation_reg`` (``pipeline="reg1"``) and must stay within
+    the same last-ulp MAE bound as the default MATLAB path.
     """
     golden_path = _require_p02_fixtures(he_filename, golden_folder)
     matlab_golden = _load_tif_uint8(golden_path)
@@ -328,7 +330,7 @@ def test_shg_he_registration_patient02(
         pixelpermicron=pixelpermicron,
         SHGfilepath=str(_P02_SHG),
         areaThreshold=5000.0,
-        ecm_method="auto",
+        pipeline=matlab_reg,
     )
     python_float, debug = shg_he_registration(
         params, save_output=False, return_debug=True
@@ -356,9 +358,11 @@ def test_shg_he_registration_patient02(
 
     metrics = compute_registration_quality_metrics(python_uint8, matlab_golden)
     mae = float(metrics["mae_uint8"])
-    # Catastrophic ceiling only (blank / wrong shape already caught above).
-    assert mae <= 80.0, (
-        f"[{case_id}] ppm={pixelpermicron}: MAE={mae:.2f} exceeds ceiling 80 "
+    # reg1/reg2 MATLAB paths are pixel-exact on the reference machine; keep a
+    # last-ulp margin so another ITK build does not fail CI on 1 gray-level.
+    mae_ceiling = _MAX_MAE_UINT8_MATLAB if matlab_reg == "reg1" else 80.0
+    assert mae <= mae_ceiling, (
+        f"[{case_id}] ppm={pixelpermicron}: MAE={mae:.2f} exceeds {mae_ceiling} "
         f"(PSNR={metrics['psnr']:.2f}, SSIM={metrics['ssim']:.4f}, "
-        f"matlab_reg={matlab_reg})"
+        f"matlab_reg={matlab_reg}, pipeline={debug.get('pipeline')})"
     )

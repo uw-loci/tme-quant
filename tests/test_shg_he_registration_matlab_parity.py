@@ -243,3 +243,122 @@ def test_matlab_method_reproduces_golden_tiff_exactly(case_id, he_dir, fname, sh
         f"[{case_id}] {n_bad} / {diff.size} pixels differ from MATLAB golden "
         f"(max {diff.max()} gray levels); backend={debug.get('registration_backend')}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 4. BDcreation_reg (reg1) — dumps from dump_bdc_reg1.m with kmeans seed 28
+# ---------------------------------------------------------------------------
+
+REG1_CASES = (
+    (
+        "test8",
+        _P02_ROOT / "HE",
+        "patient_02_roi4.tif",
+        _P02_ROOT / "SHG",
+        3.0,
+        "HE_registered_for_reg1_test6b_ppm3",
+        "test8_km3",
+    ),
+    (
+        "test9",
+        _P02_ROOT / "HE",
+        "patient_02_roi4.tif",
+        _P02_ROOT / "SHG",
+        2.6,
+        "HE_registered_for_reg1_test9_ppm2p6",
+        "test9_km3",
+    ),
+)
+_REG1_IDS = [c[0] for c in REG1_CASES]
+
+
+@pytest.mark.parametrize(
+    "case_id,he_dir,fname,shg_dir,ppm,_golden,dump_id",
+    REG1_CASES,
+    ids=_REG1_IDS,
+)
+def test_reg1_preprocessing_reproduces_matlab_fixed_and_moving(
+    case_id, he_dir, fname, shg_dir, ppm, _golden, dump_id
+) -> None:
+    from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED, bdcreation_reg1_preprocess
+
+    mat = _DUMPS / dump_id / "images.mat"
+    _skip_unless_files(mat, he_dir / fname, shg_dir / fname)
+    m = sio.loadmat(str(mat))
+    ml_moving = np.asarray(m["HEmoving"], dtype=np.float64)
+    ml_fixed = np.asarray(m["fixedSHG_double"], dtype=np.float64)
+    he_u8 = io.imread(str(he_dir / fname))
+    shg = io.imread(str(shg_dir / fname))
+    pre = bdcreation_reg1_preprocess(he_u8, shg, ppm, kmeans_seed=DEFAULT_KMEANS_SEED)
+    assert pre["HEmoving"].shape == ml_moving.shape, f"[{case_id}] HEmoving grid mismatch"
+    assert np.max(np.abs(pre["HEmoving"] - ml_moving)) < 1e-12, (
+        f"[{case_id}] HEmoving differs from MATLAB imresize"
+    )
+    assert np.array_equal(pre["fixedSHG_double"], ml_fixed), (
+        f"[{case_id}] fixedSHG_double differs from MATLAB imadjust"
+    )
+
+
+@requires_itk
+@pytest.mark.parametrize(
+    "case_id,he_dir,fname,shg_dir,ppm,_golden,dump_id",
+    REG1_CASES,
+    ids=_REG1_IDS,
+)
+def test_reg1_itk_v3_engine_reproduces_matlab_tform_on_matlab_inputs(
+    case_id, he_dir, fname, shg_dir, ppm, _golden, dump_id
+) -> None:
+    mat = _DUMPS / dump_id / "images.mat"
+    tform_txt = _DUMPS / dump_id / "tform_affine.txt"
+    _skip_unless_files(mat, tform_txt)
+    m = sio.loadmat(str(mat))
+    _fwd, dbg = register_bdcreation_reg2_matlab(
+        np.asarray(m["HEmoving"], dtype=np.float64),
+        np.asarray(m["fixedSHG_double"], dtype=np.float64),
+        seed=DEFAULT_SEED,
+    )
+    A_py = np.asarray(dbg["aff_matlab_tform_A"])
+    A_ml = matlab_T_to_A(np.loadtxt(tform_txt))
+    max_diff = float(np.max(np.abs(A_py - A_ml)))
+    assert max_diff < 1e-6, (
+        f"[{case_id}] tform.A differs from MATLAB by {max_diff:.3e}\n"
+        f"python:\n{A_py}\nmatlab:\n{A_ml}"
+    )
+
+
+@requires_itk
+@pytest.mark.parametrize(
+    "case_id,he_dir,fname,shg_dir,ppm,golden,dump_id",
+    REG1_CASES,
+    ids=_REG1_IDS,
+)
+def test_reg1_pipeline_reproduces_golden_tiff_exactly(
+    case_id, he_dir, fname, shg_dir, ppm, golden, dump_id
+) -> None:
+    del dump_id
+    golden_path = he_dir / golden / fname
+    _skip_unless_files(he_dir / fname, shg_dir / fname, golden_path)
+    matlab_golden = io.imread(str(golden_path))
+    if matlab_golden.dtype != np.uint8:
+        matlab_golden = np.clip(matlab_golden, 0, 255).astype(np.uint8)
+
+    params = SHGHERegistrationParameters(
+        HEfilepath=str(he_dir),
+        HEfilename=fname,
+        pixelpermicron=ppm,
+        SHGfilepath=str(shg_dir),
+        areaThreshold=5000.0,
+        registration_method="matlab",
+        pipeline="reg1",
+    )
+    py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
+    py_uint8 = np.round(np.clip(py_float, 0, 1) * 255).astype(np.uint8)
+
+    assert debug.get("pipeline") == "reg1"
+    assert py_uint8.shape == matlab_golden.shape
+    diff = np.abs(py_uint8.astype(int) - matlab_golden.astype(int))
+    n_bad = int(np.count_nonzero(diff))
+    assert n_bad == 0, (
+        f"[{case_id}] {n_bad} / {diff.size} pixels differ from MATLAB reg1 golden "
+        f"(max {diff.max()} gray levels); backend={debug.get('registration_backend')}"
+    )
