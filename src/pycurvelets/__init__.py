@@ -7,6 +7,7 @@ except Exception:
     HAS_CURVELETS = False
 
 from .SHG_HE_registration import (
+    BDcreation_reg,
     BDcreation_reg2,
     SHGHERegistrationParameters,
     has_simpleitk,
@@ -32,6 +33,7 @@ __all__ = [
     "has_simpleitk",
     "shg_he_registration",
     "BDcreation_reg2",
+    "BDcreation_reg",
     "TumorAnnotationFromHEParameters",
     "tumor_annotation_from_he",
     "BDcreationHE2",

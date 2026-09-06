@@ -1,4 +1,17 @@
-"""H&E <-> SHG registration - Python port of MATLAB ``BDcreation_reg2.m``.
+"""H&E <-> SHG registration - Python port of MATLAB ``BDcreation_reg2.m`` and
+``BDcreation_reg.m``.
+
+Two MATLAB pipelines are available through ``pipeline``:
+
+* ``"reg2"`` (default) - ``BDcreation_reg2.m``: SHG capped at 2 px/um, HSV
+  nuclei/collagen masks, binary collagen moving image. Described below.
+* ``"reg1"`` - ``BDcreation_reg.m``: SHG ``imadjust``-ed at native resolution,
+  ``decorrstretch`` + fixed RGB cuts + CIELAB k-means for the eosin/collagen
+  moving image (continuous grey levels), output warped on the SHG grid. Ported
+  exactly in :mod:`pycurvelets._he_bdc_reg1`, including a bit-exact replay of
+  MATLAB's ``kmeans`` (which ``BDcreation_reg.m`` leaves *unseeded*, so MATLAB
+  itself is not deterministic here; ``kmeans_seed`` selects the k-means optimum,
+  and the default reproduces the reference goldens).
 
 Default algorithm (``registration_method="matlab"``) - the original (1+1)-ES:
 
@@ -48,8 +61,8 @@ ECM extraction is controlled separately by ``ecm_method``:
 
 The pipeline requires no MATLAB licence at runtime.
 
-Public entry points: :func:`shg_he_registration`, :func:`BDcreation_reg2`
-(MATLAB-compatible name), :class:`SHGHERegistrationParameters`,
+Public entry points: :func:`shg_he_registration`, :func:`BDcreation_reg2` and
+:func:`BDcreation_reg` (MATLAB-compatible names), :class:`SHGHERegistrationParameters`,
 :func:`has_simpleitk`.
 """
 
@@ -57,7 +70,7 @@ from __future__ import annotations
 
 import os
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -82,6 +95,8 @@ from ._he_bdc_common import (
     remove_small_components,
     resize_like,
 )
+from ._he_bdc_reg1 import DEFAULT_KMEANS_SEED, bdcreation_reg1_preprocess
+from ._matlab_imresize import matlab_imresize
 from ._registration_quality import compute_shg_alignment_metrics
 
 try:
@@ -136,6 +151,14 @@ class SHGHERegistrationParameters:
     ecm_method: str = "hsv"
     # Used by stochastic methods (e.g. oneplusone optimizer / LAB k-means).
     random_state: int = 0
+    # Which MATLAB script to reproduce:
+    # "reg2" (default): BDcreation_reg2.m (HSV masks; ecm_method applies).
+    # "reg1"          : BDcreation_reg.m (decorrstretch + RGB cuts + LAB
+    #                   k-means; ecm_method is ignored). See module docstring.
+    pipeline: str = "reg2"
+    # reg1 only: seed for the exact replay of MATLAB's unseeded kmeans. The
+    # default lands in the same k-means optimum as the reference goldens.
+    kmeans_seed: int = DEFAULT_KMEANS_SEED
 
 
 def _to_params(
@@ -1351,6 +1374,67 @@ def _score_forward_vs_shg(
     )
 
 
+def _reg1_core(
+    he_path: str,
+    shg_path: str,
+    pixelpermicron: float,
+    registration_method: str,
+    random_state: int,
+    kmeans_seed: int,
+) -> tuple[np.ndarray, str, dict[str, Any]]:
+    """
+    ``BDcreation_reg.m`` (reg1). Preprocessing in :func:`bdcreation_reg1_preprocess`;
+    registration through the same backends as reg2 (``"matlab"`` = exact ITK v3
+    port, fed ``double(fixedSHG)`` in 0..255 exactly as ``imregtform`` is); output::
+
+        HEdata_registered = imresize(HEdata, size(fixedSHG));
+        B = imwarp(HEdata_registered, imref2d(size(HEmoving)), tform, ...
+                   'OutputView', imref2d(size(fixedSHG)), 'FillValues', 255);
+    """
+    he_u8 = io.imread(he_path)
+    shg_raw = io.imread(shg_path)
+    if he_u8.dtype != np.uint8:
+        raise TypeError(f"reg1 expects a uint8 H&E TIFF, got {he_u8.dtype} ({he_path})")
+
+    pre = bdcreation_reg1_preprocess(he_u8, shg_raw, float(pixelpermicron), kmeans_seed=kmeans_seed)
+    he_moving = pre["HEmoving"]
+    fixed_double = pre["fixedSHG_double"]
+    fixed_shape = tuple(int(x) for x in fixed_double.shape)
+
+    method = (registration_method or "matlab").lower()
+    debug: dict[str, Any] = {
+        "pipeline": "reg1",
+        "registration_method_requested": method,
+        "kmeans_seed": int(kmeans_seed),
+        "kmeans": pre["kmeans_debug"],
+        "collagen_cluster": pre["collagen_cluster"],
+        "mask_coverage": pre["mask_coverage"],
+        "pixpermic_working": float(pixelpermicron),
+        "fixed_shape": fixed_shape,
+        "fixed_dtype": str(pre["fixedSHG"].dtype),
+    }
+    # The SimpleITK/NCC backups were written for [0, 1] intensities; MATLAB's own
+    # engine takes the raw double(uint8) values, as imregtform does.
+    fixed_for_backend = fixed_double if method == "matlab" else fixed_double / float(fixed_double.max() or 1.0)
+    forward_2x3, backend, opt_debug = _run_optimizer(he_moving, fixed_for_backend, method, random_state)
+    debug.update(opt_debug)
+    debug["forward_2x3"] = forward_2x3.tolist()
+
+    fixed_unit = fixed_double / float(fixed_double.max() or 1.0)
+    debug["shg_alignment"] = _score_forward_vs_shg(he_moving, fixed_unit, forward_2x3)
+    identity = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64)
+    debug["shg_alignment_identity_mi"] = float(_score_forward_vs_shg(he_moving, fixed_unit, identity)["shg_mi"])
+
+    A_inv = _affine_fixed_to_moving_from_forward(forward_2x3)
+    he_data_registered = matlab_imresize(pre["HEdata"], output_shape=fixed_shape, method="bicubic")
+    registered = matlab_imwarp_bilinear(he_data_registered.astype(np.float64), fixed_shape, A_inv, fill_value=255.0)
+    registered_img = np.clip(registered, 0.0, 1.0)
+
+    reg_luma = matlab_rgb2gray(registered_img)
+    debug["shg_alignment_fullres"] = compute_shg_alignment_metrics(reg_luma, fixed_unit, forward_2x3=None)
+    return registered_img, backend, debug
+
+
 def _shg_he_registration_core(
     he_filepath: str,
     he_filename: str,
@@ -1359,6 +1443,8 @@ def _shg_he_registration_core(
     registration_method: str = "matlab",
     ecm_method: str = "hsv",
     random_state: int = 0,
+    pipeline: str = "reg2",
+    kmeans_seed: int = DEFAULT_KMEANS_SEED,
 ) -> tuple[np.ndarray, str, dict[str, Any]]:
     """
     Core registration (same algorithm description as the module docstring).
@@ -1374,6 +1460,12 @@ def _shg_he_registration_core(
     """
     he_path = os.path.join(he_filepath, he_filename)
     shg_path = os.path.join(shg_filepath, he_filename)
+
+    pipe = (pipeline or "reg2").lower()
+    if pipe == "reg1":
+        return _reg1_core(he_path, shg_path, pixelpermicron, registration_method, random_state, kmeans_seed)
+    if pipe != "reg2":
+        raise ValueError(f"pipeline must be 'reg2' or 'reg1', got {pipeline!r}")
 
     he_img = io.imread(he_path).astype(np.float64) / 255.0
     shg_img = io.imread(shg_path).astype(np.float64) / 255.0
@@ -1495,7 +1587,8 @@ def shg_he_registration(
     include_debug_images: bool = True,
 ) -> np.ndarray | tuple[np.ndarray, dict[str, Any]]:
     """
-    Register H&E to SHG (Python port of MATLAB ``BDcreation_reg2.m``).
+    Register H&E to SHG (Python port of MATLAB ``BDcreation_reg2.m`` /
+    ``BDcreation_reg.m``, selected by ``params.pipeline``).
 
     Writes ``HE_registered/<HEfilename>`` under ``HEfilepath`` when
     ``save_output`` is True, and prints the absolute output path to stdout.
@@ -1510,6 +1603,8 @@ def shg_he_registration(
         registration_method=p.registration_method,
         ecm_method=p.ecm_method,
         random_state=p.random_state,
+        pipeline=p.pipeline,
+        kmeans_seed=p.kmeans_seed,
     )
 
     if save_output:
@@ -1532,9 +1627,18 @@ def shg_he_registration(
 def BDcreation_reg2(
     BDCparameters: SHGHERegistrationParameters | dict[str, Any],
 ) -> np.ndarray:
-    """Compatibility wrapper retaining MATLAB function name."""
-    out = shg_he_registration(
-        BDCparameters, save_output=True, return_debug=False
-    )
+    """MATLAB-named wrapper: ``BDcreation_reg2.m`` (forces ``pipeline="reg2"``)."""
+    p = replace(_to_params(BDCparameters), pipeline="reg2")
+    out = shg_he_registration(p, save_output=True, return_debug=False)
+    assert isinstance(out, np.ndarray)
+    return out
+
+
+def BDcreation_reg(
+    BDCparameters: SHGHERegistrationParameters | dict[str, Any],
+) -> np.ndarray:
+    """MATLAB-named wrapper: ``BDcreation_reg.m`` (forces ``pipeline="reg1"``)."""
+    p = replace(_to_params(BDCparameters), pipeline="reg1")
+    out = shg_he_registration(p, save_output=True, return_debug=False)
     assert isinstance(out, np.ndarray)
     return out
