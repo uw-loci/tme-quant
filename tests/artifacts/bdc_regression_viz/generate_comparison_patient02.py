@@ -10,9 +10,8 @@ Default method:     "matlab" (the package default - ITK v3 (1+1)-ES port).
 Test case definitions:
   Tests 4-7 use BDcreation_reg2.m goldens (HSV-based registration); the
           default Python path reproduces them pixel-for-pixel.
-  Tests 8-9 use BDcreation_reg.m goldens (RGB / decorrstretch pipeline that
-          the Python port does not implement), so a mismatch vs the golden is
-          expected there; the ground-truth (GT) panel is the meaningful score.
+  Tests 8-9 use BDcreation_reg.m goldens (reg1: decorrstretch + LAB k-means);
+          Python ``pipeline="reg1"`` reproduces them pixel-for-pixel.
 Every case is also scored against ground truth (the un-transformed HE ROI +
 ``tests/matlab_parity/dumps/gt_affine_<case>.json``): corner displacement in
 px, angle/scale error and SSIM vs the GT-aligned HE, for both Python and
@@ -151,6 +150,7 @@ def generate(
         SHGfilepath=str(SHG_DIR),
         areaThreshold=5000.0,
         registration_method=registration_method,
+        pipeline=matlab_reg,
     )
     py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
     py_uint8 = np.round(np.clip(py_float, 0, 1) * 255).astype(np.uint8)  # im2uint8 rounds
@@ -190,7 +190,7 @@ def generate(
 
     fig, axes = plt.subplots(3, 4, figsize=(20, 15), facecolor="white")
     fig.suptitle(
-        f"{case_id}  |  ppm={ppm}  |  method={registration_method}  |  ecm=HSV\n"
+        f"{case_id}  |  ppm={ppm}  |  method={registration_method}  |  pipeline={matlab_reg}\n"
         f"MAE={mae:.1f}  |  RMSE={rmse:.1f}  |  Exact={exact_pct:.1f}%  |  "
         f"PSNR={psnr:.1f} dB  |  SSIM={ssim:.4f}",
         fontsize=13,
@@ -260,7 +260,7 @@ def generate(
     ax11.set_title("Summary Statistics", fontsize=10)
     stats_text = (
         f"registration: {registration_method}\n"
-        f"ecm_method:   hsv\n"
+        f"pipeline:     {matlab_reg}\n"
         f"ppm:          {ppm}\n"
         f"file:         {he_filename}\n"
         f"matlab_golden: {matlab_reg}\n"
@@ -344,7 +344,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     cases = [c for c in CASES if selected is None or c[0] in selected]
 
-    print(f"Running {len(cases)} patient_02 test cases ({method} + HSV)...\n")
+    print(f"Running {len(cases)} patient_02 test cases ({method}; pipeline from case)...\n")
     all_metrics = {}
     for case_id, he_fn, ppm, golden, matlab_reg, notes in cases:
         m = generate(case_id, he_fn, ppm, golden, matlab_reg, notes, out_dir,

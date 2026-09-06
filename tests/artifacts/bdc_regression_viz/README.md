@@ -25,7 +25,7 @@ Only `current/` is tracked; other output directories are gitignored.
 | `generate_comparison_patient02.py` | patient_02 (tests 4-9). Tests 4-7 vs `BDcreation_reg2` goldens, tests 8-9 vs `BDcreation_reg` (RGB pipeline) goldens. Adds ground-truth scoring (see below). CLI: `[out_dir] [--method M] [--cases id,...]`. |
 | `current/comparison_test{1,2,3}_ppm*_matlab_hsv.png` | patient_001 figures. 3x4 panel: inputs (HE, SHG), MATLAB golden, Python output; split / checkerboard / 50-50 blend of MATLAB vs Python; Python-HE vs SHG checkerboard; |diff| x3, per-pixel mean |diff| heat-map, signed-diff histogram, and a stats box (MAE, RMSE, PSNR, SSIM, exact %, within-5/10/20, SHG MI vs identity, SHG NCC). |
 | `current/comparison_test{4..7}_reg2_*_matlab_hsv.png` | patient_02 vs reg2 goldens, same layout, plus a **ground truth vs Python** checkerboard and GT metrics in the stats box. |
-| `current/comparison_test{8,9}_reg1_*_matlab_hsv.png` | patient_02 vs `BDcreation_reg` (reg1) goldens. The Python port implements the reg2 (HSV) pipeline, so a mismatch vs the reg1 golden is expected; read the GT metrics instead. |
+| `current/comparison_test{8,9}_reg1_*_matlab_hsv.png` | patient_02 vs `BDcreation_reg` (reg1) goldens. Python `pipeline="reg1"` (decorrstretch + LAB k-means, seed 28) reproduces them pixel-for-pixel. |
 
 ## Results with the current build
 
@@ -43,18 +43,17 @@ doing nothing); lower is better.
 | test5 | patient_02 roi4 | 1.5 | reg2 | 0.00 | 1.0000 | 100 % | 68.7 px (82.6) | 68.7 px |
 | test6 | patient_02 roi4 | 2.6 | reg2 | 0.00 | 1.0000 | 100 % | 9.4 px (63.6) | 9.4 px |
 | test7 | patient_02 roi5 | 2.6 | reg2 | 0.00 | 1.0000 | 100 % | 7.5 px (48.7) | 7.5 px |
-| test8 | patient_02 roi4 | 3.0 | reg1 | 45.4 | 0.236 | 15 % | 52.2 px (55.0) | reg1 golden: n/a |
-| test9 | patient_02 roi4 | 2.6 | reg1 | 19.7 | 0.433 | 16 % | 9.4 px (63.6) | reg1 golden: n/a |
+| test8 | patient_02 roi4 | 3.0 | reg1 | 0.00 | 1.0000 | 100 % | 8.1 px (82.6) | 8.1 px |
+| test9 | patient_02 roi4 | 2.6 | reg1 | 0.00 | 1.0000 | 100 % | 7.9 px (82.6) | 7.9 px |
 
 Reading the table:
 
-* Tests 1-7: the Python default reproduces MATLAB `BDcreation_reg2` exactly,
-  including MATLAB's own failure on test5 (roi4 at ppm 1.5 stays ~69 px from
-  truth in both implementations). Parity is the goal here, not accuracy.
-* Test 8 (roi4 at ppm 3.0): the reg2 pipeline barely improves on identity
-  (52 vs 55 px). There is no reg2 MATLAB golden for this configuration, so
-  this is a property of the `BDcreation_reg2` algorithm at that scale, not a
-  porting error (the same code is pixel-exact on the seven cases that do have
-  goldens).
-* Test 9 is the same registration as test6 (same input, same ppm) scored
-  against the reg1 golden; the 9.4 px GT error is identical to test6.
+* Tests 1-7: the Python default (`pipeline="reg2"`) reproduces MATLAB
+  `BDcreation_reg2` exactly, including MATLAB's own failure on test5 (roi4 at
+  ppm 1.5 stays ~69 px from truth in both implementations). Parity is the
+  goal here, not accuracy.
+* Tests 8-9: `pipeline="reg1"` reproduces MATLAB `BDcreation_reg` exactly
+  (MAE 0). MATLAB's own `kmeans` is unseeded; the Python default seed (28)
+  lands in the same rare optimum the committed goldens used. Those goldens
+  sit ~8 px from the synthetic ground-truth HE (SIFT residual), which is
+  MATLAB's accuracy, not a porting error.
