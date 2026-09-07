@@ -200,16 +200,24 @@ tests/artifacts/bdc_regression_viz/*
 # referenced MATLAB files
 *.m
 
-# MATLAB-parity harness for BDcreation_reg2 / BDcreation_reg: keep the MATLAB
-# dump/probe scripts and the small dumps the parity tests read (images.mat,
-# tform txt, traces, probes). Regenerable bulk (intermediates.mat, ~8 MB each),
-# the 200k-triplet sRGB->Lab dump, and diagnostic k-means-optima folders stay
-# ignored. Must come after the *.m / *.mat / *.tif rules above.
+# Developer-only MATLAB parity harness. Tracked: dump/probe scripts, images.mat,
+# tform_*.txt, interp2d_probe.mat, gt_affine_*.json. Everything else a dump
+# script may write is local-only. Must come after the *.m / *.mat / *.tif rules.
 !tests/matlab_parity/**
 tests/matlab_parity/dumps/*/intermediates.mat
+tests/matlab_parity/dumps/*/HEmoving.tif
+tests/matlab_parity/dumps/*/fixedSHG.tif
+tests/matlab_parity/dumps/*/registered.tif
+tests/matlab_parity/dumps/*/meta.mat
+tests/matlab_parity/dumps/*/kmeans_probe.txt
+tests/matlab_parity/dumps/*/optimization_trace.txt
+tests/matlab_parity/dumps/*/es_probe.txt
 tests/matlab_parity/dumps/*.log
 tests/matlab_parity/dumps/srgb2lab_components.mat
 tests/matlab_parity/dumps/srgb2lab_reference_20k.npz
+tests/matlab_parity/dumps/analysis_summary.json
+tests/matlab_parity/dumps/preprocessing_parity.json
+tests/matlab_parity/dumps/test2_rerun/
 tests/matlab_parity/dumps/test8/
 tests/matlab_parity/dumps/test8_s3/
 tests/matlab_parity/dumps/test8_km1/
