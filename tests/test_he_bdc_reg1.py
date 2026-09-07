@@ -20,7 +20,7 @@ from pycurvelets._he_bdc_reg1 import (
 
 def test_default_kmeans_seed_is_the_golden_optimum() -> None:
     # BDcreation_reg.m never seeds kmeans; seed 28 is the rare optimum that
-    # matches the committed test8/test9 goldens (see probe_reg1_kmeans.m).
+    # matches the committed test8/test9 goldens.
     assert DEFAULT_KMEANS_SEED == 28
 
 

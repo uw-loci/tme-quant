@@ -18,9 +18,9 @@ Determinism
 -----------
 ``BDcreation_reg.m`` never seeds MATLAB's RNG, and ``kmeans`` (k-means++ init) has
 several local optima on real H&E data, so MATLAB's own output depends on the
-session's RNG state (see ``tests/matlab_parity/probe_reg1_kmeans.m``: 3 optima with
-~82/13/5 % frequency on ``patient_02_roi4``; the committed goldens correspond to
-the *5 %* one). This module replays MATLAB's ``kmeans`` exactly - k-means++ via
+session's RNG state (3 optima with ~82/13/5 % frequency on ``patient_02_roi4``;
+the committed goldens correspond to the *5 %* one). This module replays
+MATLAB's ``kmeans`` exactly - k-means++ via
 ``datasample`` on the Mersenne-Twister stream (``numpy.random.RandomState`` is
 bit-identical to ``rng(seed,'twister')``), Lloyd batch updates with MATLAB's tie
 rules - so a given ``kmeans_seed`` gives the same labels MATLAB gives for
