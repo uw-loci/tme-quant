@@ -50,6 +50,9 @@ napari-curvealign = "napari_curvealign:napari.yaml"
 [tool.setuptools]
 package-dir = { "" = "src" }
 include-package-data = true
+# Installed wheels contain only src/. MANIFEST.in also prunes
+# tests/matlab_parity and tests/artifacts from the sdist so MATLAB
+# dumps / comparison figures never ship to PyPI users.
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,5 @@
+# Wheels already ship only src/ (see [tool.setuptools.packages.find]).
+# The sdist would otherwise include every git-tracked file. Keep MATLAB
+# parity dumps, one-off probes, and comparison PNGs out of PyPI releases.
+prune tests/matlab_parity
+prune tests/artifacts
