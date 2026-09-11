@@ -1,5 +1,27 @@
-# Wheels already ship only src/ (see [tool.setuptools.packages.find]).
-# The sdist would otherwise include every git-tracked file. Keep MATLAB
-# parity dumps, one-off probes, and comparison PNGs out of PyPI releases.
+# Distribution policy
+# -------------------
+# WHEEL (pip install / python -m build --wheel):
+#   [tool.setuptools.packages.find] where=["src"] → only src/pycurvelets
+#   and src/napari_curvealign, plus package-data (napari.yaml, data/*.npz).
+#   Test helpers, MATLAB dumps, and comparison figures never enter the wheel.
+#
+# SDIST (pip install --no-binary tme-quant / python -m build --sdist):
+#   Source + CI-runnable tests, including the small patient_001 fixtures.
+#   The developer MATLAB-parity harness and visual-regression PNGs stay
+#   git-dev only (clone the repo).
+#
+# GIT-DEV (clone this repo):
+#   Full harness: tests/matlab_parity, tests/artifacts/bdc_regression_viz,
+#   and (optional, gitignored) the local patient_02 tree for tests 4-9.
+
+graft tests
 prune tests/matlab_parity
 prune tests/artifacts
+# Local-only patient_02 tree (gitignored; graft would otherwise pack it).
+prune tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7
+graft doc
+include Makefile
+global-exclude .DS_Store
+global-exclude .coverage
+global-exclude *.pyc
+global-exclude __pycache__

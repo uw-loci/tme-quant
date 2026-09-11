@@ -1,8 +1,8 @@
-# MATLAB parity harness (developer-only)
+# MATLAB parity harness (git-dev only)
 
-**Not part of a PyPI / wheel release.** `MANIFEST.in` prunes this directory
-from the sdist; installed packages only contain `src/`. Clone the git repo
-and set `TMEQ_RUN_MATLAB_PARITY=1` to run these checks.
+**Not in the wheel or the sdist.** `MANIFEST.in` prunes this directory from
+PyPI source releases; installed wheels contain only `src/`. Clone the git
+repo and set `TMEQ_RUN_MATLAB_PARITY=1` to run these checks.
 
 Validates that `pycurvelets.SHG_HE_registration` reproduces MATLAB
 `BDcreation_reg2.m` (tests 1-7, `pipeline="reg2"`) and `BDcreation_reg.m`
@@ -22,9 +22,8 @@ TMEQ_RUN_MATLAB_PARITY=1 pytest -q -p no:napari \
 | `dump_bdc_reg2.m` | Offline MATLAB dump of reg2 cases (tests 1-7). |
 | `dump_bdc_reg1.m` | Same for reg1 (tests 8-9). Seed 28 matches the goldens (`dumps/test8_km3`, `dumps/test9_km3`). |
 | `dump_srgb2lab_components.m` | Rebuilds `src/pycurvelets/data/matlab_srgb2lab_components.npz` if the ICC tables change. |
-| `probe_es_steps.m` | How MATLAB's (1+1)-ES seed / centre / per-level radius were pinned down. |
 | `probe_interp2d.m` | Regenerates `dumps/interp2d_probe.mat` (`imwarp` edge rule). |
-| `analyze_dumps.py` | Optional offline comparison; writes local `analysis_summary.json` (gitignored). |
+| `analyze_dumps.py` | Optional offline comparison; writes local `analysis_summary.json` (gitignored) and can refresh `gt_affine_*.json`. |
 
 ## Tracked dumps (pytest inputs)
 

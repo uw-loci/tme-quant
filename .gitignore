@@ -179,6 +179,10 @@ lastPATH_CTF.mat
 !tests/test_images/**/*.tif
 !tests/test_for_shg_he_registration_BDcreation/**
 tests/test_for_shg_he_registration_BDcreation/.DS_Store
+# Local-only patient_02 tree for tests 4-9 (~78 MB, includes unused MATLAB
+# working copies). Engine parity for those cases uses committed dumps under
+# tests/matlab_parity/; end-to-end TIFF tests skip when this tree is absent.
+tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/
 
 pycurvelets/opt/*.*
 

@@ -1,20 +1,10 @@
 """
-Ground-truth based evaluation helpers for SHG<->HE registration.
+Ground-truth evaluation helpers for SHG<->HE registration.
 
-The MATLAB ``BDcreation_reg2`` goldens are *reference outputs*, not ground
-truth: on the synthetic patient_02 cases (HE rotated/scaled by a known
-transform) MATLAB itself lands 5-70 px from the true alignment. These helpers
-score a registration against the true transform / true image instead:
-
-* :func:`decompose_affine` - angle / scale / shear / translation of a 2x3.
-* :func:`mean_corner_displacement_px` - transform error as the mean
-  displacement of the image corners + centre between two forward affines.
-* :func:`gt_forward_to_working_grid` - map a GT affine recovered on the input
-  grids onto the (resized) working grid used by the registration.
-* :func:`registration_transform_to_grid` - map the registration's working-grid
-  forward affine to any other pair of grids (e.g. full-res, for cross-ppm
-  consistency of the same image pair registered at different ppm).
-* :func:`ssim_vs_reference_rgb` - SSIM of a registered RGB vs a reference RGB.
+Developer / test-only (not installed in the wheel). The MATLAB
+``BDcreation_reg2`` goldens are *reference outputs*, not ground truth: on the
+synthetic patient_02 cases MATLAB itself lands 5-70 px from the true
+alignment. These helpers score a registration against the true transform.
 
 All affines are 0-based pixel-centre ``forward`` maps (moving -> fixed),
 row-vector-free ``[x'; y'; 1] = F @ [x; y; 1]`` with ``F`` 2x3 or 3x3.

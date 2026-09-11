@@ -33,7 +33,7 @@ _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"
 _SHG_DIR = _FIXTURE_ROOT / "SHG"
 _HE_RAW = _FIXTURE_ROOT / "HE" / "patient_001.tif"
 
-# Matches BDCparameters_for_seg1_test{1,2,3}.mat: ppm 1.5, 2.0, 3.0; HE from HE_registered_testN.
+# MATLAB BDcreationHE2 cases: ppm 1.5, 2.0, 3.0; HE from HE_registered_testN.
 ANNOTATION_CASES: tuple[tuple[str, float, str, str], ...] = (
     ("test1", 1.5, "HE_registered_test1", "BDcreationHE_test1results_mask for patient_001.tif.tif"),
     ("test2", 2.0, "HE_registered_test2", "BDcreationHE_test2results_mask for patient_001.tif.tif"),

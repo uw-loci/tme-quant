@@ -27,8 +27,7 @@ instead. Everything MATLAB sets in ``imregtform.m`` /
 * ``MaximumIterations`` applies per pyramid level.
 
 Three things are *not* readable from MATLAB's .m files and were pinned
-empirically against MATLAB runs (``tests/matlab_parity/probe_es_steps.m``,
-which exposes the raw ES steps by running ``imregtform`` with
+empirically against MATLAB ``imregtform`` runs (first ES steps with
 ``MaximumIterations = 1``):
 
 * the RNG seed is ``12345`` (the ITK-example constant; the first normal

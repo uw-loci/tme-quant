@@ -1,7 +1,7 @@
 # Makefile for tme-quant
 # Convenience commands for common tasks
 
-.PHONY: help setup test check clean
+.PHONY: help setup test check clean wheel sdist
 
 help:
 	@echo "tme-quant Makefile Commands"
@@ -14,6 +14,10 @@ help:
 	@echo "  make check        - Run linting"
 	@echo "  make clean        - Clean build artifacts"
 	@echo ""
+	@echo "Packaging (see README.md 'Wheel vs sdist vs git-dev'):"
+	@echo "  make wheel        - Build the runtime wheel (src/ only)"
+	@echo "  make sdist        - Build the source dist (CI tests; no MATLAB dumps / viz PNGs)"
+	@echo ""
 
 setup:
 	@echo "Running automated installation..."
@@ -24,6 +28,12 @@ test:
 
 check:
 	uv run ruff check .
+
+wheel:
+	uv run python -m build --wheel
+
+sdist:
+	uv run python -m build --sdist
 
 clean:
 	rm -rf build/ dist/ *.egg-info

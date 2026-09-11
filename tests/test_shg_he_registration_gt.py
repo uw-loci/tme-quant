@@ -36,18 +36,19 @@ import pytest
 from skimage import io
 
 from pycurvelets._itk_v3_matlab_engine import has_itk
-from pycurvelets._registration_gt_eval import (
+from pycurvelets.SHG_HE_registration import (
+    SHGHERegistrationParameters,
+    has_simpleitk,
+    shg_he_registration,
+)
+
+from _registration_gt_eval import (
     decompose_affine,
     gt_forward_to_working_grid,
     gt_report,
     mean_corner_displacement_px,
     registration_transform_to_grid,
     ssim_vs_reference_rgb,
-)
-from pycurvelets.SHG_HE_registration import (
-    SHGHERegistrationParameters,
-    has_simpleitk,
-    shg_he_registration,
 )
 
 # Developer-only validation (needs the untracked patient_02 fixture tree and

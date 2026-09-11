@@ -32,8 +32,9 @@ from skimage import io
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tests"))
 
-from pycurvelets._registration_gt_eval import (
+from _registration_gt_eval import (
     gt_forward_to_working_grid,
     gt_report,
     ssim_vs_reference_rgb,

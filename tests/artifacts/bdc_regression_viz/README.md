@@ -1,6 +1,6 @@
 # BDcreation registration comparison figures (tests 1-9)
 
-Developer-only visual record (pruned from the PyPI sdist; see `MANIFEST.in`).
+Git-dev visual record (pruned from the wheel and the PyPI sdist; see `MANIFEST.in`).
 Visual regression record for the Python port of `BDcreation_reg2.m`
 (`pycurvelets.SHG_HE_registration`). `current/` holds one figure per test case,
 produced with the package **default** `registration_method="matlab"` (ITK v3
