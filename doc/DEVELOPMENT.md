@@ -31,21 +31,20 @@ Curvelet tests run automatically when curvelops is installed; otherwise they are
 | Suite | When it runs | Needs |
 | --- | --- | --- |
 | `tests/test_he_bdc_reg1.py` | CI | nothing extra |
-| `tests/test_shg_he_registration.py` | CI | patient_001 fixtures in-tree; patient_02 cases skip if the local tree is absent |
-| `tests/test_shg_he_registration_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | git-dev `tests/matlab_parity/dumps` |
-| `tests/test_shg_he_registration_gt.py` | `TMEQ_RUN_MATLAB_PARITY=1` | dumps + optional local patient_02 tree |
+| `tests/test_shg_he_registration.py` | CI | patient_001 and patient_02 fixtures shipped in the sdist |
+| `tests/test_shg_he_registration_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `tests/matlab_parity/dumps` (in the sdist) |
+| `tests/test_shg_he_registration_gt.py` | `TMEQ_RUN_MATLAB_PARITY=1` | dumps + patient_02 GT HE TIFFs (in the sdist) |
 
 See `tests/matlab_parity/README.md` and `tests/artifacts/bdc_regression_viz/README.md`.
 
-## Wheel vs sdist vs git-dev
+## Wheel vs sdist
 
 | Command | Output |
 | --- | --- |
-| `make wheel` | `dist/*.whl` — `src/` only |
-| `make sdist` | `dist/*.tar.gz` — source + CI tests; no MATLAB dumps or viz PNGs |
+| `make wheel` | `dist/*.whl` — `src/` only (users) |
+| `make sdist` | `dist/*.tar.gz` — source + tests, dumps, figures, registration fixtures (devs) |
 
-`tests/test_packaging.py` checks the contract. Unpack an sdist to run the CI
-suite without cloning; clone the repo for bit-exact MATLAB parity.
+`tests/test_packaging.py` checks the contract.
 
 ## Troubleshooting
 

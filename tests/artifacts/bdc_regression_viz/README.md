@@ -1,13 +1,13 @@
 # BDcreation registration comparison figures (tests 1-9)
 
-Git-dev visual record (pruned from the wheel and the PyPI sdist; see `MANIFEST.in`).
+Visual record shipped in the sdist, not in the wheel (see `MANIFEST.in`).
 Visual regression record for the Python port of `BDcreation_reg2.m`
 (`pycurvelets.SHG_HE_registration`). `current/` holds one figure per test case,
 produced with the package **default** `registration_method="matlab"` (ITK v3
 Mattes MI + (1+1)-ES, bit-exact port of MATLAB `imregtform`) and
 `ecm_method="hsv"`.
 
-Regenerate (needs the patient_02 fixture tree for tests 4-9):
+Regenerate (tests 4-9 use the patient_02 fixtures shipped in the sdist):
 
 ```bash
 python tests/artifacts/bdc_regression_viz/generate_comparison.py            # tests 1-3

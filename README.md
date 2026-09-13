@@ -8,18 +8,17 @@ Python translation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) w
 - `tests/`: pytest suite (data-driven tests and headless napari smoke test)
 - `.github/workflows/ci.yml`: GitHub Actions workflow (runs core tests only)
 
-### Wheel vs sdist vs git-dev
-Three installable views of the same repo. Both the wheel and the sdist are
-produced from a clone (`make wheel` / `make sdist`, or `python -m build`).
+### Wheel vs sdist
+Two installable views. Both are produced from a clone (`make wheel` /
+`make sdist`, or `python -m build`).
 
 | View | How to get it | What it contains |
 | --- | --- | --- |
-| **Wheel** | `pip install tme-quant` or `make wheel` | `src/` only (`pycurvelets`, `napari_curvealign`, `data/*.npz`). Runtime. |
-| **sdist** | `pip install tme-quant --no-binary tme-quant` or `make sdist` | Source + CI-runnable tests and the small patient_001 fixtures. `MANIFEST.in` excludes `tests/matlab_parity` and `tests/artifacts`. |
-| **git-dev** | `git clone` + `uv sync` | The sdist contents plus the MATLAB dump harness, comparison figures, and (optional, gitignored) the local patient_02 tree. |
+| **Wheel** | `pip install tme-quant` or `make wheel` | Runtime only: `src/` (`pycurvelets`, `napari_curvealign`, `data/*.npz`). |
+| **sdist** | `pip install tme-quant --no-binary tme-quant` or `make sdist` | Developer source: tests, MATLAB dumps, comparison figures, patient_001, and the patient_02 files used by tests 4-9. |
 
-`tests/test_packaging.py` asserts this split. Bit-exact MATLAB parity
-(`TMEQ_RUN_MATLAB_PARITY=1`) needs the git-dev tree; see
+`tests/test_packaging.py` asserts this split. Bit-exact MATLAB parity needs
+the sdist (or a clone) plus `TMEQ_RUN_MATLAB_PARITY=1`; see
 `tests/matlab_parity/README.md`.
 
 ### Licensing and prerequisites
@@ -81,7 +80,7 @@ export TMEQ_VALIDATE_MATLAB=1
 
 - SHG–HE registration (issue 33). CI always runs the cheap gates in
   `tests/test_shg_he_registration.py` and `tests/test_he_bdc_reg1.py`. The
-  bit-exact dump suite (tests 1-9) is git-dev only:
+  bit-exact dump suite (tests 1-9) is in the sdist; enable it with:
 ```bash
 export TMEQ_RUN_MATLAB_PARITY=1
 QT_QPA_PLATFORM=offscreen uv run pytest -q -p no:napari \

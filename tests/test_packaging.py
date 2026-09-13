@@ -1,4 +1,4 @@
-"""Guard the wheel vs sdist vs git-dev file split for SHG–HE registration.
+"""Guard the wheel vs sdist file split.
 
 Wheel
     ``pip install tme-quant`` / ``python -m build --wheel``
@@ -7,13 +7,9 @@ Wheel
 
 sdist
     ``pip install tme-quant --no-binary tme-quant`` / ``python -m build --sdist``
-    Source + CI-runnable tests and the small patient_001 fixtures.
-    ``MANIFEST.in`` prunes the MATLAB dump harness and comparison PNGs.
-
-git-dev
-    A clone of this repo. Adds ``tests/matlab_parity`` and
-    ``tests/artifacts/bdc_regression_viz``. The optional patient_02 tree is
-    local-only (gitignored).
+    Developer source: tests (including MATLAB dumps and comparison figures),
+    patient_001, and the patient_02 files that tests 4-9 read. Unused
+    copies under ``new_test_datasets_tests4-5-6-7/`` stay out.
 """
 
 from __future__ import annotations
@@ -31,6 +27,24 @@ _WHEEL_REGISTRATION_MODULES = (
     "_registration_quality.py",
 )
 
+_SDIST_PATIENT02_FILES = (
+    "HE/patient_02_roi2.tif",
+    "HE/patient_02_roi4.tif",
+    "HE/patient_02_roi5.tif",
+    "SHG/patient_02_roi2.tif",
+    "SHG/patient_02_roi4.tif",
+    "SHG/patient_02_roi5.tif",
+    "HE/HE_registered_for_reg2_test4_roi2_ppm2p6/patient_02_roi2.tif",
+    "HE/HE_registered_for_reg2_test5_roi4_ppm1p5/patient_02_roi4.tif",
+    "HE/HE_registered_for_reg2_test6_roi4_ppm2p6/patient_02_roi4.tif",
+    "HE/HE_registered_for_reg2_test7_roi5_ppm2p6/patient_02_roi5.tif",
+    "HE/HE_registered_for_reg1_test6b_ppm3/patient_02_roi4.tif",
+    "HE/HE_registered_for_reg1_test9_ppm2p6/patient_02_roi4.tif",
+    "patient_02_HE_original-roi2.tif",
+    "patient_02_HE_original-roi4.tif",
+    "patient_02_HE_original-roi5.tif",
+)
+
 
 def test_wheel_runtime_modules_live_under_src() -> None:
     for name in _WHEEL_REGISTRATION_MODULES:
@@ -39,17 +53,19 @@ def test_wheel_runtime_modules_live_under_src() -> None:
     assert (ROOT / "src" / "pycurvelets" / "data" / "matlab_srgb2lab_components.npz").is_file()
 
 
-def test_gt_eval_is_dev_only_not_in_the_wheel() -> None:
+def test_gt_eval_is_not_in_the_wheel() -> None:
     assert not (ROOT / "src" / "pycurvelets" / "_registration_gt_eval.py").exists()
     assert (ROOT / "tests" / "_registration_gt_eval.py").is_file()
 
 
-def test_sdist_manifest_includes_ci_tests_and_prunes_dev_harness() -> None:
+def test_sdist_manifest_is_the_dev_tree() -> None:
     manifest = (ROOT / "MANIFEST.in").read_text()
     assert "graft tests" in manifest
-    assert "prune tests/matlab_parity" in manifest
-    assert "prune tests/artifacts" in manifest
+    assert "prune tests/matlab_parity" not in manifest
+    assert "prune tests/artifacts" not in manifest
     assert "prune tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7" in manifest
+    for rel in _SDIST_PATIENT02_FILES:
+        assert rel in manifest, f"sdist must include patient_02 fixture {rel}"
 
 
 def test_setuptools_wheel_is_src_only() -> None:

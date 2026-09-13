@@ -14,9 +14,9 @@ help:
 	@echo "  make check        - Run linting"
 	@echo "  make clean        - Clean build artifacts"
 	@echo ""
-	@echo "Packaging (see README.md 'Wheel vs sdist vs git-dev'):"
+	@echo "Packaging (see README.md 'Wheel vs sdist'):"
 	@echo "  make wheel        - Build the runtime wheel (src/ only)"
-	@echo "  make sdist        - Build the source dist (CI tests; no MATLAB dumps / viz PNGs)"
+	@echo "  make sdist        - Build the developer source dist (tests + fixtures)"
 	@echo ""
 
 setup:
