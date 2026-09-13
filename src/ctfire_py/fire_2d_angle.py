@@ -79,8 +79,15 @@ def smooth(v, sigma):
     # Use mode='constant', cval=0 (zero-padding) to match MATLAB's imfilter default.
     # MATLAB's imfilter(v, kernel, 'same') uses zero-padding by default (the 'same'
     # argument specifies output size, not boundary behavior; the default boundary is 0).
-    v = convolve(v, gx1, mode="constant", cval=0.0)
-    v = convolve(v, gx2, mode="constant", cval=0.0)
+    # Skip any axis of size 1: a Gaussian along a length-1 axis is meaningless, and with
+    # zero-padding the convolution would just multiply the whole array by the kernel's centre
+    # weight (~0.4 for any sigma>0), silently attenuating the image. This bit the 2D path,
+    # where the image is shaped (1, J, I) so axis 0 (channels) has size 1 -> any sigma_im>0
+    # scaled the whole image down and the threshold then rejected nearly everything (0 fibres).
+    if v.shape[0] > 1:
+        v = convolve(v, gx1, mode="constant", cval=0.0)
+    if v.shape[1] > 1:
+        v = convolve(v, gx2, mode="constant", cval=0.0)
 
     # Kernel for Axis 2 (Depth/Slices) if 3D
     if ndims == 3:
@@ -90,7 +97,8 @@ def smooth(v, sigma):
         shape3 = [1, 1, len(x3)]
         gx3 = gx3.reshape(shape3)
 
-        v = convolve(v, gx3, mode="constant", cval=0.0)
+        if v.shape[2] > 1:
+            v = convolve(v, gx3, mode="constant", cval=0.0)
 
     return v
 
