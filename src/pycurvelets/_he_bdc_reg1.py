@@ -44,6 +44,7 @@ from ._he_bdc_common import (
     matlab_fspecial_gaussian,
     matlab_imfilter,
     matlab_rgb2gray,
+    rgb_threshold_masks_uint8,
     remove_small_components,
 )
 from ._matlab_imresize import matlab_imresize
@@ -497,12 +498,10 @@ def bdcreation_reg1_preprocess(
 
     S = matlab_decorrstretch_uint8(HEdata_adj0, tol=0.01)
     out["S"] = S
-    Sr, Sg, Sb = (S[..., i].astype(np.int64) for i in range(3))
-    nuclei_cond = (Sr < 120) & (Sg > 150) & (Sb < 120)
+    nuclei_cond, red_cond = rgb_threshold_masks_uint8(S)
     HEdata_nuclei = np.where(nuclei_cond[..., None], S, np.uint8(0))
     # Quirk preserved from the MATLAB loop: only the red channel is taken from the
     # decorrelated image; green/blue keep the pre-decorrstretch values.
-    red_cond = (Sr > 200) & (Sg < 100) & (Sb > 100)
     HEdata_red = np.where(red_cond[..., None], np.dstack([S[..., 0], HEdata_adj0[..., 1], HEdata_adj0[..., 2]]), np.uint8(0))
     out["HEdata_nuclei"], out["HEdata_red"] = HEdata_nuclei, HEdata_red
 
