@@ -31,9 +31,9 @@ Curvelet tests run automatically when curvelops is installed; otherwise they are
 | Suite | When it runs | Needs |
 | --- | --- | --- |
 | `tests/test_he_bdc_reg1.py` | CI | nothing extra |
-| `tests/test_shg_he_registration.py` | CI | patient_001 and patient_02 fixtures shipped in the sdist |
-| `tests/test_shg_he_registration_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `tests/matlab_parity/dumps` (in the sdist) |
-| `tests/test_shg_he_registration_gt.py` | `TMEQ_RUN_MATLAB_PARITY=1` | dumps + patient_02 GT HE TIFFs (in the sdist) |
+| `tests/test_shg_he_registration.py` | CI | patient fixtures in the clone (not in wheel/sdist) |
+| `tests/test_shg_he_registration_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `tests/matlab_parity/dumps` (git only) |
+| `tests/test_shg_he_registration_gt.py` | `TMEQ_RUN_MATLAB_PARITY=1` | dumps + patient_02 GT HE TIFFs (git only) |
 
 See `tests/matlab_parity/README.md` and `tests/artifacts/bdc_regression_viz/README.md`.
 
@@ -42,7 +42,7 @@ See `tests/matlab_parity/README.md` and `tests/artifacts/bdc_regression_viz/READ
 | Command | Output |
 | --- | --- |
 | `make wheel` | `dist/*.whl` — `src/` only (users) |
-| `make sdist` | `dist/*.tar.gz` — source + tests, dumps, figures, registration fixtures (devs) |
+| `make sdist` | `dist/*.tar.gz` — source + docs + lightweight tests (no tests 1-9 / dumps) |
 
 `tests/test_packaging.py` checks the contract.
 

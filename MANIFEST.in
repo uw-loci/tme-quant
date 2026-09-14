@@ -3,36 +3,20 @@
 # WHEEL (pip install / python -m build --wheel):
 #   [tool.setuptools.packages.find] where=["src"] → only src/pycurvelets
 #   and src/napari_curvealign, plus package-data (napari.yaml, data/*.npz).
-#   Tests, MATLAB dumps, fixtures, and comparison figures never enter the wheel.
 #
 # SDIST (pip install --no-binary tme-quant / python -m build --sdist):
-#   The developer source tree: src/ + docs + the test suite, including
-#   tests/matlab_parity, tests/artifacts, patient_001, and the patient_02
-#   files that tests 4-9 read. Unused MATLAB working copies under
-#   new_test_datasets_tests4-5-6-7/ stay out (see the prune + include list).
+#   What is needed to rebuild the wheel: src/ + docs + the lightweight
+#   pytest suite (CSV / synthetic-image tests). Registration tests 1-9,
+#   MATLAB dumps, ground-truth TIFFs, and comparison figures stay in git
+#   for CI / clones. They are not release artifacts.
 
 graft tests
 graft doc
 include Makefile
 
-# The local patient_02 dump is ~78 MB (extra warps, unused ROIs, a zip).
-# Drop the whole tree, then put back only the ~12 MB tests 4-9 open.
-prune tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/patient_02_roi2.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/patient_02_roi4.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/patient_02_roi5.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/SHG/patient_02_roi2.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/SHG/patient_02_roi4.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/SHG/patient_02_roi5.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test4_roi2_ppm2p6/patient_02_roi2.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test5_roi4_ppm1p5/patient_02_roi4.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test6_roi4_ppm2p6/patient_02_roi4.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test7_roi5_ppm2p6/patient_02_roi5.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg1_test6b_ppm3/patient_02_roi4.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg1_test9_ppm2p6/patient_02_roi4.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/patient_02_HE_original-roi2.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/patient_02_HE_original-roi4.tif
-include tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/patient_02_HE_original-roi5.tif
+prune tests/test_for_shg_he_registration_BDcreation
+prune tests/matlab_parity
+prune tests/artifacts
 
 global-exclude .DS_Store
 global-exclude .coverage

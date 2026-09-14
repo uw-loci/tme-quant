@@ -1,7 +1,8 @@
-# MATLAB parity harness (sdist / clone)
+# MATLAB parity harness (git / clone only)
 
-**Not in the wheel.** Installed wheels contain only `src/`. This directory
-ships in the sdist. Set `TMEQ_RUN_MATLAB_PARITY=1` to run these checks.
+**Not in the wheel or the sdist.** Installed releases contain only what is
+needed to run or rebuild the package. This directory is a maintainer
+check: clone the repo and set `TMEQ_RUN_MATLAB_PARITY=1`.
 
 Validates that `pycurvelets.SHG_HE_registration` reproduces MATLAB
 `BDcreation_reg2.m` (tests 1-7, `pipeline="reg2"`) and `BDcreation_reg.m`

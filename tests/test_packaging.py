@@ -7,9 +7,9 @@ Wheel
 
 sdist
     ``pip install tme-quant --no-binary tme-quant`` / ``python -m build --sdist``
-    Developer source: tests (including MATLAB dumps and comparison figures),
-    patient_001, and the patient_02 files that tests 4-9 read. Unused
-    copies under ``new_test_datasets_tests4-5-6-7/`` stay out.
+    Source needed to rebuild the wheel, plus the lightweight pytest suite.
+    Tests 1-9 fixtures, MATLAB dumps, GT TIFFs, and comparison figures stay
+    in git; they are not release artifacts.
 """
 
 from __future__ import annotations
@@ -27,22 +27,10 @@ _WHEEL_REGISTRATION_MODULES = (
     "_registration_quality.py",
 )
 
-_SDIST_PATIENT02_FILES = (
-    "HE/patient_02_roi2.tif",
-    "HE/patient_02_roi4.tif",
-    "HE/patient_02_roi5.tif",
-    "SHG/patient_02_roi2.tif",
-    "SHG/patient_02_roi4.tif",
-    "SHG/patient_02_roi5.tif",
-    "HE/HE_registered_for_reg2_test4_roi2_ppm2p6/patient_02_roi2.tif",
-    "HE/HE_registered_for_reg2_test5_roi4_ppm1p5/patient_02_roi4.tif",
-    "HE/HE_registered_for_reg2_test6_roi4_ppm2p6/patient_02_roi4.tif",
-    "HE/HE_registered_for_reg2_test7_roi5_ppm2p6/patient_02_roi5.tif",
-    "HE/HE_registered_for_reg1_test6b_ppm3/patient_02_roi4.tif",
-    "HE/HE_registered_for_reg1_test9_ppm2p6/patient_02_roi4.tif",
-    "patient_02_HE_original-roi2.tif",
-    "patient_02_HE_original-roi4.tif",
-    "patient_02_HE_original-roi5.tif",
+_SDIST_PRUNED = (
+    "tests/test_for_shg_he_registration_BDcreation",
+    "tests/matlab_parity",
+    "tests/artifacts",
 )
 
 
@@ -58,14 +46,13 @@ def test_gt_eval_is_not_in_the_wheel() -> None:
     assert (ROOT / "tests" / "_registration_gt_eval.py").is_file()
 
 
-def test_sdist_manifest_is_the_dev_tree() -> None:
+def test_sdist_excludes_registration_verification_assets() -> None:
     manifest = (ROOT / "MANIFEST.in").read_text()
     assert "graft tests" in manifest
-    assert "prune tests/matlab_parity" not in manifest
-    assert "prune tests/artifacts" not in manifest
-    assert "prune tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7" in manifest
-    for rel in _SDIST_PATIENT02_FILES:
-        assert rel in manifest, f"sdist must include patient_02 fixture {rel}"
+    for rel in _SDIST_PRUNED:
+        assert f"prune {rel}" in manifest, f"sdist must prune {rel}"
+    assert "patient_02" not in manifest
+    assert "include tests/test_for_shg_he_registration_BDcreation" not in manifest
 
 
 def test_setuptools_wheel_is_src_only() -> None:

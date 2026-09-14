@@ -15,11 +15,12 @@ Two installable views. Both are produced from a clone (`make wheel` /
 | View | How to get it | What it contains |
 | --- | --- | --- |
 | **Wheel** | `pip install tme-quant` or `make wheel` | Runtime only: `src/` (`pycurvelets`, `napari_curvealign`, `data/*.npz`). |
-| **sdist** | `pip install tme-quant --no-binary tme-quant` or `make sdist` | Developer source: tests, MATLAB dumps, comparison figures, patient_001, and the patient_02 files used by tests 4-9. |
+| **sdist** | `pip install tme-quant --no-binary tme-quant` or `make sdist` | Source to rebuild the wheel, plus docs and the lightweight pytest suite. |
 
+Registration tests 1-9, MATLAB dumps, ground-truth TIFFs, and comparison
+figures live in git (clone / CI) only. They are not release artifacts.
 `tests/test_packaging.py` asserts this split. Bit-exact MATLAB parity needs
-the sdist (or a clone) plus `TMEQ_RUN_MATLAB_PARITY=1`; see
-`tests/matlab_parity/README.md`.
+a clone plus `TMEQ_RUN_MATLAB_PARITY=1`; see `tests/matlab_parity/README.md`.
 
 ### Licensing and prerequisites
 This project depends on code that cannot be redistributed here:
@@ -79,8 +80,9 @@ export TMEQ_VALIDATE_MATLAB=1
 ```
 
 - SHG–HE registration (issue 33). CI always runs the cheap gates in
-  `tests/test_shg_he_registration.py` and `tests/test_he_bdc_reg1.py`. The
-  bit-exact dump suite (tests 1-9) is in the sdist; enable it with:
+  `tests/test_shg_he_registration.py` and `tests/test_he_bdc_reg1.py`
+  (fixtures are in the clone, not the wheel or sdist). The bit-exact dump
+  suite (tests 1-9) is git-only; enable it with:
 ```bash
 export TMEQ_RUN_MATLAB_PARITY=1
 QT_QPA_PLATFORM=offscreen uv run pytest -q -p no:napari \

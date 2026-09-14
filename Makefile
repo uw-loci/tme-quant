@@ -16,7 +16,7 @@ help:
 	@echo ""
 	@echo "Packaging (see README.md 'Wheel vs sdist'):"
 	@echo "  make wheel        - Build the runtime wheel (src/ only)"
-	@echo "  make sdist        - Build the developer source dist (tests + fixtures)"
+	@echo "  make sdist        - Build the source dist (src + docs + lightweight tests)"
 	@echo ""
 
 setup:
