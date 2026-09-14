@@ -117,7 +117,7 @@ def histogram_mutual_information(
     """
     Histogram mutual information (nats) between two images.
 
-    Higher is better. Independent of SimpleITK; used as the primary
+    Higher is better. Used as the primary
     SHG-alignment score for tests and ECM auto-selection.
     """
     x = _to_float01_gray(a).ravel()

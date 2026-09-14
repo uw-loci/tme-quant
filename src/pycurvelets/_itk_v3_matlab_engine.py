@@ -185,7 +185,7 @@ def _require_itk() -> None:
     if not _HAS_ITK:
         raise RuntimeError(
             "The MATLAB-parity registration engine requires the 'itk' package "
-            "(pip install itk). Install it or choose another registration_method."
+            "(pip install itk)."
         )
 
 
