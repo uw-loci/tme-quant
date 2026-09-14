@@ -2,10 +2,10 @@
 
 Usage:
     python tests/artifacts/bdc_regression_viz/generate_comparison_patient02.py \
-        [output_dir] [--method matlab|mi_ncc|oneplusone|mi|ncc] [--cases id1,id2]
+        [output_dir] [--cases id1,id2]
 
 Default output_dir: tests/artifacts/bdc_regression_viz/current
-Default method:     "matlab" (the package default - ITK v3 (1+1)-ES port).
+Uses the ITK v3 (1+1)-ES port.
 
 Test case definitions:
   Tests 4-7 use BDcreation_reg2.m goldens (HSV-based registration); the
@@ -129,7 +129,6 @@ def generate(
     matlab_reg: str,
     notes: str,
     out_dir: Path,
-    registration_method: str = "matlab",
 ) -> dict:
     he_path = HE_DIR / he_filename
     shg_path = SHG_DIR / he_filename
@@ -150,7 +149,6 @@ def generate(
         pixelpermicron=ppm,
         SHGfilepath=str(SHG_DIR),
         areaThreshold=5000.0,
-        registration_method=registration_method,
         pipeline=matlab_reg,
     )
     py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
@@ -191,7 +189,7 @@ def generate(
 
     fig, axes = plt.subplots(3, 4, figsize=(20, 15), facecolor="white")
     fig.suptitle(
-        f"{case_id}  |  ppm={ppm}  |  method={registration_method}  |  pipeline={matlab_reg}\n"
+        f"{case_id}  |  ppm={ppm}  |  ITK v3 (1+1)-ES  |  pipeline={matlab_reg}\n"
         f"MAE={mae:.1f}  |  RMSE={rmse:.1f}  |  Exact={exact_pct:.1f}%  |  "
         f"PSNR={psnr:.1f} dB  |  SSIM={ssim:.4f}",
         fontsize=13,
@@ -260,7 +258,7 @@ def generate(
     ax11.axis("off")
     ax11.set_title("Summary Statistics", fontsize=10)
     stats_text = (
-        f"registration: {registration_method}\n"
+        f"registration: ITK v3 (1+1)-ES\n"
         f"pipeline:     {matlab_reg}\n"
         f"ppm:          {ppm}\n"
         f"file:         {he_filename}\n"
@@ -306,7 +304,7 @@ def generate(
     )
 
     fig.tight_layout(rect=[0, 0, 1, 0.93])
-    out_path = out_dir / f"comparison_{case_id}_{registration_method}_hsv.png"
+    out_path = out_dir / f"comparison_{case_id}_matlab_hsv.png"
     fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved {out_path}")
@@ -328,15 +326,12 @@ def generate(
 
 
 def main() -> None:
-    """``[out_dir] [--method M] [--cases id1,id2]``."""
+    """``[out_dir] [--cases id1,id2]``."""
     out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
-    method = "matlab"
     selected: list[str] | None = None
     it = iter(sys.argv[1:])
     for a in it:
-        if a == "--method":
-            method = next(it)
-        elif a == "--cases":
+        if a == "--cases":
             selected = next(it).split(",")
         elif a.startswith("--"):
             raise SystemExit(f"unknown option {a}")
@@ -345,11 +340,10 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     cases = [c for c in CASES if selected is None or c[0] in selected]
 
-    print(f"Running {len(cases)} patient_02 test cases ({method}; pipeline from case)...\n")
+    print(f"Running {len(cases)} patient_02 test cases (ITK v3; pipeline from case)...\n")
     all_metrics = {}
     for case_id, he_fn, ppm, golden, matlab_reg, notes in cases:
-        m = generate(case_id, he_fn, ppm, golden, matlab_reg, notes, out_dir,
-                     registration_method=method)
+        m = generate(case_id, he_fn, ppm, golden, matlab_reg, notes, out_dir)
         if m:
             all_metrics[case_id] = m
         print()

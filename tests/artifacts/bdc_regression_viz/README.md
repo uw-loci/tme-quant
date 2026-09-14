@@ -1,19 +1,16 @@
 # BDcreation registration comparison figures (tests 1-9)
 
-Visual record shipped in the sdist, not in the wheel (see `MANIFEST.in`).
+Visual record kept in git, not in the wheel or sdist (see `MANIFEST.in`).
 Visual regression record for the Python port of `BDcreation_reg2.m`
 (`pycurvelets.SHG_HE_registration`). `current/` holds one figure per test case,
-produced with the package **default** `registration_method="matlab"` (ITK v3
-Mattes MI + (1+1)-ES, bit-exact port of MATLAB `imregtform`) and
-`ecm_method="hsv"`.
+produced with the ITK v3 (1+1)-ES port of MATLAB `imregtform` and the
+BDcreation_reg2 HSV collagen mask.
 
-Regenerate (tests 4-9 use the patient_02 fixtures shipped in the sdist):
+Regenerate (tests 4-9 use the patient_02 fixtures in the clone):
 
 ```bash
 python tests/artifacts/bdc_regression_viz/generate_comparison.py            # tests 1-3
 python tests/artifacts/bdc_regression_viz/generate_comparison_patient02.py  # tests 4-9
-# picture a backup method instead (writes to a directory of your choice):
-python tests/artifacts/bdc_regression_viz/generate_comparison.py /tmp/viz_mi_ncc --method mi_ncc
 ```
 
 Only `current/` is tracked; other output directories are gitignored.

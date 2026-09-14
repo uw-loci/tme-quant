@@ -18,9 +18,9 @@ import pytest
 from skimage import io
 
 from pycurvelets._registration_quality import compute_mask_boundary_metrics
+from pycurvelets._itk_v3_matlab_engine import has_itk
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
-    has_simpleitk,
     shg_he_registration,
 )
 from pycurvelets.tumor_annotation_from_HE import (
@@ -176,7 +176,7 @@ def test_tumor_annotation_rgb_kmeans_runs() -> None:
     assert str(debug["annotation_method"][0]) == "rgb_kmeans"
 
 
-@pytest.mark.skipif(not has_simpleitk(), reason="e2e registration needs SimpleITK")
+@pytest.mark.skipif(not has_itk(), reason="e2e registration needs itk")
 def test_register_then_annotate_end_to_end_smoke() -> None:
     """
     F5: Python register → Python annotate on patient_001 ppm=2.0.

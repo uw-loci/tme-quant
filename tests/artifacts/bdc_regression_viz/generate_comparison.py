@@ -2,16 +2,12 @@
 (patient_001, tests 1-3: MATLAB golden vs Python at ppm 1.5 / 2.0 / 3.0).
 
 Usage:
-    python tests/artifacts/bdc_regression_viz/generate_comparison.py \
-        [output_dir] [--method matlab|mi_ncc|oneplusone|mi|ncc] [--ecm hsv,rgb,...]
+    python tests/artifacts/bdc_regression_viz/generate_comparison.py [output_dir]
 
 Default output_dir: tests/artifacts/bdc_regression_viz/current
-Default method:     "matlab" (the package default - ITK v3 (1+1)-ES port,
-                    pixel-exact vs MATLAB). Pass ``--method mi_ncc`` etc. to
-                    picture a backup method instead.
 
-Generates one figure per (case, ecm_method) combination named
-``comparison_<case>_ppm<ppm>_<method>_<ecm>.png``.
+Uses the ITK v3 (1+1)-ES port and the BDcreation_reg2 HSV mask.
+Figures are named ``comparison_<case>_ppm<ppm>_matlab_hsv.png``.
 """
 from __future__ import annotations
 
@@ -46,10 +42,6 @@ CASES = [
     ("test3", 3.0, "HE_registered_test3"),
 ]
 
-REGISTRATION_METHOD = "matlab"
-ECM_METHODS = ["hsv"]
-
-
 def _load_uint8(path: Path) -> np.ndarray:
     im = io.imread(str(path))
     if im.dtype != np.uint8:
@@ -73,9 +65,6 @@ def generate(
     ppm: float,
     golden_folder: str,
     out_dir: Path,
-    *,
-    registration_method: str = REGISTRATION_METHOD,
-    ecm_method: str = "hsv",
 ) -> None:
     he_raw = _load_uint8(HE_DIR / "patient_001.tif")
     shg_raw = _load_uint8(SHG_DIR / "patient_001.tif")
@@ -87,8 +76,6 @@ def generate(
         pixelpermicron=ppm,
         SHGfilepath=str(SHG_DIR),
         areaThreshold=5000.0,
-        registration_method=registration_method,
-        ecm_method=ecm_method,
     )
     py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
     py_uint8 = np.round(np.clip(py_float, 0, 1) * 255).astype(np.uint8)  # im2uint8 rounds
@@ -111,19 +98,11 @@ def generate(
     psnr = float(metrics["psnr"])
     ssim = float(metrics["ssim"])
 
-    ecm_label = {
-        "hsv": "HSV (BDcreation_reg2)",
-        "rgb": "RGB (BDcreation_reg)",
-        "lab": "LAB k-means",
-        "gray": "inverted luma",
-        "auto": "auto (best SHG MI)",
-    }
-    ecm_display = ecm_label.get(ecm_method, ecm_method)
-    ecm_selected = debug.get("ecm_method_selected", ecm_method)
+    ecm_selected = debug.get("ecm_method_selected", "hsv")
 
     fig, axes = plt.subplots(3, 4, figsize=(20, 15), facecolor="white")
     fig.suptitle(
-        f"{case_id}  |  pixelpermicron = {ppm}  |  method={registration_method}  |  ecm={ecm_display}\n"
+        f"{case_id}  |  pixelpermicron = {ppm}  |  ITK v3 (1+1)-ES  |  ecm=HSV (BDcreation_reg2)\n"
         f"MAE={mae:.1f}  |  RMSE={rmse:.1f}  |  Exact={exact_pct:.1f}%  |  "
         f"PSNR={psnr:.1f} dB  |  SSIM={ssim:.4f}  |  "
         f"SHG MI={shg_mi:.4f} (Δid={shg_mi_delta:+.4f})  |  SHG NCC={shg_ncc:.4f}",
@@ -217,8 +196,8 @@ def generate(
     ax11.axis("off")
     ax11.set_title("Summary Statistics", fontsize=10)
     stats_text = (
-        f"registration: {registration_method}\n"
-        f"ecm requested: {ecm_method}\n"
+        f"registration: ITK v3 (1+1)-ES\n"
+        f"ecm:           HSV (BDcreation_reg2)\n"
         f"ecm selected:  {ecm_selected}\n"
         f"ppm:           {ppm}\n"
         f"\n"
@@ -258,12 +237,12 @@ def generate(
     )
 
     fig.tight_layout(rect=[0, 0, 1, 0.93])
-    out_path = out_dir / f"comparison_{case_id}_ppm{ppm}_{registration_method}_{ecm_method}.png"
+    out_path = out_dir / f"comparison_{case_id}_ppm{ppm}_matlab_hsv.png"
     fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved {out_path}")
     print(
-        f"  {case_id} ppm={ppm} method={registration_method} ecm={ecm_method}: "
+        f"  {case_id} ppm={ppm}: "
         f"MAE={mae:.2f}, RMSE={rmse:.2f}, "
         f"PSNR={psnr:.2f}dB, SSIM={ssim:.4f}, "
         f"Exact={exact_pct:.1f}%, Within5={w5:.1f}%, Within10={w10:.1f}%, Within20={w20:.1f}%, "
@@ -271,38 +250,16 @@ def generate(
     )
 
 
-def _parse_cli(argv: list[str]) -> tuple[Path, str, list[str]]:
-    """``[out_dir] [--method M] [--ecm a,b]`` - defaults keep old behaviour."""
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
-    method = REGISTRATION_METHOD
-    ecm_methods = list(ECM_METHODS)
-    it = iter(argv)
-    for a in it:
-        if a == "--method":
-            method = next(it)
-        elif a == "--ecm":
-            ecm_methods = next(it).split(",")
-        elif a.startswith("--"):
-            raise SystemExit(f"unknown option {a}")
-        else:
-            out_dir = Path(a)
-    return out_dir, method, ecm_methods
-
-
 def main() -> None:
-    out_dir, method, ecm_methods = _parse_cli(sys.argv[1:])
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
+    if len(sys.argv) > 1:
+        if sys.argv[1].startswith("--"):
+            raise SystemExit(f"unknown option {sys.argv[1]}")
+        out_dir = Path(sys.argv[1])
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    for ecm_method in ecm_methods:
-        for case_id, ppm, folder in CASES:
-            generate(
-                case_id,
-                ppm,
-                folder,
-                out_dir,
-                registration_method=method,
-                ecm_method=ecm_method,
-            )
+    for case_id, ppm, folder in CASES:
+        generate(case_id, ppm, folder, out_dir)
 
 
 if __name__ == "__main__":
