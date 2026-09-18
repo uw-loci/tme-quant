@@ -1,5 +1,8 @@
 # BDcreation registration comparison figures (tests 1-9)
 
+This directory is **registration only** (`BDcreation_reg` / `BDcreation_reg2`).
+Tumor-boundary annotation figures live in `../bdc_annotation_viz/`.
+
 Visual record kept in git, not in the wheel or sdist (see `MANIFEST.in`).
 Visual regression record for the Python port of `BDcreation_reg2.m`
 (`pycurvelets.SHG_HE_registration`). `current/` holds one figure per test case,
@@ -9,8 +12,8 @@ BDcreation_reg2 HSV collagen mask.
 Regenerate (tests 4-9 use the patient_02 fixtures in the clone):
 
 ```bash
-python tests/artifacts/bdc_regression_viz/generate_comparison.py            # tests 1-3
-python tests/artifacts/bdc_regression_viz/generate_comparison_patient02.py  # tests 4-9
+python tests/artifacts/bdc_registration_viz/generate_comparison.py            # tests 1-3
+python tests/artifacts/bdc_registration_viz/generate_comparison_patient02.py  # tests 4-9
 ```
 
 Only `current/` is tracked; other output directories are gitignored.
