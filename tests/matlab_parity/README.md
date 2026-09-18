@@ -47,6 +47,7 @@ HE TIFFs under `tests/test_for_shg_he_registration_BDcreation/HE/HE_registered_t
 The committed `SHG/CA_Boundary/BDcreationHE_testNresults_*.tif` goldens are
 a fresh HE2 run (the previous copies were `BDcreationHE.m` output; the
 filename still says HE). Compare HE-path masks to `dumps/he_testN/images.mat`.
+Figures: `tests/artifacts/bdc_annotation_viz/`.
 
 ```bash
 TMEQ_RUN_MATLAB_PARITY=1 pytest -q -p no:napari \

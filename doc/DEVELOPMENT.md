@@ -35,7 +35,7 @@ Curvelet tests run automatically when curvelops is installed; otherwise they are
 | `tests/test_shg_he_registration_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `tests/matlab_parity/dumps` (git only) |
 | `tests/test_shg_he_registration_gt.py` | `TMEQ_RUN_MATLAB_PARITY=1` | dumps + patient_02 GT HE TIFFs (git only) |
 
-See `tests/matlab_parity/README.md` and `tests/artifacts/bdc_registration_viz/README.md`.
+See `tests/matlab_parity/README.md`, `tests/artifacts/bdc_registration_viz/README.md`, and `tests/artifacts/bdc_annotation_viz/README.md`.
 
 ### Tumor annotation (BDcreationHE / BDcreationHE2)
 
@@ -45,7 +45,7 @@ See `tests/matlab_parity/README.md` and `tests/artifacts/bdc_registration_viz/RE
 | `tests/test_tumor_annotation_from_he.py` | CI | patient_001 HE fixtures + CA_Boundary goldens (clone) |
 | `tests/test_tumor_annotation_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `tests/matlab_parity/dumps/he2_*` and `he_*` (git only) |
 
-Default `annotation_method="hsv"` is `BDcreationHE2.m`. `annotation_method="rgb_kmeans"` is `BDcreationHE.m` (unseeded MATLAB `kmeans`; Python replays `rng(28,'twister')`). Do not edit `_he_bdc_common.py` / `_he_bdc_reg1.py` for annotation work — new primitives live in `_he_bdc_annotation.py`.
+Default `annotation_method="hsv"` is `BDcreationHE2.m`. `annotation_method="rgb_kmeans"` is `BDcreationHE.m` (unseeded MATLAB `kmeans`; Python replays `rng(28,'twister')`). Do not edit `_he_bdc_common.py` / `_he_bdc_reg1.py` for annotation work — new primitives live in `_he_bdc_annotation.py`. Comparison figures: `tests/artifacts/bdc_annotation_viz/`.
 
 ## Wheel vs sdist
 

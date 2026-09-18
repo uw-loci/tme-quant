@@ -18,8 +18,9 @@ Two installable views. Both are produced from a clone (`make wheel` /
 | **sdist** | `pip install tme-quant --no-binary tme-quant` or `make sdist` | Source to rebuild the wheel, plus docs and the lightweight pytest suite. |
 
 Registration tests 1-9, annotation tests 1-3, MATLAB dumps, ground-truth
-TIFFs, and comparison figures (`tests/artifacts/bdc_registration_viz`)
-live in git (clone / CI) only. They are not release artifacts.
+TIFFs, and comparison figures (`tests/artifacts/bdc_registration_viz`,
+`tests/artifacts/bdc_annotation_viz`) live in git (clone / CI) only. They
+are not release artifacts.
 `tests/test_packaging.py` asserts this split. Bit-exact MATLAB parity needs
 a clone plus `TMEQ_RUN_MATLAB_PARITY=1`; see `tests/matlab_parity/README.md`.
 
