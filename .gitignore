@@ -242,6 +242,7 @@ tests/matlab_parity/dumps/*.log
 tests/matlab_parity/dumps/srgb2lab_components.mat
 tests/matlab_parity/dumps/srgb2lab_reference_20k.npz
 tests/matlab_parity/dumps/analysis_summary.json
+tests/matlab_parity/dumps/he_analysis_summary.json
 tests/matlab_parity/dumps/preprocessing_parity.json
 tests/matlab_parity/dumps/test2_rerun/
 tests/matlab_parity/dumps/test8/
