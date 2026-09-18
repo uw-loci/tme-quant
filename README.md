@@ -17,8 +17,9 @@ Two installable views. Both are produced from a clone (`make wheel` /
 | **Wheel** | `pip install tme-quant` or `make wheel` | Runtime only: `src/` (`pycurvelets`, `napari_curvealign`, `data/*.npz`). |
 | **sdist** | `pip install tme-quant --no-binary tme-quant` or `make sdist` | Source to rebuild the wheel, plus docs and the lightweight pytest suite. |
 
-Registration tests 1-9, MATLAB dumps, ground-truth TIFFs, and comparison
-figures live in git (clone / CI) only. They are not release artifacts.
+Registration tests 1-9, annotation tests 1-3, MATLAB dumps, ground-truth
+TIFFs, and comparison figures (`tests/artifacts/bdc_registration_viz`)
+live in git (clone / CI) only. They are not release artifacts.
 `tests/test_packaging.py` asserts this split. Bit-exact MATLAB parity needs
 a clone plus `TMEQ_RUN_MATLAB_PARITY=1`; see `tests/matlab_parity/README.md`.
 
@@ -90,6 +91,17 @@ QT_QPA_PLATFORM=offscreen uv run pytest -q -p no:napari \
     tests/test_he_bdc_reg1.py \
     tests/test_shg_he_registration_matlab_parity.py \
     tests/test_shg_he_registration_gt.py
+```
+
+- Tumor annotation (issue 34). CI always runs `tests/test_he_bdc_annotation.py`
+  and `tests/test_tumor_annotation_from_he.py`. The bit-exact HE2/HE dump
+  suite is git-only; enable it with the same `TMEQ_RUN_MATLAB_PARITY=1` flag:
+```bash
+export TMEQ_RUN_MATLAB_PARITY=1
+QT_QPA_PLATFORM=offscreen uv run pytest -q -p no:napari \
+    tests/test_he_bdc_annotation.py \
+    tests/test_tumor_annotation_from_he.py \
+    tests/test_tumor_annotation_matlab_parity.py
 ```
 
 Notes:
