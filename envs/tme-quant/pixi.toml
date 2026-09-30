@@ -1,0 +1,20 @@
+[workspace]
+name = "skop-tme-quant"
+description = "Portable TME-Quant image analysis operations."
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
+version = "0.1.0"
+
+[dependencies]
+python = "3.11.*"
+numpy = ">=2.2"
+scipy = ">=1.15"
+scikit-image = ">=0.25"
+scikit-learn = ">=1.7"
+appose = ">=0.12"
+
+[pypi-dependencies]
+# The development Runner prepends this checkout's configured `root` (`src/`) to
+# the worker's import path. A published environment should instead add a
+# released TME-Quant package or a pinned Git revision here.
+scikit-ops = { git = "https://github.com/apposed/scikit-ops.git", rev = "e3585f82d175a62c9f46abad7f8105165b58d30c" }

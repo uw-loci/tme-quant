@@ -1,0 +1,20 @@
+[workspace]
+name = "skop-tme-quant-curvelets"
+description = "TME-Quant curvelet extraction with the native CurveLab backend."
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
+version = "0.1.0"
+
+[dependencies]
+python = "3.11.*"
+numpy = ">=2.2"
+scipy = ">=1.15"
+pandas = ">=2.2"
+scikit-learn = ">=1.7"
+appose = ">=0.12"
+
+[pypi-dependencies]
+# curvelops is deliberately not declared yet: its CurveLab/FFTW native build
+# needs a reproducible cross-platform recipe before this environment can build
+# unattended. See doc/DEVELOPMENT.md.
+scikit-ops = { git = "https://github.com/apposed/scikit-ops.git", rev = "e3585f82d175a62c9f46abad7f8105165b58d30c" }

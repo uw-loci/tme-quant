@@ -34,6 +34,9 @@ dev = [
 curvelops = [
   "curvelops @ git+https://github.com/PyLops/curvelops@0.23.4",
 ]
+scikit-ops = [
+  "scikit-ops @ git+https://github.com/apposed/scikit-ops.git@e3585f82d175a62c9f46abad7f8105165b58d30c",
+]
 segmentation = [
   "cellcast",
   "cellpose",
