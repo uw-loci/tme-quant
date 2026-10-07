@@ -206,6 +206,22 @@ create_env_and_install() {
   export CPPFLAGS="-I${FFTW}/include"
   export LDFLAGS="-L${FFTW}/lib"
 
+  cd "$PROJECT_ROOT"
+
+  # PYTHON_VERSION is otherwise unused, and requires-python is only ">=3.11",
+  # so uv would pick the newest interpreter on PATH (for example 3.14).
+  print_info "Pinning Python ${PYTHON_VERSION}..."
+  uv python pin "$PYTHON_VERSION"
+
+  # uv builds curvelops in an isolated environment and does not forward shell
+  # exports. curvelops' setup.py reads FFTW and FDCT from that environment.
+  # uv.toml is gitignored because the paths are local to this machine.
+  print_info "Writing uv.toml so the curvelops build can see FFTW and CurveLab..."
+  cat > "$PROJECT_ROOT/uv.toml" <<EOF
+# Written by bin/install.sh. Local paths; do not commit.
+extra-build-variables = { curvelops = { FFTW = "${FFTW}", FDCT = "${FDCT}" } }
+EOF
+
   # Purge stale curvelops artifacts so uv rebuilds from source against the
   # current FFTW/CurveLab.  setuptools caches .so files in uv's git checkout
   # build/ dirs and reuses them even when the underlying C libraries change.
@@ -219,7 +235,7 @@ create_env_and_install() {
   done
 
   print_info "Syncing uv environment..."
-  uv sync --extra curvelops --extra segmentation &&
+  uv sync --python "$PYTHON_VERSION" --extra curvelops --extra segmentation &&
   print_success "Environment configured."
 
   print_info "Installing tme-quant..."
