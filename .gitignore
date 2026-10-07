@@ -136,6 +136,8 @@ Desktop.ini
 
 # uv
 uv.lock
+# Machine-local FFTW/CurveLab paths written by bin/install.sh.
+uv.toml
 
 # Packages
 *.egg
