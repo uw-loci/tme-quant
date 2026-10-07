@@ -1,0 +1,24 @@
+# Two installable views
+# ---------------------
+# WHEEL (pip install / python -m build --wheel):
+#   [tool.setuptools.packages.find] where=["src"] → only src/pycurvelets
+#   and src/napari_curvealign, plus package-data (napari.yaml, data/*.npz).
+#
+# SDIST (pip install --no-binary tme-quant / python -m build --sdist):
+#   What is needed to rebuild the wheel: src/ + docs + the lightweight
+#   pytest suite (CSV / synthetic-image tests). Registration tests 1-9,
+#   MATLAB dumps, ground-truth TIFFs, and comparison figures stay in git
+#   for CI / clones. They are not release artifacts.
+
+graft tests
+graft doc
+include Makefile
+
+prune tests/test_for_shg_he_registration_BDcreation
+prune tests/matlab_parity
+prune tests/artifacts
+
+global-exclude .DS_Store
+global-exclude .coverage
+global-exclude *.pyc
+global-exclude __pycache__

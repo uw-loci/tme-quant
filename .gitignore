@@ -136,6 +136,8 @@ Desktop.ini
 
 # uv
 uv.lock
+# Machine-local FFTW/CurveLab paths written by bin/install.sh.
+uv.toml
 
 # Packages
 *.egg
@@ -174,11 +176,78 @@ lastPATH_CTF.mat
 *.m~
 *.mat
 *.tif
+# The line above ignores all TIFFs. These ``!`` rules re-include test fixtures so
+# ``git add tests/...`` picks them up (last matching gitignore rule wins).
+!tests/test_images/**/*.tif
+!tests/test_for_shg_he_registration_BDcreation/**
+tests/test_for_shg_he_registration_BDcreation/.DS_Store
+# The patient_02 dump is ~78 MB. Ignore it, then re-include only the ~12 MB
+# that tests 4-9 open (inputs, goldens, GT HE). Last matching rule wins.
+tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/**
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/SHG/
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/patient_02_roi2.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/patient_02_roi4.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/patient_02_roi5.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/SHG/patient_02_roi2.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/SHG/patient_02_roi4.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/SHG/patient_02_roi5.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test4_roi2_ppm2p6/
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test4_roi2_ppm2p6/patient_02_roi2.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test5_roi4_ppm1p5/
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test5_roi4_ppm1p5/patient_02_roi4.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test6_roi4_ppm2p6/
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test6_roi4_ppm2p6/patient_02_roi4.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test7_roi5_ppm2p6/
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg2_test7_roi5_ppm2p6/patient_02_roi5.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg1_test6b_ppm3/
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg1_test6b_ppm3/patient_02_roi4.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg1_test9_ppm2p6/
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/HE/HE_registered_for_reg1_test9_ppm2p6/patient_02_roi4.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/patient_02_HE_original-roi2.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/patient_02_HE_original-roi4.tif
+!tests/test_for_shg_he_registration_BDcreation/new_test_datasets_tests4-5-6-7/patient_02_HE_original-roi5.tif
 
 pycurvelets/opt/*.*
 
 # test tmp folder
 tests/test_images/CA_Out/
+# ...except the BDcreation registration comparison figures for tests 1-9 and
+# the scripts that generate them. bdc_regression_viz/current is the canonical
+# set produced with the default registration_method; output dirs from ad-hoc
+# `--method ...` runs stay ignored. (`dir/*` rather than `dir/` so children
+# can be re-included.)
+tests/artifacts/*
+!tests/artifacts/bdc_regression_viz/
+tests/artifacts/bdc_regression_viz/*
+!tests/artifacts/bdc_regression_viz/*.py
+!tests/artifacts/bdc_regression_viz/README.md
+!tests/artifacts/bdc_regression_viz/current/
+.mplconfig/
 
 # referenced MATLAB files
 *.m
+
+# Developer-only MATLAB parity harness. Tracked: dump/probe scripts, images.mat,
+# tform_*.txt, interp2d_probe.mat, gt_affine_*.json. Everything else a dump
+# script may write is local-only. Must come after the *.m / *.mat / *.tif rules.
+!tests/matlab_parity/**
+tests/matlab_parity/dumps/*/intermediates.mat
+tests/matlab_parity/dumps/*/HEmoving.tif
+tests/matlab_parity/dumps/*/fixedSHG.tif
+tests/matlab_parity/dumps/*/registered.tif
+tests/matlab_parity/dumps/*/meta.mat
+tests/matlab_parity/dumps/*/kmeans_probe.txt
+tests/matlab_parity/dumps/*/optimization_trace.txt
+tests/matlab_parity/dumps/*/es_probe.txt
+tests/matlab_parity/dumps/*.log
+tests/matlab_parity/dumps/srgb2lab_components.mat
+tests/matlab_parity/dumps/srgb2lab_reference_20k.npz
+tests/matlab_parity/dumps/analysis_summary.json
+tests/matlab_parity/dumps/preprocessing_parity.json
+tests/matlab_parity/dumps/test2_rerun/
+tests/matlab_parity/dumps/test8/
+tests/matlab_parity/dumps/test8_s3/
+tests/matlab_parity/dumps/test8_km1/
+tests/matlab_parity/dumps/test8_km2/
+tests/matlab_parity/dumps/test9/

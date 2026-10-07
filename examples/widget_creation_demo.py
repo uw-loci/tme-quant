@@ -15,7 +15,7 @@ def run_widget_creation_demo() -> bool:
         return False
 
     try:
-        from napari_curvealign.widget import CurveAlignWidget
+        from napari_curvealign.widgets import CurveAlignWidget
     except ImportError as exc:
         print(f"Failed to import CurveAlignWidget: {exc}")
         return False

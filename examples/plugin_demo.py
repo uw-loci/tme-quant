@@ -36,7 +36,7 @@ def main():
 
     print("Loading CurveAlign plugin widget...")
     try:
-        from napari_curvealign.widget import CurveAlignWidget
+        from napari_curvealign.widgets import CurveAlignWidget
 
         widget_instance = CurveAlignWidget(viewer)
         viewer.window.add_dock_widget(widget_instance, name="CurveAlign", area="right")
@@ -49,7 +49,7 @@ def main():
         print("\nTroubleshooting:")
         print("1. Install editable package: uv pip install -e .")
         print("2. Check napari import/version.")
-        print("3. Verify widget import: from napari_curvealign.widget import CurveAlignWidget")
+        print("3. Verify widget import: from napari_curvealign.widgets import CurveAlignWidget")
         sys.exit(1)
 
     print("\nStarting napari...")
