@@ -2,9 +2,9 @@
 (patient_001, tests 1-3: MATLAB golden vs Python at ppm 1.5 / 2.0 / 3.0).
 
 Usage:
-    python tests/artifacts/bdc_regression_viz/generate_comparison.py [output_dir]
+    python tests/artifacts/bdc_registration_viz/generate_comparison.py [output_dir]
 
-Default output_dir: tests/artifacts/bdc_regression_viz/current
+Default output_dir: tests/artifacts/bdc_registration_viz/current
 
 Uses the ITK v3 (1+1)-ES port and the BDcreation_reg2 HSV mask.
 Figures are named ``comparison_<case>_ppm<ppm>_matlab_hsv.png``.
@@ -251,7 +251,7 @@ def generate(
 
 
 def main() -> None:
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_registration_viz" / "current"
     if len(sys.argv) > 1:
         if sys.argv[1].startswith("--"):
             raise SystemExit(f"unknown option {sys.argv[1]}")

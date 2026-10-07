@@ -1,10 +1,10 @@
 """Generate comparison visualizations for patient_02 test cases (tests 4-9).
 
 Usage:
-    python tests/artifacts/bdc_regression_viz/generate_comparison_patient02.py \
+    python tests/artifacts/bdc_registration_viz/generate_comparison_patient02.py \
         [output_dir] [--cases id1,id2]
 
-Default output_dir: tests/artifacts/bdc_regression_viz/current
+Default output_dir: tests/artifacts/bdc_registration_viz/current
 Uses the ITK v3 (1+1)-ES port.
 
 Test case definitions:
@@ -327,7 +327,7 @@ def generate(
 
 def main() -> None:
     """``[out_dir] [--cases id1,id2]``."""
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_registration_viz" / "current"
     selected: list[str] | None = None
     it = iter(sys.argv[1:])
     for a in it:
