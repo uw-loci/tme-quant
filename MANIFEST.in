@@ -15,8 +15,8 @@ graft doc
 include Makefile
 
 prune tests/test_for_shg_he_registration_BDcreation
-prune tests/matlab_parity
 prune tests/artifacts
+prune archive
 
 global-exclude .DS_Store
 global-exclude .coverage

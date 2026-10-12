@@ -1,18 +1,19 @@
 """
-Exact-parity tests for ``registration_method="matlab"`` vs MATLAB ``BDcreation_reg2.m``.
+Exact-parity tests for the ITK v3 registrar vs MATLAB ``BDcreation_reg2.m``.
 
 Three layers, so a regression points at one stage:
 
 1. Primitive ports (``graythresh``, even-kernel ``imfilter``, ``imwarp`` edge
    rule) against values/probes captured from MATLAB.
 2. Preprocessing: Python ``fixedSHG`` / ``HEmoving`` vs MATLAB's exact doubles
-   in ``tests/matlab_parity/dumps/<case>/images.mat``.
+   in ``archive/matlab_parity/dumps/<case>/images.mat``.
 3. Registration engine: ITK-v3 (1+1)-ES on MATLAB's own inputs reproduces
    ``tform_affine.txt``; and the full pipeline reproduces the golden TIFF
    pixel-for-pixel.
 
-All MATLAB artefacts were generated offline (``tests/matlab_parity/*.m``);
-nothing here needs MATLAB. Tests skip when ``itk`` or fixtures are missing.
+All MATLAB artefacts were generated offline (``archive/matlab_parity/*.m``);
+nothing here needs MATLAB. Tests skip when fixtures are missing. ``itk`` is
+a package dependency.
 
 This is a developer validation suite (bit-exactness against MATLAB dumps,
 tens of seconds of ITK per case), not a CI gate. It is skipped unless::
@@ -44,7 +45,6 @@ from pycurvelets._he_bdc_common import (
 )
 from pycurvelets._itk_v3_matlab_engine import (
     DEFAULT_SEED,
-    has_itk,
     matlab_T_to_A,
     register_bdcreation_reg2_matlab,
 )
@@ -65,7 +65,7 @@ if os.environ.get("TMEQ_RUN_MATLAB_PARITY") != "1":
 _TESTS_DIR = Path(__file__).resolve().parent
 _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"
 _P02_ROOT = _FIXTURE_ROOT / "new_test_datasets_tests4-5-6-7"
-_DUMPS = _TESTS_DIR / "matlab_parity" / "dumps"
+_DUMPS = _TESTS_DIR.parent / "archive" / "matlab_parity" / "dumps"
 
 # case_id, HE dir, HE/SHG filename, SHG dir, ppm, golden folder (under HE dir)
 PARITY_CASES = (
@@ -78,9 +78,6 @@ PARITY_CASES = (
     ("test7", _P02_ROOT / "HE", "patient_02_roi5.tif", _P02_ROOT / "SHG", 2.6, "HE_registered_for_reg2_test7_roi5_ppm2p6"),
 )
 _IDS = [c[0] for c in PARITY_CASES]
-
-requires_itk = pytest.mark.skipif(not has_itk(), reason="registration_method='matlab' needs the itk package")
-
 
 def _skip_unless_files(*paths: Path) -> None:
     missing = [p for p in paths if not p.is_file()]
@@ -100,7 +97,7 @@ def _python_he_moving_and_fixed(he_dir: Path, fname: str, shg_dir: Path, ppm: fl
     he, shg = _load_inputs(he_dir, fname, shg_dir)
     he_scaled, fixed, pix = prepare_registration_pair(he, shg, float(ppm))
     he_adj = adjust_rgb_mean_std(he_scaled)
-    he_moving, mode, _extras = _build_he_moving(he_scaled, he_adj, he_adj, pix, "hsv")
+    he_moving, mode, _extras = _build_he_moving(he_adj, pix, "hsv")
     assert mode == "hsv", f"hsv mask fell back to {mode!r}; MATLAB has no fallback"
     return he_moving, fixed
 
@@ -192,7 +189,6 @@ def test_preprocessing_reproduces_matlab_fixed_and_moving(case_id, he_dir, fname
 # ---------------------------------------------------------------------------
 
 
-@requires_itk
 @pytest.mark.parametrize("case_id,he_dir,fname,shg_dir,ppm,_golden", PARITY_CASES, ids=_IDS)
 def test_itk_v3_engine_reproduces_matlab_tform_on_matlab_inputs(case_id, he_dir, fname, shg_dir, ppm, _golden) -> None:
     """Feed MATLAB's exact HEmoving/fixedSHG; the affine must match tform.T."""
@@ -215,7 +211,6 @@ def test_itk_v3_engine_reproduces_matlab_tform_on_matlab_inputs(case_id, he_dir,
     )
 
 
-@requires_itk
 @pytest.mark.parametrize("case_id,he_dir,fname,shg_dir,ppm,golden", PARITY_CASES, ids=_IDS)
 def test_matlab_method_reproduces_golden_tiff_exactly(case_id, he_dir, fname, shg_dir, ppm, golden) -> None:
     golden_path = he_dir / golden / fname
@@ -229,8 +224,6 @@ def test_matlab_method_reproduces_golden_tiff_exactly(case_id, he_dir, fname, sh
         HEfilename=fname,
         pixelpermicron=ppm,
         SHGfilepath=str(shg_dir),
-        areaThreshold=5000.0,
-        registration_method="matlab",
         ecm_method="hsv",
     )
     py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
@@ -299,7 +292,6 @@ def test_reg1_preprocessing_reproduces_matlab_fixed_and_moving(
     )
 
 
-@requires_itk
 @pytest.mark.parametrize(
     "case_id,he_dir,fname,shg_dir,ppm,_golden,dump_id",
     REG1_CASES,
@@ -326,7 +318,6 @@ def test_reg1_itk_v3_engine_reproduces_matlab_tform_on_matlab_inputs(
     )
 
 
-@requires_itk
 @pytest.mark.parametrize(
     "case_id,he_dir,fname,shg_dir,ppm,golden,dump_id",
     REG1_CASES,
@@ -347,8 +338,6 @@ def test_reg1_pipeline_reproduces_golden_tiff_exactly(
         HEfilename=fname,
         pixelpermicron=ppm,
         SHGfilepath=str(shg_dir),
-        areaThreshold=5000.0,
-        registration_method="matlab",
         pipeline="reg1",
     )
     py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)

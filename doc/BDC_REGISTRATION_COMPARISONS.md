@@ -1,7 +1,11 @@
 # BDcreation registration comparison figures (tests 1-9)
 
-Visual record kept in git, not in the wheel or sdist (see `MANIFEST.in`).
-Visual regression record for the Python port of `BDcreation_reg2.m`
+Registration only (`BDcreation_reg` / `BDcreation_reg2`). The PNGs live in
+`tests/artifacts/bdc_regression_viz/current/` and are indexed in
+[ARTIFACTS.md](ARTIFACTS.md).
+
+The figures are a visual record kept in git, not in the wheel or sdist
+(see `MANIFEST.in`). They record the Python port of `BDcreation_reg2.m`
 (`pycurvelets.SHG_HE_registration`). `current/` holds one figure per test case,
 produced with the ITK v3 (1+1)-ES port of MATLAB `imregtform` and the
 BDcreation_reg2 HSV collagen mask.
@@ -9,21 +13,23 @@ BDcreation_reg2 HSV collagen mask.
 Regenerate (tests 4-9 use the patient_02 fixtures in the clone):
 
 ```bash
-python tests/artifacts/bdc_regression_viz/generate_comparison.py            # tests 1-3
-python tests/artifacts/bdc_regression_viz/generate_comparison_patient02.py  # tests 4-9
+python archive/visualization/generate_registration_comparison.py            # tests 1-3
+python archive/visualization/generate_registration_comparison_patient02.py  # tests 4-9
 ```
 
-Only `current/` is tracked; other output directories are gitignored.
+Only `tests/artifacts/bdc_regression_viz/current/` is tracked. Other output
+directories are gitignored. The generators are development scripts in
+`archive/visualization/`, not pytest tests.
 
 ## Files
 
 | File | What it is |
 | --- | --- |
-| `generate_comparison.py` | patient_001 (tests 1-3, ppm 1.5 / 2.0 / 3.0) vs the `BDcreation_reg2` goldens. CLI: `[out_dir] [--method M] [--ecm a,b]`. |
-| `generate_comparison_patient02.py` | patient_02 (tests 4-9). Tests 4-7 vs `BDcreation_reg2` goldens, tests 8-9 vs `BDcreation_reg` (RGB pipeline) goldens. Adds ground-truth scoring (see below). CLI: `[out_dir] [--method M] [--cases id,...]`. |
-| `current/comparison_test{1,2,3}_ppm*_matlab_hsv.png` | patient_001 figures. 3x4 panel: inputs (HE, SHG), MATLAB golden, Python output; split / checkerboard / 50-50 blend of MATLAB vs Python; Python-HE vs SHG checkerboard; |diff| x3, per-pixel mean |diff| heat-map, signed-diff histogram, and a stats box (MAE, RMSE, PSNR, SSIM, exact %, within-5/10/20, SHG MI vs identity, SHG NCC). |
-| `current/comparison_test{4..7}_reg2_*_matlab_hsv.png` | patient_02 vs reg2 goldens, same layout, plus a **ground truth vs Python** checkerboard and GT metrics in the stats box. |
-| `current/comparison_test{8,9}_reg1_*_matlab_hsv.png` | patient_02 vs `BDcreation_reg` (reg1) goldens. Python `pipeline="reg1"` (decorrstretch + LAB k-means, seed 28) reproduces them pixel-for-pixel. |
+| `archive/visualization/generate_registration_comparison.py` | patient_001 (tests 1-3, ppm 1.5 / 2.0 / 3.0) vs the `BDcreation_reg2` goldens. Calls `shg_he_registration` with the default `pipeline="reg2"` and `ecm_method="hsv"`. CLI: `[out_dir]`. |
+| `archive/visualization/generate_registration_comparison_patient02.py` | patient_02 (tests 4-9). Tests 4-7 pass `pipeline="reg2"`; tests 8-9 pass `pipeline="reg1"`. Adds ground-truth scoring (see below). CLI: `[out_dir] [--cases id,...]`. |
+| `tests/artifacts/bdc_regression_viz/current/comparison_test{1,2,3}_ppm*_matlab_hsv.png` | patient_001 figures. 3x4 panel: inputs (HE, SHG), MATLAB golden, Python output; split / checkerboard / 50-50 blend of MATLAB vs Python; Python-HE vs SHG checkerboard; |diff| x3, per-pixel mean |diff| heat-map, signed-diff histogram, and a stats box (MAE, RMSE, PSNR, SSIM, exact %, within-5/10/20, SHG MI vs identity, SHG NCC). |
+| `tests/artifacts/bdc_regression_viz/current/comparison_test{4..7}_reg2_*_matlab_hsv.png` | patient_02 vs reg2 goldens, same layout, plus a **ground truth vs Python** checkerboard and GT metrics in the stats box. |
+| `tests/artifacts/bdc_regression_viz/current/comparison_test{8,9}_reg1_*_matlab_hsv.png` | patient_02 vs `BDcreation_reg` (reg1) goldens. Python `pipeline="reg1"` (decorrstretch + LAB k-means, seed 28) reproduces them pixel-for-pixel. |
 
 ## Results with the current build
 

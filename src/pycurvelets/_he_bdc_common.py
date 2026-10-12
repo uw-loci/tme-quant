@@ -1,3 +1,12 @@
+"""Shared MATLAB image primitives for H&E registration and tumor annotation.
+
+These helpers reproduce the Image Processing Toolbox calls used by
+``BDcreation_reg.m``, ``BDcreation_reg2.m``, ``BDcreationHE.m``, and
+``BDcreationHE2.m``: color conversion, Otsu thresholding, filtering, and
+the bilinear warp. Annotation-only morphology lives in
+:mod:`pycurvelets._he_bdc_annotation`.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,6 +27,9 @@ COLLAGEN_HUE_MAX = 0.066  # wrapped hue range (>= min OR <= max)
 NUCLEI_MIN_AREA = 150
 COLLAGEN_MIN_AREA = 100
 
+# MATLAB ``graythresh`` histograms a uint8 image: one bin per level 0..255.
+_GRAYTHRESH_BINS = 256
+
 # MATLAB-derived RGB cuts from BDcreation_reg.m on decorrstretched uint8 (S).
 # Exclusive inequalities, as in the MATLAB script.
 RGB_NUCLEI_R_MAX = 120  # R < 120
@@ -29,11 +41,27 @@ RGB_EOSIN_B_MIN = 100  # B > 100
 
 
 def matlab_rgb2hsv(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
-    """
-    MATLAB-compatible ``rgb2hsv`` for float RGB in ``[0, 1]``.
+    """Convert float RGB in ``[0, 1]`` to MATLAB ``rgb2hsv`` order.
 
-    Matches MathWorks' channel ordering (H, S, V) and hue wrap to ``[0, 1]``.
-    Used instead of ``skimage.color.rgb2hsv`` for CurveAlign parity (F2/D1).
+    Hue, saturation, and value are each in ``[0, 1]``. Hue wraps the same way
+    as MathWorks ``rgb2hsv``, which is what the CurveAlign hue bands assume.
+
+    Parameters
+    ----------
+    rgb : numpy.ndarray
+        RGB image. Channel axis is ``axis`` (default last).
+    axis : int, optional
+        Axis of the color channels. Default is ``-1``.
+
+    Returns
+    -------
+    numpy.ndarray
+        HSV image, same layout as the input.
+
+    Raises
+    ------
+    ValueError
+        If ``rgb`` is not an RGB image.
     """
     arr = np.moveaxis(np.asarray(rgb, dtype=np.float64), axis, -1)
     if arr.ndim != 3 or arr.shape[-1] < 3:
@@ -64,7 +92,21 @@ def matlab_rgb2hsv(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
 
 
 def matlab_round(x: float | np.ndarray) -> float | np.ndarray:
-    """MATLAB ``round``: half-integers round away from zero (unlike ``numpy.round``)."""
+    """Round half away from zero, matching MATLAB ``round``.
+
+    ``numpy.round`` sends halves to the nearest even integer. MATLAB sends
+    them away from zero, which changes structuring-element radii.
+
+    Parameters
+    ----------
+    x : float or numpy.ndarray
+        Value or array to round.
+
+    Returns
+    -------
+    float or numpy.ndarray
+        Scalar in, scalar out. Array in, array out.
+    """
     arr = np.asarray(x, dtype=np.float64)
     out = np.sign(arr) * np.floor(np.abs(arr) + 0.5)
     if np.ndim(x) == 0:
@@ -73,11 +115,28 @@ def matlab_round(x: float | np.ndarray) -> float | np.ndarray:
 
 
 def matlab_rgb2gray(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
-    """
-    MATLAB ``rgb2gray`` for double input. MATLAB uses the full-precision
-    Rec.601 coefficients below (``rgb2gray.m``: ``T = inv([1 0.956 0.621; 1
-    -0.272 -0.647; 1 -1.106 1.703])``, first row), not the rounded
-    ``[0.2989, 0.5870, 0.1140]``; the rounded set differs by up to ~1e-4.
+    """Convert RGB to grayscale with MATLAB's full-precision coefficients.
+
+    MATLAB ``rgb2gray`` uses the first row of ``inv([1 0.956 0.621; 1 -0.272
+    -0.647; 1 -1.106 1.703])``. The rounded ``[0.2989, 0.5870, 0.1140]`` set
+    differs by up to about ``1e-4``. A 2-D array is returned unchanged.
+
+    Parameters
+    ----------
+    rgb : numpy.ndarray
+        Grayscale ``(H, W)`` or RGB with the channel axis at ``axis``.
+    axis : int, optional
+        Channel axis for RGB input. Default is ``-1``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float64 grayscale image.
+
+    Raises
+    ------
+    ValueError
+        If an array with a channel axis has fewer than 3 channels.
     """
     if rgb.ndim == 2:
         return rgb.astype(np.float64)
@@ -88,32 +147,45 @@ def matlab_rgb2gray(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
     return 0.298936021293775 * r + 0.587043074451121 * g + 0.114020904255103 * b
 
 
-def matlab_graythresh(image: np.ndarray, nbins: int = 256) -> float:
-    """
-    Exact port of MATLAB ``graythresh`` / ``otsuthresh`` for ``double`` images.
+def matlab_graythresh(image: np.ndarray) -> float:
+    """Otsu threshold matching MATLAB ``graythresh`` on a double image.
 
-    MATLAB does ``counts = imhist(im2uint8(I(:)), 256)`` - i.e. one bin per
-    uint8 level after ``round(I * 255)`` - then Otsu on bin indices ``1..256``
-    with ties resolved by averaging the arg-max indices, and returns
-    ``(idx - 1) / 255``. (An earlier version used 256 equal-width bins on
-    ``[0, 1]`` and returned the bin *centre*, which shifted thresholds by up to
-    ~0.002 and changed a few hundred mask pixels.)
+    MATLAB does ``counts = imhist(im2uint8(I(:)), 256)``: one bin per uint8
+    level after rounding ``I * 255``. Otsu then runs on bin indices ``1..256``,
+    ties are the mean of the arg-max indices, and the threshold is
+    ``(idx - 1) / 255``. The bin count is fixed at :data:`_GRAYTHRESH_BINS`
+    because that is the only histogram ``graythresh`` builds.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Double image, typically intensities in ``[0, 1]``.
+
+    Returns
+    -------
+    float
+        Threshold in ``[0, 1]``. ``0.0`` when every between-class variance
+        is NaN or infinite.
+
+    Raises
+    ------
+    ValueError
+        If ``image`` is empty.
     """
-    if nbins != 256:
-        raise ValueError("MATLAB graythresh always uses 256 bins.")
+    nbins = _GRAYTHRESH_BINS
     arr = np.asarray(image, dtype=np.float64).ravel()
     if arr.size == 0:
         raise ValueError("Cannot compute graythresh for empty image.")
     # im2uint8 for double input: clip to [0, 1], scale by 255, round half away
     # from zero (values are non-negative here so np.floor(x + 0.5) matches).
-    levels = np.floor(np.clip(arr, 0.0, 1.0) * 255.0 + 0.5).astype(np.int64)
-    counts = np.bincount(levels, minlength=256).astype(np.float64)
+    levels = np.floor(np.clip(arr, 0.0, 1.0) * (nbins - 1) + 0.5).astype(np.int64)
+    counts = np.bincount(levels, minlength=nbins).astype(np.float64)
     total = counts.sum()
     if total <= 0:
         raise ValueError("Cannot compute graythresh for empty histogram.")
     p = counts / total
     omega = np.cumsum(p)
-    mu = np.cumsum(p * np.arange(1, 257, dtype=np.float64))
+    mu = np.cumsum(p * np.arange(1, nbins + 1, dtype=np.float64))
     mu_t = mu[-1]
     with np.errstate(divide="ignore", invalid="ignore"):
         sigma_b_squared = (mu_t * omega - mu) ** 2 / (omega * (1.0 - omega))
@@ -125,11 +197,29 @@ def matlab_graythresh(image: np.ndarray, nbins: int = 256) -> float:
     if not np.isfinite(maxval):
         return 0.0
     idx = np.mean(np.flatnonzero(sigma_b_squared == maxval)) + 1.0  # 1-based
-    return float((idx - 1.0) / 255.0)
+    return float((idx - 1.0) / (nbins - 1))
 
 
 def matlab_fspecial_gaussian(size: int, sigma: float) -> np.ndarray:
-    """MATLAB ``fspecial('gaussian', size, sigma)`` for scalar ``size`` (square kernel)."""
+    """Square Gaussian kernel matching ``fspecial('gaussian', size, sigma)``.
+
+    Parameters
+    ----------
+    size : int
+        Side length in pixels. Must be at least 1.
+    sigma : float
+        Standard deviation. Must be greater than 0.
+
+    Returns
+    -------
+    numpy.ndarray
+        Kernel of shape ``(size, size)`` that sums to 1.
+
+    Raises
+    ------
+    ValueError
+        If ``size`` or ``sigma`` is out of range.
+    """
     if size < 1:
         raise ValueError(f"Kernel size must be >= 1, got {size}.")
     if sigma <= 0:
@@ -146,11 +236,31 @@ def matlab_imfilter(
     *,
     boundary: str = "zero",
 ) -> np.ndarray:
-    """
-    MATLAB ``imfilter(..., 'corr')`` with ``'symmetric'``-equivalent boundaries.
+    """Correlate ``image`` with ``kernel``, matching MATLAB ``imfilter``.
 
-    ``boundary='zero'``: pad with 0 (default ``imfilter`` padding).
-    ``boundary='replicate'``: ``'replicate'`` edge padding.
+    MATLAB centres an even-sized kernel on the top-left of the two middle
+    samples. SciPy centres it on the bottom-right, so even axes use
+    ``origin=-1``.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Image to filter.
+    kernel : numpy.ndarray
+        Filter kernel. Must have the same number of dimensions as ``image``.
+    boundary : {'zero', 'replicate'}, optional
+        ``'zero'`` pads with 0 (MATLAB's default). ``'replicate'`` repeats
+        the edge pixel. Default is ``'zero'``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Filtered image, float64.
+
+    Raises
+    ------
+    ValueError
+        If the kernel rank does not match the image, or ``boundary`` is unknown.
     """
     img = np.asarray(image, dtype=np.float64)
     k = np.asarray(kernel, dtype=np.float64)
@@ -170,70 +280,19 @@ def matlab_imfilter(
     raise ValueError(f"boundary must be 'zero' or 'replicate', got {boundary!r}")
 
 
-def normalize_array_to_unit_interval(
-    image: np.ndarray,
-    normalization_epsilon: float = 1e-12,
-    raise_on_homogeneous: bool = False,
-) -> np.ndarray:
-    """
-    Normalize an in-memory numeric array to [0, 1] after NaN/Inf cleanup.
+def save_as_uint8_image(path: str | Path, image: np.ndarray) -> None:
+    """Write ``image`` as uint8, matching MATLAB ``imwrite`` on a double image.
+
+    Boolean images become 0 or 255. Integer images are scaled by their own
+    maximum. Floating images are clipped to ``[0, 1]`` and rounded to uint8.
 
     Parameters
     ----------
-    image : np.ndarray
-        Input array.
-    normalization_epsilon : float, default 1e-12
-        Lower bound for denominator stability.
-    raise_on_homogeneous : bool, default False
-        If True, raise for arrays with no dynamic range.
+    path : str or pathlib.Path
+        Destination path.
+    image : numpy.ndarray
+        Image to save.
     """
-    arr = np.asarray(image, dtype=np.float32)
-    arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
-
-    if arr.size == 0:
-        raise ValueError("Cannot normalize an empty array.")
-
-    arr_min = float(arr.min())
-    arr_max = float(arr.max())
-    dynamic = arr_max - arr_min
-    if dynamic <= float(normalization_epsilon):
-        if raise_on_homogeneous:
-            raise ValueError("Cannot normalize homogeneous array.")
-        return np.zeros_like(arr, dtype=np.float32)
-
-    return (arr - arr_min) / max(dynamic, float(normalization_epsilon))
-
-
-def load_and_normalize_image(
-    path: str | Path,
-    normalization_epsilon: float = 1e-12,
-) -> np.ndarray:
-    """Load image from disk and normalize intensities to [0, 1]."""
-    image = io.imread(str(path))
-    original_dtype = image.dtype
-
-    if image.dtype == np.bool_:
-        return image.astype(np.float64)
-
-    image = image.astype(np.float64)
-    if image.size == 0:
-        raise ValueError(f"Opened image at {path} but it is empty.")
-
-    max_val = float(np.nanmax(image))
-    min_val = float(np.nanmin(image))
-    if max_val > 1.0 or min_val < 0.0:
-        if np.issubdtype(original_dtype, np.integer):
-            dtype_max = np.iinfo(original_dtype).max
-            image = image / float(dtype_max)
-        else:
-            dynamic = max(max_val - min_val, float(normalization_epsilon))
-            image = (image - min_val) / dynamic
-
-    return np.clip(image, 0.0, 1.0)
-
-
-def save_as_uint8_image(path: str | Path, image: np.ndarray) -> None:
-    """Save image to disk as uint8, normalizing/clipping numeric arrays to [0, 1]."""
     arr = image
 
     if arr.dtype == np.bool_:
@@ -251,7 +310,28 @@ def save_as_uint8_image(path: str | Path, image: np.ndarray) -> None:
 
 
 def ensure_rgb(image: np.ndarray, axis: int = 2) -> np.ndarray:
-    """Ensure image is RGB with channel-last layout and float64 dtype."""
+    """Return a channel-last float64 RGB image.
+
+    A grayscale image is stacked into three identical channels. Extra channels
+    beyond the first three are dropped.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Grayscale ``(H, W)`` or multichannel image.
+    axis : int, optional
+        Channel axis of a multichannel input. Default is ``2``.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(H, W, 3)`` float64.
+
+    Raises
+    ------
+    ValueError
+        If ``image`` is neither 2-D nor RGB.
+    """
     arr = image
     if arr.ndim == 2:
         return np.dstack([arr, arr, arr]).astype(np.float64)
@@ -263,7 +343,28 @@ def ensure_rgb(image: np.ndarray, axis: int = 2) -> np.ndarray:
 
 
 def ensure_grayscale(image: np.ndarray, axis: int = 2) -> np.ndarray:
-    """Return a grayscale float64 image; RGB input is converted, 2D input is cast."""
+    """Return a 2-D float64 image.
+
+    RGB input is converted with ``skimage.color.rgb2gray``. A 2-D input is
+    only cast.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Grayscale or RGB image.
+    axis : int, optional
+        Channel axis when ``image`` is RGB. Default is ``2``.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(H, W)`` float64.
+
+    Raises
+    ------
+    ValueError
+        If ``image`` is neither 2-D nor RGB.
+    """
     # TODO: remove unnecessary casts
     arr = image
     if arr.ndim == 2:
@@ -278,18 +379,23 @@ def ensure_grayscale(image: np.ndarray, axis: int = 2) -> np.ndarray:
 def resize_like(
     image: np.ndarray,
     out_shape: tuple[int, int],
-    *,
-    order: int = 3,
-    anti_aliasing: bool | None = None,
 ) -> np.ndarray:
-    """
-    Resize image to target (rows, cols) while preserving range.
+    """Resize ``image`` to ``(rows, cols)`` with MATLAB bicubic ``imresize``.
 
-    Uses MATLAB-compatible bicubic (keys cubic) via :func:`matlab_imresize` for
-    parity with ``BDcreation_reg2.m`` / ``BDcreationHE2.m``. ``order`` and
-    ``anti_aliasing`` are accepted for API compatibility but ignored.
+    An image that is already the requested shape is copied and returned.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        ``(H, W)`` or ``(H, W, C)`` array.
+    out_shape : tuple of int
+        Target ``(rows, cols)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Resized image. The intensity range is not renormalized.
     """
-    del order, anti_aliasing  # MATLAB path is fixed; kept for call-site compatibility
     if image.shape[:2] == out_shape:
         return image.copy()
     arr = np.asarray(image, dtype=np.float64)
@@ -298,26 +404,28 @@ def resize_like(
     return matlab_imresize(arr, output_shape=(out_shape[0], out_shape[1]), method="bicubic")
 
 
-def prepare_he_image(he: np.ndarray, pixel_per_micron: float) -> tuple[np.ndarray, float]:
-    """MATLAB-compatible HE scaling cap: if ppm > 2, resize by 2/ppm and set ppm=2."""
-    pix = float(pixel_per_micron)
-    he_rgb = ensure_rgb(he)
-    if pix > 2.0:
-        target_rows = int(round(he_rgb.shape[0] * 2.0 / pix))
-        target_cols = int(round(he_rgb.shape[1] * 2.0 / pix))
-        he_rgb = resize_like(he_rgb, (target_rows, target_cols))
-        pix = 2.0
-    return he_rgb, pix
-
-
 def matlab_std_std_2d(channel: np.ndarray) -> float:
-    """
-    MATLAB ``std(std(r))`` for a 2-D channel image.
+    """Nested sample standard deviation, matching MATLAB ``std(std(channel))``.
 
-    In MATLAB, ``std(r)`` for a matrix is the standard deviation along rows
-    (one value per column); the outer ``std`` reduces that vector to a scalar.
-    This differs from ``std(r(:))`` (global standard deviation) and matches
-    ``BDcreation_reg2.m`` / ``BDcreationHE2.m``.
+    MATLAB ``std`` of a matrix is one value per column. The outer ``std``
+    reduces that vector to a scalar. That is not the same as ``std`` of the
+    flattened image, and it is what ``BDcreation_reg2`` / ``BDcreationHE2``
+    use for ``imadjust``.
+
+    Parameters
+    ----------
+    channel : numpy.ndarray
+        One 2-D color channel.
+
+    Returns
+    -------
+    float
+        Nested sample standard deviation. ``0.0`` for an empty channel.
+
+    Raises
+    ------
+    ValueError
+        If ``channel`` is not 2-D.
     """
     if channel.ndim != 2:
         raise ValueError(f"Expected 2-D channel, got shape {channel.shape}.")
@@ -333,11 +441,27 @@ def matlab_std_std_2d(channel: np.ndarray) -> float:
 
 
 def adjust_rgb_mean_std(rgb: np.ndarray, axis: int = 2) -> np.ndarray:
-    """
-    Reproduce MATLAB ``imadjust`` with per-channel high input at ``mean + 2*std(std(r))``.
+    """Stretch each RGB channel the way CurveAlign's ``imadjust`` call does.
 
-    Matches ``imadjust(RGB,[0 0 0; HIGH_IN],[0 0 0; 1 1 1])`` in the CurveAlign
-    scripts (per-channel ``HIGH_IN`` capped at 1.0).
+    The high input for a channel is ``mean + 2 * std(std(channel))``, capped
+    at 1. That matches ``imadjust(RGB, [0 0 0; HIGH_IN], [0 0 0; 1 1 1])``.
+
+    Parameters
+    ----------
+    rgb : numpy.ndarray
+        Float RGB image.
+    axis : int, optional
+        Channel axis. Default is ``2``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Channel-last float64 RGB in ``[0, 1]``.
+
+    Raises
+    ------
+    ValueError
+        If ``rgb`` does not have three channels.
     """
     rgb_arr = np.moveaxis(rgb, axis, -1).astype(np.float64)
     if rgb_arr.ndim != 3 or rgb_arr.shape[-1] < 3:
@@ -368,9 +492,32 @@ def prepare_registration_pair(
         else: fixedSHG = SHG
         RGB = imresize(HE, size(fixedSHG))
 
-    The working resolution is therefore **defined by SHG** after the ppm cap,
-    then H&E is forced to that grid. This differs from ``prepare_he_image``,
-    which only resamples HE (tumor pipeline).
+    The working resolution is therefore defined by SHG after the ppm cap,
+    then H&E is forced onto that grid. Tumor annotation resamples H&E on its
+    own in :func:`pycurvelets._he_bdc_annotation.prepare_he2_image`.
+
+    Parameters
+    ----------
+    he_rgb : numpy.ndarray
+        H&E image, grayscale or RGB.
+    shg_gray : numpy.ndarray
+        SHG image. A 3-channel array is converted to grayscale first.
+    pixel_per_micron : float
+        Native resolution of the pair.
+
+    Returns
+    -------
+    he_scaled : numpy.ndarray
+        H&E resized to the working SHG grid.
+    fixed_shg : numpy.ndarray
+        SHG on that grid.
+    pix : float
+        Working pixels per micron (``2.0`` when the input was coarser).
+
+    Raises
+    ------
+    ValueError
+        If SHG is not a 2-D image after grayscale conversion.
     """
     pix = float(pixel_per_micron)
     he_rgb = ensure_rgb(he_rgb)
@@ -396,7 +543,27 @@ def prepare_registration_pair(
 
 
 def remove_small_components(mask: np.ndarray, min_size: int) -> np.ndarray:
-    """Remove connected components smaller than min_size using 8-connectivity."""
+    """Drop 8-connected components smaller than ``min_size``.
+
+    This is the boolean part of MATLAB ``bwareaopen``.
+
+    Parameters
+    ----------
+    mask : numpy.ndarray
+        Boolean or numeric mask. Nonzero pixels are foreground.
+    min_size : int
+        Minimum component area in pixels. Values below 1 are treated as 1.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean mask of the components that were kept.
+
+    Raises
+    ------
+    ValueError
+        If ``mask`` is empty.
+    """
     min_size = max(int(min_size), 1)
     if mask.size == 0:
         raise ValueError("Mask is empty; cannot remove small components.")
@@ -408,7 +575,18 @@ def remove_small_components(mask: np.ndarray, min_size: int) -> np.ndarray:
 
 
 def disk_se(radius: float) -> np.ndarray:
-    """Create a disk structuring element; radius uses :func:`matlab_round` like MATLAB ``strel``."""
+    """Disk structuring element with MATLAB ``round`` on the radius.
+
+    Parameters
+    ----------
+    radius : float
+        Disk radius in pixels. A non-positive radius becomes a 1x1 element.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean neighborhood.
+    """
     r = max(int(matlab_round(radius)), 0)
     if r <= 0:
         return np.ones((1, 1), dtype=bool)
@@ -416,7 +594,23 @@ def disk_se(radius: float) -> np.ndarray:
 
 
 def rgb_threshold_masks_uint8(s_u8: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """BDcreation_reg.m RGB cuts on decorrstretched uint8. Returns (nuclei, eosin)."""
+    """Apply the ``BDcreation_reg.m`` RGB cuts to a decorrstretched uint8 image.
+
+    Nuclei are ``R < 120``, ``G > 150``, ``B < 120``. Eosin is ``R > 200``,
+    ``G < 100``, ``B > 100``. The comparisons are exclusive, as in the script.
+
+    Parameters
+    ----------
+    s_u8 : numpy.ndarray
+        ``(H, W, 3)`` uint8 RGB.
+
+    Returns
+    -------
+    nuclei : numpy.ndarray
+        Boolean nuclei mask.
+    eosin : numpy.ndarray
+        Boolean eosin mask.
+    """
     arr = np.asarray(s_u8)
     r = arr[..., 0]
     g = arr[..., 1]
@@ -430,11 +624,21 @@ def make_nuclei_mask_rgb(
     he_decorr_rgb: np.ndarray,
     pix_per_mic: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Nuclei mask from BDcreation_reg RGB thresholds on decorrelated RGB.
+    """Nuclei mask from the ``BDcreation_reg`` RGB cuts.
 
-    Returns ``(nuclei_opened, masked_nuclei_rgb)`` analogous to
-    :func:`make_nuclei_mask`.
+    Parameters
+    ----------
+    he_decorr_rgb : numpy.ndarray
+        Decorrelation-stretched H&E in ``[0, 1]``.
+    pix_per_mic : float
+        Working pixels per micron. The opening radius is ``ceil(ppm / 2)``.
+
+    Returns
+    -------
+    nuclei_opened : numpy.ndarray
+        Boolean mask after area opening and morphological opening.
+    masked : numpy.ndarray
+        ``he_decorr_rgb`` with non-nuclei pixels set to 0.
     """
     u8 = np.round(np.clip(he_decorr_rgb, 0.0, 1.0) * 255.0).astype(np.uint8)
     nuclei, _ = rgb_threshold_masks_uint8(u8)
@@ -450,11 +654,22 @@ def make_ecm_mask_rgb(
     he_decorr_rgb: np.ndarray,
     pix_per_mic: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    ECM candidate from BDcreation_reg RGB eosin thresholds.
+    """Grayscale ECM image from the ``BDcreation_reg`` eosin RGB cuts.
 
-    Returns ``(ecm_gray, eosin_mask)``. Use when RGB cuts beat the HSV mask
-    on a given slide (``ecm_method="rgb"`` on pipeline ``reg2``).
+    Parameters
+    ----------
+    he_decorr_rgb : numpy.ndarray
+        Decorrelation-stretched H&E in ``[0, 1]``.
+    pix_per_mic : float
+        Working pixels per micron. When positive, the eosin mask is opened
+        with a disk of radius ``ceil(ppm / 2)``.
+
+    Returns
+    -------
+    ecm_gray : numpy.ndarray
+        Float grayscale of the eosin pixels; other pixels are 0.
+    eosin : numpy.ndarray
+        Boolean eosin mask.
     """
     u8 = np.round(np.clip(he_decorr_rgb, 0.0, 1.0) * 255.0).astype(np.uint8)
     _, eosin = rgb_threshold_masks_uint8(u8)
@@ -471,16 +686,35 @@ def make_ecm_mask_rgb(
 def make_nuclei_mask(
     he_rgb_adjusted: np.ndarray,
     pix_per_mic: float,
-    saturation_channel: int = 1,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Generate nuclei mask and masked nuclei RGB image from adjusted HE."""
+    """Build the HSV nuclei mask used by ``BDcreation_reg2``.
+
+    Pixels in the blue-purple hue band whose saturation is at least the Otsu
+    threshold are kept, small objects are removed, and the mask is opened
+    with a disk of radius ``ceil(ppm / 2)``.
+
+    Parameters
+    ----------
+    he_rgb_adjusted : numpy.ndarray
+        Contrast-adjusted H&E, float RGB in ``[0, 1]``.
+    pix_per_mic : float
+        Working pixels per micron.
+
+    Returns
+    -------
+    nuclei_opened : numpy.ndarray
+        Boolean mask after area opening and morphological opening.
+    masked : numpy.ndarray
+        ``he_rgb_adjusted`` with non-nuclei pixels set to 0.
+    """
     hsv = matlab_rgb2hsv(he_rgb_adjusted)
-    sat_thresh = matlab_graythresh(hsv[..., saturation_channel])
+    saturation = hsv[..., 1]
+    sat_thresh = matlab_graythresh(saturation)
 
     nuclei_raw = (
         (hsv[..., 0] >= NUCLEI_HUE_MIN)
         & (hsv[..., 0] <= NUCLEI_HUE_MAX)
-        & (hsv[..., saturation_channel] >= sat_thresh)
+        & (saturation >= sat_thresh)
     )
     # 150 px minimum area is copied from the original MATLAB scripts.
     nuclei_raw = remove_small_components(nuclei_raw, NUCLEI_MIN_AREA)
@@ -493,39 +727,61 @@ def make_nuclei_mask(
 
 def make_collagen_mask(
     he_rgb_adjusted: np.ndarray,
-    pix_per_mic: float,
-    enhanced_postprocessing: bool = False,
-    saturation_channel: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Generate collagen mask and non-background mask from adjusted HE."""
+    """Build the HSV collagen mask used by ``BDcreation_reg2``.
+
+    Collagen is the wrapped hue band (pink/red) at or above the Otsu
+    saturation threshold, after dropping components smaller than 100 pixels.
+    The extra dilation used by tumor annotation is not part of registration.
+
+    Parameters
+    ----------
+    he_rgb_adjusted : numpy.ndarray
+        Contrast-adjusted H&E, float RGB in ``[0, 1]``.
+
+    Returns
+    -------
+    collagen : numpy.ndarray
+        Boolean collagen mask.
+    no_background : numpy.ndarray
+        Boolean mask of pixels at or above the saturation threshold.
+    sat_thresh : float
+        Otsu threshold applied to the saturation channel.
+    """
     hsv = matlab_rgb2hsv(he_rgb_adjusted)
-    sat_thresh = matlab_graythresh(hsv[..., saturation_channel])
+    saturation = hsv[..., 1]
+    sat_thresh = matlab_graythresh(saturation)
 
     collagen = (
         ((hsv[..., 0] >= COLLAGEN_HUE_MIN) | (hsv[..., 0] <= COLLAGEN_HUE_MAX))
-        & (hsv[..., saturation_channel] >= sat_thresh)
+        & (saturation >= sat_thresh)
     )
     # 100 px minimum area and the wrapped hue band come from MATLAB defaults.
     collagen = remove_small_components(collagen, COLLAGEN_MIN_AREA)
 
-    if enhanced_postprocessing:
-        # Morphology radii are MATLAB-derived heuristics in units of pixel/micron.
-        # BDcreationHE2.m: strel('disk', ceil(ppm)) then strel('disk', round(3*ppm)).
-        collagen = morphology.dilation(collagen, disk_se(np.ceil(pix_per_mic)))
-        collagen = morphology.closing(
-            collagen, disk_se(float(matlab_round(3.0 * pix_per_mic)))
-        )
-
-    no_background = hsv[..., saturation_channel] >= sat_thresh
+    no_background = saturation >= sat_thresh
     return collagen.astype(bool), no_background.astype(bool), sat_thresh
 
 
 def decorrelation_stretch(rgb: np.ndarray, tol: float = 0.01) -> np.ndarray:
-    """
-    Approximate MATLAB ``decorrstretch`` for RGB images in ``[0, 1]``.
+    """Approximate MATLAB ``decorrstretch`` for RGB in ``[0, 1]``.
 
-    A PCA whitening transform decorrelates channels, then each channel is
-    contrast-stretched using percentile clipping controlled by ``tol``.
+    Channels are whitened with PCA, then each channel is stretched between
+    the ``tol`` and ``1 - tol`` percentiles. The bit-exact uint8 port used by
+    reg1 and ``BDcreationHE`` is
+    :func:`pycurvelets._he_bdc_reg1.matlab_decorrstretch_uint8`.
+
+    Parameters
+    ----------
+    rgb : numpy.ndarray
+        RGB image.
+    tol : float, optional
+        Fraction of pixels clipped at each end of a channel. Default is 0.01.
+
+    Returns
+    -------
+    numpy.ndarray
+        Channel-last float64 RGB in ``[0, 1]``.
     """
     arr = ensure_rgb(np.asarray(rgb, dtype=np.float64))
     arr = np.clip(arr, 0.0, 1.0)
@@ -599,7 +855,7 @@ def matlab_imwarp_bilinear(
       **no** blending with the fill value at the border. This was verified
       against ``images.internal.interp2d(..., 'linear', fill)`` with
       ``SmoothEdges=false`` (imwarp's default) on a dense probe grid
-      (``tests/matlab_parity/probe_interp2d.m``): inside samples never touch
+      (``archive/matlab_parity/probe_interp2d.m``): inside samples never touch
       the fill, samples in the half-pixel band ``[0.5, 1)`` are pure fill.
     - Padding with ``fill_value`` below only guards the ``x == W_in - 1``
       edge, where the right neighbour has weight exactly 0.
@@ -698,30 +954,37 @@ def matlab_imwarp_bilinear(
     return np.stack(out_channels, axis=-1).astype(np.float64)
 
 
-def gaussian_filter_with_size_hint(
+def gaussian_filter_matlab_like(
     image: np.ndarray,
     sigma: float,
-    kernel_size: int | None = None,
+    kernel_size: int,
     *,
     boundary: str = "zero",
 ) -> np.ndarray:
-    """
-    MATLAB ``fspecial('gaussian', kernel_size, sigma)`` + ``imfilter`` (correlation).
+    """Gaussian filter matching ``fspecial`` plus ``imfilter``.
 
-    ``boundary='zero'`` for ``BDcreation_reg2`` nuclei filtering; ``'replicate'`` for
-    ``BDcreationHE2`` final Gaussian blur.
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Image to blur.
+    sigma : float
+        Gaussian standard deviation passed to ``fspecial``.
+    kernel_size : int
+        Square kernel side length. MATLAB always passes this explicitly
+        (``floor(ppm)`` for nuclei, ``101`` for the HE2 mask).
+    boundary : {'zero', 'replicate'}, optional
+        Passed to :func:`matlab_imfilter`. Registration uses ``'zero'``.
+        The HE2 mask uses ``'replicate'``. Default is ``'zero'``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Filtered float64 image.
     """
-    if kernel_size is None:
-        raise ValueError("kernel_size is required for MATLAB-compatible Gaussian filtering.")
     sz = max(int(kernel_size), 1)
     h = matlab_fspecial_gaussian(sz, float(sigma))
     return matlab_imfilter(image.astype(np.float64), h, boundary=boundary)
 
 
-# Backward-compatible aliases for current call sites.
-load_image_as_float = load_and_normalize_image
+# Name used by the annotation writer.
 save_image_uint8 = save_as_uint8_image
-to_grayscale = ensure_grayscale
-matlab_area_open = remove_small_components
-safe_otsu = matlab_graythresh
-gaussian_filter_matlab_like = gaussian_filter_with_size_hint

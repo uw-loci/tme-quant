@@ -29,7 +29,7 @@ _WHEEL_REGISTRATION_MODULES = (
 
 _SDIST_PRUNED = (
     "tests/test_for_shg_he_registration_BDcreation",
-    "tests/matlab_parity",
+    "archive",
     "tests/artifacts",
 )
 

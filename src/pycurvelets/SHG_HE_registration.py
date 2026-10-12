@@ -71,17 +71,24 @@ from ._matlab_imresize import matlab_imresize
 from ._registration_quality import compute_shg_alignment_metrics
 
 
-def _require_matlab_method(method: str | None) -> str:
-    resolved = (method or "matlab").lower()
-    if resolved != "matlab":
-        raise ValueError(
-            f"registration_method={method!r} is not supported; only the ITK v3 "
-            "(1+1)-ES port ('matlab') remains."
-        )
-    return resolved
-
-
 def _require_ecm_method(ecm_method: str | None) -> str:
+    """Return ``'hsv'`` or ``'rgb'``, the two collagen masks reg2 can build.
+
+    Parameters
+    ----------
+    ecm_method : str or None
+        Requested mask. ``None`` means ``'hsv'`` (``BDcreation_reg2``).
+
+    Returns
+    -------
+    str
+        ``'hsv'`` or ``'rgb'``.
+
+    Raises
+    ------
+    ValueError
+        If ``ecm_method`` is something else.
+    """
     resolved = (ecm_method or "hsv").lower()
     if resolved not in ("hsv", "rgb"):
         raise ValueError(
@@ -91,25 +98,38 @@ def _require_ecm_method(ecm_method: str | None) -> str:
     return resolved
 
 
-# Kept so existing test imports still resolve.
-_require_hsv_ecm = _require_ecm_method
-
-
 @dataclass
 class SHGHERegistrationParameters:
+    """Inputs for :func:`shg_he_registration`.
+
+    Attributes
+    ----------
+    HEfilepath : str
+        Directory that contains the H&E TIFF.
+    HEfilename : str
+        File name of the H&E image. The SHG image has the same name under
+        ``SHGfilepath``.
+    pixelpermicron : float
+        Native resolution of the pair, in pixels per micron.
+    SHGfilepath : str
+        Directory that contains the SHG TIFF.
+    ecm_method : {'hsv', 'rgb'}, optional
+        Collagen mask for ``pipeline='reg2'``. ``'hsv'`` is ``BDcreation_reg2``.
+        ``'rgb'`` uses the ``BDcreation_reg`` RGB cuts. Ignored for ``'reg1'``.
+        Default is ``'hsv'``.
+    pipeline : {'reg2', 'reg1'}, optional
+        ``'reg2'`` is ``BDcreation_reg2.m``. ``'reg1'`` is ``BDcreation_reg.m``.
+        Default is ``'reg2'``.
+    kmeans_seed : int, optional
+        Seed for the reg1 k-means replay. Default matches the committed goldens.
+    """
     HEfilepath: str
     HEfilename: str
     pixelpermicron: float
     SHGfilepath: str
-    areaThreshold: float | None = None
-    # Only the ITK v3 (1+1)-ES port of MATLAB imregtform is implemented.
-    # The field is kept so existing call sites that pass "matlab" still work.
-    registration_method: str = "matlab"
     # reg2 only: "hsv" (BDcreation_reg2, default) or "rgb" (BDcreation_reg
-    # RGB cuts on decorrstretched HE). RGB sometimes isolates collagen
-    # better; the registrar is still ITK v3. Ignored when pipeline="reg1".
+    # RGB cuts on decorrstretched HE). Ignored when pipeline="reg1".
     ecm_method: str = "hsv"
-    random_state: int = 0
     # "reg2" (default): BDcreation_reg2.m.
     # "reg1"          : BDcreation_reg.m (decorrstretch + RGB cuts + LAB
     #                   k-means; ecm_method is ignored).
@@ -121,6 +141,17 @@ class SHGHERegistrationParameters:
 def _to_params(
     params: SHGHERegistrationParameters | dict[str, Any],
 ) -> SHGHERegistrationParameters:
+    """Accept a parameter object or a dict of the same fields.
+
+    Parameters
+    ----------
+    params : SHGHERegistrationParameters or dict
+        Registration inputs.
+
+    Returns
+    -------
+    SHGHERegistrationParameters
+    """
     if isinstance(params, SHGHERegistrationParameters):
         return params
     return SHGHERegistrationParameters(**params)
@@ -129,9 +160,20 @@ def _to_params(
 def _affine_fixed_to_moving_from_forward(
     forward_2x3: np.ndarray,
 ) -> np.ndarray:
-    """
-    Invert a 2x3 forward affine ``p_out = M @ p_in + t`` into the 3x3
-    fixed->moving matrix accepted by the warp helper.
+    """Invert a 2x3 forward affine into the matrix the warp helper expects.
+
+    The forward map is ``p_out = M @ p_in + t``. The returned 3x3 matrix maps
+    fixed (output) coordinates back to moving (input) coordinates.
+
+    Parameters
+    ----------
+    forward_2x3 : numpy.ndarray
+        Affine of shape ``(2, 3)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(3, 3)`` fixed-to-moving matrix.
     """
     M = np.asarray(forward_2x3[:, :2], dtype=np.float64)
     t = np.asarray(forward_2x3[:, 2], dtype=np.float64)
@@ -147,7 +189,23 @@ def _refine_nuclei_filled(
     masked_nuclei_image: np.ndarray,
     pixpermic: float,
 ) -> np.ndarray:
-    """Shared nuclei cleanup used before collagen/ECM isolation."""
+    """Fill nuclei holes the way ``BDcreation_reg2`` does before collagen is kept.
+
+    The nuclei image is blurred, thresholded, opened by area, dilated, and
+    hole-filled. Collagen pixels that fall inside this mask are discarded.
+
+    Parameters
+    ----------
+    masked_nuclei_image : numpy.ndarray
+        RGB nuclei image with the background already zeroed.
+    pixpermic : float
+        Working pixels per micron. Sets the blur kernel and dilation radius.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean filled nuclei mask.
+    """
     gray_nuclei = matlab_rgb2gray(masked_nuclei_image)
     ksize = max(1, int(np.floor(pixpermic)))
     nuclei_filtered = gaussian_filter_matlab_like(
@@ -167,14 +225,32 @@ def _build_he_moving_hsv(
     he_adjusted: np.ndarray,
     pixpermic: float,
 ) -> tuple[np.ndarray, str, dict[str, Any]]:
-    """BDcreation_reg2 HSV collagen mask (binary moving image)."""
+    """Build the binary collagen image used by ``BDcreation_reg2``.
+
+    If that mask covers less than 2% of the image, and inverted grayscale
+    tissue covers more, the fallback grayscale image is used instead.
+
+    Parameters
+    ----------
+    he_adjusted : numpy.ndarray
+        Contrast-adjusted H&E on the working grid.
+    pixpermic : float
+        Working pixels per micron.
+
+    Returns
+    -------
+    he_moving : numpy.ndarray
+        2-D moving image.
+    mode : str
+        ``'hsv'`` or ``'hsv->gray_fallback'``.
+    extras : dict
+        ``mask_coverage`` of the image that was returned.
+    """
     extras: dict[str, Any] = {}
     _MIN_MASK_COVERAGE = 0.02
 
     _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask(he_adjusted, pixpermic)
-    bw_collagen, _bw_no_background, _sat_thresh = make_collagen_mask(
-        he_adjusted, pixpermic, enhanced_postprocessing=False
-    )
+    bw_collagen, _bw_no_background, _sat_thresh = make_collagen_mask(he_adjusted)
     bw_nuclei_filled = _refine_nuclei_filled(masked_nuclei_image, pixpermic)
     he_collagen_bw = bw_collagen & (~bw_nuclei_filled)
     he_collagen_bw = remove_small_components(
@@ -200,7 +276,24 @@ def _build_he_moving_rgb(
     he_adjusted: np.ndarray,
     pixpermic: float,
 ) -> tuple[np.ndarray, str, dict[str, Any]]:
-    """BDcreation_reg RGB cuts on decorrstretched HE (continuous moving image)."""
+    """Build the continuous collagen image from the ``BDcreation_reg`` RGB cuts.
+
+    Parameters
+    ----------
+    he_adjusted : numpy.ndarray
+        Contrast-adjusted H&E on the working grid.
+    pixpermic : float
+        Working pixels per micron.
+
+    Returns
+    -------
+    he_moving : numpy.ndarray
+        2-D grayscale moving image. Nuclei pixels are zero.
+    mode : str
+        Always ``'rgb'``.
+    extras : dict
+        ``mask_coverage`` of pixels above 0.01.
+    """
     he_decorr = decorrelation_stretch(he_adjusted, tol=0.01)
     _bw_nuclei_opened, masked_nuclei_image = make_nuclei_mask_rgb(he_decorr, pixpermic)
     he_collagen_gray, _bw_collagen = make_ecm_mask_rgb(he_decorr, pixpermic)
@@ -216,15 +309,30 @@ def _build_he_moving_rgb(
 
 
 def _build_he_moving(
-    he_scaled: np.ndarray,
     he_adjusted: np.ndarray,
-    he_decorr: np.ndarray,
     pixpermic: float,
     ecm_mode: str,
-    random_state: int = 0,
 ) -> tuple[np.ndarray, str, dict[str, Any]]:
-    """Dispatch HSV / RGB moving-image builders. Extra args kept for callers."""
-    del he_scaled, he_decorr, random_state
+    """Build the collagen image that is registered to SHG.
+
+    Parameters
+    ----------
+    he_adjusted : numpy.ndarray
+        Contrast-adjusted H&E on the working grid.
+    pixpermic : float
+        Working pixels per micron.
+    ecm_mode : str
+        ``'hsv'`` or ``'rgb'``.
+
+    Returns
+    -------
+    he_moving : numpy.ndarray
+        2-D moving image.
+    mode : str
+        ``'hsv'``, ``'hsv->gray_fallback'``, or ``'rgb'``.
+    extras : dict
+        Coverage and other debug values.
+    """
     mode = _require_ecm_method(ecm_mode)
     if mode == "rgb":
         return _build_he_moving_rgb(he_adjusted, pixpermic)
@@ -235,21 +343,28 @@ def _register_matlab_itk_v3(
     he_moving: np.ndarray,
     fixed: np.ndarray,
 ) -> tuple[np.ndarray, dict[str, Any]]:
-    """
-    MATLAB-parity registration: ITK v3 framework configured exactly like
-    ``imregtform`` (see :mod:`pycurvelets._itk_v3_matlab_engine`).
+    """Run the ITK v3 ``imregtform`` port on one moving/fixed pair.
+
+    Parameters
+    ----------
+    he_moving : numpy.ndarray
+        Collagen moving image.
+    fixed : numpy.ndarray
+        SHG fixed image, same spatial size as ``he_moving``.
+
+    Returns
+    -------
+    forward_2x3 : numpy.ndarray
+        ``(2, 3)`` moving-to-fixed affine in 0-based pixel coordinates.
+        Identity when the moving image is all zeros.
+    debug : dict
+        Optimizer trace from the engine, or ``matlab_degenerate_moving``.
     """
     from ._itk_v3_matlab_engine import (
         DEFAULT_SEED,
-        has_itk,
         register_bdcreation_reg2_matlab,
     )
 
-    if not has_itk():
-        raise RuntimeError(
-            "SHG–HE registration requires the 'itk' package "
-            "(pip install itk; it is a declared dependency of tme-quant)."
-        )
     if not np.any(he_moving > 0):
         forward_2x3 = np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float64)
         return forward_2x3, {"matlab_degenerate_moving": True}
@@ -265,7 +380,22 @@ def _score_forward_vs_shg(
     fixed: np.ndarray,
     forward_2x3: np.ndarray,
 ) -> dict[str, Any]:
-    """Warp moving image with ``forward_2x3`` and score against SHG."""
+    """Warp the moving image and score it against the SHG.
+
+    Parameters
+    ----------
+    he_moving : numpy.ndarray
+        Collagen image that was registered.
+    fixed : numpy.ndarray
+        SHG image on the same grid.
+    forward_2x3 : numpy.ndarray
+        ``(2, 3)`` moving-to-fixed affine.
+
+    Returns
+    -------
+    dict
+        Mutual information, normalized correlation, and the transform summary.
+    """
     A_inv = _affine_fixed_to_moving_from_forward(forward_2x3)
     warped = matlab_imwarp_bilinear(
         he_moving.astype(np.float64),
@@ -284,10 +414,32 @@ def _reg1_core(
     pixelpermicron: float,
     kmeans_seed: int,
 ) -> tuple[np.ndarray, str, dict[str, Any]]:
-    """
-    ``BDcreation_reg.m`` (reg1). Preprocessing in :func:`bdcreation_reg1_preprocess`;
-    registration is the ITK v3 port, fed ``double(fixedSHG)`` in 0..255 exactly
-    as ``imregtform`` is.
+    """Run ``BDcreation_reg.m``: decorrstretch, RGB cuts, k-means, then ITK.
+
+    Parameters
+    ----------
+    he_path : str
+        Path to the uint8 H&E TIFF.
+    shg_path : str
+        Path to the matching SHG TIFF.
+    pixelpermicron : float
+        Native pixels per micron. reg1 does not cap this at 2.
+    kmeans_seed : int
+        Seed that replays MATLAB ``rng(seed, 'twister')`` before ``kmeans``.
+
+    Returns
+    -------
+    registered_img : numpy.ndarray
+        Float RGB in ``[0, 1]`` on the original SHG grid.
+    backend : str
+        Always ``'itk_v3_matlab_parity'``.
+    debug : dict
+        Preprocessing, transform, and alignment scores.
+
+    Raises
+    ------
+    TypeError
+        If the H&E TIFF is not uint8.
     """
     he_u8 = io.imread(he_path)
     shg_raw = io.imread(shg_path)
@@ -301,7 +453,6 @@ def _reg1_core(
 
     debug: dict[str, Any] = {
         "pipeline": "reg1",
-        "registration_method_requested": "matlab",
         "kmeans_seed": int(kmeans_seed),
         "kmeans": pre["kmeans_debug"],
         "collagen_cluster": pre["collagen_cluster"],
@@ -335,27 +486,42 @@ def _shg_he_registration_core(
     he_filename: str,
     shg_filepath: str,
     pixelpermicron: float,
-    registration_method: str = "matlab",
     ecm_method: str = "hsv",
     pipeline: str = "reg2",
     kmeans_seed: int = DEFAULT_KMEANS_SEED,
 ) -> tuple[np.ndarray, str, dict[str, Any]]:
-    """
-    Core registration (same algorithm description as the module docstring).
+    """Register one H&E/SHG pair and return the image plus debug data.
+
+    Parameters
+    ----------
+    he_filepath, he_filename, shg_filepath : str
+        Locate ``HE/<filename>`` and ``SHG/<filename>``.
+    pixelpermicron : float
+        Native resolution.
+    ecm_method : str, optional
+        ``'hsv'`` or ``'rgb'`` for ``pipeline='reg2'``. Default is ``'hsv'``.
+    pipeline : str, optional
+        ``'reg2'`` or ``'reg1'``. Default is ``'reg2'``.
+    kmeans_seed : int, optional
+        Used only by ``'reg1'``.
 
     Returns
     -------
-    registered_img
-        Float RGB in ``[0, 1]``, shape matching original SHG (H, W, 3).
-    backend
-        Optimizer backend label.
-    debug
-        Intermediate registration parameters (transform matrices, SHG scores).
+    registered_img : numpy.ndarray
+        Float RGB in ``[0, 1]``, shape ``(H, W, 3)`` of the original SHG.
+    backend : str
+        ``'itk_v3_matlab_parity'``.
+    debug : dict
+        Transform, mask coverage, and SHG alignment scores.
+
+    Raises
+    ------
+    ValueError
+        If ``pipeline`` is not ``'reg1'`` or ``'reg2'``.
     """
     he_path = os.path.join(he_filepath, he_filename)
     shg_path = os.path.join(shg_filepath, he_filename)
 
-    _require_matlab_method(registration_method)
     pipe = (pipeline or "reg2").lower()
     if pipe == "reg1":
         return _reg1_core(he_path, shg_path, pixelpermicron, kmeans_seed)
@@ -380,7 +546,6 @@ def _shg_he_registration_core(
         fixed = matlab_rgb2gray(fixed)
 
     debug: dict[str, Any] = {
-        "registration_method_requested": "matlab",
         "ecm_method_requested": ecm_requested,
         "pixpermic_working": float(pixpermic),
         "fixed_shape": tuple(int(x) for x in fixed.shape),
@@ -434,23 +599,41 @@ def shg_he_registration(
     params: SHGHERegistrationParameters | dict[str, Any],
     save_output: bool = True,
     return_debug: bool = False,
-    include_debug_images: bool = True,
 ) -> np.ndarray | tuple[np.ndarray, dict[str, Any]]:
-    """
-    Register H&E to SHG (Python port of MATLAB ``BDcreation_reg2.m`` /
-    ``BDcreation_reg.m``, selected by ``params.pipeline``).
+    """Register an H&E image onto its SHG partner.
 
-    Writes ``HE_registered/<HEfilename>`` under ``HEfilepath`` when
-    ``save_output`` is True, and prints the absolute output path to stdout.
+    ``params.pipeline`` selects the MATLAB script being reproduced:
+    ``'reg2'`` is ``BDcreation_reg2.m`` and ``'reg1'`` is ``BDcreation_reg.m``.
+    The registrar is the ITK v3 (1+1)-ES port of ``imregtform``.
+
+    When ``save_output`` is true, the uint8 result is written to
+    ``<HEfilepath>/HE_registered/<HEfilename>`` and that directory is printed.
+
+    Parameters
+    ----------
+    params : SHGHERegistrationParameters or dict
+        Paths, resolution, pipeline, and (for reg2) the collagen mask.
+    save_output : bool, optional
+        Write the registered TIFF. Default is true.
+    return_debug : bool, optional
+        When true, also return the debug dict. ``debug['registration_backend']``
+        is ``'itk_v3_matlab_parity'``. The rest of the dict holds the affine,
+        mask coverage, and SHG alignment scores (mutual information and
+        normalized correlation of the warped collagen against SHG, plus the
+        same scores for an identity transform). Default is false.
+
+    Returns
+    -------
+    numpy.ndarray or tuple
+        Float RGB in ``[0, 1]``. If ``return_debug`` is true, a
+        ``(image, debug)`` tuple.
     """
-    del include_debug_images  # reserved for API compatibility; unused here
     p = _to_params(params)
     registered_img, backend, debug = _shg_he_registration_core(
         p.HEfilepath,
         p.HEfilename,
         p.SHGfilepath,
         p.pixelpermicron,
-        registration_method=p.registration_method,
         ecm_method=p.ecm_method,
         pipeline=p.pipeline,
         kmeans_seed=p.kmeans_seed,
@@ -476,7 +659,19 @@ def shg_he_registration(
 def BDcreation_reg2(
     BDCparameters: SHGHERegistrationParameters | dict[str, Any],
 ) -> np.ndarray:
-    """MATLAB-named wrapper: ``BDcreation_reg2.m`` (forces ``pipeline="reg2"``)."""
+    """Run ``BDcreation_reg2.m`` and save the registered TIFF.
+
+    Parameters
+    ----------
+    BDCparameters : SHGHERegistrationParameters or dict
+        Same fields as :func:`shg_he_registration`. ``pipeline`` is forced
+        to ``'reg2'``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Registered float RGB in ``[0, 1]``.
+    """
     p = replace(_to_params(BDCparameters), pipeline="reg2")
     out = shg_he_registration(p, save_output=True, return_debug=False)
     assert isinstance(out, np.ndarray)
@@ -486,7 +681,19 @@ def BDcreation_reg2(
 def BDcreation_reg(
     BDCparameters: SHGHERegistrationParameters | dict[str, Any],
 ) -> np.ndarray:
-    """MATLAB-named wrapper: ``BDcreation_reg.m`` (forces ``pipeline="reg1"``)."""
+    """Run ``BDcreation_reg.m`` and save the registered TIFF.
+
+    Parameters
+    ----------
+    BDCparameters : SHGHERegistrationParameters or dict
+        Same fields as :func:`shg_he_registration`. ``pipeline`` is forced
+        to ``'reg1'``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Registered float RGB in ``[0, 1]``.
+    """
     p = replace(_to_params(BDCparameters), pipeline="reg1")
     out = shg_he_registration(p, save_output=True, return_debug=False)
     assert isinstance(out, np.ndarray)

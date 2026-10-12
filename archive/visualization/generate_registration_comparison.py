@@ -2,7 +2,7 @@
 (patient_001, tests 1-3: MATLAB golden vs Python at ppm 1.5 / 2.0 / 3.0).
 
 Usage:
-    python tests/artifacts/bdc_regression_viz/generate_comparison.py [output_dir]
+    python archive/visualization/generate_registration_comparison.py [output_dir]
 
 Default output_dir: tests/artifacts/bdc_regression_viz/current
 
@@ -19,7 +19,7 @@ import numpy as np
 from matplotlib.patches import FancyBboxPatch
 from skimage import io
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from pycurvelets._he_bdc_common import matlab_rgb2gray
@@ -75,7 +75,6 @@ def generate(
         HEfilename="patient_001.tif",
         pixelpermicron=ppm,
         SHGfilepath=str(SHG_DIR),
-        areaThreshold=5000.0,
     )
     py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)
     py_uint8 = np.round(np.clip(py_float, 0, 1) * 255).astype(np.uint8)  # im2uint8 rounds

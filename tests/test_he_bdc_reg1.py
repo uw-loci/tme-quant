@@ -31,10 +31,7 @@ from pycurvelets._he_bdc_reg1 import (
     matlab_strel_disk,
     matlab_stretchlim,
 )
-from pycurvelets.SHG_HE_registration import (
-    _require_ecm_method,
-    _require_matlab_method,
-)
+from pycurvelets.SHG_HE_registration import _require_ecm_method
 
 
 def test_default_kmeans_seed_is_the_golden_optimum() -> None:
@@ -95,12 +92,9 @@ def test_hsv_and_rgb_thresholds_match_matlab() -> None:
     assert not bool(nuclei[0, 2]) and not bool(eosin[0, 2])
 
 
-def test_only_itk_v3_registrar_is_supported() -> None:
-    assert _require_matlab_method(None) == "matlab"
-    assert _require_matlab_method("matlab") == "matlab"
+def test_ecm_method_is_hsv_or_rgb() -> None:
+    assert _require_ecm_method(None) == "hsv"
     assert _require_ecm_method("hsv") == "hsv"
     assert _require_ecm_method("rgb") == "rgb"
-    with pytest.raises(ValueError, match="not supported"):
-        _require_matlab_method("mi_ncc")
     with pytest.raises(ValueError, match="not supported"):
         _require_ecm_method("auto")

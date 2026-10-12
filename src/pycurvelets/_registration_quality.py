@@ -1,3 +1,10 @@
+"""Scores for comparing a registered image or a tumor mask to a reference.
+
+The registration tests use these numbers against MATLAB goldens. The
+comparison figures under ``tests/artifacts`` use the same scores in their
+captions. They are not part of the registration algorithm.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -7,6 +14,18 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 
 def _to_uint8_rgb(arr: np.ndarray) -> np.ndarray:
+    """Convert an image to uint8 RGB for pixel-difference scores.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        Grayscale or RGB, uint8 or float in ``[0, 1]``.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(H, W, 3)`` uint8. Float values are rounded, matching ``im2uint8``.
+    """
     out = np.asarray(arr)
     if out.ndim == 2:
         out = np.stack([out, out, out], axis=-1)
@@ -20,6 +39,18 @@ def _to_uint8_rgb(arr: np.ndarray) -> np.ndarray:
 
 
 def _to_float01_rgb(arr: np.ndarray) -> np.ndarray:
+    """Convert an image to float RGB in ``[0, 1]``.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        Grayscale or RGB.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(H, W, 3)`` float64.
+    """
     out = np.asarray(arr)
     if out.ndim == 2:
         out = np.stack([out, out, out], axis=-1)
@@ -29,6 +60,18 @@ def _to_float01_rgb(arr: np.ndarray) -> np.ndarray:
 
 
 def _to_float01_gray(arr: np.ndarray) -> np.ndarray:
+    """Convert an image to float grayscale in ``[0, 1]``.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        Grayscale or RGB. RGB uses the rounded Rec.601 weights.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(H, W)`` float64.
+    """
     out = np.asarray(arr, dtype=np.float64)
     if out.ndim == 3:
         out = (
@@ -46,13 +89,30 @@ def compute_registration_quality_metrics(
     python_img: np.ndarray,
     matlab_golden_img: np.ndarray,
 ) -> dict[str, Any]:
-    """
-    Compute registration quality metrics against MATLAB golden output.
+    """Compare a registered RGB image with the MATLAB golden image.
 
-    Metrics are reported in mixed scales:
-    - MAE/RMSE are on uint8 differences (0..255).
-    - PSNR/SSIM are on float images in [0, 1].
-    - exact/withinN are fractions in [0, 1].
+    MAE and RMSE use uint8 differences (0..255). PSNR and SSIM use float
+    images in ``[0, 1]``. ``exact`` and ``withinN`` are fractions in ``[0, 1]``.
+    Identical images report PSNR as infinity.
+
+    Parameters
+    ----------
+    python_img : numpy.ndarray
+        Registered image from the Python pipeline.
+    matlab_golden_img : numpy.ndarray
+        MATLAB registered image. Must have the same shape after conversion
+        to uint8 RGB.
+
+    Returns
+    -------
+    dict
+        ``mae_uint8``, ``rmse_uint8``, ``exact_frac``, ``within5_frac``,
+        ``within10_frac``, ``within20_frac``, ``psnr``, ``ssim``, and ``shape``.
+
+    Raises
+    ------
+    ValueError
+        If the two images do not have the same shape.
     """
     py_u8 = _to_uint8_rgb(python_img)
     gt_u8 = _to_uint8_rgb(matlab_golden_img)
@@ -97,7 +157,19 @@ def compute_registration_quality_metrics(
 
 
 def normalized_cross_correlation(a: np.ndarray, b: np.ndarray) -> float:
-    """Zero-mean NCC in ``[-1, 1]`` for two same-shaped images."""
+    """Zero-mean normalized cross-correlation of two images.
+
+    Parameters
+    ----------
+    a, b : numpy.ndarray
+        Images of the same shape. Grayscale or RGB. Converted to float
+        gray in ``[0, 1]``.
+
+    Returns
+    -------
+    float
+        Correlation in ``[-1, 1]``. Returns 0 when either image is flat.
+    """
     x = _to_float01_gray(a).ravel()
     y = _to_float01_gray(b).ravel()
     x = x - float(x.mean())
@@ -114,11 +186,23 @@ def histogram_mutual_information(
     *,
     bins: int = 50,
 ) -> float:
-    """
-    Histogram mutual information (nats) between two images.
+    """Histogram mutual information between two images, in nats.
 
-    Higher is better. Used as the primary
-    SHG-alignment score for tests and ECM auto-selection.
+    Higher means the images share more intensity structure. This is the
+    SHG-alignment score used by tests.
+
+    Parameters
+    ----------
+    a, b : numpy.ndarray
+        Images of the same length after flattening. Converted to float
+        gray in ``[0, 1]``.
+    bins : int, optional
+        Bins per axis of the joint histogram. Default is 50.
+
+    Returns
+    -------
+    float
+        Mutual information. Returns 0 when the histogram is empty.
     """
     x = _to_float01_gray(a).ravel()
     y = _to_float01_gray(b).ravel()
@@ -143,11 +227,22 @@ def decompose_similarity_from_forward(
     forward_2x3: np.ndarray,
     center: tuple[float, float] | None = None,
 ) -> dict[str, float]:
-    """
-    Approximate similarity parameters from a 2x3 forward affine.
+    """Read angle, scale, and translation out of a 2x3 forward affine.
 
-    Returns angle (rad), scale, tx, ty relative to ``center`` (image centre
-    if omitted). Shear is ignored; this is a diagnostic summary only.
+    Shear is ignored. This is a diagnostic summary, not a transform to apply.
+
+    Parameters
+    ----------
+    forward_2x3 : numpy.ndarray
+        Forward map ``p' = M p + t``, shape ``(2, 3)``, 0-based pixels.
+    center : tuple of float or None, optional
+        Point the translation is measured from. ``None`` reports the raw
+        translation column.
+
+    Returns
+    -------
+    dict
+        ``angle_rad``, ``scale``, ``tx``, and ``ty``.
     """
     M = np.asarray(forward_2x3, dtype=np.float64)
     A = M[:, :2]
@@ -180,11 +275,25 @@ def compute_shg_alignment_metrics(
     forward_2x3: np.ndarray | None = None,
     bins: int = 50,
 ) -> dict[str, Any]:
-    """
-    Primary registration quality vs SHG (not vs MATLAB golden RGB).
+    """Score how well a warped H&E image lines up with the SHG image.
 
-    Returns histogram MI (higher better), NCC in [-1,1], and optional
-    transform summary when ``forward_2x3`` is provided.
+    Parameters
+    ----------
+    warped_moving : numpy.ndarray
+        H&E after the registration warp.
+    fixed_shg : numpy.ndarray
+        SHG image on the same grid.
+    forward_2x3 : numpy.ndarray or None, optional
+        When given, angle, scale, and translation are added to the result.
+    bins : int, optional
+        Histogram bins for mutual information. Default is 50.
+
+    Returns
+    -------
+    dict
+        ``shg_mi`` (higher is better), ``shg_ncc`` in ``[-1, 1]``, and the
+        two image shapes. Transform fields are present only when
+        ``forward_2x3`` is given.
     """
     mi = histogram_mutual_information(warped_moving, fixed_shg, bins=bins)
     ncc = normalized_cross_correlation(warped_moving, fixed_shg)
@@ -208,11 +317,27 @@ def make_checkerboard(
     b: np.ndarray,
     block: int = 64,
 ) -> np.ndarray:
-    """
-    Interleave two images in a checkerboard for visual SHG/HE alignment checks.
+    """Interleave two images in a checkerboard.
 
-    Both inputs are converted to float RGB in ``[0, 1]``. Grayscale is
-    replicated to 3 channels.
+    Both inputs become float RGB in ``[0, 1]``. Grayscale is copied to
+    three channels.
+
+    Parameters
+    ----------
+    a, b : numpy.ndarray
+        Images with the same height and width.
+    block : int, optional
+        Square size in pixels. Default is 64.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float RGB checkerboard.
+
+    Raises
+    ------
+    ValueError
+        If the spatial shapes differ.
     """
     aa = _to_float01_rgb(a)
     bb = _to_float01_rgb(b)
@@ -232,10 +357,28 @@ def compute_mask_boundary_metrics(
     pred: np.ndarray,
     golden: np.ndarray,
 ) -> dict[str, float]:
-    """
-    Boundary-focused mask metrics: IoU, Dice, pixel accuracy, Hausdorff, boundary F1.
+    """Compare two binary masks, including their boundaries.
 
-    Hausdorff uses a coarse distance-transform approximation (pixels).
+    Hausdorff distance is in pixels and uses a distance transform of the
+    boundary pixels.
+
+    Parameters
+    ----------
+    pred : numpy.ndarray
+        Predicted boolean mask.
+    golden : numpy.ndarray
+        Reference boolean mask. Must have the same shape.
+
+    Returns
+    -------
+    dict
+        ``iou``, ``dice``, ``pixel_accuracy``, ``hausdorff_px``, and
+        ``boundary_f1``.
+
+    Raises
+    ------
+    ValueError
+        If the masks do not have the same shape.
     """
     from scipy import ndimage
 

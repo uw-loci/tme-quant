@@ -20,7 +20,8 @@ Two installable views. Both are produced from a clone (`make wheel` /
 Registration tests 1-9, MATLAB dumps, ground-truth TIFFs, and comparison
 figures live in git (clone / CI) only. They are not release artifacts.
 `tests/test_packaging.py` asserts this split. Bit-exact MATLAB parity needs
-a clone plus `TMEQ_RUN_MATLAB_PARITY=1`; see `tests/matlab_parity/README.md`.
+a clone plus `TMEQ_RUN_MATLAB_PARITY=1`; see [doc/MATLAB_PARITY.md](doc/MATLAB_PARITY.md).
+Comparison figures are listed in [doc/ARTIFACTS.md](doc/ARTIFACTS.md).
 
 ### Licensing and prerequisites
 This project depends on code that cannot be redistributed here:

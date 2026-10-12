@@ -1,7 +1,7 @@
 """Generate comparison visualizations for patient_02 test cases (tests 4-9).
 
 Usage:
-    python tests/artifacts/bdc_regression_viz/generate_comparison_patient02.py \
+    python archive/visualization/generate_registration_comparison_patient02.py \
         [output_dir] [--cases id1,id2]
 
 Default output_dir: tests/artifacts/bdc_regression_viz/current
@@ -13,7 +13,7 @@ Test case definitions:
   Tests 8-9 use BDcreation_reg.m goldens (reg1: decorrstretch + LAB k-means);
           Python ``pipeline="reg1"`` reproduces them pixel-for-pixel.
 Every case is also scored against ground truth (the un-transformed HE ROI +
-``tests/matlab_parity/dumps/gt_affine_<case>.json``): corner displacement in
+``archive/matlab_parity/dumps/gt_affine_<case>.json``): corner displacement in
 px, angle/scale error and SSIM vs the GT-aligned HE, for both Python and
 MATLAB.
 
@@ -30,7 +30,7 @@ import numpy as np
 from matplotlib.patches import FancyBboxPatch
 from skimage import io
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
@@ -49,8 +49,8 @@ NEW_DATA = ROOT / "tests" / "test_for_shg_he_registration_BDcreation" / "new_tes
 HE_DIR = NEW_DATA / "HE"
 SHG_DIR = NEW_DATA / "SHG"
 # Ground truth: the un-transformed HE ROI (already on the SHG grid) and the
-# affine recovered between input HE and that ROI (tests/matlab_parity/dumps).
-GT_AFFINE_DIR = ROOT / "tests" / "matlab_parity" / "dumps"
+# affine recovered between input HE and that ROI (archive/matlab_parity/dumps).
+GT_AFFINE_DIR = ROOT / "archive" / "matlab_parity" / "dumps"
 
 
 def _gt_reference_path(he_filename: str) -> Path:
@@ -148,7 +148,6 @@ def generate(
         HEfilename=he_filename,
         pixelpermicron=ppm,
         SHGfilepath=str(SHG_DIR),
-        areaThreshold=5000.0,
         pipeline=matlab_reg,
     )
     py_float, debug = shg_he_registration(params, save_output=False, return_debug=True)

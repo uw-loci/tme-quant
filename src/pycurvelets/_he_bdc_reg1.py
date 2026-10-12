@@ -28,7 +28,7 @@ rules - so a given ``kmeans_seed`` gives the same labels MATLAB gives for
 the goldens' optimum.
 
 Every intermediate is returned under its MATLAB variable name so a parity mismatch
-can be attributed to a single step (``tests/matlab_parity/dump_bdc_reg1.m`` dumps the
+can be attributed to a single step (``archive/matlab_parity/dump_bdc_reg1.m`` dumps the
 same names from MATLAB).
 """
 
@@ -64,23 +64,61 @@ _RGB2GRAY_COEF = (0.298936021293775, 0.587043074451121, 0.114020904255103)
 
 
 def matlab_im2uint8(x: np.ndarray) -> np.ndarray:
-    """``im2uint8`` on a double image: ``uint8(round(x*255))`` with saturation (half-up)."""
+    """Convert a double image to uint8 the way MATLAB ``im2uint8`` does.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Double image, typically in ``[0, 1]``.
+
+    Returns
+    -------
+    numpy.ndarray
+        uint8 image. Values are ``round(x * 255)`` and clipped to 0..255.
+        Halves round away from zero.
+    """
     v = np.asarray(x, dtype=np.float64) * 255.0
     return np.clip(np.floor(v + 0.5), 0, 255).astype(np.uint8)
 
 
 def matlab_rgb2gray_uint8(rgb_u8: np.ndarray) -> np.ndarray:
-    """``rgb2gray`` on a uint8 RGB image: weighted sum rounded half-up to uint8."""
+    """Convert uint8 RGB to uint8 grayscale with MATLAB's ``rgb2gray`` weights.
+
+    Parameters
+    ----------
+    rgb_u8 : numpy.ndarray
+        uint8 RGB image.
+
+    Returns
+    -------
+    numpy.ndarray
+        uint8 grayscale. The weighted sum is rounded half away from zero.
+    """
     a = np.asarray(rgb_u8, dtype=np.float64)
     lin = _RGB2GRAY_COEF[0] * a[..., 0] + _RGB2GRAY_COEF[1] * a[..., 1] + _RGB2GRAY_COEF[2] * a[..., 2]
     return np.clip(np.floor(lin + 0.5), 0, 255).astype(np.uint8)
 
 
 def matlab_imhist_counts(plane: np.ndarray, nbins: int) -> np.ndarray:
-    """
-    ``imhist(I, nbins)`` counts. Integer images bin by value; double images use
-    ``imhistc`` binning ``floor(x*(nbins-1)+0.5)`` with out-of-range values clamped to
-    the end bins (relevant for ``decorrstretch``, whose double output exceeds [0,1]).
+    """Histogram counts matching ``imhist(I, nbins)``.
+
+    Integer images are binned by their stored value. Double images use
+    ``floor(x * (nbins - 1) + 0.5)``, and values outside ``[0, 1]`` are
+    clamped to the end bins. That matters for ``decorrstretch``, whose
+    double output can leave ``[0, 1]``.
+
+    Parameters
+    ----------
+    plane : numpy.ndarray
+        One image channel.
+    nbins : int
+        Number of bins. Callers pass 256 for uint8 and 65536 otherwise.
+        The length is used for the bin index and for ``minlength``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float counts of length ``nbins``.
     """
     p = np.asarray(plane)
     if np.issubdtype(p.dtype, np.integer):
@@ -93,12 +131,24 @@ def matlab_imhist_counts(plane: np.ndarray, nbins: int) -> np.ndarray:
 
 
 def matlab_stretchlim(img: np.ndarray, tol: tuple[float, float] = (0.01, 0.99)) -> np.ndarray:
-    """
-    ``stretchlim(img, tol)`` -> ``(2, nplanes)`` ``[low; high]`` in [0, 1].
+    """Find the low and high limits MATLAB ``stretchlim`` would use.
 
-    ``nbins`` is 256 for uint8 and 65536 otherwise (MATLAB uses 65536 for uint16
-    *and* double). ``ilow`` is the first bin whose CDF exceeds ``tol_low``; ``ihigh``
-    the first whose CDF reaches ``tol_high``; a flat plane maps to ``[0; 1]``.
+    The histogram has 256 bins for uint8 and 65536 otherwise. ``ilow`` is the
+    first bin whose CDF exceeds the low tolerance. ``ihigh`` is the first
+    whose CDF reaches the high tolerance. A flat plane maps to ``[0, 1]``.
+
+    Parameters
+    ----------
+    img : numpy.ndarray
+        2-D or multi-channel image.
+    tol : tuple of float, optional
+        ``(low, high)`` CDF cutoffs. Default is ``(0.01, 0.99)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Shape ``(2, nplanes)``. Row 0 is the low limit, row 1 the high limit,
+        both in ``[0, 1]``.
     """
     a = np.asarray(img)
     planes = a[..., None] if a.ndim == 2 else a
@@ -121,17 +171,49 @@ def matlab_stretchlim(img: np.ndarray, tol: tuple[float, float] = (0.01, 0.99)) 
 
 
 def _adjust_array(x: np.ndarray, low_in: float, high_in: float, low_out: float = 0.0, high_out: float = 1.0) -> np.ndarray:
-    """``imadjust``'s ``adjustArray`` with gamma 1: clip to ``[low_in, high_in]`` then rescale."""
+    """Linear ``imadjust`` stretch (gamma 1).
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Values to stretch.
+    low_in, high_in : float
+        Input range. Values outside it are clipped.
+    low_out, high_out : float, optional
+        Output range. Default is 0 to 1.
+
+    Returns
+    -------
+    numpy.ndarray
+        Stretched values.
+    """
     xc = np.maximum(low_in, np.minimum(high_in, np.asarray(x, dtype=np.float64)))
     out = (xc - low_in) / (high_in - low_in)
     return out * (high_out - low_out) + low_out
 
 
 def matlab_imadjust_auto_integer(img: np.ndarray) -> np.ndarray:
-    """
-    ``imadjust(I)`` (single argument) on a 2-D uint8/uint16 image: ``stretchlim``
-    limits, linear stretch, same integer class out. Implemented value-wise, which is
-    what MATLAB's LUT path (``numel > 65536``) and direct path both reduce to.
+    """``imadjust(I)`` with no extra arguments, on a 2-D uint8 or uint16 image.
+
+    Limits come from ``stretchlim``. The stretch is linear and the result
+    keeps the input integer class.
+
+    Parameters
+    ----------
+    img : numpy.ndarray
+        2-D uint8 or uint16 image.
+
+    Returns
+    -------
+    numpy.ndarray
+        Contrast-stretched image, same dtype as ``img``.
+
+    Raises
+    ------
+    ValueError
+        If ``img`` is not 2-D.
+    TypeError
+        If ``img`` is not uint8 or uint16.
     """
     a = np.asarray(img)
     if a.ndim != 2:
@@ -149,12 +231,38 @@ def matlab_imadjust_auto_integer(img: np.ndarray) -> np.ndarray:
 
 
 def matlab_imadjust_double_rgb(img: np.ndarray, low_in: float, high_in: float) -> np.ndarray:
-    """``imadjust(RGB_double, [low_in high_in], [0 1])`` - same limits on every channel."""
+    """``imadjust`` on a double RGB image with one input range for every channel.
+
+    Parameters
+    ----------
+    img : numpy.ndarray
+        Double RGB image.
+    low_in, high_in : float
+        Shared input limits. Output limits are 0 and 1.
+
+    Returns
+    -------
+    numpy.ndarray
+        Stretched image.
+    """
     return _adjust_array(img, float(low_in), float(high_in))
 
 
 def _matlab_pinv_diag(D: np.ndarray) -> np.ndarray:
-    """``fitdecorrtrans``'s local ``pinv`` for a diagonal matrix (tolerance ``n*max*sqrt(eps)``)."""
+    """Pseudoinverse of a diagonal matrix, matching ``fitdecorrtrans``.
+
+    Singular values at or below ``n * max(d) * sqrt(eps)`` become zero.
+
+    Parameters
+    ----------
+    D : numpy.ndarray
+        Square diagonal matrix.
+
+    Returns
+    -------
+    numpy.ndarray
+        Diagonal pseudoinverse.
+    """
     d = np.diag(D).astype(np.float64)
     tol = len(d) * d.max() * np.sqrt(np.finfo(np.float64).eps)
     s = np.zeros_like(d)
@@ -164,13 +272,28 @@ def _matlab_pinv_diag(D: np.ndarray) -> np.ndarray:
 
 
 def matlab_decorrstretch_uint8(rgb_u8: np.ndarray, tol: float = 0.01) -> np.ndarray:
-    """
-    ``decorrstretch(uint8 RGB, 'tol', tol)`` (default ``Mode='correlation'``,
-    target mean/sigma taken from the data). Steps as in ``decorrstretch.m`` /
-    ``private/fitdecorrtrans.m``: sample covariance, correlation whitening
-    ``T = pinv(S) V W V' S`` renormalised to the target sigma, ``S = A*T + offset``,
-    then ``stretchlim`` (65536 bins on the double result) + linear stretch, clip,
-    ``im2uint8``.
+    """Decorrelation stretch of a uint8 RGB image.
+
+    Follows ``decorrstretch.m`` / ``fitdecorrtrans.m`` with correlation mode:
+    sample covariance, whitening, stretch back to the original sigma, then
+    ``stretchlim`` and ``im2uint8``.
+
+    Parameters
+    ----------
+    rgb_u8 : numpy.ndarray
+        uint8 RGB image, shape ``(H, W, 3)``.
+    tol : float, optional
+        Fraction trimmed from each end of the histogram. Default is 0.01.
+
+    Returns
+    -------
+    numpy.ndarray
+        uint8 RGB image with the same shape.
+
+    Raises
+    ------
+    TypeError
+        If ``rgb_u8`` is not uint8 RGB.
     """
     a = np.asarray(rgb_u8)
     if a.dtype != np.uint8 or a.ndim != 3:
@@ -204,6 +327,13 @@ def matlab_decorrstretch_uint8(rgb_u8: np.ndarray, tol: float = 0.01) -> np.ndar
 
 
 def _load_srgb2lab_components() -> dict[str, np.ndarray]:
+    """Load the sRGB-to-Lab tables shipped in ``data/matlab_srgb2lab_components.npz``.
+
+    Returns
+    -------
+    dict
+        Arrays exported from MATLAB's ICC pipeline (TRC, colorants, adaptation).
+    """
     with resources.files("pycurvelets").joinpath("data/matlab_srgb2lab_components.npz").open("rb") as fh:
         z = np.load(fh)
         return {k: np.array(z[k]) for k in z.files}
@@ -213,15 +343,27 @@ _SRGB2LAB: dict[str, np.ndarray] | None = None
 
 
 def matlab_srgb2lab_uint8(rgb_u8: np.ndarray) -> np.ndarray:
-    """
-    ``applycform(uint8 RGB, makecform('srgb2lab'))`` -> uint8 Lab.
+    """Convert uint8 RGB to uint8 Lab the way MATLAB ``applycform`` does.
 
-    Closed-form evaluation of MATLAB's ICC pipeline with constants exported from
-    MATLAB (``tests/matlab_parity/dump_srgb2lab_components.m``): per-channel sRGB.icm
-    TRC (spline-interpolated 1024-entry curve tabulated at the 256 uint8 levels) ->
-    colorant matrix -> Bradford adaptation D50 -> ICC white -> ``xyz2lab`` -> uint8
-    encoding ``round([255 L/100, a+128, b+128])``. Validated exactly on 200k random
-    triplets and the fixture images.
+    Uses the sRGB ICC tables exported by
+    ``archive/matlab_parity/dump_srgb2lab_components.m``: tone curve, colorant
+    matrix, Bradford adaptation, then ``xyz2lab`` packed as
+    ``round([255 L/100, a+128, b+128])``.
+
+    Parameters
+    ----------
+    rgb_u8 : numpy.ndarray
+        uint8 RGB image. The last axis must have length 3.
+
+    Returns
+    -------
+    numpy.ndarray
+        uint8 Lab image with the same shape.
+
+    Raises
+    ------
+    TypeError
+        If the array is not uint8 RGB.
     """
     global _SRGB2LAB
     if _SRGB2LAB is None:
@@ -248,13 +390,29 @@ def matlab_srgb2lab_uint8(rgb_u8: np.ndarray) -> np.ndarray:
 
 
 def matlab_strel_disk(r: int, n: int = 4) -> np.ndarray:
-    """
-    ``strel('disk', r, n).Neighborhood`` (default ``n=4``).
+    """Neighborhood of ``strel('disk', r, n)``.
 
-    For ``r < 3`` MATLAB uses the exact Euclidean disk. Otherwise it is Adams'
-    radial decomposition into ``n`` periodic lines (``floor``-ed lengths), dilated
-    together, then padded with horizontal/vertical lines to recover the radius. This
-    is *not* the Euclidean disk: ``r=3`` is a flat 5x5 square, ``r=4`` a 7x7 octagon.
+    Radii below 3, and ``n == 0``, use the exact Euclidean disk. Larger radii
+    use Adams' periodic-line approximation. That is not a Euclidean disk:
+    ``r=3`` is a flat 5x5 square and ``r=4`` is a 7x7 octagon.
+
+    Parameters
+    ----------
+    r : int
+        Disk radius in pixels.
+    n : int, optional
+        Approximation order: 0, 4, 6, or 8. Default is 4, matching
+        ``BDcreation_reg``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean neighborhood.
+
+    Raises
+    ------
+    ValueError
+        If ``n`` is not 0, 4, 6, or 8.
     """
     r = int(r)
     if r <= 0:
@@ -274,6 +432,18 @@ def matlab_strel_disk(r: int, n: int = 4) -> np.ndarray:
     k = 2 * r / (1.0 / np.tan(theta) + 1.0 / np.sin(theta))
 
     def minkowski(a: set[tuple[int, int]], b: set[tuple[int, int]]) -> set[tuple[int, int]]:
+        """Minkowski sum of two sets of integer offsets.
+
+        Parameters
+        ----------
+        a, b : set of tuple of int
+            Offset sets.
+
+        Returns
+        -------
+        set of tuple of int
+            All pairwise sums.
+        """
         return {(p[0] + q[0], p[1] + q[1]) for p in a for q in b}
 
     offsets: set[tuple[int, int]] = {(0, 0)}
@@ -302,17 +472,52 @@ def matlab_strel_disk(r: int, n: int = 4) -> np.ndarray:
 
 
 def _sqdist(X: np.ndarray, c: np.ndarray) -> np.ndarray:
-    """Squared Euclidean distance of every row of ``X`` to one centre (explicit differences, as pdist2mex 'sqe')."""
+    """Squared Euclidean distance from every row to one centre.
+
+    Differences are explicit, matching ``pdist2mex`` mode ``'sqe'``.
+
+    Parameters
+    ----------
+    X : numpy.ndarray
+        Samples, shape ``(n, d)``.
+    c : numpy.ndarray
+        One centre, shape ``(d,)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Squared distances, shape ``(n,)``.
+    """
     d = X - c[None, :]
     return np.einsum("ij,ij->i", d, d)
 
 
 def _kmeanspp_init(X: np.ndarray, k: int, rng: np.random.RandomState) -> np.ndarray:
-    """
-    MATLAB ``'Start','plus'``: first seed uniform via ``datasample`` (=``randi``,
-    i.e. ``floor(rand*n)``), then D^2-weighted draws via ``datasample(...,'Replace',
-    false,'Weights',p)`` which (for one sample) inverts the cumulative weights with a
-    single ``rand`` (``histcounts`` semantics: bin ``i`` with ``edges[i] <= r < edges[i+1]``).
+    """Pick k-means++ seeds the way MATLAB ``'Start','plus'`` does.
+
+    The first seed is ``floor(rand * n)``. Later seeds are weighted by
+    squared distance. One uniform draw is inverted through the cumulative
+    weights with ``histcounts`` bin edges.
+
+    Parameters
+    ----------
+    X : numpy.ndarray
+        Samples, shape ``(n, d)``.
+    k : int
+        Number of centres.
+    rng : numpy.random.RandomState
+        MATLAB-compatible generator.
+
+    Returns
+    -------
+    numpy.ndarray
+        Initial centres, shape ``(k, d)``.
+
+    Raises
+    ------
+    RuntimeError
+        If every point is the same point. MATLAB would then use ``randperm``,
+        which this replay does not implement.
     """
     n = X.shape[0]
     C = np.empty((k, X.shape[1]), dtype=np.float64)
@@ -339,10 +544,32 @@ def _kmeanspp_init(X: np.ndarray, k: int, rng: np.random.RandomState) -> np.ndar
 def _lloyd_batch_matlab(
     X: np.ndarray, C: np.ndarray, max_iter: int
 ) -> tuple[np.ndarray, np.ndarray, float, np.ndarray, int]:
-    """
-    ``kmeansHelper``'s batch phase (``OnlinePhase='off'``, ``EmptyAction='singleton'``):
-    recompute centroids of changed clusters, back out if the objective did not
-    decrease, reassign with ties resolved in favour of not moving.
+    """One MATLAB ``kmeans`` batch phase.
+
+    Empty clusters are refilled from the farthest point (``'singleton'``).
+    A step that does not lower the objective is undone. Ties keep the old label.
+
+    Parameters
+    ----------
+    X : numpy.ndarray
+        Samples, shape ``(n, d)``.
+    C : numpy.ndarray
+        Starting centres, shape ``(k, d)``. Updated in place.
+    max_iter : int
+        Iteration cap.
+
+    Returns
+    -------
+    idx : numpy.ndarray
+        0-based labels, shape ``(n,)``.
+    C : numpy.ndarray
+        Final centres.
+    totsumD : float
+        Total within-cluster sum of squares.
+    sumD : numpy.ndarray
+        Per-cluster sum of squares.
+    it : int
+        Iterations actually used.
     """
     n, k = X.shape[0], C.shape[0]
     D = np.column_stack([_sqdist(X, C[j]) for j in range(k)])
@@ -356,6 +583,13 @@ def _lloyd_batch_matlab(
     converged = False
 
     def centroids(clusters: np.ndarray) -> None:
+        """Recompute centres, counts, and distances for the given clusters.
+
+        Parameters
+        ----------
+        clusters : numpy.ndarray
+            0-based cluster ids that changed.
+        """
         for j in clusters:
             members = idx == j
             m[j] = int(members.sum())
@@ -422,13 +656,34 @@ def matlab_kmeans(
     replicates: int = 3,
     max_iter: int = 100,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-    """
-    Replay ``rng(seed,'twister'); [idx, C, sumd] = kmeans(X, k, 'distance',
-    'sqEuclidean', 'Replicates', replicates)`` bit-for-bit for well-separated data.
+    """Replay MATLAB ``kmeans`` with squared Euclidean distance.
 
-    ``X`` is ``(n, p)`` with rows in MATLAB's observation order (column-major image
-    flatten for ``reshape(ab, nrows*ncols, 2)``). Returns 0-based ``idx``, ``C`` (k, p),
-    ``sumd`` (k,), and a debug dict with every replicate's objective.
+    Rows of ``X`` must already be in MATLAB observation order (column-major
+    flatten of the a/b image).
+
+    Parameters
+    ----------
+    X : numpy.ndarray
+        Samples, shape ``(n, p)``.
+    k : int
+        Number of clusters.
+    seed : int
+        Seed for the MATLAB twister replay.
+    replicates : int, optional
+        Independent k-means++ starts. Default is 3.
+    max_iter : int, optional
+        Iteration cap per replicate. Default is 100.
+
+    Returns
+    -------
+    idx : numpy.ndarray
+        0-based labels of the best replicate.
+    C : numpy.ndarray
+        Centres, shape ``(k, p)``.
+    sumd : numpy.ndarray
+        Per-cluster sum of squares.
+    debug : dict
+        Seed and every replicate's objective.
     """
     Xd = np.ascontiguousarray(X, dtype=np.float64)
     rng = np.random.RandomState(int(seed))
