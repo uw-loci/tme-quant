@@ -35,7 +35,7 @@ Curvelet tests run automatically when curvelops is installed; otherwise they are
 | `tests/test_shg_he_registration_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `archive/matlab_parity/dumps` (git only) |
 | `tests/test_shg_he_registration_gt.py` | `TMEQ_RUN_MATLAB_PARITY=1` | dumps + patient_02 GT HE TIFFs (git only) |
 
-See [MATLAB_PARITY.md](MATLAB_PARITY.md), [BDC_REGISTRATION_COMPARISONS.md](BDC_REGISTRATION_COMPARISONS.md), and [ARTIFACTS.md](ARTIFACTS.md).
+See [MATLAB_PARITY.md](MATLAB_PARITY.md), [BDC_REGISTRATION_COMPARISONS.md](BDC_REGISTRATION_COMPARISONS.md), and [ARTIFACTS.md](ARTIFACTS.md). Comparison figures are generated locally.
 
 ## Wheel vs sdist
 

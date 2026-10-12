@@ -5,19 +5,22 @@ Usage:
         [output_dir] [--cases id1,id2]
 
 Default output_dir: tests/artifacts/bdc_regression_viz/current
-Uses the ITK v3 (1+1)-ES port.
+(gitignored; not an input to the registration API).
+
+Calls ``pycurvelets.shg_he_registration`` with ``SHGHERegistrationParameters``.
+``pipeline`` is ``"reg2"`` for tests 4-7 and ``"reg1"`` for tests 8-9.
+The registrar is the ITK v3 (1+1)-ES port. ``kmeans_seed`` stays at the
+default (28) so tests 8-9 match the committed goldens.
 
 Test case definitions:
-  Tests 4-7 use BDcreation_reg2.m goldens (HSV-based registration); the
-          default Python path reproduces them pixel-for-pixel.
-  Tests 8-9 use BDcreation_reg.m goldens (reg1: decorrstretch + LAB k-means);
-          Python ``pipeline="reg1"`` reproduces them pixel-for-pixel.
+  Tests 4-7 use BDcreation_reg2.m goldens (HSV-based registration).
+  Tests 8-9 use BDcreation_reg.m goldens (reg1: decorrstretch + LAB k-means).
 Every case is also scored against ground truth (the un-transformed HE ROI +
 ``archive/matlab_parity/dumps/gt_affine_<case>.json``): corner displacement in
 px, angle/scale error and SSIM vs the GT-aligned HE, for both Python and
-MATLAB.
+MATLAB. Ground-truth helpers come from ``tests/_registration_gt_eval.py``.
 
-Output: ``comparison_<case>_<method>_hsv.png`` per case.
+Output: ``comparison_<case_id>_matlab_hsv.png`` per case.
 """
 from __future__ import annotations
 

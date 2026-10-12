@@ -17,11 +17,12 @@ Two installable views. Both are produced from a clone (`make wheel` /
 | **Wheel** | `pip install tme-quant` or `make wheel` | Runtime only: `src/` (`pycurvelets`, `napari_curvealign`, `data/*.npz`). |
 | **sdist** | `pip install tme-quant --no-binary tme-quant` or `make sdist` | Source to rebuild the wheel, plus docs and the lightweight pytest suite. |
 
-Registration tests 1-9, MATLAB dumps, ground-truth TIFFs, and comparison
-figures live in git (clone / CI) only. They are not release artifacts.
+Registration tests 1-9, MATLAB dumps, and ground-truth TIFFs live in git
+(clone / CI) only. They are not release artifacts.
+Comparison PNGs are not stored; regenerate them with
+`archive/visualization/` (see [doc/ARTIFACTS.md](doc/ARTIFACTS.md)).
 `tests/test_packaging.py` asserts this split. Bit-exact MATLAB parity needs
 a clone plus `TMEQ_RUN_MATLAB_PARITY=1`; see [doc/MATLAB_PARITY.md](doc/MATLAB_PARITY.md).
-Comparison figures are listed in [doc/ARTIFACTS.md](doc/ARTIFACTS.md).
 
 ### Licensing and prerequisites
 This project depends on code that cannot be redistributed here:

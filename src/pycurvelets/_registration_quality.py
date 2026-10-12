@@ -1,8 +1,9 @@
 """Scores for comparing a registered image or a tumor mask to a reference.
 
 The registration tests use these numbers against MATLAB goldens. The
-comparison figures under ``tests/artifacts`` use the same scores in their
-captions. They are not part of the registration algorithm.
+development scripts in ``archive/visualization`` print the same scores on
+locally generated figures. Those figures are not part of the registration
+algorithm and are not stored in the repository.
 """
 
 from __future__ import annotations

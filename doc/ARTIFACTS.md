@@ -1,14 +1,25 @@
 # Comparison figures
 
-These PNGs are a visual record of the MATLAB ports. They are not pytest
-tests. Numeric checks live in `tests/test_shg_he_registration.py`. The
-scripts that redraw the figures are development tools in
-`archive/visualization/`.
+These PNGs are a local visual check of the MATLAB port. They are not an
+input to `shg_he_registration`, and they are not stored in git. Numeric
+checks live in `tests/test_shg_he_registration.py`.
 
-How to read a panel, and the measured MAE table, are in
+The scripts that draw them are development tools in `archive/visualization/`.
+They call `shg_he_registration` and write under `tests/artifacts/`
+(gitignored, and pruned from the sdist). How to read a panel, and the
+measured MAE table, are in
 [BDC_REGISTRATION_COMPARISONS.md](BDC_REGISTRATION_COMPARISONS.md).
 
+```bash
+python archive/visualization/generate_registration_comparison.py
+python archive/visualization/generate_registration_comparison_patient02.py
+```
+
 ## Registration (`tests/artifacts/bdc_regression_viz/current/`)
+
+Written by `generate_registration_comparison.py` (patient_001, `pipeline="reg2"`,
+`ecm_method="hsv"`) and `generate_registration_comparison_patient02.py`
+(patient_02; tests 4-7 use `pipeline="reg2"`, tests 8-9 use `pipeline="reg1"`).
 
 | Figure | Case |
 | --- | --- |

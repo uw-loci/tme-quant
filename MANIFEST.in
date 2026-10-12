@@ -7,8 +7,8 @@
 # SDIST (pip install --no-binary tme-quant / python -m build --sdist):
 #   What is needed to rebuild the wheel: src/ + docs + the lightweight
 #   pytest suite (CSV / synthetic-image tests). Registration tests 1-9,
-#   MATLAB dumps, ground-truth TIFFs, and comparison figures stay in git
-#   for CI / clones. They are not release artifacts.
+#   MATLAB dumps, and ground-truth TIFFs stay in git for CI / clones.
+#   Comparison PNGs are generated locally and are not in git or the sdist.
 
 graft tests
 graft doc

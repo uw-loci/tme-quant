@@ -5,8 +5,11 @@ Usage:
     python archive/visualization/generate_registration_comparison.py [output_dir]
 
 Default output_dir: tests/artifacts/bdc_regression_viz/current
+(gitignored; not an input to the registration API).
 
-Uses the ITK v3 (1+1)-ES port and the BDcreation_reg2 HSV mask.
+Calls ``pycurvelets.shg_he_registration`` with ``SHGHERegistrationParameters``.
+Tests 1-3 use the defaults ``pipeline="reg2"`` and ``ecm_method="hsv"``
+(the ITK v3 (1+1)-ES port and the BDcreation_reg2 HSV mask).
 Figures are named ``comparison_<case>_ppm<ppm>_matlab_hsv.png``.
 """
 from __future__ import annotations
