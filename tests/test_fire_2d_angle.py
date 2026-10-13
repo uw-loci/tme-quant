@@ -110,6 +110,54 @@ def load_matlab_reference(mat_file_path):
     """
     if not os.path.exists(mat_file_path):
         pytest.skip(f"MATLAB reference file not found: {mat_file_path}")
+
+    def _read_h5_fang(file_handle, fang_group):
+        """Read MATLAB v7.3 M.Fang cell/struct arrays into Python dicts."""
+        if fang_group is None:
+            return []
+
+        def _read_angle_field(field_name):
+            if field_name not in fang_group:
+                return []
+            ds = fang_group[field_name]
+            values = []
+            for i in range(ds.shape[0]):
+                item = ds[i, 0] if ds.ndim == 2 else ds[i]
+                if isinstance(item, h5py.Reference):
+                    arr = np.array(file_handle[item]).flatten()
+                else:
+                    arr = np.asarray(item).flatten()
+                values.append(arr)
+            return values
+
+        angle_xy = _read_angle_field("angle_xy")
+        angle_xz = _read_angle_field("angle_xz")
+        n_fibers = max(len(angle_xy), len(angle_xz))
+        return [
+            {
+                "angle_xy": angle_xy[i] if i < len(angle_xy) else np.array([]),
+                "angle_xz": angle_xz[i] if i < len(angle_xz) else np.array([]),
+            }
+            for i in range(n_fibers)
+        ]
+
+    def _read_scipy_fang(raw_fang):
+        """Read MATLAB v5 M.Fang mat_struct arrays into Python dicts."""
+        if raw_fang is None:
+            return []
+        fibers = []
+        for fang in np.atleast_1d(raw_fang):
+            fibers.append({
+                "angle_xy": (
+                    np.atleast_1d(fang.angle_xy).flatten()
+                    if hasattr(fang, "angle_xy") else np.array([])
+                ),
+                "angle_xz": (
+                    np.atleast_1d(fang.angle_xz).flatten()
+                    if hasattr(fang, "angle_xz") else np.array([])
+                ),
+            })
+        return fibers
     
     # Try h5py first (for MATLAB v7.3 files), fall back to scipy for v5 files
     _h5py_ok = False
@@ -174,6 +222,10 @@ def load_matlab_reference(mat_file_path):
                     if 'angle_xy' in M_group:
                         angle_data = np.array(M_group['angle_xy'])
                         result['M']['angle_xy'] = angle_data.flatten() if angle_data.size > 0 else np.array([])
+                    if 'Fang' in M_group:
+                        result['M']['Fang'] = _read_h5_fang(f, M_group['Fang'])
+                    if 'FangI' in M_group:
+                        result['M']['FangI'] = _read_h5_fang(f, M_group['FangI'])
                 
                 return result
         
@@ -216,6 +268,8 @@ def load_matlab_reference(mat_file_path):
                     'totL': M.totL if hasattr(M, 'totL') else 0,
                     'L': M.L if hasattr(M, 'L') else np.array([]),
                     'angle_xy': M.angle_xy if hasattr(M, 'angle_xy') else np.array([]),
+                    'Fang': _read_scipy_fang(M.Fang) if hasattr(M, 'Fang') else [],
+                    'FangI': _read_scipy_fang(M.FangI) if hasattr(M, 'FangI') else [],
                     'Ldens': M.Ldens if hasattr(M, 'Ldens') else 0,
                     'volfrac': M.volfrac if hasattr(M, 'volfrac') else 0,
                 }
@@ -291,6 +345,8 @@ def _rasterize_fibers(X, F, image_shape):
 
 
 MIN_FIBER_LEN_PX = 30.0
+ENDPOINT_ANGLE_MEAN_TOL_DEG = 10.0
+SEGMENT_ANGLE_MEAN_TOL_DEG = 10.0
 
 
 def _fiber_stats_filtered(X, F, min_len=MIN_FIBER_LEN_PX, row_idx=0, col_idx=1):
@@ -336,6 +392,33 @@ def _fiber_stats_filtered(X, F, min_len=MIN_FIBER_LEN_PX, row_idx=0, col_idx=1):
         'totL': float(np.sum(L)),
         'angle_xy': np.array(angles, dtype=float),
     }
+
+
+def _long_fiber_mask(X, F, min_len=MIN_FIBER_LEN_PX):
+    """Return a boolean mask for fibers with arc length >= min_len."""
+    if F is None or X is None:
+        return np.array([], dtype=bool)
+
+    X_arr = np.asarray(X, dtype=float)
+    mask = []
+    for fiber in F:
+        v = fiber['v'] if isinstance(fiber, dict) else list(fiber)
+        length = sum(
+            np.linalg.norm(X_arr[v[i + 1]] - X_arr[v[i]])
+            for i in range(len(v) - 1)
+            if 0 <= v[i] < len(X_arr) and 0 <= v[i + 1] < len(X_arr)
+        )
+        mask.append(length >= min_len)
+    return np.asarray(mask, dtype=bool)
+
+
+def _mean_segment_angles(Fang):
+    """Return one mean angle per fiber from a Fang-style list of dicts."""
+    return np.array([
+        np.mean(f['angle_xy'])
+        for f in Fang
+        if len(f.get('angle_xy', [])) > 0
+    ])
 
 
 # ============================================================================
@@ -676,13 +759,9 @@ def test_fire_2d_matches_matlab_angles(test_name, test_case):
     load_test_cases(matlab_only=True),
     ids=[name for name, _ in load_test_cases(matlab_only=True)],
 )
-def test_fire_2d_segment_angle_mean(test_name, test_case):
+def test_fire_2d_endpoint_angle_mean(test_name, test_case):
     """
-    Validate per-segment angles from calc_fiberang2.
-
-    For non-straight fibers, segment angles vary along the path.
-    The mean of all segment angles per fiber should correlate with the
-    endpoint angle (M['angle_xy']) and with the MATLAB reference distribution.
+    Validate endpoint-angle means against MATLAB endpoint-angle means.
     """
     if not CPP_AVAILABLE:
         pytest.skip("C++ backend not available")
@@ -694,36 +773,70 @@ def test_fire_2d_segment_angle_mean(test_name, test_case):
     mat_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / test_case["matlab_reference_mat"]
     data_mat = load_matlab_reference(mat_path)
 
-    # Filter to fibers with arc-length >= 30px (same threshold as other tests)
-    Xa  = data_py['Xa']
-    Fa  = data_py['Fa']
-    Fang_all          = data_py['M']['Fang']
-    endpoint_all      = np.asarray(data_py['M']['angle_xy'])
+    py_long_mask = _long_fiber_mask(data_py['Xa'], data_py['Fa'])
+    endpoint_all = np.asarray(data_py['M']['angle_xy'])
+    endpoint_angles = endpoint_all[py_long_mask]
 
-    long_mask = []
-    for fiber in Fa:
-        v = fiber['v']
-        length = sum(
-            np.linalg.norm(Xa[v[i + 1]] - Xa[v[i]])
-            for i in range(len(v) - 1)
-            if 0 <= v[i] < len(Xa) and 0 <= v[i + 1] < len(Xa)
-        )
-        long_mask.append(length >= MIN_FIBER_LEN_PX)
-
-    Fang           = [f for f, keep in zip(Fang_all,     long_mask) if keep]
-    endpoint_angles = endpoint_all[np.array(long_mask)]
-
-    # MATLAB: filter endpoint angles to fibers > 30px
     mat_stats  = (_fiber_stats_filtered(data_mat['Xa'], data_mat['Fa'], row_idx=1, col_idx=0)
                   if data_mat.get('Fa') is not None else data_mat['M'])
     mat_angles = np.asarray(mat_stats.get('angle_xy', []))
 
-    print(f"\nFibers >30px — Python: {len(Fang)}, MATLAB: {len(mat_angles)}")
+    print(f"\nEndpoint angles >30px — Python: {len(endpoint_angles)}, MATLAB: {len(mat_angles)}")
 
-    # Sub-check A: mean segment angle per fiber correlates with endpoint angle
-    mean_seg = np.array([
-        np.mean(f['angle_xy']) for f in Fang if len(f.get('angle_xy', [])) > 0
-    ])
+    if len(endpoint_angles) > 0 and len(mat_angles) > 0:
+        py_mean_abs = np.degrees(np.mean(endpoint_angles % np.pi))
+        mat_mean_abs = np.degrees(np.mean(mat_angles % np.pi))
+        delta_deg = abs(py_mean_abs - mat_mean_abs)
+        assert delta_deg < ENDPOINT_ANGLE_MEAN_TOL_DEG, (
+            f"Mean endpoint angle {py_mean_abs:.1f}° differs from MATLAB "
+            f"{mat_mean_abs:.1f}° by {delta_deg:.1f}° > "
+            f"{ENDPOINT_ANGLE_MEAN_TOL_DEG:.1f}°"
+        )
+        print(
+            f"Mean endpoint angle [0-180°] - Python: {py_mean_abs:.1f}°, "
+            f"MATLAB: {mat_mean_abs:.1f}°, delta: {delta_deg:.1f}°"
+        )
+
+
+@pytest.mark.matlab
+@pytest.mark.parametrize(
+    "test_name,test_case",
+    load_test_cases(matlab_only=True),
+    ids=[name for name, _ in load_test_cases(matlab_only=True)],
+)
+def test_fire_2d_segment_angle_mean(test_name, test_case):
+    """
+    Validate per-segment angle means from calc_fiberang2 against MATLAB Fang.
+    """
+    if not CPP_AVAILABLE:
+        pytest.skip("C++ backend not available")
+
+    img = load_test_image(test_case["image"])
+    im3 = img[np.newaxis] if img.ndim == 2 else img
+    data_py = fire_2d_angle(p=test_case["params"], im=im3, plotflag=0)
+
+    mat_path = Path(__file__).parent / "test_results" / "fire_2d_test_files" / test_case["matlab_reference_mat"]
+    data_mat = load_matlab_reference(mat_path)
+
+    py_long_mask = _long_fiber_mask(data_py['Xa'], data_py['Fa'])
+    mat_long_mask = _long_fiber_mask(data_mat['Xa'], data_mat['Fa'])
+
+    py_fang_all = data_py['M'].get('Fang', [])
+    mat_fang_all = data_mat['M'].get('Fang', [])
+    if not mat_fang_all:
+        pytest.skip("MATLAB reference does not include M.Fang")
+
+    py_fang = [f for f, keep in zip(py_fang_all, py_long_mask) if keep]
+    mat_fang = [f for f, keep in zip(mat_fang_all, mat_long_mask) if keep]
+
+    print(f"\nSegment angles >30px — Python: {len(py_fang)}, MATLAB: {len(mat_fang)}")
+
+    mean_seg = _mean_segment_angles(py_fang)
+    mat_mean_seg = _mean_segment_angles(mat_fang)
+
+    # Sub-check A: mean segment angle per Python fiber correlates with its endpoint angle.
+    endpoint_all = np.asarray(data_py['M']['angle_xy'])
+    endpoint_angles = endpoint_all[py_long_mask]
     if len(mean_seg) > 1 and len(endpoint_angles) > 1:
         n = min(len(mean_seg), len(endpoint_angles))
         corr = np.corrcoef(mean_seg[:n], endpoint_angles[:n])[0, 1]
@@ -732,11 +845,11 @@ def test_fire_2d_segment_angle_mean(test_name, test_case):
         )
         print(f"\nMean segment vs endpoint angle correlation: {corr:.3f}")
 
-    # Sub-check A2: long non-straight fibers must show angle variation
+    # Sub-check B: long non-straight fibers must show angle variation.
     SPI = test_case["params"].get("ang_interval", 5)
     long_stds = [
         np.std(f['angle_xy'])
-        for f in Fang
+        for f in py_fang
         if len(f.get('angle_xy', [])) > 2 * SPI
     ]
     if long_stds:
@@ -747,17 +860,22 @@ def test_fire_2d_segment_angle_mean(test_name, test_case):
         )
         print(f"Long fiber angle std — max: {max_std:.3f} rad, mean: {np.mean(long_stds):.3f} rad")
 
-    # Sub-check B: Python endpoint-angle mean is within 20° of MATLAB endpoint
-    # mean. Segment-angle means are validated against Python endpoints above;
-    # MATLAB stores endpoint angles here, so compare like with like.
-    if len(endpoint_angles) > 0 and len(mat_angles) > 0:
-        py_mean_abs  = np.degrees(np.mean(endpoint_angles % np.pi))
-        mat_mean_abs = np.degrees(np.mean(mat_angles % np.pi))
+    # Sub-check C: Python segment-angle mean is within tolerance of MATLAB Fang.
+    if len(mean_seg) > 0 and len(mat_mean_seg) > 0:
+        # Fang angles are signed atan values in [-pi/2, pi/2].  Use absolute
+        # orientation here; modulo-pi would wrap small negative angles to ~180°.
+        py_mean_abs = np.degrees(np.mean(np.abs(mean_seg)))
+        mat_mean_abs = np.degrees(np.mean(np.abs(mat_mean_seg)))
         delta_deg = abs(py_mean_abs - mat_mean_abs)
-        assert delta_deg < 20.0, (
-            f"Mean endpoint angle {py_mean_abs:.1f}° differs from MATLAB {mat_mean_abs:.1f}° by {delta_deg:.1f}° > 20°"
+        assert delta_deg < SEGMENT_ANGLE_MEAN_TOL_DEG, (
+            f"Mean segment angle {py_mean_abs:.1f}° differs from MATLAB Fang "
+            f"{mat_mean_abs:.1f}° by {delta_deg:.1f}° > "
+            f"{SEGMENT_ANGLE_MEAN_TOL_DEG:.1f}°"
         )
-        print(f"Mean endpoint angle [0-180°] - Python: {py_mean_abs:.1f}°, MATLAB: {mat_mean_abs:.1f}°, delta: {delta_deg:.1f}°")
+        print(
+            f"Mean segment angle [0-180°] - Python: {py_mean_abs:.1f}°, "
+            f"MATLAB Fang: {mat_mean_abs:.1f}°, delta: {delta_deg:.1f}°"
+        )
 
 
 # ============================================================================
