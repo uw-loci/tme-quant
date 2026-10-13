@@ -71,7 +71,7 @@ def test_fspecial_disk_is_normalized_odd_kernel() -> None:
 
 def test_padarray_symmetric_duplicates_edge() -> None:
     src = np.arange(1, 17, dtype=np.uint8).reshape(4, 4)
-    out = matlab_padarray(src, 2, mode="symmetric")
+    out = matlab_padarray(src, 2)
     assert out.shape == (8, 8) and out.dtype == np.uint8
     assert out[2, 2] == src[0, 0]
     np.testing.assert_array_equal(out[1, 2:6], src[0])

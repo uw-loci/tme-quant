@@ -54,21 +54,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import itk  # type: ignore[import-untyped]
 import numpy as np
-
-try:
-    import itk  # type: ignore[import-untyped]
-
-    _HAS_ITK = True
-except ImportError:  # pragma: no cover - optional dependency
-    itk = None  # type: ignore[assignment]
-    _HAS_ITK = False
-
-
-def has_itk() -> bool:
-    """True when the ``itk`` Python package (v3 registration classes) is importable."""
-    return _HAS_ITK
-
 
 # MATLAB ``imregconfig('multimodal')`` defaults
 # (``registration.optimizer.OnePlusOneEvolutionary`` /
@@ -86,7 +73,19 @@ DEFAULT_SEED = 12345
 
 @dataclass
 class OnePlusOneConfig:
-    """Mirror of MATLAB's ``registration.optimizer.OnePlusOneEvolutionary``."""
+    """Settings for MATLAB's ``OnePlusOneEvolutionary`` optimizer.
+
+    Attributes
+    ----------
+    initial_radius : float
+        Starting search radius. ``BDcreation_reg2`` divides the default by 3.5.
+    growth_factor : float
+        How fast a successful step grows the radius.
+    epsilon : float
+        Stop when the radius falls below this.
+    maximum_iterations : int
+        Iteration cap. ``BDcreation_reg2`` sets this to 700.
+    """
 
     initial_radius: float = MATLAB_DEFAULT_INITIAL_RADIUS
     growth_factor: float = MATLAB_DEFAULT_GROWTH_FACTOR
@@ -95,7 +94,14 @@ class OnePlusOneConfig:
 
     @property
     def shrink_factor(self) -> float:
-        # MATLAB: dependent property ``GrowthFactor ^ -0.25`` (Styner 1997 / ITK).
+        """Radius shrink after a failed step.
+
+        MATLAB's dependent property is ``GrowthFactor ** -0.25``.
+
+        Returns
+        -------
+        float
+        """
         return float(self.growth_factor) ** -0.25
 
 
@@ -109,6 +115,29 @@ class RegmexResult:
     ``forward_2x3_0based`` is the same forward transform re-expressed in the
     0-based pixel-centre convention used by
     :func:`pycurvelets._he_bdc_common.matlab_imwarp_bilinear`.
+
+    Attributes
+    ----------
+    transform_type : str
+        ``'similarity'`` or ``'affine'``.
+    parameters : list of float
+        Final ITK parameter vector.
+    fixed_to_moving_3x3 : numpy.ndarray
+        ITK transform, fixed world to moving world.
+    moving_to_fixed_1based_3x3 : numpy.ndarray
+        Inverse of that matrix. This is MATLAB's ``tform.A``.
+    forward_2x3_0based : numpy.ndarray
+        Same forward map in 0-based pixel centres.
+    final_metric : float
+        Last Mattes mutual-information value (ITK returns the negative).
+    stop_condition : str
+        Why the optimizer stopped.
+    trace : list of dict
+        One entry per iteration.
+    level_starts : list of int
+        Trace index where each pyramid level began.
+    extras : dict
+        Pyramid settings and the ITK version string.
     """
 
     transform_type: str
@@ -123,6 +152,18 @@ class RegmexResult:
     extras: dict[str, Any] = field(default_factory=dict)
 
     def as_debug_dict(self, prefix: str = "") -> dict[str, Any]:
+        """Flatten this result into a JSON-friendly dict.
+
+        Parameters
+        ----------
+        prefix : str, optional
+            Text prepended to every key. Default is empty.
+
+        Returns
+        -------
+        dict
+            Transform, metric, stop reason, and per-level trace.
+        """
         return {
             f"{prefix}transform_type": self.transform_type,
             f"{prefix}parameters": list(self.parameters),
@@ -143,9 +184,19 @@ class RegmexResult:
 
 
 def moving_to_fixed_1based_to_forward_0based(A_1based: np.ndarray) -> np.ndarray:
-    """
-    Convert a moving->fixed affine expressed on MATLAB's 1-based pixel-centre
-    grid into the 0-based convention: ``p0' = M p0 + (M @ 1 + t - 1)``.
+    """Convert MATLAB's 1-based ``tform.A`` into a 0-based 2x3 forward map.
+
+    The shift is ``t0 = M @ 1 + t - 1``.
+
+    Parameters
+    ----------
+    A_1based : numpy.ndarray
+        3x3 moving-to-fixed matrix on MATLAB's 1-based pixel centres.
+
+    Returns
+    -------
+    numpy.ndarray
+        2x3 map for 0-based pixel centres.
     """
     A = np.asarray(A_1based, dtype=np.float64)
     M = A[:2, :2]
@@ -159,7 +210,18 @@ def moving_to_fixed_1based_to_forward_0based(A_1based: np.ndarray) -> np.ndarray
 
 
 def forward_0based_to_moving_to_fixed_1based(forward_2x3: np.ndarray) -> np.ndarray:
-    """Inverse of :func:`moving_to_fixed_1based_to_forward_0based`."""
+    """Convert a 0-based 2x3 forward map back to MATLAB's 3x3 ``tform.A``.
+
+    Parameters
+    ----------
+    forward_2x3 : numpy.ndarray
+        2x3 map on 0-based pixel centres.
+
+    Returns
+    -------
+    numpy.ndarray
+        3x3 moving-to-fixed matrix on 1-based pixel centres.
+    """
     F = np.asarray(forward_2x3, dtype=np.float64)
     M = F[:, :2]
     t0 = F[:, 2]
@@ -172,7 +234,18 @@ def forward_0based_to_moving_to_fixed_1based(forward_2x3: np.ndarray) -> np.ndar
 
 
 def matlab_T_to_A(T: np.ndarray) -> np.ndarray:
-    """MATLAB post-multiply ``tform.T`` -> column-form ``tform.A`` (3x3)."""
+    """Turn MATLAB's post-multiply ``tform.T`` into column-form ``tform.A``.
+
+    Parameters
+    ----------
+    T : numpy.ndarray
+        3x3 matrix stored the way ``tform.T`` is stored.
+
+    Returns
+    -------
+    numpy.ndarray
+        Transpose of ``T``.
+    """
     return np.asarray(T, dtype=np.float64).T.copy()
 
 
@@ -181,19 +254,28 @@ def matlab_T_to_A(T: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def _require_itk() -> None:
-    if not _HAS_ITK:
-        raise RuntimeError(
-            "The MATLAB-parity registration engine requires the 'itk' package "
-            "(pip install itk)."
-        )
-
-
 def _to_itk_image(arr: np.ndarray, origin: tuple[float, float] = (1.0, 1.0)) -> Any:
-    """
-    numpy (H, W) float64 -> ``itk.Image[itk.D, 2]`` with unit spacing and the
-    given world origin. Default origin (1, 1) reproduces MATLAB's default
-    ``imref2d`` world coordinates (pixel centres at 1..N).
+    """Wrap a 2-D float array as an ITK image with unit spacing.
+
+    The default origin ``(1, 1)`` puts pixel centres at 1..N, matching
+    MATLAB's default ``imref2d``.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        2-D image.
+    origin : tuple of float, optional
+        World origin ``(x, y)``. Default is ``(1, 1)``.
+
+    Returns
+    -------
+    itk.Image
+        Double 2-D image.
+
+    Raises
+    ------
+    ValueError
+        If ``arr`` is not 2-D.
     """
     a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
     if a.ndim != 2:
@@ -205,6 +287,18 @@ def _to_itk_image(arr: np.ndarray, origin: tuple[float, float] = (1.0, 1.0)) -> 
 
 
 def _make_scales(values: list[float]) -> Any:
+    """Build the ITK optimizer-scales vector MATLAB passes to ``imregtform``.
+
+    Parameters
+    ----------
+    values : list of float
+        One scale per transform parameter.
+
+    Returns
+    -------
+    itk.OptimizerParameters
+        Scales object the evolutionary optimizer expects.
+    """
     arr = itk.Array[itk.D](len(values))
     for i, v in enumerate(values):
         arr.SetElement(i, float(v))
@@ -212,6 +306,19 @@ def _make_scales(values: list[float]) -> Any:
 
 
 def _params_from_itk(p: Any, n: int) -> list[float]:
+    """Copy the first ``n`` ITK parameters into a Python list.
+
+    Parameters
+    ----------
+    p : itk parameter object
+        Object with ``GetElement``.
+    n : int
+        How many parameters to copy.
+
+    Returns
+    -------
+    list of float
+    """
     return [float(p.GetElement(i)) for i in range(n)]
 
 
@@ -220,10 +327,29 @@ def matlab_default_settings(
     moving_shape: tuple[int, int],
     fixed_shape: tuple[int, int],
 ) -> tuple[np.ndarray, np.ndarray, list[float]]:
-    """
-    Port of ``computeDefaultRegmexSettings.m`` for 2-D, default ``imref2d``.
+    """Default transform and optimizer scales from ``computeDefaultRegmexSettings``.
 
-    Returns ``(linear_2x2, translation_2, optimizer_scales)``.
+    Parameters
+    ----------
+    transform_type : {'affine', 'similarity', 'rigid', 'translation'}
+        Transform whose parameter scales are needed.
+    moving_shape, fixed_shape : tuple of int
+        ``(height, width)`` of the two images.
+
+    Returns
+    -------
+    linear_2x2 : numpy.ndarray
+        Identity 2x2 matrix.
+    translation_2 : numpy.ndarray
+        Shift that lines up the two image centres.
+    optimizer_scales : list of float
+        One scale per ITK parameter. Translation is scaled by the fixed
+        image diagonal.
+
+    Raises
+    ------
+    ValueError
+        If ``transform_type`` is not one of the four names above.
     """
     mh, mw = int(moving_shape[0]), int(moving_shape[1])
     fh, fw = int(fixed_shape[0]), int(fixed_shape[1])
@@ -251,10 +377,19 @@ def matlab_default_settings(
 
 
 def _similarity_params_from_matrix(M: np.ndarray, t: np.ndarray) -> list[float]:
-    """
-    Decompose a fixed->moving similarity ``M = s R(theta)`` (centre at world
-    origin) into ITK ``Similarity2DTransform`` parameters
-    ``[scale, angle, tx, ty]``.
+    """Read ITK similarity parameters from a 2x2 matrix and a translation.
+
+    Parameters
+    ----------
+    M : numpy.ndarray
+        ``scale * rotation``, shape ``(2, 2)``. The centre is the world origin.
+    t : numpy.ndarray
+        Translation, shape ``(2,)``.
+
+    Returns
+    -------
+    list of float
+        ``[scale, angle, tx, ty]``.
     """
     scale = float(np.sqrt(abs(np.linalg.det(M))))
     angle = float(np.arctan2(M[1, 0], M[0, 0]))
@@ -267,12 +402,33 @@ def _build_transform(
     translation_2: np.ndarray,
     center: tuple[float, float],
 ) -> Any:
-    """
-    Create the ITK transform and set it so that
-    ``T(p) = M @ p + t`` (fixed world -> moving world), regardless of ``center``.
+    """Build an ITK transform for ``T(p) = M p + t``.
 
-    ITK's parameterisation is ``T(p) = M (p - c) + c + trans`` so the ITK
-    translation parameter is ``trans = t - c + M c``.
+    ITK stores ``T(p) = M (p - c) + c + trans``, so the translation parameter
+    is ``t - c + M c``. The built transform is checked against ``M`` and ``t``.
+
+    Parameters
+    ----------
+    transform_type : {'similarity', 'affine'}
+        Which ITK transform to create.
+    linear_2x2 : numpy.ndarray
+        Linear part ``M``.
+    translation_2 : numpy.ndarray
+        Translation ``t`` in world coordinates.
+    center : tuple of float
+        ITK transform centre ``(x, y)``.
+
+    Returns
+    -------
+    itk.Transform
+        Initialized similarity or affine transform.
+
+    Raises
+    ------
+    RuntimeError
+        If the ITK object does not reproduce ``M`` and ``t``.
+    ValueError
+        If ``transform_type`` is not ``'similarity'`` or ``'affine'``.
     """
     M = np.asarray(linear_2x2, dtype=np.float64)
     t = np.asarray(translation_2, dtype=np.float64)
@@ -313,7 +469,20 @@ def _build_transform(
 
 
 def _transform_to_matrix(transform: Any) -> tuple[np.ndarray, np.ndarray]:
-    """Extract ``(M, t)`` with ``T(p) = M p + t`` by probing three points."""
+    """Read ``T(p) = M p + t`` by transforming three points.
+
+    Parameters
+    ----------
+    transform : itk.Transform
+        2-D transform.
+
+    Returns
+    -------
+    M : numpy.ndarray
+        2x2 linear part.
+    t : numpy.ndarray
+        Translation, equal to ``T(0)``.
+    """
     p00 = np.array(transform.TransformPoint([0.0, 0.0]), dtype=np.float64)
     p10 = np.array(transform.TransformPoint([1.0, 0.0]), dtype=np.float64)
     p01 = np.array(transform.TransformPoint([0.0, 1.0]), dtype=np.float64)
@@ -386,7 +555,6 @@ def matlab_imregtform_v3(
     -------
     RegmexResult
     """
-    _require_itk()
     t = transform_type.lower()
     if t not in ("similarity", "affine"):
         raise ValueError("transform_type must be 'similarity' or 'affine'")
@@ -470,8 +638,15 @@ def matlab_imregtform_v3(
     n_levels = int(pyramid_levels)
 
     def _on_level() -> None:
-        # Port of MATLAB's PyramidLevelOptimizerRefiner: fires before
-        # StartOptimization() of each level.
+        """Reset radius, epsilon, and the random seed at each pyramid level.
+
+        This is the port of MATLAB's ``PyramidLevelOptimizerRefiner``. It
+        runs before ``StartOptimization`` on that level.
+
+        Returns
+        -------
+        None
+        """
         level = int(registration.GetCurrentLevel())
         shrink = 2.0 ** (n_levels - 1 - level)  # ITK default schedule 4/2/1
         radius_l = float(optimizer.initial_radius) * shrink ** float(level_radius_power)
@@ -486,6 +661,12 @@ def matlab_imregtform_v3(
             print(f"  -- pyramid level {level + 1}/{n_levels}: radius={radius_l:.4g} epsilon={eps_l:.3g} --")
 
     def _on_iteration() -> None:
+        """Append the current cost and parameters to the trace.
+
+        Returns
+        -------
+        None
+        """
         pos = opt.GetCurrentPosition()
         trace.append(
             {
@@ -572,6 +753,27 @@ def register_bdcreation_reg2_matlab(
 
     The discarded ``imregister`` warm-up has no side effects on the optimizer
     (value class) and is skipped unless ``run_warmup=True``.
+
+    Parameters
+    ----------
+    he_moving : numpy.ndarray
+        Binary or grayscale H&E moving image.
+    fixed_shg : numpy.ndarray
+        SHG fixed image.
+    seed : int, optional
+        Random seed for the evolutionary optimizer. Default is 12345.
+    center : str or tuple of float, optional
+        Transform centre. Default is the fixed-image centre.
+    radius_divisor : float, optional
+        Divides MATLAB's default initial radius. Default is 3.5.
+    maximum_iterations : int, optional
+        Iteration cap for both stages. Default is 700.
+    run_warmup : bool, optional
+        When True, also run the discarded ``imregister`` call. Default is False.
+    number_of_threads : int or None, optional
+        ITK thread count. ``None`` leaves the ITK default.
+    verbose : bool, optional
+        Print pyramid-level progress. Default is False.
 
     Returns
     -------

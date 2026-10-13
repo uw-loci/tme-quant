@@ -4,7 +4,7 @@ Ground-truth evaluation of SHG<->HE registration (Plan D).
 The MATLAB goldens are reference *outputs*, not truth. The patient_02 cases
 are synthetic: the HE was rotated/scaled by a known transform, so
 ``patient_02_HE_original-<roi>.tif`` is the truly aligned HE and the affine
-recovered between input HE and that ROI (``tests/matlab_parity/dumps/
+recovered between input HE and that ROI (``archive/matlab_parity/dumps/
 gt_affine_<case>.json``, SIFT+RANSAC, inlier RMS ~0.6 px) is ground truth.
 
 What is asserted:
@@ -17,7 +17,7 @@ What is asserted:
   hence this port) is 4.4-7.8 px apart.
 
 Measured values are in the module constants so a regression shows up as a
-number, not a boolean. Tests skip without fixtures / itk.
+number, not a boolean. Tests skip without fixtures. ``itk`` is a package dependency.
 """
 
 from __future__ import annotations
@@ -30,7 +30,6 @@ import numpy as np
 import pytest
 from skimage import io
 
-from pycurvelets._itk_v3_matlab_engine import has_itk
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
     shg_he_registration,
@@ -56,7 +55,7 @@ if os.environ.get("TMEQ_RUN_MATLAB_PARITY") != "1":
 _TESTS_DIR = Path(__file__).resolve().parent
 _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"
 _P02_ROOT = _FIXTURE_ROOT / "new_test_datasets_tests4-5-6-7"
-_GT_DIR = _TESTS_DIR / "matlab_parity" / "dumps"
+_GT_DIR = _TESTS_DIR.parent / "archive" / "matlab_parity" / "dumps"
 
 GT_CASES = (
     ("test4", "patient_02_roi2.tif", 2.6, "roi2"),
@@ -95,7 +94,6 @@ def _run(he_dir: Path, fname: str, shg_dir: Path, ppm: float):
         HEfilename=fname,
         pixelpermicron=ppm,
         SHGfilepath=str(shg_dir),
-        areaThreshold=5000.0,
     )
     img, debug = shg_he_registration(params, save_output=False, return_debug=True)
     return img, debug
@@ -143,7 +141,6 @@ def test_working_grid_mapping_roundtrips() -> None:
     np.testing.assert_allclose(back, F_full, atol=1e-10)
 
 
-@pytest.mark.skipif(not has_itk(), reason="ITK v3 (1+1)-ES path requires itk")
 @pytest.mark.parametrize("case_id,fname,ppm,roi", GT_CASES, ids=_IDS)
 def test_matlab_method_gt_error_matches_matlab(case_id, fname, ppm, roi) -> None:
     rep = _gt_eval(case_id, fname, ppm, roi)
@@ -169,7 +166,6 @@ def _full_res_transforms() -> tuple[dict[float, np.ndarray], tuple[int, int]]:
     return out, he_shape
 
 
-@pytest.mark.skipif(not has_itk(), reason="ITK v3 (1+1)-ES path requires itk")
 def test_cross_ppm_consistency_patient001() -> None:
     full, he_shape = _full_res_transforms()
     pairs = {(a, b): mean_corner_displacement_px(full[a], full[b], he_shape) for a, b in ((1.5, 2.0), (1.5, 3.0), (2.0, 3.0))}

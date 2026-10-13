@@ -13,6 +13,20 @@ import numpy as np
 
 
 def _derive_size_from_scale(img_shape: tuple[int, ...], scale: list[float]) -> list[int]:
+    """Output size for a per-axis scale, using MATLAB's ``ceil``.
+
+    Parameters
+    ----------
+    img_shape : tuple of int
+        Input ``(rows, cols, ...)``.
+    scale : list of float
+        Scale for each of the first two axes.
+
+    Returns
+    -------
+    list of int
+        ``[ceil(scale * rows), ceil(scale * cols)]``.
+    """
     output_shape: list[int] = []
     for k in range(2):
         output_shape.append(int(ceil(scale[k] * img_shape[k])))
@@ -20,6 +34,20 @@ def _derive_size_from_scale(img_shape: tuple[int, ...], scale: list[float]) -> l
 
 
 def _derive_scale_from_size(img_shape_in: tuple[int, ...], img_shape_out: tuple[int, ...]) -> list[float]:
+    """Per-axis scale that turns ``img_shape_in`` into ``img_shape_out``.
+
+    Parameters
+    ----------
+    img_shape_in : tuple of int
+        Input shape.
+    img_shape_out : tuple of int
+        Output shape.
+
+    Returns
+    -------
+    list of float
+        ``[out / in]`` for the first two axes.
+    """
     scale: list[float] = []
     for k in range(2):
         scale.append(1.0 * img_shape_out[k] / img_shape_in[k])
@@ -27,6 +55,18 @@ def _derive_scale_from_size(img_shape_in: tuple[int, ...], img_shape_out: tuple[
 
 
 def _triangle(x: np.ndarray) -> np.ndarray:
+    """Bilinear interpolation kernel used by MATLAB ``imresize``.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Distance from the sample, in input pixels.
+
+    Returns
+    -------
+    numpy.ndarray
+        Kernel weights. Nonzero on ``[-1, 1]``.
+    """
     x = np.array(x).astype(np.float64)
     lessthanzero = np.logical_and((x >= -1), x < 0)
     greaterthanzero = np.logical_and((x <= 1), x >= 0)
@@ -34,6 +74,18 @@ def _triangle(x: np.ndarray) -> np.ndarray:
 
 
 def _cubic(x: np.ndarray) -> np.ndarray:
+    """Keys bicubic kernel used by MATLAB ``imresize``.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Distance from the sample, in input pixels.
+
+    Returns
+    -------
+    numpy.ndarray
+        Kernel weights. Nonzero on ``[-2, 2]``.
+    """
     x = np.array(x).astype(np.float64)
     absx = np.absolute(x)
     absx2 = np.multiply(absx, absx)
@@ -51,8 +103,42 @@ def _contributions(
     kernel,
     k_width: float,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Antialias weights and source indices for one axis of ``imresize``.
+
+    Parameters
+    ----------
+    in_length : int
+        Input length along this axis.
+    out_length : int
+        Output length along this axis.
+    scale : float
+        ``out_length / in_length``.
+    kernel : callable
+        ``_cubic`` or ``_triangle``.
+    k_width : float
+        Kernel half-width in input pixels before antialias scaling.
+
+    Returns
+    -------
+    weights : numpy.ndarray
+        Normalized kernel weights for each output pixel.
+    indices : numpy.ndarray
+        Input indices those weights read, reflected at the borders.
+    """
     if scale < 1:
         def h(x: np.ndarray) -> np.ndarray:
+            """Antialiased kernel: scale the weights when shrinking.
+
+            Parameters
+            ----------
+            x : numpy.ndarray
+                Distance from the output sample.
+
+            Returns
+            -------
+            numpy.ndarray
+                Scaled kernel weights.
+            """
             return scale * kernel(scale * x)
 
         kernel_width = 1.0 * k_width / scale
@@ -81,6 +167,29 @@ def _imresizevec(
     indices: np.ndarray,
     dim: int,
 ) -> np.ndarray:
+    """Apply one axis of the separable ``imresize`` weighted sum.
+
+    Parameters
+    ----------
+    inimg : numpy.ndarray
+        Image with a channel axis.
+    weights : numpy.ndarray
+        Weights from :func:`_contributions`.
+    indices : numpy.ndarray
+        Source indices from :func:`_contributions`.
+    dim : int
+        ``0`` for rows, ``1`` for columns.
+
+    Returns
+    -------
+    numpy.ndarray
+        Image resized along ``dim``. uint8 input is rounded back to uint8.
+
+    Raises
+    ------
+    ValueError
+        If ``dim`` is not 0 or 1.
+    """
     wshape = weights.shape
     if dim == 0:
         weights = weights.reshape((wshape[0], wshape[2], 1, 1))
@@ -102,6 +211,24 @@ def _resize_along_dim(
     weights: np.ndarray,
     indices: np.ndarray,
 ) -> np.ndarray:
+    """Resize ``a`` along one axis. See :func:`_imresizevec`.
+
+    Parameters
+    ----------
+    a : numpy.ndarray
+        Image with a channel axis.
+    dim : int
+        ``0`` for rows, ``1`` for columns.
+    weights : numpy.ndarray
+        Weights from :func:`_contributions`.
+    indices : numpy.ndarray
+        Source indices from :func:`_contributions`.
+
+    Returns
+    -------
+    numpy.ndarray
+        Image resized along ``dim``.
+    """
     return _imresizevec(a, weights, indices, dim)
 
 
@@ -123,8 +250,18 @@ def matlab_imresize(
         Uniform scale factor (e.g. ``2/3`` for ppm=3 cap).
     output_shape
         Target ``(rows, cols)``.
-    method
-        ``'bicubic'`` (keys cubic) or ``'bilinear'``.
+    method : {'bicubic', 'bilinear'}, optional
+        Interpolation kernel. Default is ``'bicubic'``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Resized image. uint8 input stays uint8; other dtypes come back float64.
+
+    Raises
+    ------
+    ValueError
+        If ``method`` is unknown, or both size arguments are set, or neither is.
     """
     if method == "bicubic":
         kernel = _cubic

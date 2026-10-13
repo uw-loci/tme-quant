@@ -7,7 +7,7 @@ The only registrar is the ITK v3 (1+1)-ES port. On the reference machine it is
 pixel-exact (asserted in ``test_shg_he_registration_matlab_parity.py``). Here
 we keep a last-ulp MAE margin so another ITK build does not fail CI.
 
-Tests skip if fixtures or ``itk`` are missing.
+Tests skip if the patient fixtures are missing. ``itk`` is a package dependency.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ import numpy as np
 import pytest
 from skimage import io
 
-from pycurvelets._itk_v3_matlab_engine import has_itk
 from pycurvelets._registration_quality import compute_registration_quality_metrics
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
@@ -70,7 +69,6 @@ def _require_registration_fixtures(case_folder: str) -> Path:
     REGRESSION_CASES,
     ids=[c[0] for c in REGRESSION_CASES],
 )
-@pytest.mark.skipif(not has_itk(), reason="ITK v3 (1+1)-ES path requires itk")
 def test_shg_he_registration_matches_matlab_golden_patient001(
     case_id: str,
     pixelpermicron: float,
@@ -85,7 +83,6 @@ def test_shg_he_registration_matches_matlab_golden_patient001(
         HEfilename="patient_001.tif",
         pixelpermicron=pixelpermicron,
         SHGfilepath=str(_SHG_INPUT.parent),
-        areaThreshold=5000.0,
     )
     python_float, debug = shg_he_registration(
         params, save_output=False, return_debug=True
@@ -140,7 +137,6 @@ def _require_p02_fixtures(he_filename: str, golden_folder: str) -> Path:
     PATIENT02_CASES,
     ids=[c[0] for c in PATIENT02_CASES],
 )
-@pytest.mark.skipif(not has_itk(), reason="ITK v3 (1+1)-ES path requires itk")
 def test_shg_he_registration_patient02(
     case_id: str,
     he_filename: str,
@@ -160,7 +156,6 @@ def test_shg_he_registration_patient02(
         HEfilename=he_filename,
         pixelpermicron=pixelpermicron,
         SHGfilepath=str(_P02_SHG),
-        areaThreshold=5000.0,
         pipeline=matlab_reg,
     )
     python_float, debug = shg_he_registration(

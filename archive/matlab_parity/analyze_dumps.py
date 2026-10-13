@@ -2,17 +2,17 @@
 
 Usage (from tme-quant root, after ``dump_bdc_reg2.m`` has run)::
 
-    .venv/bin/python tests/matlab_parity/analyze_dumps.py            # all cases
-    .venv/bin/python tests/matlab_parity/analyze_dumps.py test1 test4  # subset
-    .venv/bin/python tests/matlab_parity/analyze_dumps.py --no-engine  # skip ITK runs
-    .venv/bin/python tests/matlab_parity/analyze_dumps.py --preproc    # step-by-step
+    .venv/bin/python archive/matlab_parity/analyze_dumps.py            # all cases
+    .venv/bin/python archive/matlab_parity/analyze_dumps.py test1 test4  # subset
+    .venv/bin/python archive/matlab_parity/analyze_dumps.py --no-engine  # skip ITK runs
+    .venv/bin/python archive/matlab_parity/analyze_dumps.py --preproc    # step-by-step
                                                                          # mask parity
 
 For every case this reports
 
 1. **Preprocessing parity** - Dice between Python's ``he_moving`` collagen mask
    and MATLAB's dumped ``HEmoving``.
-2. **Engine parity** - the ITK-v3 engine (``registration_method="matlab"``)
+2. **Engine parity** - the ITK v3 (1+1)-ES engine
    run on MATLAB's *exact* ``HEmoving``/``fixedSHG`` doubles; both stage
    transforms are compared against ``tformSimilarity.T`` / ``tform.T`` in
    parameter space. Where ``optimization_trace.txt`` exists, the per-iteration
@@ -27,7 +27,7 @@ For every case this reports
    MATLAB, Python and GT transforms.
 5. **Determinism** - ``test2`` vs ``test2_rerun`` MATLAB transforms.
 
-Writes ``tests/matlab_parity/dumps/analysis_summary.json`` and, for patient_02,
+Writes ``archive/matlab_parity/dumps/analysis_summary.json`` and, for patient_02,
 ``dumps/gt_affine_<case>.json``.
 """
 from __future__ import annotations
@@ -58,7 +58,6 @@ from pycurvelets._he_bdc_common import (  # noqa: E402
 from pycurvelets._itk_v3_matlab_engine import (  # noqa: E402
     OnePlusOneConfig,
     forward_0based_to_moving_to_fixed_1based,
-    has_itk,
     matlab_T_to_A,
     matlab_imregtform_v3,
     moving_to_fixed_1based_to_forward_0based,
@@ -125,7 +124,7 @@ def _python_pipeline(
     fixed = fixed_shg.astype(np.float64)
     if fixed.ndim == 3:
         fixed = matlab_rgb2gray(fixed)
-    he_moving, _mode, _extras = _build_he_moving(he_scaled, he_adj, he_dec, pix, "hsv", 0)
+    he_moving, _mode, _extras = _build_he_moving(he_adj, pix, "hsv")
     return he_moving.astype(np.float64), fixed, pix, he.shape[:2], shg.shape[:2]
 
 
@@ -394,7 +393,7 @@ def compare_preprocessing(case_id: str, he_dir: Path, he_file: str, shg_dir: Pat
     cmp_mask("BW (nuclei raw + bwareaopen150)", nuclei_raw, m["BW"])
     bw_nuclei, masked = make_nuclei_mask(he_adj, pix)
     cmp_mask("BW_nuclei (imopen)", bw_nuclei, m["BW_nuclei"])
-    bw_col, _, _ = make_collagen_mask(he_adj, pix, enhanced_postprocessing=False)
+    bw_col, _, _ = make_collagen_mask(he_adj)
     cmp_mask("BW_collagen", bw_col, m["BW_collagen"])
 
     gray_nuclei = matlab_rgb2gray(masked)
@@ -450,10 +449,6 @@ def main(argv: list[str]) -> None:
         out.write_text(json.dumps(report, indent=2, default=float))
         print(f"\nWrote {out}")
         return
-    if run_engine and not has_itk():
-        print("itk not importable -> engine checks disabled (--no-engine).")
-        run_engine = False
-
     results: dict[str, Any] = {"cases": {}, "determinism": {}}
 
     t2 = DUMPS / "test2" / "tform_affine.txt"

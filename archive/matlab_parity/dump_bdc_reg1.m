@@ -2,7 +2,7 @@
 % Diagnostic harness for BDcreation_reg.m ("reg1", the RGB/decorrstretch +
 % LAB k-means pipeline) parity work. Mirrors dump_bdc_reg2.m. Run with:
 %   /Applications/MATLAB_R2025b.app/bin/matlab -batch \
-%     "cd('.../tests/matlab_parity'); dump_bdc_reg1"
+%     "cd('.../archive/matlab_parity'); dump_bdc_reg1"
 %
 % Outputs under dumps/<case_id>/ :
 %   images.mat          HEmoving (double) and fixedSHG as regmex sees it

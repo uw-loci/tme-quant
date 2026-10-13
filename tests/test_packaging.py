@@ -8,8 +8,9 @@ Wheel
 sdist
     ``pip install tme-quant --no-binary tme-quant`` / ``python -m build --sdist``
     Source needed to rebuild the wheel, plus the lightweight pytest suite.
-    Tests 1-9 fixtures, MATLAB dumps, GT TIFFs, and comparison figures stay
-    in git; they are not release artifacts.
+    Tests 1-9 fixtures, MATLAB dumps, and GT TIFFs stay in git; they are
+    not release artifacts. Comparison PNGs are generated locally under
+    tests/artifacts and are not in git or the sdist.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ _WHEEL_REGISTRATION_MODULES = (
 
 _SDIST_PRUNED = (
     "tests/test_for_shg_he_registration_BDcreation",
-    "tests/matlab_parity",
+    "archive",
     "tests/artifacts",
 )
 

@@ -62,7 +62,19 @@ HE2_PPM_CAP = 2.0
 
 
 def matlab_im2double(image: np.ndarray) -> np.ndarray:
-    """``im2double``: uint8/uint16 scale to ``[0, 1]``; float left as-is."""
+    """Scale an image to ``[0, 1]`` the way MATLAB ``im2double`` does.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        uint8, uint16, bool, or float image.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float64 image. uint8 is divided by 255, uint16 by 65535. Float input
+        is not rescaled.
+    """
     a = np.asarray(image)
     if a.dtype == np.uint8:
         return a.astype(np.float64) / 255.0
@@ -74,30 +86,73 @@ def matlab_im2double(image: np.ndarray) -> np.ndarray:
 
 
 def matlab_im2bw(image: np.ndarray, thresh: float) -> np.ndarray:
-    """``im2bw(I, level)``: ``im2double(I) > level`` (logical)."""
+    """Threshold an image the way ``im2bw(I, level)`` does.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Image to threshold. A boolean image is copied.
+    thresh : float
+        Level in ``[0, 1]`` after ``im2double``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean mask, true where the scaled image is strictly above ``thresh``.
+    """
     a = np.asarray(image)
     if a.dtype == np.bool_:
         return a.copy()
     return matlab_im2double(a) > float(thresh)
 
 
-def matlab_padarray(image: np.ndarray, pad: int | tuple[int, int], mode: str = "symmetric") -> np.ndarray:
-    """
-    ``padarray(A, [p p], 'symmetric')`` (both sides). MATLAB's symmetric
-    reflection duplicates the edge pixel, which is ``np.pad(..., mode='symmetric')``.
+def matlab_padarray(image: np.ndarray, pad: int | tuple[int, int]) -> np.ndarray:
+    """Pad both sides the way ``padarray(A, [pr pc], 'symmetric')`` does.
+
+    MATLAB's symmetric reflection duplicates the edge pixel, which is
+    ``numpy.pad(..., mode='symmetric')``. That is the only padding
+    ``BDcreationHE`` uses, so there is no mode argument.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        2-D array to pad.
+    pad : int or tuple of int
+        ``(row_pad, col_pad)``, or one integer used for both axes.
+
+    Returns
+    -------
+    numpy.ndarray
+        Padded array.
     """
     a = np.asarray(image)
     if isinstance(pad, tuple):
         pr, pc = int(pad[0]), int(pad[1])
     else:
         pr = pc = int(pad)
-    if mode != "symmetric":
-        raise ValueError(f"only 'symmetric' padarray is implemented, got {mode!r}")
     return np.pad(a, ((pr, pr), (pc, pc)), mode="symmetric")
 
 
 def matlab_fspecial_disk(radius: float) -> np.ndarray:
-    """``fspecial('disk', radius)``: normalized circular averaging kernel."""
+    """Circular averaging kernel matching ``fspecial('disk', radius)``.
+
+    Parameters
+    ----------
+    radius : float
+        Disk radius in pixels. Must be greater than 0.
+
+    Returns
+    -------
+    numpy.ndarray
+        Kernel that sums to 1.
+
+    Raises
+    ------
+    ValueError
+        If ``radius`` is not positive.
+    RuntimeError
+        If the kernel sums to zero.
+    """
     rad = float(radius)
     if rad <= 0:
         raise ValueError(f"disk radius must be > 0, got {rad}")
@@ -157,7 +212,22 @@ def matlab_fspecial_disk(radius: float) -> np.ndarray:
 
 
 def _histeq_transform(counts: np.ndarray, hgram: np.ndarray, n_pixels: int) -> np.ndarray:
-    """``createTransformationToIntensityImage`` from MATLAB ``histeq.m``."""
+    """Build the intensity map used inside MATLAB ``histeq``.
+
+    Parameters
+    ----------
+    counts : numpy.ndarray
+        Input histogram.
+    hgram : numpy.ndarray
+        Desired histogram. Its length is the number of output levels.
+    n_pixels : int
+        Number of pixels. Used as the error sentinels in ``histeq.m``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Lookup values in ``[0, 1]``, one per input bin.
+    """
     nn = np.asarray(counts, dtype=np.float64).ravel()
     desired = np.asarray(hgram, dtype=np.float64).ravel()
     m = desired.size
@@ -176,13 +246,29 @@ def _histeq_transform(counts: np.ndarray, hgram: np.ndarray, n_pixels: int) -> n
 
 
 def matlab_grayxform(image: np.ndarray, transform: np.ndarray) -> np.ndarray:
-    """
-    ``images.internal.builtins.grayxform(I, T)``.
+    """Apply a lookup table the way MATLAB ``grayxform`` does.
 
-    ``T`` is a double LUT of length ``N`` with values in ``[0, 1]``. uint8 with
-    ``N == 256`` maps ``uint8(floor(255*T(I+1)+0.5))``. Double maps
-    ``T(floor(I*(N-1)+0.5)+1)`` with values outside ``[0, 1]`` clamped to the
+    ``transform`` holds values in ``[0, 1]``. A uint8 image with a 256-entry
+    table maps ``floor(255 * T(I) + 0.5)``. A double image indexes
+    ``floor(I * (N - 1) + 0.5)`` and clamps values outside ``[0, 1]`` to the
     end bins.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        uint8 or double image.
+    transform : numpy.ndarray
+        Lookup table. At least two entries.
+
+    Returns
+    -------
+    numpy.ndarray
+        Mapped image. uint8 in, uint8 out. Double in, double out.
+
+    Raises
+    ------
+    ValueError
+        If ``transform`` has fewer than two entries.
     """
     t = np.asarray(transform, dtype=np.float64).ravel()
     if t.size < 2:
@@ -209,11 +295,28 @@ def matlab_grayxform(image: np.ndarray, transform: np.ndarray) -> np.ndarray:
 
 
 def matlab_histeq(image: np.ndarray, n_levels: int | None = None) -> np.ndarray:
-    """
-    ``histeq(I)`` / ``histeq(I, N)``.
+    """Histogram-equalize an image the way MATLAB ``histeq`` does.
 
-    Default ``N`` is 64 for every class (including uint8). The *input*
-    histogram always uses 256 bins for uint8 and double. Same class out.
+    The default number of output levels is 64 for every class, including
+    uint8. The input histogram always uses 256 bins. The output keeps the
+    input class.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        uint8 or double image.
+    n_levels : int or None, optional
+        Output levels. ``None`` means 64. Must be at least 2.
+
+    Returns
+    -------
+    numpy.ndarray
+        Equalized image, same dtype as ``image``.
+
+    Raises
+    ------
+    ValueError
+        If ``n_levels`` is less than 2.
     """
     a = np.asarray(image)
     npts = 256
@@ -232,7 +335,25 @@ def matlab_imfilter_keep_class(
     *,
     boundary: str = "zero",
 ) -> np.ndarray:
-    """``imfilter`` returning the same integer class as ``image`` (round + saturate)."""
+    """Filter an image and return the same numeric class.
+
+    The filter runs in double precision. Integer results are rounded half
+    away from zero and clipped to the dtype range.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        uint8, uint16, or double image.
+    kernel : numpy.ndarray
+        Convolution kernel.
+    boundary : {'zero', 'replicate', 'symmetric'}, optional
+        How ``imfilter`` fills the border. Default is ``'zero'``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Filtered image, same dtype as ``image``.
+    """
     a = np.asarray(image)
     out = matlab_imfilter(a.astype(np.float64), kernel, boundary=boundary)
     if a.dtype == np.uint8:
@@ -243,6 +364,25 @@ def matlab_imfilter_keep_class(
 
 
 def _disk_nhood(radius: float, *, how: str) -> np.ndarray:
+    """Adams ``strel('disk')`` neighborhood used by the HE2 morphology.
+
+    Parameters
+    ----------
+    radius : float
+        Radius before it is converted to an integer.
+    how : {'ceil', 'round'}
+        ``'ceil'`` matches ``ceil(ppm)``. ``'round'`` matches MATLAB ``round``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean structuring element.
+
+    Raises
+    ------
+    ValueError
+        If ``how`` is not ``'ceil'`` or ``'round'``.
+    """
     if how == "ceil":
         r = int(np.ceil(radius))
     elif how == "round":
@@ -253,14 +393,56 @@ def _disk_nhood(radius: float, *, how: str) -> np.ndarray:
 
 
 def _imdilate(mask: np.ndarray, nhood: np.ndarray) -> np.ndarray:
+    """Binary dilation matching ``imdilate``.
+
+    Parameters
+    ----------
+    mask : numpy.ndarray
+        Boolean mask.
+    nhood : numpy.ndarray
+        Structuring element.
+
+    Returns
+    -------
+    numpy.ndarray
+        Dilated boolean mask.
+    """
     return ndimage.binary_dilation(np.asarray(mask, dtype=bool), structure=np.asarray(nhood, dtype=bool))
 
 
 def _imopen(mask: np.ndarray, nhood: np.ndarray) -> np.ndarray:
+    """Binary opening matching ``imopen``.
+
+    Parameters
+    ----------
+    mask : numpy.ndarray
+        Boolean mask.
+    nhood : numpy.ndarray
+        Structuring element.
+
+    Returns
+    -------
+    numpy.ndarray
+        Opened boolean mask.
+    """
     return ndimage.binary_opening(np.asarray(mask, dtype=bool), structure=np.asarray(nhood, dtype=bool))
 
 
 def _imclose(mask: np.ndarray, nhood: np.ndarray) -> np.ndarray:
+    """Binary closing matching ``imclose``.
+
+    Parameters
+    ----------
+    mask : numpy.ndarray
+        Boolean mask.
+    nhood : numpy.ndarray
+        Structuring element.
+
+    Returns
+    -------
+    numpy.ndarray
+        Closed boolean mask.
+    """
     return ndimage.binary_closing(np.asarray(mask, dtype=bool), structure=np.asarray(nhood, dtype=bool))
 
 
@@ -268,8 +450,22 @@ def prepare_he2_image(he: np.ndarray, pixel_per_micron: float) -> tuple[np.ndarr
     """
     BDcreationHE2 sizing: ``if ppm > 2: HEdata = imresize(HE, 2/ppm); ppm = 2``.
 
-    Uses MATLAB's scalar-scale ``imresize`` (``ceil`` output size), not
-    :func:`prepare_he_image` (that helper ``round``s and is shared with registration).
+    Uses MATLAB's scalar-scale ``imresize`` (``ceil`` output size). Registration
+    resamples H&E onto the SHG grid instead; this helper only resamples H&E.
+
+    Parameters
+    ----------
+    he : numpy.ndarray
+        H&E image in ``[0, 1]``.
+    pixel_per_micron : float
+        Native resolution.
+
+    Returns
+    -------
+    he_rgb : numpy.ndarray
+        Image on the working grid.
+    pix : float
+        Working pixels per micron, capped at 2.
     """
     he_rgb = ensure_rgb(he)
     pix = float(pixel_per_micron)
@@ -280,7 +476,24 @@ def prepare_he2_image(he: np.ndarray, pixel_per_micron: float) -> tuple[np.ndarr
 
 
 def he2_nuclei_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.ndarray, np.ndarray, float]:
-    """HSV nuclei band + ``bwareaopen(150)`` + ``imopen(strel('disk', ceil(ppm/2)))``."""
+    """HSV nuclei mask from ``BDcreationHE2.m``.
+
+    Parameters
+    ----------
+    he_adjusted : numpy.ndarray
+        Contrast-adjusted H&E.
+    pix_per_mic : float
+        Working pixels per micron. The opening radius is ``ceil(ppm / 2)``.
+
+    Returns
+    -------
+    bw_nuclei : numpy.ndarray
+        Boolean nuclei mask.
+    masked : numpy.ndarray
+        H&E with non-nuclei pixels set to 0.
+    sat_thresh : float
+        Otsu threshold on the saturation channel.
+    """
     hsv = matlab_rgb2hsv(he_adjusted)
     sat_thresh = matlab_graythresh(hsv[..., 1])
     bw = (
@@ -297,7 +510,26 @@ def he2_nuclei_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.nda
 
 
 def he2_collagen_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.ndarray, np.ndarray, float]:
-    """Wrapped-hue collagen + dilate ``ceil(ppm)`` + close ``round(3*ppm)``."""
+    """Wrapped-hue collagen mask from ``BDcreationHE2.m``.
+
+    The mask is dilated by ``ceil(ppm)`` and closed by ``round(3 * ppm)``.
+
+    Parameters
+    ----------
+    he_adjusted : numpy.ndarray
+        Contrast-adjusted H&E.
+    pix_per_mic : float
+        Working pixels per micron.
+
+    Returns
+    -------
+    bw_collagen : numpy.ndarray
+        Boolean collagen mask after dilation and closing.
+    bw_nobackground : numpy.ndarray
+        Pixels at or above the saturation threshold.
+    sat_thresh : float
+        Otsu threshold on the saturation channel.
+    """
     hsv = matlab_rgb2hsv(he_adjusted)
     sat_thresh = matlab_graythresh(hsv[..., 1])
     collagen = (
@@ -317,7 +549,31 @@ def _he2_epithelial_morphology(
     bw_collagen1: np.ndarray,
     pix_per_mic: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Dilate / fill / dual ``bwareaopen`` / collagen-masked dilate (HE2 lines 143-149)."""
+    """Grow the epithelial mask and punch out collagen.
+
+    Dilate, fill holes, drop small holes and small objects, then dilate
+    again and remove collagen.
+
+    Parameters
+    ----------
+    epith_cell_bw : numpy.ndarray
+        Boolean epithelial pixels.
+    bw_collagen1 : numpy.ndarray
+        Boolean collagen mask. Those pixels are removed from the final mask.
+    pix_per_mic : float
+        Working pixels per micron. Sets the dilation radii and area cutoffs.
+
+    Returns
+    -------
+    opened : numpy.ndarray
+        Dilated epithelial mask.
+    bwx : numpy.ndarray
+        Filled mask.
+    mask_image : numpy.ndarray
+        Mask after the two area openings.
+    mask_image1 : numpy.ndarray
+        Final mask with collagen removed.
+    """
     opened = _imdilate(epith_cell_bw, _disk_nhood(EPITH_DILATION_RADIUS_MULTIPLIER * pix_per_mic, how="round"))
     bwx = ndimage.binary_fill_holes(opened)
     hole_area = int(matlab_round((BACKGROUND_HOLE_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2))
@@ -332,7 +588,22 @@ def _he2_epithelial_morphology(
 
 
 def annotate_he2(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarray, dict[str, Any]]:
-    """Pixel-exact ``BDcreationHE2.m``. Returns logical ``BDmask`` and named intermediates."""
+    """Run ``BDcreationHE2.m`` on one registered H&E image.
+
+    Parameters
+    ----------
+    he_raw : numpy.ndarray
+        Registered H&E. Integer images are scaled with ``im2double``.
+    pixelpermicron : float
+        Native resolution. Values above 2 are capped by resizing the image.
+
+    Returns
+    -------
+    bd_mask : numpy.ndarray
+        Boolean tumor mask at the original image size.
+    debug : dict
+        Named intermediates (adjusted image, nuclei, collagen, smoothed mask).
+    """
     orig_row, orig_col = int(he_raw.shape[0]), int(he_raw.shape[1])
     he_data, pix = prepare_he2_image(matlab_im2double(he_raw), float(pixelpermicron))
     he_adjusted = adjust_rgb_mean_std(he_data)
@@ -384,7 +655,18 @@ def annotate_he2(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarray,
 
 
 def _matlab_argsort_asc(x: np.ndarray) -> np.ndarray:
-    """Stable ascending argsort with NaNs last, matching MATLAB ``sort``."""
+    """Stable ascending argsort with NaNs last, matching MATLAB ``sort``.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Values to order.
+
+    Returns
+    -------
+    numpy.ndarray
+        Indices that would sort ``x``.
+    """
     v = np.asarray(x, dtype=np.float64)
     keys = np.where(np.isnan(v), np.inf, v)
     return np.argsort(keys, kind="stable")
@@ -394,12 +676,23 @@ def pick_he_epithelial_cluster(
     cluster_center: np.ndarray,
     mean_cluster_intensity: np.ndarray,
 ) -> int:
-    """
-    Dual-sort cluster pick from ``BDcreationHE.m`` lines 56-65.
+    """Choose the epithelial cluster the way ``BDcreationHE.m`` does.
 
-    ``cluster_val(k) = find(idx==k)*find(idx1==k)`` on 1-based ranks of
-    ``mean(cluster_center, 2)`` and ``mean(nonzeros(rgb2gray(segmented)))``.
-    Returns the **0-based** cluster index of ``idx2(1)``.
+    Each cluster gets a score equal to the product of two 1-based ranks:
+    rank of the mean Lab centre, and rank of the mean nonzero grayscale
+    intensity. The lowest score wins.
+
+    Parameters
+    ----------
+    cluster_center : numpy.ndarray
+        Centres, shape ``(k, d)``.
+    mean_cluster_intensity : numpy.ndarray
+        One mean intensity per cluster.
+
+    Returns
+    -------
+    int
+        0-based index of the chosen cluster.
     """
     n = int(cluster_center.shape[0])
     mean_cluster_value = np.mean(np.asarray(cluster_center, dtype=np.float64), axis=1)
@@ -415,7 +708,18 @@ def pick_he_epithelial_cluster(
 
 
 def _mean_nonzero_gray(segmented: np.ndarray) -> float:
-    """``mean(nonzeros(rgb2gray(segmented)))``; empty -> NaN."""
+    """Mean of the nonzero grayscale pixels in one cluster image.
+
+    Parameters
+    ----------
+    segmented : numpy.ndarray
+        RGB crop of one cluster. uint8 uses ``rgb2gray`` on uint8.
+
+    Returns
+    -------
+    float
+        Mean of nonzero gray values, or NaN when every pixel is zero.
+    """
     if segmented.dtype == np.uint8:
         gray = matlab_rgb2gray_uint8(segmented)
         nz = gray[gray > 0]
@@ -436,8 +740,30 @@ def annotate_he(
     """
     Pixel-exact ``BDcreationHE.m``.
 
-    Returns a **boolean** mask (``BDmask > 0``) plus debug arrays. MATLAB's
+    Returns a boolean mask (``BDmask > 0``) plus debug arrays. MATLAB's
     saved mask is ``uint8(255 * mask)`` and is stored as ``debug['BDmask']``.
+
+    Parameters
+    ----------
+    he_u8 : numpy.ndarray
+        Registered uint8 RGB H&E. Other dtypes are rounded to uint8.
+    pixelpermicron : float
+        Native resolution. This path does not cap ppm at 2.
+    kmeans_seed : int, optional
+        Seed for ``rng(seed, 'twister')`` before ``kmeans``. Default is the
+        seed that matches the committed goldens.
+
+    Returns
+    -------
+    mask : numpy.ndarray
+        Boolean tumor mask.
+    debug : dict
+        Decorrelated image, cluster labels, and the uint8 ``BDmask``.
+
+    Raises
+    ------
+    ValueError
+        If ``he_u8`` is not a 3-channel image.
     """
     he = np.asarray(he_u8)
     if he.ndim != 3 or he.shape[-1] < 3:
@@ -451,7 +777,7 @@ def annotate_he(
     disk = matlab_fspecial_disk(float(matlab_round(HE_RGB_DISK_RADIUS_MULTIPLIER * pix)))
     k3 = np.empty((m, n, 3), dtype=s.dtype)
     for j in range(3):
-        padded = matlab_padarray(s[..., j], HE_RGB_PAD, mode="symmetric")
+        padded = matlab_padarray(s[..., j], HE_RGB_PAD)
         k2 = matlab_histeq(padded)
         k1 = matlab_imfilter_keep_class(k2, disk, boundary="zero")
         k1 = matlab_imfilter_keep_class(k1, disk, boundary="zero")

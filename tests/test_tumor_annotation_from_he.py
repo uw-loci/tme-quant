@@ -15,7 +15,6 @@ import numpy as np
 import pytest
 from skimage import io
 
-from pycurvelets._itk_v3_matlab_engine import has_itk
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
     shg_he_registration,
@@ -66,7 +65,6 @@ def test_tumor_annotation_he2_matches_committed_golden(
         HEfilepath=str(he_dir),
         HEfilename="patient_001.tif",
         pixelpermicron=pixelpermicron,
-        areaThreshold=5000.0,
         SHGfilepath=str(_SHG_DIR),
     )
     python_mask, debug = tumor_annotation_from_he(params, save_output=False, return_debug=True)
@@ -87,7 +85,6 @@ def test_tumor_annotation_rgb_kmeans_runs() -> None:
         HEfilepath=str(he_dir),
         HEfilename="patient_001.tif",
         pixelpermicron=2.0,
-        areaThreshold=5000.0,
         SHGfilepath=str(_SHG_DIR),
         annotation_method="rgb_kmeans",
     )
@@ -99,7 +96,6 @@ def test_tumor_annotation_rgb_kmeans_runs() -> None:
     assert debug["BDmask"].dtype == np.uint8
 
 
-@pytest.mark.skipif(not has_itk(), reason="e2e registration needs itk")
 def test_register_then_annotate_end_to_end_smoke() -> None:
     if not _HE_RAW.is_file() or not (_SHG_DIR / "patient_001.tif").is_file():
         pytest.skip("patient_001 HE/SHG fixtures missing")
@@ -109,7 +105,6 @@ def test_register_then_annotate_end_to_end_smoke() -> None:
         HEfilename="patient_001.tif",
         pixelpermicron=2.0,
         SHGfilepath=str(_SHG_DIR),
-        areaThreshold=5000.0,
     )
     registered = shg_he_registration(reg_params, save_output=False, return_debug=False)
     assert registered.ndim == 3
@@ -128,7 +123,6 @@ def test_register_then_annotate_end_to_end_smoke() -> None:
             HEfilepath=str(tmp),
             HEfilename=he_name,
             pixelpermicron=2.0,
-            areaThreshold=5000.0,
             SHGfilepath=str(_SHG_DIR),
         )
         mask = tumor_annotation_from_he(ann_params, save_output=False, return_debug=False)

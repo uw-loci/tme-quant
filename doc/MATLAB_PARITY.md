@@ -1,8 +1,9 @@
 # MATLAB parity harness (git / clone only)
 
-**Not in the wheel or the sdist.** Installed releases contain only what is
-needed to run or rebuild the package. This directory is a maintainer
-check: clone the repo and set `TMEQ_RUN_MATLAB_PARITY=1`.
+The scripts and dumps live in `archive/matlab_parity/`. They are a maintainer
+check, not part of the pytest tree and not in the wheel or the sdist.
+Clone the repo and set `TMEQ_RUN_MATLAB_PARITY=1`. File names below are
+relative to `archive/matlab_parity/`.
 
 Validates that `pycurvelets.SHG_HE_registration` reproduces MATLAB
 `BDcreation_reg2.m` (tests 1-7, `pipeline="reg2"`) and `BDcreation_reg.m`
@@ -47,7 +48,7 @@ HE TIFFs under `tests/test_for_shg_he_registration_BDcreation/HE/HE_registered_t
 The committed `SHG/CA_Boundary/BDcreationHE_testNresults_*.tif` goldens are
 a fresh HE2 run (the previous copies were `BDcreationHE.m` output; the
 filename still says HE). Compare HE-path masks to `dumps/he_testN/images.mat`.
-Figures: `tests/artifacts/bdc_annotation_viz/`.
+Figures are generated locally; see [ARTIFACTS.md](ARTIFACTS.md).
 
 ```bash
 TMEQ_RUN_MATLAB_PARITY=1 pytest -q -p no:napari \

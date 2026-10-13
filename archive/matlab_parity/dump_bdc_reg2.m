@@ -2,7 +2,7 @@
 % Step-0 diagnostic harness: dump HEmoving, fixedSHG, transforms for
 % BDcreation_reg2 parity work. Run with:
 %   /Applications/MATLAB_R2025b.app/bin/matlab -batch \
-%     "cd('.../tests/matlab_parity'); dump_bdc_reg2"
+%     "cd('.../archive/matlab_parity'); dump_bdc_reg2"
 %
 % Outputs under dumps/<case_id>/ :
 %   HEmoving.tif, fixedSHG.tif, tform_similarity.txt, tform_affine.txt

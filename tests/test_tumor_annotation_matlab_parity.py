@@ -47,7 +47,7 @@ if os.environ.get("TMEQ_RUN_MATLAB_PARITY") != "1":
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"
-_DUMPS = _TESTS_DIR / "matlab_parity" / "dumps"
+_DUMPS = _TESTS_DIR.parent / "archive" / "matlab_parity" / "dumps"
 _GOLDEN_DIR = _FIXTURE_ROOT / "SHG" / "CA_Boundary"
 
 HE2_CASES = (
@@ -154,7 +154,6 @@ def test_he2_bdmask_is_pixel_identical(case_id: str, ppm: float, he_folder: str)
         HEfilepath=str(he_path.parent),
         HEfilename=he_path.name,
         pixelpermicron=ppm,
-        areaThreshold=5000.0,
         SHGfilepath=str(_FIXTURE_ROOT / "SHG"),
         annotation_method="hsv",
     )

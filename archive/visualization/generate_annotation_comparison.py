@@ -1,15 +1,20 @@
 """Generate comparison visualizations for BDcreationHE / HE2 annotation.
 
 Usage:
-    python tests/artifacts/bdc_annotation_viz/generate_comparison.py [output_dir]
-    python tests/artifacts/bdc_annotation_viz/generate_comparison.py [output_dir] --method hsv
-    python tests/artifacts/bdc_annotation_viz/generate_comparison.py [output_dir] --method rgb_kmeans
+    python archive/visualization/generate_annotation_comparison.py [output_dir]
+    python archive/visualization/generate_annotation_comparison.py [output_dir] --method hsv
+    python archive/visualization/generate_annotation_comparison.py [output_dir] --method rgb_kmeans
 
 Default output_dir: tests/artifacts/bdc_annotation_viz/current
+(gitignored; not an input to the annotation API).
 
-``hsv`` (BDcreationHE2) is compared to the committed CA_Boundary goldens.
-``rgb_kmeans`` (BDcreationHE) is compared to ``dumps/he_testN/images.mat``
-(MATLAB never seeded kmeans; Python uses seed 28).
+Calls ``pycurvelets.tumor_annotation_from_he`` with
+``TumorAnnotationFromHEParameters``. ``--method hsv`` is ``BDcreationHE2``
+(``annotation_method="hsv"``) and is compared to the committed CA_Boundary
+goldens. ``--method rgb_kmeans`` is ``BDcreationHE``
+(``annotation_method="rgb_kmeans"``) and is compared to
+``archive/matlab_parity/dumps/he_testN/images.mat``. MATLAB never seeded
+kmeans; Python uses the default seed 28.
 """
 from __future__ import annotations
 
@@ -22,7 +27,7 @@ from matplotlib.patches import FancyBboxPatch
 from scipy import ndimage
 from skimage import io
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from pycurvelets._registration_quality import compute_mask_boundary_metrics  # noqa: E402
@@ -35,7 +40,7 @@ FIXTURE = ROOT / "tests" / "test_for_shg_he_registration_BDcreation"
 HE_ROOT = FIXTURE / "HE"
 SHG_DIR = FIXTURE / "SHG"
 GOLDEN_DIR = SHG_DIR / "CA_Boundary"
-DUMPS = ROOT / "tests" / "matlab_parity" / "dumps"
+DUMPS = ROOT / "archive" / "matlab_parity" / "dumps"
 
 CASES = [
     ("test1", 1.5, "HE_registered_test1", "BDcreationHE_test1results_mask for patient_001.tif.tif"),
@@ -154,7 +159,6 @@ def generate(
         HEfilepath=str(he_path.parent),
         HEfilename=he_path.name,
         pixelpermicron=ppm,
-        areaThreshold=5000.0,
         SHGfilepath=str(SHG_DIR),
         annotation_method=method,
     )
