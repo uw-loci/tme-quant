@@ -23,7 +23,8 @@ Use the MSYS2 UCRT64 login shell and activate the repo `.venv`:
 
 ```bash
 C:\msys64\usr\bin\bash.exe -lc "export MSYSTEM=UCRT64 && source /etc/profile && \
-  cd /h/GitHub.06.2022/tmequant_ctfire/tme-quant && source .venv/bin/activate && \
+  pwd && \
+  source .venv/bin/activate && \
   export TMEQ_RUN_CURVELETS=1 && export MPLCONFIGDIR=/c/msys64/tmp/mpl && \
   python -V"
 ```
