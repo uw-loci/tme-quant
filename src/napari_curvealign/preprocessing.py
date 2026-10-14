@@ -9,7 +9,7 @@ Provides preprocessing options including:
 """
 
 import numpy as np
-from typing import Optional, Tuple, Literal
+from typing import Optional, Tuple
 from enum import Enum
 
 from skimage import filters, io
@@ -35,6 +35,41 @@ try:
     HAS_IMAGEJ = True
 except ImportError:
     HAS_IMAGEJ = False
+
+
+def to_2d_grayscale_for_curvelets(image: np.ndarray) -> np.ndarray:
+    """Reduce a loaded array to 2D grayscale for curvelet / FDCT analysis.
+
+    ``skimage.io.imread`` may return (H, W) grayscale, (H, W, C) RGB/RGBA, or a
+    small stack (P, H, W).  Treating (H, W, 3) like a multi-page volume by
+    taking ``arr[0]`` yields a (W, 3) strip, invalid FDCT sizes, and can crash
+    native curvelet backends (e.g. curvelops).
+    """
+    a = np.asarray(image)
+    if a.ndim == 2:
+        return a
+    if a.ndim == 3:
+        if a.shape[-1] in (3, 4):
+            rgb = np.asarray(a[..., :3], dtype=np.float32)
+            luma = (
+                0.2125 * rgb[..., 0]
+                + 0.7154 * rgb[..., 1]
+                + 0.0721 * rgb[..., 2]
+            )
+            return np.clip(luma, 0, 255).astype(np.uint8)
+        c0, c1, c2 = a.shape
+        if c0 in (3, 4) and c0 < min(c1, c2):
+            sl = np.asarray(a[:3], dtype=np.float32)
+            luma = 0.2125 * sl[0] + 0.7154 * sl[1] + 0.0721 * sl[2]
+            return np.clip(luma, 0, 255).astype(np.uint8)
+        if a.shape[0] > 1:
+            return np.asarray(a[0])
+    out = np.squeeze(a)
+    if out.ndim != 2:
+        raise ValueError(
+            f"Cannot reduce image with shape {tuple(a.shape)} to 2D for curvelets"
+        )
+    return out
 
 
 class ThresholdMethod(Enum):
@@ -126,9 +161,7 @@ def load_image_with_bioformats(
             print(f"aicsimageio loading failed: {e}, falling back to skimage")
     
     # Fallback to skimage
-    image_data = io.imread(file_path)
-    if image_data.ndim > 2:
-        image_data = image_data[0]
+    image_data = to_2d_grayscale_for_curvelets(io.imread(file_path))
     metadata = {"source": "skimage", "shape": image_data.shape}
     return image_data, metadata
 
