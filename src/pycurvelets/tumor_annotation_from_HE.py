@@ -15,7 +15,6 @@ import numpy as np
 from skimage import io
 
 from ._he_bdc_annotation import annotate_he, annotate_he2
-from ._he_bdc_common import save_image_uint8
 from ._he_bdc_reg1 import DEFAULT_KMEANS_SEED
 
 # Re-export morphology constants so existing imports keep working.
@@ -157,6 +156,33 @@ def _load_he(path: Path) -> np.ndarray:
     return img[..., :3]
 
 
+def _save_image_uint8(path: str | Path, image: np.ndarray) -> None:
+    """Write ``image`` as uint8, matching MATLAB ``imwrite`` on a double image.
+
+    Boolean images become 0 or 255. Integer images are scaled by their own
+    maximum. Floating images are clipped to ``[0, 1]`` and rounded to uint8.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Destination path.
+    image : numpy.ndarray
+        Mask or image to save.
+    """
+    arr = image
+    if arr.dtype == np.bool_:
+        out = arr.astype(np.uint8) * 255
+    else:
+        if np.issubdtype(arr.dtype, np.integer):
+            arr_float = arr.astype(np.float64)
+            arr_float = arr_float / max(float(arr_float.max()), 1.0)
+        else:
+            arr_float = arr.astype(np.float64)
+        out = np.clip(arr_float, 0.0, 1.0)
+        out = np.round(out * 255.0).astype(np.uint8)
+    io.imsave(str(path), out, check_contrast=False)
+
+
 def tumor_annotation_from_he(
     params: TumorAnnotationFromHEParameters | dict[str, Any],
     save_output: bool = True,
@@ -214,7 +240,7 @@ def tumor_annotation_from_he(
         save_dir = _resolve_save_dir(p, he2_fallback=he2_fallback)
         if not he2_fallback:
             save_dir.mkdir(parents=True, exist_ok=True)
-        save_image_uint8(save_dir / _resolve_mask_name(p.HEfilename), save_arr)
+        _save_image_uint8(save_dir / _resolve_mask_name(p.HEfilename), save_arr)
 
     if not return_debug:
         return bd_mask.astype(bool)
