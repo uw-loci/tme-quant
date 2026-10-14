@@ -9,11 +9,9 @@ the bilinear warp. Annotation-only morphology lives in
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 from scipy import ndimage
-from skimage import color, io, morphology
+from skimage import color, morphology
 
 from ._matlab_imresize import matlab_imresize
 
@@ -278,35 +276,6 @@ def matlab_imfilter(
     if boundary == "replicate":
         return ndimage.correlate(img, k, mode="nearest", origin=origin).astype(np.float64)
     raise ValueError(f"boundary must be 'zero' or 'replicate', got {boundary!r}")
-
-
-def save_as_uint8_image(path: str | Path, image: np.ndarray) -> None:
-    """Write ``image`` as uint8, matching MATLAB ``imwrite`` on a double image.
-
-    Boolean images become 0 or 255. Integer images are scaled by their own
-    maximum. Floating images are clipped to ``[0, 1]`` and rounded to uint8.
-
-    Parameters
-    ----------
-    path : str or pathlib.Path
-        Destination path.
-    image : numpy.ndarray
-        Image to save.
-    """
-    arr = image
-
-    if arr.dtype == np.bool_:
-        out = arr.astype(np.uint8) * 255
-    else:
-        if np.issubdtype(arr.dtype, np.integer):
-            arr_float = arr.astype(np.float64)
-            arr_float = arr_float / max(float(arr_float.max()), 1.0)
-        else:
-            arr_float = arr.astype(np.float64)
-        out = np.clip(arr_float, 0.0, 1.0)
-        out = np.round(out * 255.0).astype(np.uint8)
-
-    io.imsave(str(path), out, check_contrast=False)
 
 
 def ensure_rgb(image: np.ndarray, axis: int = 2) -> np.ndarray:
@@ -984,7 +953,3 @@ def gaussian_filter_matlab_like(
     sz = max(int(kernel_size), 1)
     h = matlab_fspecial_gaussian(sz, float(sigma))
     return matlab_imfilter(image.astype(np.float64), h, boundary=boundary)
-
-
-# Name used by the annotation writer.
-save_image_uint8 = save_as_uint8_image
