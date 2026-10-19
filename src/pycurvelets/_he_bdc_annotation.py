@@ -294,19 +294,19 @@ def matlab_grayxform(image: np.ndarray, transform: np.ndarray) -> np.ndarray:
     return t[idx]
 
 
-def matlab_histeq(image: np.ndarray, n_levels: int | None = None) -> np.ndarray:
+def matlab_histeq(image: np.ndarray, n_levels: int = 64) -> np.ndarray:
     """Histogram-equalize an image the way MATLAB ``histeq`` does.
 
-    The default number of output levels is 64 for every class, including
-    uint8. The input histogram always uses 256 bins. The output keeps the
-    input class.
+    MATLAB's default is 64 output levels for every class, including uint8.
+    ``BDcreationHE.m`` calls ``histeq`` with that default. The input histogram
+    always uses 256 bins. The output keeps the input class.
 
     Parameters
     ----------
     image : numpy.ndarray
         uint8 or double image.
-    n_levels : int or None, optional
-        Output levels. ``None`` means 64. Must be at least 2.
+    n_levels : int, optional
+        Output levels. Default is 64. Must be at least 2.
 
     Returns
     -------
@@ -320,7 +320,7 @@ def matlab_histeq(image: np.ndarray, n_levels: int | None = None) -> np.ndarray:
     """
     a = np.asarray(image)
     npts = 256
-    m = 64 if n_levels is None else int(n_levels)
+    m = int(n_levels)
     if m < 2:
         raise ValueError(f"histeq N must be >= 2, got {m}")
     counts = matlab_imhist_counts(a, npts)
