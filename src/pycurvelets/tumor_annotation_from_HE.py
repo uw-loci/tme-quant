@@ -3,6 +3,10 @@
 ``tumor_annotation_from_he`` reproduces ``BDcreationHE2.m`` (HSV, the default)
 and ``BDcreationHE.m`` (RGB k-means). Registration is a separate step; this
 module does not move the image.
+
+Public entry points: :func:`tumor_annotation_from_he`, :func:`BDcreationHE2`
+and :func:`BDcreationHE` (MATLAB-compatible names), and
+:class:`TumorAnnotationFromHEParameters`.
 """
 
 from __future__ import annotations
@@ -195,8 +199,10 @@ def tumor_annotation_from_he(
 
     Returns
     -------
-    numpy.ndarray or tuple
-        Boolean mask. If ``return_debug`` is true, ``(mask, debug)``.
+    numpy.ndarray or tuple of numpy.ndarray and dict
+        Boolean mask. If ``return_debug`` is true, ``(mask, debug)``. ``debug``
+        holds the named MATLAB intermediates (adjusted image, masks, cluster
+        labels).
 
     Raises
     ------
