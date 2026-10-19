@@ -222,11 +222,11 @@ def tumor_annotation_from_he(
     he_raw = _load_he(he_path)
 
     method = (p.annotation_method or "hsv").lower()
-    if method in ("hsv", "he2"):
+    if method == "hsv":
         bd_mask, debug = annotate_he2(he_raw, p.pixelpermicron)
         save_arr: np.ndarray = bd_mask
         he2_fallback = True
-    elif method in ("rgb_kmeans", "rgb", "he"):
+    elif method == "rgb_kmeans":
         bd_mask, debug = annotate_he(he_raw, p.pixelpermicron, kmeans_seed=int(p.kmeans_seed))
         save_arr = np.asarray(debug["BDmask"])
         he2_fallback = False
