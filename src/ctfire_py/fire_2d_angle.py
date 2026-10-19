@@ -330,8 +330,11 @@ def fire_2d_angle(
     # Compute distance transform
     d = bw_dist(bw=~imt_2d, method=p.get("dtype"))
 
-    # Smooth distance function
-    dsm = smooth(d, p.get("sigma_d", 2.0)).astype(np.float32)
+    # MATLAB smooths a [1, height, width] volume. Its zero-padded convolution
+    # along the singleton depth axis attenuates the DSM when sigma_d > 0.
+    # Keep that axis during filtering, then expose the 2D plane for plotting
+    # and the native backend's flat input.
+    dsm = smooth(d[np.newaxis, :, :], p.get("sigma_d", 2.0))[0].astype(np.float32)
 
     if plotflag == 1:
         print(f"  Distance function range: [{np.min(dsm):.2f}, {np.max(dsm):.2f}]")

@@ -30,6 +30,32 @@ struct ExtendXLink {
         return val;
     }
 
+    // Reduction of getdB's neighbor lists to the nonzero middle image plane.
+    // Face pixels compare along their own face, not diagonally across faces.
+    // The two asymmetric corner cases preserve the original MATLAB offsets
+    // for z-running edges (including its repeated z offsets).
+    static bool boundary_maximum(const std::array<int, d>& p,
+                                 const std::array<int, d>& lower,
+                                 const std::array<int, d>& upper,
+                                 const T* image, int width, int height) {
+        const T value = image[p[0] * width + p[1]];
+        auto higher = [&](int row, int col) {
+            return row >= 0 && row < height && col >= 0 && col < width &&
+                   image[row * width + col] > value;
+        };
+        const bool top = p[0] == lower[0], bottom = p[0] == upper[0];
+        const bool left = p[1] == lower[1], right = p[1] == upper[1];
+        if ((top || bottom) && (left || right)) {
+            if (top && left) return !higher(p[0] + 1, p[1]);
+            if (bottom && right) return !higher(p[0], p[1] - 1);
+            return !higher(p[0] + (top ? 1 : -1), p[1]) &&
+                   !higher(p[0], p[1] + (left ? 1 : -1));
+        }
+        if (left || right)
+            return !higher(p[0] - 1, p[1]) && !higher(p[0] + 1, p[1]);
+        return !higher(p[0], p[1] - 1) && !higher(p[0], p[1] + 1);
+    }
+
     // Straight-line continuity check matching MATLAB's ind_btw_nodes +
     // findLMP.m line 55-60:
     //   for k=size(LMP,1):-1:1
@@ -96,10 +122,11 @@ struct ExtendXLink {
             const std::array<int, d> nucleation{pts[i][0], pts[i][1]};
             const std::array<int, d> b_min = {nucleation[0] - r_i, nucleation[1] - r_i};
             const std::array<int, d> b_max = {nucleation[0] + r_i, nucleation[1] + r_i};
+            std::vector<std::array<int, d>> initial_lmps;
 
-            // Search for LMP on the boundary
-            for (int ii = -r_i; ii <= r_i; ++ii) {
-                for (int jj = -r_i; jj <= r_i; ++jj) {
+            // MATLAB unique(LMP, 'rows') sorts by [x, y, z]: column first.
+            for (int jj = -r_i; jj <= r_i; ++jj) {
+                for (int ii = -r_i; ii <= r_i; ++ii) {
                     const std::array<int, d> p{ii + pts[i][0], jj + pts[i][1]};
                     
                     // Bounds check
@@ -127,30 +154,9 @@ struct ExtendXLink {
                     // y-neighbors, not against interior (col±1) pixels.  The z±1
                     // neighbors are in zero-padded planes and never beat it.
                     //
-                    // This is equivalent to: compare each boundary candidate only
-                    // against its neighbours that are ALSO on the same boundary face.
-                    // For a square box that means the same-col neighbors (for left/
-                    // right faces) or same-row neighbors (for top/bottom faces), which
-                    // is exactly what the boundary-only restriction below achieves for
-                    // all practical radii (r≥2, so faces are ≥4 px apart and other-face
-                    // pixels never appear in the 8-neighbourhood).
-                    bool is_LMP = true;
-                    for (int iii = -1; iii <= 1 && is_LMP; ++iii) {
-                        for (int jjj = -1; jjj <= 1; ++jjj) {
-                            const std::array<int, d> p_n{iii + p[0], jjj + p[1]};
-                            if (p_n[0] < 0 || p_n[0] >= sizey || p_n[1] < 0 || p_n[1] >= sizex) continue;
-                            if (p_n[0] < b_min[0] || p_n[0] > b_max[0] || 
-                                p_n[1] < b_min[1] || p_n[1] > b_max[1]) continue;
-                            if (p_n[0] != b_min[0] && p_n[0] != b_max[0] && 
-                                p_n[1] != b_min[1] && p_n[1] != b_max[1]) continue;
-                            
-                            const T d_value_n = image[p_n[0] * sizex + p_n[1]];
-                            if (d_value < d_value_n) { 
-                                is_LMP = false; 
-                                break; 
-                            }
-                        }
-                    }
+                    // Near corners, getdB's explicit edge lists differ from a
+                    // generic eight-neighbor boundary test; use those rules too.
+                    const bool is_LMP = boundary_maximum(p, b_min, b_max, image, sizex, sizey);
 
                     if (is_LMP) {
                         // MATLAB findLMP.m:55-60 continuity check: discard
@@ -161,18 +167,21 @@ struct ExtendXLink {
                             continue;
                         }
 
-                        // Check if too close to existing fiber endpoints
-                        // Match MATLAB: use Euclidean distance norm(p1-p2) < LMPdist
+                        // MATLAB marks close later candidates using ALL earlier
+                        // candidates, including ones already marked for removal.
+                        // Preserve that list rather than pruning greedily against
+                        // retained fiber endpoints only.
                         bool too_close = false;
-                        for (size_t b = 0; b < fibres[i].size(); ++b) {
-                            T dx = p[0] - fibres[i][b].link[1][0];
-                            T dy = p[1] - fibres[i][b].link[1][1];
+                        for (const auto& earlier : initial_lmps) {
+                            T dx = p[0] - earlier[0];
+                            T dy = p[1] - earlier[1];
                             T dist = sqrt(dx*dx + dy*dy);
                             if (dist < thresh_LMPdist) {
                                 too_close = true; 
                                 break;
                             }
                         }
+                        initial_lmps.push_back(p);
                         if (too_close) continue;
 
                         // Start a new fiber
@@ -205,8 +214,10 @@ struct ExtendXLink {
                             };
                             std::vector<LMPCandidate> lmp_candidates;
                             
-                            for (int m = -r_curr; m <= r_curr && !found_nucleation; ++m) {
-                                for (int n = -r_curr; n <= r_curr; ++n) {
+                            // Both getbox's first crosslink and unique(LMPj,
+                            // 'rows') use column-first order in the image plane.
+                            for (int n = -r_curr; n <= r_curr && !found_nucleation; ++n) {
+                                for (int m = -r_curr; m <= r_curr; ++m) {
                                     const std::array<int, d> p_cand{m + p_current[0], n + p_current[1]};
                                     if (p_cand[0] < 0 || p_cand[0] >= sizey || 
                                         p_cand[1] < 0 || p_cand[1] >= sizex) continue;
@@ -230,24 +241,8 @@ struct ExtendXLink {
 
                                     // Check if it's a local maximum among boundary neighbors only.
                                     // Same face-local logic as the initial LMP search above.
-                                    bool is_LMP_cand = true;
-                                    for (int iii = -1; iii <= 1 && is_LMP_cand; ++iii) {
-                                        for (int jjj = -1; jjj <= 1; ++jjj) {
-                                            const std::array<int, d> p_n{iii + p_cand[0], jjj + p_cand[1]};
-                                            if (p_n[0] < 0 || p_n[0] >= sizey || 
-                                                p_n[1] < 0 || p_n[1] >= sizex) continue;
-                                            if (p_n[0] < cur_min[0] || p_n[0] > cur_max[0] || 
-                                                p_n[1] < cur_min[1] || p_n[1] > cur_max[1]) continue;
-                                            if (p_n[0] != cur_min[0] && p_n[0] != cur_max[0] && 
-                                                p_n[1] != cur_min[1] && p_n[1] != cur_max[1]) continue;
-                                            
-                                            const T d_value_n = image[p_n[0] * sizex + p_n[1]];
-                                            if (d_val < d_value_n) {
-                                                is_LMP_cand = false;
-                                                break;
-                                            }
-                                        }
-                                    }
+                                    const bool is_LMP_cand = boundary_maximum(
+                                        p_cand, cur_min, cur_max, image, sizex, sizey);
 
                                     if (is_LMP_cand) {
                                         // MATLAB findLMP.m:55-60 continuity

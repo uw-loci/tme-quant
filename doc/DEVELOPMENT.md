@@ -20,7 +20,24 @@ make test
 
 Headless (no GUI): `QT_QPA_PLATFORM=offscreen make test`
 
-Curvelet tests run automatically when curvelops is installed; otherwise they are skipped.
+Some curvelet test modules also require `TMEQ_RUN_CURVELETS=1`; installing
+curvelops alone does not enable them. To install and exercise both optional
+backends (including the napari import smoke test):
+
+```bash
+uv sync --extra curvelops --extra gui
+TMEQ_RUN_CURVELETS=1 QT_QPA_PLATFORM=offscreen MPLBACKEND=Agg \
+  uv run --extra curvelops --extra gui pytest tests/ -q -rs
+```
+
+Select the extras on `uv run` as well as `uv sync`: otherwise uv can remove
+optional dependencies before running the tests. Set `MPLCONFIGDIR` to a writable
+directory if needed. The native extension must be rebuilt after C++ edits.
+On macOS, `make -C src/ctfire_py/CPP` builds the backend used by these tests.
+
+`TMEQ_VALIDATE_MATLAB` is not read by this branch. Available FIRE reference
+comparisons run without that flag; missing input/reference files still skip.
+Use `-rs` to distinguish fixture skips from unavailable optional backends.
 
 ### Which environment (Windows / MSYS2)
 
@@ -79,6 +96,17 @@ review so this section stays useful for future troubleshooting.
 
 This branch converts the MATLAB **ctFIRE** pipeline to Python + C++ (it does not develop
 the napari plugin or the CurveAlign / curvelet ports — those already live in `main`).
+
+- 2026-10-19 (uncommitted): preserve the extension DSM during nucleation detection;
+  include singleton-depth smoothing; match MATLAB LMP sorting, pairwise pruning,
+  face/edge neighbors, and crosslink search order; correct final-endpoint direction
+  indexing. Match reconstruction's one-based coefficient cutoff and default scale
+  count, and pass float64 input to the transform. Add focused regression tests and
+  `scripts/compare_matlab_runtime.py` for stage-level capture comparisons. See
+  [MATLAB_PARITY_REVIEW.md](MATLAB_PARITY_REVIEW.md) for measurements and limitations.
+  Validation with curvelet and GUI extras: 147 passed, 32 skipped for missing
+  fixtures, 0 failed. No tolerances were loosened; missing MATLAB comparisons
+  remain outstanding.
 
 - 2026-03-10 67ebfa5 feat: port CTrec_1.m → ct_reconstruction.py (curvelet preprocessing for FIRE)
 - 2026-03-10 8fc74e4 feat: begin fire_2d_angle — FIRE 2D fiber-extraction port (through smoothing)

@@ -68,7 +68,16 @@ brew install libomp
 make test
 ```
 
-- Full tests with curvelets (after installing `curvelops`): `make test` — curvelet tests run automatically when curvelops is available; otherwise skipped.
+- Full tests with curvelets and the GUI import smoke test:
+
+```bash
+uv sync --extra curvelops --extra gui
+TMEQ_RUN_CURVELETS=1 QT_QPA_PLATFORM=offscreen MPLBACKEND=Agg \
+  uv run --extra curvelops --extra gui pytest tests/ -q -rs
+```
+
+Missing MATLAB fixtures still skip. `TMEQ_VALIDATE_MATLAB` is not implemented on
+this branch; available FIRE MATLAB comparisons already run without that flag.
 
 Notes:
 - The napari test is an import-only smoke test (no `Viewer` is created); it runs headless.

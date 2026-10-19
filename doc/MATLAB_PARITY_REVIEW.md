@@ -13,6 +13,96 @@ Exact matching remains an objective, not a demonstrated outcome. Individual fixe
 
 Fiber count agreement is not a percentage of fiber parity. Two networks can have similar counts while containing different paths and connections.
 
+## Implementation progress — October 19, 2026
+
+The original measurements below remain a historical baseline. The first implementation pass now addresses the following issues:
+
+- **Issue 1:** native nucleation detection perturbs a private working buffer, preserving the caller's DSM, including read-only inputs.
+- **Issue 2:** distance smoothing retains the singleton depth axis. Residual convolution differences in issue 3 remain.
+- **Issues 4 and 5:** initial and continuation LMP traversal follow MATLAB's `[x,y,z]` order; initial distance pruning retains discarded candidates for subsequent pair comparisons. Fractional `thresh_LMPdist` support remains outstanding.
+- **Issue 6:** the 2D boundary check follows MATLAB's face and z-running-edge neighbor lists, including its asymmetric corner offsets. This reduction targets the positive LMP thresholds used by the fixtures; it does not establish parity for zero-threshold padded-volume candidates or 3D extraction.
+- **Issue 10:** crosslink search uses MATLAB's column-first image-plane order.
+- **Issue 13:** the final-endpoint sample position in `fiberproc` is corrected.
+
+With the same runtime capture, one OpenMP thread, and a freshly rebuilt backend:
+
+| Metric | Before these changes | After these changes | MATLAB reference |
+| --- | ---: | ---: | ---: |
+| DSM maximum absolute error | 0.0459185 | 7.15256e-7 | 0 |
+| DSM pixels changed by nucleation detection | 262,143 | 0 | 0 |
+| Shared nucleation points | 358 | 358 | 358 |
+| Extension fibers on exact MATLAB inputs | 844 | 868 | 873 |
+| Exact shared extension paths on those inputs | 585 | 868 | 873 |
+| Processed fibers on MATLAB extension output | 192 | 189 | 191 |
+| Exact shared processed paths on that input | 175 | 182 | 191 |
+| Full captured-input extraction: final fibers | 182 | 189 | 191 |
+| Full captured-input extraction: exact shared final paths | 5 | 179 | 191 |
+| Full captured-input extraction: total length, pixels | 7,511.64 | 7,851.97 | 7,921.06 |
+
+Every extension path produced in the exact-input experiment now matches a MATLAB path, allowing whole-path reversal, but five MATLAB paths are missing. Early coordinate merging and duplicate removal remain candidates for those missing paths; their cause has not yet been isolated. Full captured-input length error falls from 5.17% to 0.87%, with 179 of 191 exact final paths shared. These are fixture-specific measurements, not a claim of complete parity.
+
+Regression coverage includes immutable/repeatable nucleation inputs, singleton-axis attenuation, non-greedy LMP pruning, face-neighbor selection near a corner, and final-endpoint direction sampling. The targeted suite completed with **46 passed, 10 skipped**; the skips include unavailable MATLAB function references. This is not a full-suite result. No tolerance was loosened. Ruff checks on the new Python files and `git diff --check` also passed.
+
+Reproduce the runtime measurements after building the native backend:
+
+```bash
+make -C src/ctfire_py/CPP
+OMP_NUM_THREADS=1 MPLBACKEND=Agg .venv/bin/python \
+  scripts/compare_matlab_runtime.py /path/to/runtime_reference.mat \
+  --output /tmp/parity-result.json
+```
+
+The comparison command requires `h5py`, uses the capture's effective parameters, and records the input checksum and loaded backend path. `--backend-dir /path/to/build` selects an alternate compiled backend. For the targeted tests:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MPLBACKEND=Agg .venv/bin/python -m pytest \
+  tests/test_parity_preprocessing.py tests/test_cpp_functions.py \
+  tests/test_fire_2d_angle.py -q --disable-warnings
+```
+
+The subsequent full-suite pass also addresses issue 18's reconstruction cutoff
+index and the default scale count for non-power-of-two images, and passes the
+explicitly converted float64 image into the native transform. Three focused
+tests exercise coefficient-rank selection, the zero/full-retention endpoints,
+finest-scale exclusion, and transform parameters without requiring a MATLAB
+fixture. These source fixes do not by themselves establish reconstruction parity
+for images whose MATLAB reconstruction references are absent.
+
+Remaining work includes floating-point arithmetic, vertex identity/deduplication timing, gap-link candidate semantics, processing tie order and hashing, numerical reconstruction comparisons, and validation on additional captures.
+
+### Full-suite validation
+
+After installing both `curvelops` and `gui` extras, the full suite completed with
+**147 passed, 32 skipped, 0 failed** on October 19, 2026. Curvelet tests were
+enabled, the napari import smoke test passed, and all 11 newly added regression
+cases ran. No test tolerance was loosened and no new skip or xfail was added.
+The targeted Ruff checks for the new Python files and reconstruction changes,
+relative documentation links, and `git diff --check` passed.
+
+The 32 skips are missing fixtures, not missing installed backends:
+
+| Cases skipped | Missing input/reference |
+| --- | --- |
+| 4 | `tests/test_images/2B_D9_ROI1.tif` |
+| 8 | Six per-function MATLAB references under `cpp_test_files`; two additional pipeline tests reuse the missing nucleation references |
+| 4 | MATLAB reconstructed-image references under `ct_fire_test_files` |
+| 16 | Four final CT-FIRE MATLAB references, each used by four comparison cases |
+
+Exact command used (with `MPLCONFIGDIR` pointing to a writable cache):
+
+```bash
+TMEQ_RUN_CURVELETS=1 TMEQ_VALIDATE_MATLAB=1 QT_QPA_PLATFORM=offscreen \
+  MPLBACKEND=Agg MPLCONFIGDIR=/tmp/tme-parity-mpl OMP_NUM_THREADS=1 \
+  uv run --extra curvelops --extra gui pytest tests/ -q -rs --disable-warnings
+```
+
+`TMEQ_VALIDATE_MATLAB=1` has no effect on this branch because no implementation
+reads it. Available reference tests already run; missing references remain
+unvalidated. The final run used normal pytest plugin loading and access to uv
+and napari caches. An earlier sandbox-only run skipped napari because the GUI
+extra was not installed at collection time; that skip is absent from the final
+result.
+
 ## Sources and comparison method
 
 - MATLAB source: `CurveletsSourceCode_CurveAlign5.0_CT-FIRE3.0/CT-FIRE3.0_src`, including its `FIRE` subfolder.

@@ -2,7 +2,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-from scipy.stats import scoreatpercentile
 from pycurvelets.utils.math import round_mlab
 
 
@@ -57,15 +56,14 @@ def ct_reconstruction(
     is_img = np.asanyarray(img, dtype=np.float64)
     img_height, img_width = is_img.shape
 
-    # Apply the FDCT to the image
-    # Note: Python implementation uses different parameter ordering from MATLAB
-    # is_real=0 in MATLAB corresponds to ac=1 in Python (complex-valued transform)
-    M, N = img.shape
-    is_real = 0  # 0 means complex
-    ac = 0  # 1 is curvelets, 0 is wavelets
-    nbscales = math.floor(math.log2(min(M, N)) - 3)
+    # Match fdct_wrapping(double(IS), 0): its default scale count uses ceil.
+    # The native wrapper's ac flag selects the finest-scale representation;
+    # ac=0 is a finest wavelet, matching MATLAB's default finest=2.
+    M, N = is_img.shape
+    ac = 0
+    nbscales = math.ceil(math.log2(min(M, N)) - 3)
     nbangles_coarse = 16  # default
-    c = fdct2d_wrapper.fdct2d_forward_wrap(nbscales, nbangles_coarse, ac, img)
+    c = fdct2d_wrapper.fdct2d_forward_wrap(nbscales, nbangles_coarse, ac, is_img)
 
     # 3. Thresholding Logic
     # Flatten all coefficients across all scales and wedges into one array
@@ -80,8 +78,9 @@ def ct_reconstruction(
 
     # Get specific threshold based on percentile (pct)
     nb = int(round_mlab(coefficient_percentile * len(all_coeffs)))
-    # Handle edge case where pct might be 0 or 1
-    idx = min(nb, len(all_coeffs) - 1)
+    # MATLAB cfs(nb) is one-based. Keep the supported pct=0 behavior
+    # (no retained coefficients) by clamping the index to the first value.
+    idx = max(0, min(nb - 1, len(all_coeffs) - 1))
     cutoff = all_coeffs[idx]
 
     # 4. Filter coefficients by threshold

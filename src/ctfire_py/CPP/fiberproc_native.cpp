@@ -106,7 +106,8 @@ static std::array<float, 3> getvect(
         int vj = fiber[ii];
         vect = {X[vj][0] - X[vi][0], X[vj][1] - X[vi][1], X[vj][2] - X[vi][2]};
     } else if (fiber.back() == vi) {
-        int ii = std::max(0, len - sp);
+        // MATLAB fiber(max(1, len-sp)); convert the position to zero-based.
+        int ii = std::max(0, len - sp - 1);
         int vj = fiber[ii];
         vect = {X[vj][0] - X[vi][0], X[vj][1] - X[vi][1], X[vj][2] - X[vi][2]};
     }

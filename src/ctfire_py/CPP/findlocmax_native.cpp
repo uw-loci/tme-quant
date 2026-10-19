@@ -126,13 +126,16 @@ py::array_t<int32_t> findlocmax_native(
     if ((uint64_t)image.size() != (uint64_t)sizex * sizey * sizez)
         throw std::runtime_error("Input image size does not match dimensions.");
 
-    float* img_ptr = image.mutable_data();
     std::vector<std::array<int, 2>> pts;
 
     if (sizex == 1) {
         {
+            // MATLAB perturbs a local copy of d and returns only coordinates.
+            // Keep the caller's DSM intact for extension and radius sampling.
+            const float* input = image.data();
+            std::vector<float> working_image(input, input + image.size());
             py::gil_scoped_release release;
-            FindLocalMax<float, 2>(sizey, sizez, img_ptr, pts, radius, dmin);
+            FindLocalMax<float, 2>(sizey, sizez, working_image.data(), pts, radius, dmin);
         }
 
         auto result = py::array_t<int32_t>({(int)pts.size(), 3});
