@@ -98,7 +98,7 @@ def _resolve_save_dir(params: TumorAnnotationFromHEParameters, *, he2_fallback: 
     try:
         primary.mkdir(parents=True, exist_ok=True)
         return primary
-    except Exception:
+    except OSError:
         fallback = Path(params.HEfilepath) / "CA_Boundary"
         fallback.mkdir(parents=True, exist_ok=True)
         return fallback
