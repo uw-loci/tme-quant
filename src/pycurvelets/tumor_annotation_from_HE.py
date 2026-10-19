@@ -173,7 +173,7 @@ def tumor_annotation_from_he(
     params: TumorAnnotationFromHEParameters | dict[str, Any],
     save_output: bool = True,
     return_debug: bool = False,
-) -> np.ndarray | tuple[np.ndarray, dict[str, np.ndarray]]:
+) -> np.ndarray | tuple[np.ndarray, dict[str, Any]]:
     """Build a tumor-boundary mask from an already-registered H&E image.
 
     ``params.annotation_method`` selects the script. ``'hsv'`` follows
