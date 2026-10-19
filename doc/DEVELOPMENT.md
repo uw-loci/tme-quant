@@ -97,6 +97,18 @@ review so this section stays useful for future troubleshooting.
 This branch converts the MATLAB **ctFIRE** pipeline to Python + C++ (it does not develop
 the napari plugin or the CurveAlign / curvelet ports — those already live in `main`).
 
+- 2026-10-19 (merge-order follow-up): direct MATLAB stage traces isolate the
+  first processing discrepancy to unsorted endpoint lists after `mergefiber`.
+  Match sorted `setdiff`/append updates and unique membership lists; add a
+  portable regression that fails on the previous backend. On the saved exact
+  extension input, all 191 final paths and the active graph now match MATLAB.
+  Extend the comparison command to check active graph arrays and a separate
+  native-coordinate processing control. Captured-image extraction matches
+  188/191 final paths; residual preprocessing and raw output-array differences
+  remain documented in [MATLAB_PARITY_REVIEW.md](MATLAB_PARITY_REVIEW.md).
+  Full suite with curvelet and GUI extras: 152 passed, 32 missing-fixture skips,
+  0 failed. No test tolerances were loosened.
+
 - 2026-10-19 (vertex-identity follow-up): trace five missing extension fibers to
   endpoint-pixel deduplication. Preserve per-step vertex IDs, explicitly reuse
   nucleation IDs at crosslinks, deduplicate by endpoint IDs, and compact unused

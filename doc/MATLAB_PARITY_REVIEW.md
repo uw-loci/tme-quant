@@ -215,6 +215,120 @@ after full-suite collection; the complete four-case regression module then
 passed separately. Targeted Ruff checks and `git diff --check` passed. No test
 tolerance or skip condition was changed.
 
+## Fiber-processing merge-order investigation and fix — October 19, 2026
+
+This follow-up addresses the next remaining parity problem: `fiberproc` produced
+189 fibers with 182 of MATLAB's 191 final paths, even when given MATLAB's exact
+extension graph. It resolves the endpoint-list ordering portion of issue 15;
+other potential ordering and numerical differences remain relevant to broader
+validation.
+
+### Direct MATLAB stage tracing
+
+The installed MATLAB R2026a was run in batch mode on a temporary instrumented
+copy of the original `fiberproc.m`. The run restored the runtime capture's
+MATLAB path, explicitly selected the temporary copy, and used the captured
+`Xz`, `Fz`, `Rz`, image size, and parameters. The resolved `calc_fiberlen` was
+the CT-FIRE `FIRE/fiberproc` version. The original source files were not edited.
+The replayed MATLAB final paths agree with the saved capture.
+
+Both implementations saved graphs after initial trimming, initial overlap
+cleanup, each intersection-linking and overlap-cleanup pass, gap linking, and
+short-fiber removal. Individual merge decisions were also logged. Graph
+comparisons account for C++ retaining unused vertices: active vertex IDs are
+renumbered in their original order before comparison.
+
+| Stage | MATLAB fibers | C++ before fix | Exact shared paths before fix |
+| --- | ---: | ---: | ---: |
+| Initial trim | 873 | 873 | 873 |
+| Initial `remove_repeat` | 863 | 863 | 863 |
+| First `fiberlink` pass | 534 | 534 | **524** |
+| After five `fiberlink`/`remove_repeat` passes | 533 | 533 | **523** |
+| `fiberlinkgap` | 476 | 477 | 464 |
+| Final `fiberremove` | 191 | 189 | 182 |
+
+The first path discrepancy is therefore in intersection linking, not initial
+overlap cleanup or gap linking. Equal fiber counts concealed it.
+
+### Root cause and specific decisions
+
+MATLAB's `mergefiber` explicitly sorts endpoint membership lists after replacing
+the removed fiber ID. C++ removed IDs and appended the survivor without sorting.
+The representation first diverged after the first merge, at pixel `(20,340)`:
+MATLAB retained endpoint list `[1,41]`, while C++ stored `[41,1]`.
+
+After merging fibers 6 and 7, pixel `(10,32)` similarly had `[6,31]` in MATLAB
+and `[31,6]` in C++. At the twelfth merge, MATLAB selected `(6,31)` and retained
+fiber 6; C++ selected `(31,6)` and retained fiber 31. IDs in this example refer
+to the fiber list after initial cleanup; coordinates and IDs are one-based as
+in MATLAB.
+
+The pair selection is not just a numbering detail. The survivor, fiber
+orientation, and position in the subsequent traversal can change. Later
+direction estimates and merge decisions then join different branches. The
+gap-linking count discrepancy was downstream of these earlier decisions.
+
+A temporary C++ probe sorting the updated endpoint lists restored all ordered
+paths at every captured processing stage, including 191 of 191 final paths.
+It also matched active coordinates, renumbered fiber vertex IDs, and active
+vertex membership and endpoint lists. This isolates a concrete cause rather
+than attributing the difference to floating-point drift.
+
+### Implemented behavior and regression
+
+[fiberproc_native.cpp](../src/ctfire_py/CPP/fiberproc_native.cpp) now reproduces:
+
+- `sort(setdiff(V(vm).fe,[f1 f2]))` at the merged intersection.
+- `sort([setdiff(V(ve).fe,f2) f1])` at the transferred endpoint. The `setdiff`
+  contribution is deduplicated before appending, preserving MATLAB's treatment
+  of an already-present survivor ID, including closed-loop cases.
+- Sorted unique fiber membership lists, matching MATLAB's `unique` update.
+
+The portable regression in
+[test_fiberproc_merge_order.py](../tests/test_fiberproc_merge_order.py) joins
+three segments `A--B`, `B--C`, and reversed `D--C`. The second endpoint update
+must become `[0,2]`, rather than `[2,0]`, so MATLAB's survivor and ordered output
+`A--B--C--D` are preserved. The test failed against the old compiled backend and
+passed after rebuilding with the fix. No external MATLAB fixture is needed.
+
+### Current results and remaining limits
+
+On MATLAB's exact extension coordinates, processing now returns:
+
+- **191 fibers and 191 exact shared paths**.
+- **7,921.061988 pixels** total length, exactly matching MATLAB's path-length
+  calculation in the comparison command.
+- **3,257 active vertices**, with exact ordered active coordinates, renumbered
+  fiber vertex IDs, radii, membership lists, and endpoint lists.
+
+The native-coordinate control experiment processes the exact C++ extension
+output in its normal zero-based row/column frame. It also reproduces all 191
+paths and the same total length. Thus the remaining discrepancies in this
+captured-input experiment are introduced before processing, rather than by
+that coordinate-frame conversion.
+
+Starting from the captured FIRE image and using Python preprocessing, the final
+output now has **191 fibers, 188 of 191 exact shared paths**, and total length
+**7,921.213811 pixels** (about **0.00192%** error). The DSM still has maximum
+absolute error `7.15256e-7`; numerical and decision differences before processing
+need further investigation. This is not a raw-image curvelet reconstruction
+comparison.
+
+Full raw output arrays are not yet identical: C++ still returns 4,122 vertex
+records, including unused vertices, while MATLAB returns the 3,257 active
+records. The comparisons above explicitly normalize that difference. Final
+`V.vall` multiplicity and other unlisted metadata have not been established as
+equal. Other images may still expose the separate candidate-order, tie-breaking,
+hashing, or precision issues in the inventory.
+
+Validation: the complete curvelet- and GUI-enabled suite finished with
+**152 passed, 32 missing-fixture skips, and 0 failures**. The focused merge-order,
+vertex-identity, and preprocessing regressions passed (13 cases). The new
+merge-order regression was verified to fail on the previous native binary and
+pass after rebuilding. Targeted Ruff checks, documentation links, and
+`git diff --check` passed. No tolerance, skip condition, or reference output was
+changed.
+
 ## Sources and comparison method
 
 - MATLAB source: `CurveletsSourceCode_CurveAlign5.0_CT-FIRE3.0/CT-FIRE3.0_src`, including its `FIRE` subfolder.
@@ -382,9 +496,9 @@ MATLAB `make_vertexmatrix` stores one vertex ID per rounded pixel; `findclose` t
 
 ### 15. Intersection-link ties and connectivity-list semantics
 
-**Status: confirmed ordering differences; full effect needs validation. Fixable: yes.**
+**Status: merge endpoint/membership ordering fixed and validated on this capture; multiway tie behavior still needs broader validation.**
 
-MATLAB `min2` finds the first minimum column-first. C++ scans the pairwise matrix row-first. MATLAB merge helpers sort endpoint lists; C++ removes entries and appends surviving fiber IDs without the same explicit sorting. MATLAB `setdiff` also deduplicates entries within each vertex's contribution to `F.f`, while retaining repeated contributions across vertices.
+MATLAB `min2` finds the first minimum column-first. C++ scans the pairwise matrix row-first. MATLAB merge helpers sort endpoint lists; C++ previously removed entries and appended surviving fiber IDs without sorting. The merge-order follow-up above fixes that mismatch and sorted membership updates. MATLAB `setdiff` also deduplicates entries within each vertex's contribution to `F.f`, while retaining repeated contributions across vertices.
 
 **Fix:** match tie order, sorting, and the precise locations where duplicates are removed or retained. Connectivity multiplicity can affect short-fiber removal. Audit MATLAB's reused `A` matrix against C++'s newly allocated matrix before declaring multiway linking faithful.
 

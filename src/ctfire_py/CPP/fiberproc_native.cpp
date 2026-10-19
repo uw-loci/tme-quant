@@ -217,13 +217,21 @@ static void mergefiber(
         auto& fe = V[vm].fe;
         fe.erase(std::remove(fe.begin(), fe.end(), f1), fe.end());
         fe.erase(std::remove(fe.begin(), fe.end(), f2), fe.end());
+        // MATLAB: sort(setdiff(V(vm).fe, [f1 f2])). Order determines
+        // which fiber survives the next merge and its resulting orientation.
+        std::sort(fe.begin(), fe.end());
+        fe.erase(std::unique(fe.begin(), fe.end()), fe.end());
     }
     if (ve >= 0 && ve < (int)V.size()) {
         auto& fe = V[ve].fe;
         fe.erase(std::remove(fe.begin(), fe.end(), f2), fe.end());
-        if (std::find(fe.begin(), fe.end(), f1) == fe.end()) {
-            fe.push_back(f1);
-        }
+        // MATLAB: sort([setdiff(V(ve).fe, f2) f1]). Deduplicate the
+        // setdiff contribution before appending, preserving MATLAB's behavior
+        // if f1 already occurs at this endpoint (for example, a closed loop).
+        std::sort(fe.begin(), fe.end());
+        fe.erase(std::unique(fe.begin(), fe.end()), fe.end());
+        fe.push_back(f1);
+        std::sort(fe.begin(), fe.end());
     }
 
     for (int vi : fiber2_copy) {
@@ -233,6 +241,9 @@ static void mergefiber(
         if (std::find(f_list.begin(), f_list.end(), f1) == f_list.end()) {
             f_list.push_back(f1);
         }
+        // MATLAB applies unique() after updating each membership list.
+        std::sort(f_list.begin(), f_list.end());
+        f_list.erase(std::unique(f_list.begin(), f_list.end()), f_list.end());
     }
 }
 

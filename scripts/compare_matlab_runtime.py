@@ -69,7 +69,8 @@ def read_capture(path):
             "xlink": array("xlink"), "Xz": array("Xz"), "Fz": fibers("Fz"),
             "Vz": vertex_info("Vz"), "Rz": array("Rz").ravel(),
             "Fz_neighbors": [indices(ref) for ref in np.asarray(handle["Fz"]["f"]).ravel()],
-            "Xa": array("Xa"), "Fa": fibers("Fa"),
+            "Xa": array("Xa"), "Fa": fibers("Fa"), "Va": vertex_info("Va"),
+            "Ra": array("Ra").ravel(),
         }
 
 
@@ -145,10 +146,36 @@ def compare(reference, backend_dir=None):
             [fiber["f"] for fiber in fibers] == capture["Fz_neighbors"]
         )
         # Retain MATLAB coordinate values and axis order to isolate fiberproc.
-        xa, fa, _, _, _ = backend.process_fibers(
+        xa, fa, _, va, ra = backend.process_fibers(
             1, height, width, saved_dsm.copy(), capture["Xz"].astype(np.int32),
             capture["Fz"], capture["Rz"].astype(np.float32), params,
         )
+        # The real pipeline uses zero-based row/column coordinates, whereas
+        # the isolated comparison above preserves MATLAB's coordinate frame.
+        # Test that frame change separately from residual DSM differences.
+        native_xa, native_fa, _, _, _ = backend.process_fibers(
+            1, height, width, saved_dsm.copy(), x, fibers, radii, params,
+        )
+    processed = statistics(np.asarray(xa) - 1, fa, processed_paths)
+    active = sorted({vertex for fiber in fa for vertex in fiber["v"]})
+    remap = {vertex: i for i, vertex in enumerate(active)}
+    processed.update({
+        "returned_vertices": len(xa), "active_vertices": len(active),
+        "ordered_active_coordinates_equal": np.array_equal(
+            np.asarray(xa)[active], capture["Xa"]
+        ),
+        "ordered_renumbered_fiber_vertex_ids_equal": (
+            [[remap[vertex] for vertex in fiber["v"]] for fiber in fa]
+            == [fiber["v"] for fiber in capture["Fa"]]
+        ),
+        "ordered_active_radii_equal": np.array_equal(np.asarray(ra)[active], capture["Ra"]),
+        "ordered_active_membership_equal": (
+            [va[vertex]["f"] for vertex in active] == [vertex["f"] for vertex in capture["Va"]]
+        ),
+        "ordered_active_endpoints_equal": (
+            [va[vertex]["fe"] for vertex in active] == [vertex["fe"] for vertex in capture["Va"]]
+        ),
+    })
     return {
         "reference": str(Path(reference).resolve()), "backend": backend.__file__,
         "reference_sha256": hashlib.sha256(Path(reference).read_bytes()).hexdigest(),
@@ -165,7 +192,10 @@ def compare(reference, backend_dir=None):
             ),
         },
         "extension_on_matlab_inputs": extension,
-        "fiberproc_on_matlab_inputs": statistics(np.asarray(xa) - 1, fa, processed_paths),
+        "fiberproc_on_matlab_inputs": processed,
+        "fiberproc_on_native_extension": statistics(
+            np.asarray(native_xa)[:, [1, 0, 2]] - [0, 0, 1], native_fa, processed_paths
+        ),
         "current_pipeline_processed": statistics(
             np.asarray(data["Xa"])[:, [1, 0, 2]] - [0, 0, 1], data["Fa"], processed_paths
         ),
