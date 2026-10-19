@@ -17,20 +17,6 @@ from skimage import io
 from ._he_bdc_annotation import annotate_he, annotate_he2
 from ._he_bdc_reg1 import DEFAULT_KMEANS_SEED
 
-# Re-export morphology constants so existing imports keep working.
-from ._he_bdc_annotation import (  # noqa: F401
-    BACKGROUND_HOLE_MIN_AREA_MULTIPLIER,
-    EPITH_BINARY_THRESHOLD,
-    EPITH_DILATION_RADIUS_MULTIPLIER,
-    FINAL_MASK_DILATION_RADIUS_MULTIPLIER,
-    FINAL_MASK_GAUSSIAN_KERNEL_SIZE,
-    FINAL_MASK_GAUSSIAN_SIGMA,
-    HE_RGB_DISK_RADIUS_MULTIPLIER,
-    HE_RGB_N_COLORS,
-    HE_RGB_PAD,
-    TUMOR_MASK_MIN_AREA_MULTIPLIER,
-)
-
 
 @dataclass
 class TumorAnnotationFromHEParameters:
