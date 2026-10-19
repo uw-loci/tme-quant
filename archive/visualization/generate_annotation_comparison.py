@@ -51,6 +51,18 @@ CASES = [
 
 
 def _load_he(path: Path) -> np.ndarray:
+    """Load an H&E TIFF as a 3-channel image.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        TIFF path.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(H, W, 3)`` image. A grayscale file is stacked into three channels.
+    """
     im = io.imread(str(path))
     if im.ndim == 2:
         im = np.dstack([im, im, im])
@@ -58,6 +70,18 @@ def _load_he(path: Path) -> np.ndarray:
 
 
 def _as_bool_mask(arr: np.ndarray) -> np.ndarray:
+    """Turn a saved mask into a boolean array.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        Boolean, float, or integer mask.
+
+    Returns
+    -------
+    numpy.ndarray
+        True where a float mask is above 0.5, or an integer mask is non-zero.
+    """
     a = np.asarray(arr).squeeze()
     if a.dtype == np.bool_:
         return a
@@ -67,6 +91,18 @@ def _as_bool_mask(arr: np.ndarray) -> np.ndarray:
 
 
 def _he01(he: np.ndarray) -> np.ndarray:
+    """Scale an H&E image into ``[0, 1]`` for display.
+
+    Parameters
+    ----------
+    he : numpy.ndarray
+        uint8 or float image.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float image. Values above 1.5 are treated as 8-bit and divided by 255.
+    """
     a = he.astype(np.float64)
     if a.max() > 1.5:
         a = a / 255.0
@@ -74,6 +110,18 @@ def _he01(he: np.ndarray) -> np.ndarray:
 
 
 def _boundary(mask: np.ndarray) -> np.ndarray:
+    """Pixels of ``mask`` that touch the background.
+
+    Parameters
+    ----------
+    mask : numpy.ndarray
+        Boolean mask.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean outline. Empty when ``mask`` has no true pixels.
+    """
     struct = np.ones((3, 3), dtype=bool)
     m = np.asarray(mask, dtype=bool)
     if not m.any():
@@ -81,7 +129,30 @@ def _boundary(mask: np.ndarray) -> np.ndarray:
     return m & ~ndimage.binary_erosion(m, structure=struct, border_value=0)
 
 
-def _overlay_mask(he: np.ndarray, mask: np.ndarray, color: tuple[float, float, float], alpha: float = 0.45) -> np.ndarray:
+def _overlay_mask(
+    he: np.ndarray,
+    mask: np.ndarray,
+    color: tuple[float, float, float],
+    alpha: float = 0.45,
+) -> np.ndarray:
+    """Blend a solid color onto the H&E where ``mask`` is true.
+
+    Parameters
+    ----------
+    he : numpy.ndarray
+        H&E image.
+    mask : numpy.ndarray
+        Boolean region.
+    color : tuple of float
+        RGB color in ``[0, 1]``.
+    alpha : float, optional
+        Blend weight of ``color``. Default is 0.45.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float RGB image in ``[0, 1]``.
+    """
     out = _he01(he).copy()
     c = np.asarray(color, dtype=np.float64)
     m = np.asarray(mask, dtype=bool)
@@ -90,6 +161,24 @@ def _overlay_mask(he: np.ndarray, mask: np.ndarray, color: tuple[float, float, f
 
 
 def _contour_overlay(he: np.ndarray, matlab: np.ndarray, python: np.ndarray) -> np.ndarray:
+    """Draw MATLAB and Python outlines on the H&E.
+
+    Cyan is MATLAB only, magenta is Python only, yellow is both.
+
+    Parameters
+    ----------
+    he : numpy.ndarray
+        H&E image.
+    matlab : numpy.ndarray
+        MATLAB mask.
+    python : numpy.ndarray
+        Python mask.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float RGB image.
+    """
     out = _he01(he).copy()
     mb = _boundary(matlab)
     pb = _boundary(python)
@@ -101,6 +190,25 @@ def _contour_overlay(he: np.ndarray, matlab: np.ndarray, python: np.ndarray) -> 
 
 
 def _tpfpfn_overlay(he: np.ndarray, matlab: np.ndarray, python: np.ndarray) -> np.ndarray:
+    """Color true positives, false positives, and false negatives.
+
+    Green is in both masks, red is Python only, blue is MATLAB only.
+    Background pixels stay the H&E image.
+
+    Parameters
+    ----------
+    he : numpy.ndarray
+        H&E image.
+    matlab : numpy.ndarray
+        MATLAB mask.
+    python : numpy.ndarray
+        Python mask.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float RGB image.
+    """
     he_f = _he01(he)
     ml = np.asarray(matlab, dtype=bool)
     py = np.asarray(python, dtype=bool)
@@ -115,10 +223,35 @@ def _tpfpfn_overlay(he: np.ndarray, matlab: np.ndarray, python: np.ndarray) -> n
 
 
 def _load_he2_golden(name: str) -> np.ndarray:
+    """Load one committed HE2 mask from ``CA_Boundary``.
+
+    Parameters
+    ----------
+    name : str
+        TIFF file name under the golden directory.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean mask.
+    """
     return _as_bool_mask(io.imread(str(GOLDEN_DIR / name)))
 
 
 def _load_he_dump_mask(case_id: str) -> np.ndarray | None:
+    """Load the RGB-path ``BDmask`` from a MATLAB dump.
+
+    Parameters
+    ----------
+    case_id : str
+        ``test1``, ``test2``, or ``test3``. The file is
+        ``dumps/he_<case_id>/images.mat``.
+
+    Returns
+    -------
+    numpy.ndarray or None
+        Boolean mask, or ``None`` when the dump is missing.
+    """
     path = DUMPS / f"he_{case_id}" / "images.mat"
     if not path.is_file():
         return None
@@ -135,6 +268,36 @@ def generate(
     method: str,
     out_dir: Path,
 ) -> dict[str, float] | None:
+    """Write one comparison figure and return its scores.
+
+    Parameters
+    ----------
+    case_id : str
+        ``test1``, ``test2``, or ``test3``.
+    ppm : float
+        Native pixels per micron.
+    he_folder : str
+        Registered-H&E folder name under the fixture tree.
+    golden_name : str
+        HE2 golden TIFF name. Ignored for ``method='rgb_kmeans'``, which
+        reads the dump mask instead.
+    method : {'hsv', 'rgb_kmeans'}
+        Annotation path to draw.
+    out_dir : pathlib.Path
+        Directory for the PNG.
+
+    Returns
+    -------
+    dict or None
+        IoU, Dice, pixel accuracy, Hausdorff distance, boundary F1, differing
+        pixel count, and exact-match percent. ``None`` when an input is missing
+        or the masks have different shapes.
+
+    Raises
+    ------
+    ValueError
+        If ``method`` is not ``'hsv'`` or ``'rgb_kmeans'``.
+    """
     he_path = HE_ROOT / he_folder / "patient_001.tif"
     if not he_path.is_file():
         print(f"skip {case_id} {method}: missing {he_path}")
@@ -316,6 +479,11 @@ def generate(
 
 
 def main() -> None:
+    """Parse ``sys.argv`` and write a figure for each requested case.
+
+    A positional argument replaces the default output directory. ``--method``
+    selects ``hsv``, ``rgb_kmeans``, or both when it is omitted.
+    """
     out_dir = ROOT / "tests" / "artifacts" / "bdc_annotation_viz" / "current"
     methods = ["hsv", "rgb_kmeans"]
     it = iter(sys.argv[1:])
