@@ -2,7 +2,7 @@
 % Small MATLAB probes for BDcreationHE / HE2 primitive ports (histeq, disk,
 % padarray, strel). Run:
 %   /Applications/MATLAB_R2025b.app/bin/matlab -batch ...
-%     "cd('.../tests/matlab_parity'); dump_annotation_primitives"
+%     "cd('.../archive/matlab_parity'); dump_annotation_primitives"
 %
 % Writes dumps/annotation_primitives.mat (tracked).
 

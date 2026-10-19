@@ -2,9 +2,9 @@
 
 Usage (from tme-quant root, after dump_bdc_he2.m / dump_bdc_he.m)::
 
-    .venv/bin/python tests/matlab_parity/analyze_he_dumps.py
-    .venv/bin/python tests/matlab_parity/analyze_he_dumps.py --preproc
-    .venv/bin/python tests/matlab_parity/analyze_he_dumps.py he2_test1 he_test2
+    .venv/bin/python archive/matlab_parity/analyze_he_dumps.py
+    .venv/bin/python archive/matlab_parity/analyze_he_dumps.py --preproc
+    .venv/bin/python archive/matlab_parity/analyze_he_dumps.py he2_test1 he_test2
 
 Does not edit ``analyze_dumps.py`` (registration). Writes a local
 ``dumps/he_analysis_summary.json`` (gitignored).

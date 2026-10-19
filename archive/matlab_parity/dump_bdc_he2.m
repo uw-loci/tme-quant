@@ -1,7 +1,7 @@
 % dump_bdc_he2.m
 % Instrumented BDcreationHE2.m on MATLAB-registered HE (tests 1-3).
 %   /Applications/MATLAB_R2025b.app/bin/matlab -batch ...
-%     "cd('.../tests/matlab_parity'); dump_bdc_he2"
+%     "cd('.../archive/matlab_parity'); dump_bdc_he2"
 %
 % Per case dumps/he2_<case>/ :
 %   images.mat  (tracked)  - arrays pytest compares
@@ -11,7 +11,7 @@
 function dump_bdc_he2(caseFilter)
     if nargin < 1; caseFilter = ''; end
     thisDir = fileparts(mfilename('fullpath'));
-    fixtureRoot = fullfile(thisDir, '..', 'test_for_shg_he_registration_BDcreation');
+    fixtureRoot = fullfile(thisDir, '..', '..', 'tests', 'test_for_shg_he_registration_BDcreation');
     outRoot = fullfile(thisDir, 'dumps');
     if ~exist(outRoot, 'dir'); mkdir(outRoot); end
 

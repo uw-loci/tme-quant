@@ -3,13 +3,13 @@
 % kmeans is unseeded in the original; this dump pins rng(28,'twister')
 % immediately before kmeans (same seed policy as dump_bdc_reg1.m).
 %   /Applications/MATLAB_R2025b.app/bin/matlab -batch ...
-%     "cd('.../tests/matlab_parity'); dump_bdc_he"
+%     "cd('.../archive/matlab_parity'); dump_bdc_he"
 
 function dump_bdc_he(caseFilter, kmeansSeed)
     if nargin < 1; caseFilter = ''; end
     if nargin < 2; kmeansSeed = 28; end
     thisDir = fileparts(mfilename('fullpath'));
-    fixtureRoot = fullfile(thisDir, '..', 'test_for_shg_he_registration_BDcreation');
+    fixtureRoot = fullfile(thisDir, '..', '..', 'tests', 'test_for_shg_he_registration_BDcreation');
     outRoot = fullfile(thisDir, 'dumps');
     if ~exist(outRoot, 'dir'); mkdir(outRoot); end
 
