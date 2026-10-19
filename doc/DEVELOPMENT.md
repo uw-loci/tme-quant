@@ -97,6 +97,14 @@ review so this section stays useful for future troubleshooting.
 This branch converts the MATLAB **ctFIRE** pipeline to Python + C++ (it does not develop
 the napari plugin or the CurveAlign / curvelet ports — those already live in `main`).
 
+- 2026-10-19 (vertex-identity follow-up): trace five missing extension fibers to
+  endpoint-pixel deduplication. Preserve per-step vertex IDs, explicitly reuse
+  nucleation IDs at crosslinks, deduplicate by endpoint IDs, and compact unused
+  vertices without merging coincident coordinates. The captured extension now
+  matches all 873 paths, all 4,122 vertices, radii, and ordered connectivity.
+  Add four portable regression cases and ordered graph comparisons to the
+  runtime-capture command. Downstream processing parity remains separate.
+
 - 2026-10-19 (uncommitted): preserve the extension DSM during nucleation detection;
   include singleton-depth smoothing; match MATLAB LMP sorting, pairwise pruning,
   face/edge neighbors, and crosslink search order; correct final-endpoint direction

@@ -103,6 +103,118 @@ and napari caches. An earlier sandbox-only run skipped napari because the GUI
 extra was not installed at collection time; that skip is absent from the final
 result.
 
+## Vertex-identity investigation and fix — October 19, 2026
+
+This follow-up addresses the first remaining fix discussed after the initial
+implementation pass: vertex identity and endpoint deduplication (issue 11 in the
+inventory below). The earlier measurements are retained as historical baselines.
+
+### Trace and confirmed failure point
+
+An instrumented temporary build logged every generated branch before duplicate
+removal, then logged every branch discarded by the endpoint-pixel key. It used
+the capture's exact DSM and ordered nucleation points, isolating extension from
+preprocessing. C++ generated 1,005 raw branches and discarded 137, leaving 868.
+Every missing MATLAB path was present in the raw branches and was removed at
+that duplicate-removal step. No direction-arithmetic or radius change was needed
+to recover them.
+
+| Missing MATLAB fiber, one-based | Start `(x,y)` | Free-tip `(x,y)` | Lost length, pixels |
+| --- | --- | --- | ---: |
+| 71 | (35,67) | (24,57) | 16.0944 |
+| 109 | (54,437) | (43,403) | 38.0554 |
+| 141 | (71,477) | (82,499) | 26.3939 |
+| 165 | (84,28) | (68,1) | 33.5202 |
+| 721 | (443,265) | (443,260) | 5.5765 |
+| **Total** | | | **119.6404** |
+
+The total exactly accounts for the extension-length shortfall:
+`9299.590353665404 - 9179.94994398473 = 119.640409680674` pixels, within
+floating-point summation precision.
+
+For example, MATLAB fibers 70 and 71 take different routes between the same
+endpoint pixels:
+
+```text
+70: (35,67) -> (31,63) -> (30,61) -> (28,58) -> (24,57)
+71: (35,67) -> (34,63) -> (31,61) -> (28,58) -> (24,57)
+```
+
+MATLAB retains endpoint ID pairs `(32,671)` and `(32,675)`. The distinct free-tip
+IDs occupy the same pixel, so MATLAB's vertex-ID check keeps both. C++ previously
+reduced both pairs to the same pixel-offset key and deleted fiber 71. All five
+missing fibers have this pattern, and none of their free tips is a nucleation
+point. A temporary diagnostic probe retained those branches and recovered all
+873 MATLAB paths while discarding only the other 132 duplicate branches.
+
+The next construction step also merged every coincident coordinate through
+`index_map`. MATLAB's 4,122 vertex records occupy only 4,029 distinct pixels;
+coordinate equality therefore cannot substitute for vertex identity at this
+stage. Keeping five extra paths alone would not correct the graph.
+
+### Implementation
+
+[extend_xlink_native.cpp](../src/ctfire_py/CPP/extend_xlink_native.cpp) now:
+
+1. Records explicit crosslink termination on each generated branch.
+2. Initializes vertex IDs from the ordered nucleation list and allocates a new
+   vertex for every extension step, including coincident pixels.
+3. Reuses an existing nucleation ID only for an explicit crosslink termination.
+4. Removes duplicate fibers using unordered endpoint **vertex-ID** pairs,
+   retaining the original serial branch order.
+5. Compacts unused vertices in their original order and remaps fiber indices,
+   matching `trimxfv` without merging coordinates.
+6. Rebuilds radii and vertex/fiber connectivity. Fiber-neighbor lists concatenate
+   MATLAB's per-vertex `setdiff` result, preserving repeated contributions across
+   vertices rather than globally deduplicating them.
+
+The pixel index map and intermediate `F_init` reconstruction are removed.
+Coincident-coordinate merging remains the responsibility of the later processing
+stage. Reverse duplicates between genuinely shared nucleation vertices are still
+removed.
+
+### Capture validation and scope
+
+The comparison script now checks ordered graph arrays in addition to whole-path
+multisets. Its HDF5 reader also handles MATLAB's empty-array encoding; without
+that check, empty endpoint lists decode incorrectly as `[-1,-1]` and report false
+connectivity differences.
+
+| Exact-input extension metric | Before identity fix | After identity fix | MATLAB |
+| --- | ---: | ---: | ---: |
+| Fibers | 868 | **873** | 873 |
+| Exact shared paths | 868 | **873** | 873 |
+| Vertex records | Prematurely merged by pixel | **4,122** | 4,122 |
+| Total length, pixels | 9,179.949944 | **9,299.590354** | 9,299.590354 |
+
+After axis and index conversion, the following compare exactly, including order:
+
+- Vertex coordinates (`Xz`).
+- Every fiber's vertex IDs (`Fz.v`).
+- Radius values (`Rz`).
+- Vertex membership, endpoint, and neighbor lists (`Vz.f`, `Vz.fe`, `Vz.vall`).
+- Fiber connectivity lists (`Fz.f`).
+
+This establishes exact extension output for the captured inputs, not universal
+or full-pipeline parity. On the captured FIRE input with Python preprocessing,
+the final output changes from 179 to **180 of 191** exact shared paths, retains
+**189 fibers**, and has total length **7,872.836608** pixels versus MATLAB's
+7,921.061988 (about **0.61%** error). Preprocessing still has its documented small
+DSM differences. Independently, `fiberproc` on MATLAB's exact extension output
+still produces 189 fibers with 182 exact shared final paths; this fix does not
+address those processing discrepancies.
+
+Four portable regression cases cover distinct vertex IDs at coincident free
+tips, two different routes sharing both endpoint pixels, shared nucleation IDs
+with reverse duplicate removal, and removal of unused nucleation vertices.
+These tests do not depend on the external runtime capture.
+
+Validation for this follow-up: the full suite completed with **150 passed,
+32 missing-fixture skips, and 0 failures**. The fourth regression case was added
+after full-suite collection; the complete four-case regression module then
+passed separately. Targeted Ruff checks and `git diff --check` passed. No test
+tolerance or skip condition was changed.
+
 ## Sources and comparison method
 
 - MATLAB source: `CurveletsSourceCode_CurveAlign5.0_CT-FIRE3.0/CT-FIRE3.0_src`, including its `FIRE` subfolder.
@@ -236,13 +348,13 @@ MATLAB uses `getbox` and takes the first qualifying crosslink in column-major bo
 
 ### 11. Vertex identity and duplicate-fiber timing
 
-**Status: confirmed structural difference. Fixable: yes, potentially requiring graph-construction changes.**
+**Status: fixed in the vertex-identity follow-up; exact captured extension graph verified.**
 
-MATLAB allocates a new vertex for each extension step and removes duplicate fibers using endpoint vertex IDs. Coincident coordinates are handled later by `remove_repeat`. C++ merges coordinates through a pixel index map and removes duplicates using endpoint pixel pairs.
+MATLAB allocates a new vertex for each extension step and removes duplicate fibers using endpoint vertex IDs. Coincident coordinates are handled later by `remove_repeat`. Before the follow-up fix, C++ merged coordinates through a pixel index map and removed duplicates using endpoint pixel pairs.
 
 Separate MATLAB vertex IDs can share coordinates. Merging them early can change which fibers survive and what connectivity later processing sees.
 
-**Fix:** preserve vertex identity until the corresponding MATLAB merge stage, and reproduce duplicate removal in the same order. Symmetric keys alone are insufficient to establish equivalence.
+**Implemented fix:** preserve vertex identity until the corresponding MATLAB merge stage, and reproduce duplicate removal in the same order. Symmetric keys alone were insufficient to establish equivalence. See the trace and ordered graph comparisons above.
 
 ### 12. Continuity-line sampling
 

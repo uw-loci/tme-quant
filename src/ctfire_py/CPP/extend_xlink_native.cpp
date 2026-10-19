@@ -3,12 +3,12 @@
 #include <pybind11/stl.h>
 #include <cstdint>
 #include <cmath>
-#include <cstring>
 #include <vector>
 #include <array>
 #include <omp.h>
 #include <iostream>
-#include <unordered_set>
+#include <algorithm>
+#include <set>
 #include "link_fibre.h" 
 
 namespace py = pybind11;
@@ -99,11 +99,7 @@ struct ExtendXLink {
         
         static_assert(d == 2, "2D Implementation Only");
 
-        // Allocate and initialize maps
-        int* index_map = new int[sizex * sizey];
-        int* nucleation_map = new int[sizex * sizey];
-        memset(nucleation_map, 0, sizeof(int) * sizex * sizey);
-        memset(index_map, 0, sizeof(int) * sizex * sizey);
+        std::vector<int> nucleation_map(sizex * sizey, 0);
 
         // Mark nucleation points (store index + 1 to distinguish from 0)
         #pragma omp parallel for
@@ -111,7 +107,10 @@ struct ExtendXLink {
             nucleation_map[pts[i][0] * sizex + pts[i][1]] = i + 1;
         }
 
-        std::vector<std::vector<Fibre_Type>> fibres(pts.size());
+        struct Branch : Fibre_Type {
+            int terminal_nucleation = -1;
+        };
+        std::vector<std::vector<Branch>> fibres(pts.size());
 
         // Step 1: Find Local Maxima Points (LMP) and extend fibers
         #pragma omp parallel for
@@ -185,7 +184,7 @@ struct ExtendXLink {
                         if (too_close) continue;
 
                         // Start a new fiber
-                        fibres[i].push_back(Fibre_Type{});
+                        fibres[i].push_back(Branch{});
                         fibres[i].back().link.push_back(nucleation);
                         fibres[i].back().link.push_back(p);
                         
@@ -314,6 +313,8 @@ struct ExtendXLink {
                             
                             if (found_nucleation) {
                                 fibres[i].back().link.push_back(nucleation_pt);
+                                fibres[i].back().terminal_nucleation =
+                                    nucleation_map[nucleation_pt[0] * sizex + nucleation_pt[1]] - 1;
                                 break;
                             }
                         }
@@ -323,144 +324,56 @@ struct ExtendXLink {
             }
         }
 
-        // Step 2: Remove duplicate fibers that share the same unordered
-        // endpoint pixel-pair.
-        //
-        // MATLAB equivalent (extend_xlink.m:143-156):
-        //     A = spalloc(n,n,10*n);
-        //     for fi=1:length(F)
-        //         v1 = F(fi).v(1);  v2 = F(fi).v(end);
-        //         if A(v1,v2)==1, fremove(fi) = 1; end
-        //         A(v1,v2) = 1;  A(v2,v1) = 1;   % symmetric
-        //     end
-        //
-        // The previous C++ used two parallel passes (forward /
-        // offset_begin<offset_end, reverse / offset_begin>offset_end) that
-        // had three divergences from MATLAB:
-        //   1. The reverse pass never wrote to link_map, so two fibers
-        //      both running in the reverse direction with the same
-        //      (begin, end) pair were never deduped.
-        //   2. Self-loops (offset_begin == offset_end) fell through both
-        //      branches and were never deduped.
-        //   3. The nucleation_map[offset_end] gate over-restricted dedup:
-        //      this C++ collapses non-nucleation vertices at shared pixel
-        //      offsets via index_map, so MATLAB's unconditional A(v1,v2)
-        //      dedup should map to an unconditional pixel-offset dedup.
-        // Fix: single serial pass with a symmetric hashed-pair key that
-        // also handles self-loops.
-        std::unordered_set<uint64_t> seen_pairs;
-        seen_pairs.reserve(fibres.size() * 2);
-        const uint64_t pack_shift = 32;  // pixel offsets fit in 32 bits for
-                                          // any realistic image (sizex<=2^16)
+        // MATLAB starts with all nucleation vertices, then allocates a new
+        // vertex for every extension step, even at an already occupied pixel.
+        // Only an explicit crosslink termination reuses an existing vertex ID.
+        X = pts;
+        F.clear();
+        std::set<std::pair<int, int>> seen_endpoints;
         for (int f = 0; f < (int)fibres.size(); ++f) {
-            for (int branch = 0; branch < (int)fibres[f].size(); ++branch) {
-                auto& br = fibres[f][branch];
-                if (br.link.size() < 2) continue;
-
-                const uint64_t ob = static_cast<uint64_t>(br.link[0][0]) * sizex +
-                                    static_cast<uint64_t>(br.link[0][1]);
-                const uint64_t oe = static_cast<uint64_t>(br.link.back()[0]) * sizex +
-                                    static_cast<uint64_t>(br.link.back()[1]);
-                const uint64_t lo = ob < oe ? ob : oe;  // symmetric key
-                const uint64_t hi = ob < oe ? oe : ob;
-                const uint64_t key = (lo << pack_shift) | hi;
-
-                if (seen_pairs.count(key)) {
-                    br.link.clear();  // duplicate pair -> drop this fiber
-                } else {
-                    seen_pairs.insert(key);
-                }
-            }
-        }
-
-        // Step 3: Populate index_map and X array
-        int ncounter = 0;
-        for (int f = 0; f < (int)fibres.size(); ++f) {
-            for (int branch = 0; branch < (int)fibres[f].size(); ++branch) {
-                for (int node = 0; node < (int)fibres[f][branch].link.size(); ++node) {
-                    const uint64_t offset = fibres[f][branch].link[node][0] * sizex + 
-                                           fibres[f][branch].link[node][1];
-                    if (!index_map[offset]) {
-                        index_map[offset] = ++ncounter;
-                        // Store 0-based pixel coords
-                        X.push_back(std::array<int, d>{fibres[f][branch].link[node][0],
-                                                       fibres[f][branch].link[node][1]});
+            for (const auto& branch : fibres[f]) {
+                if (branch.link.size() < 2) continue;
+                std::vector<int> vertices{f};
+                for (size_t node = 1; node < branch.link.size(); ++node) {
+                    if (node + 1 == branch.link.size() && branch.terminal_nucleation >= 0) {
+                        vertices.push_back(branch.terminal_nucleation);
+                    } else {
+                        vertices.push_back((int)X.size());
+                        X.push_back(branch.link[node]);
                     }
                 }
+
+                // MATLAB's symmetric A(v1,v2) is keyed by vertex IDs, not
+                // coordinates. Distinct free tips at one pixel must survive.
+                const int first = vertices.front(), last = vertices.back();
+                if (seen_endpoints.emplace(std::min(first, last), std::max(first, last)).second) {
+                    F.push_back(std::move(vertices));
+                }
             }
         }
 
-        // Step 4: Copy radius values (DSM values at vertex locations)
+        // trimxfv compacts only unused vertices; it does not merge coincident
+        // coordinates. Preserve original vertex order when renumbering.
+        std::vector<int> remap(X.size(), -1);
+        for (const auto& fiber : F)
+            for (int vertex : fiber) remap[vertex] = 0;
+        size_t kept = 0;
+        for (size_t vertex = 0; vertex < X.size(); ++vertex) {
+            if (remap[vertex] < 0) continue;
+            remap[vertex] = (int)kept;
+            X[kept++] = X[vertex];
+        }
+        X.resize(kept);
+        for (auto& fiber : F)
+            for (int& vertex : fiber) vertex = remap[vertex];
+
         R.resize(X.size());
         #pragma omp parallel for
-        for (int i = 0; i < (int)X.size(); ++i) {
-            // Store actual DSM value, not ceil (X coords are 0-based)
+        for (int i = 0; i < (int)X.size(); ++i)
             R[i] = image[X[i][0] * sizex + X[i][1]];
-        }
+        (void)thresh_linka; (void)sp;
 
-        // Step 5: Prepare nucleation points for linking (0-based indexing)
-        const int nNucleation = (int)pts.size();
-        std::vector<int> nucleation_pts(nNucleation);
-        #pragma omp parallel for
-        for (int i = 0; i < nNucleation; ++i) {
-            nucleation_pts[i] = index_map[pts[i][0] * sizex + pts[i][1]] - 1;
-        }
-
-        // Step 6: Initialize F_init with fiber segments
-        std::vector<Fibre_Type> F_init;
-        std::vector<uint64_t> branch_accum(pts.size() + 1);
-        branch_accum[0] = 0;
-        
-        for (int f = 0; f < (int)fibres.size(); ++f) {
-            int fibre_count = 0;
-            for (int b = 0; b < (int)fibres[f].size(); ++b) {
-                if (fibres[f][b].link.size() > 0) ++fibre_count;
-            }
-            branch_accum[f + 1] = branch_accum[f] + fibre_count;
-        }
-        
-        F_init.resize(branch_accum[pts.size()]);
-        
-        #pragma omp parallel for
-        for (int f = 0; f < (int)fibres.size(); ++f) {
-            int branch_count = 0;
-            for (int branch = 0; branch < (int)fibres[f].size(); ++branch) {
-                for (int node = 0; node < (int)fibres[f][branch].link.size(); ++node) {
-                    const uint64_t offset = fibres[f][branch].link[node][0] * sizex + 
-                                           fibres[f][branch].link[node][1];
-                    F_init[branch_accum[f] + branch_count].link_index.push_back(index_map[offset] - 1);
-                    F_init[branch_accum[f] + branch_count].link.push_back(fibres[f][branch].link[node]);
-                }
-                if (fibres[f][branch].link.size() > 0) {
-                    F_init[branch_accum[f] + branch_count].direction = fibres[f][branch].direction;
-                    ++branch_count;
-                }
-            }
-        }
-
-        // Step 7: MATLAB-faithful: no orientation-based linking here.
-        // MATLAB's extend_xlink.m only emits the individual F_init branches
-        // (after the (v_start, v_end) pair dedup applied above) -- fiber
-        // linking at shared nucleation points is handled later by fiberlink
-        // inside fiberproc. See /src/FIRE/xlink/extend_xlink.m lines 142-167.
-        // Previous code ran LinkFibreAtNucleationPoint here, which double-
-        // merged fibers and produced far fewer, longer fibers than MATLAB,
-        // leaving fiberremove with too little short-fiber work to do.
-        F.clear();
-        F.reserve(F_init.size());
-        for (int f = 0; f < (int)F_init.size(); ++f) {
-            if (F_init[f].link_index.size() < 2) continue; // trimxfv analogue
-            std::vector<int> v;
-            v.reserve(F_init[f].link_index.size());
-            for (int idx : F_init[f].link_index) {
-                v.push_back(idx); // 0-based vertex indices
-            }
-            F.push_back(std::move(v));
-        }
-        (void)thresh_linka; (void)sp; (void)nucleation_pts;
-
-        std::cout << "Fiber segments: " << F_init.size() << std::endl;
-        std::cout << "Fibers (no link, MATLAB-faithful): " << F.size() << std::endl;
+        std::cout << "Fibers (vertex-ID deduplication): " << F.size() << std::endl;
 
         // Step 8: Build auxiliary data structures (Xfe, Xf, Xvall, Ff)
         Xfe.resize(X.size());
@@ -489,28 +402,20 @@ struct ExtendXLink {
             }
         }
 
-        // Step 9: Build Ff (fibers connected to each fiber)
+        // MATLAB concatenates setdiff(V(vertex).f, f) at each vertex.
+        // Deduplicate within each vertex contribution, not across the fiber.
         Ff.resize(F.size());
         #pragma omp parallel for
         for (int f = 0; f < (int)F.size(); ++f) {
-            for (int node = 0; node < (int)F[f].size(); ++node) {
-                for (int f2 = 0; f2 < (int)Xf[F[f][node]].size(); ++f2) {
-                    if (Xf[F[f][node]][f2] != f) {
-                        bool unique = true;
-                        for (int ff = 0; ff < (int)Ff[f].size(); ++ff) {
-                            if (Ff[f][ff] == Xf[F[f][node]][f2]) {
-                                unique = false;
-                                break;
-                            }
-                        }
-                        if (unique) Ff[f].push_back(Xf[F[f][node]][f2]);
-                    }
-                }
+            for (int vertex : F[f]) {
+                auto connected = Xf[vertex];
+                std::sort(connected.begin(), connected.end());
+                connected.erase(std::unique(connected.begin(), connected.end()), connected.end());
+                for (int other : connected)
+                    if (other != f) Ff[f].push_back(other);
             }
         }
 
-        delete[] index_map;
-        delete[] nucleation_map;
     }
 
     // 3D Constructor stub

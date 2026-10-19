@@ -27,11 +27,24 @@ def read_capture(path):
         def array(name):
             return np.asarray(handle[name]).T
 
+        def indices(ref):
+            dataset = handle[ref]
+            if dataset.attrs.get("MATLAB_empty", 0):
+                return []
+            return (np.asarray(dataset).ravel().astype(int) - 1).tolist()
+
         def fibers(name):
             return [
-                {"v": (np.asarray(handle[ref]).ravel().astype(int) - 1).tolist()}
+                {"v": indices(ref)}
                 for ref in np.asarray(handle[name]["v"]).ravel()
             ]
+
+        def vertex_info(name):
+            fields = {
+                key: [indices(ref) for ref in np.asarray(handle[name][key]).ravel()]
+                for key in ("f", "fe", "vall")
+            }
+            return [dict(zip(fields, values)) for values in zip(*fields.values())]
 
         params = {}
         for key, value in handle["p"].items():
@@ -54,7 +67,9 @@ def read_capture(path):
         return {
             "p": params, "im": array("im"), "dsm": array("dsm").squeeze(),
             "xlink": array("xlink"), "Xz": array("Xz"), "Fz": fibers("Fz"),
-            "Rz": array("Rz").ravel(), "Xa": array("Xa"), "Fa": fibers("Fa"),
+            "Vz": vertex_info("Vz"), "Rz": array("Rz").ravel(),
+            "Fz_neighbors": [indices(ref) for ref in np.asarray(handle["Fz"]["f"]).ravel()],
+            "Xa": array("Xa"), "Fa": fibers("Fa"),
         }
 
 
@@ -111,11 +126,23 @@ def compare(reference, backend_dir=None):
     with contextlib.redirect_stdout(sys.stderr):
         with patch.object(backend, "find_local_max", side_effect=record_nucleation):
             data = module.fire_2d_angle(params, capture["im"], plotflag=0)
-        x, fibers, _, radii = backend.extend_xlink(
+        x, fibers, info, radii = backend.extend_xlink(
             1, height, width, saved_dsm.copy(), points, params
         )
         extension = statistics(
             np.asarray(x)[:, [1, 0, 2]] - [0, 0, 1], fibers, extension_paths
+        )
+        extension["vertices"] = len(x)
+        extension["ordered_coordinates_equal"] = np.array_equal(
+            np.asarray(x)[:, [1, 0, 2]] - [0, 0, 1], capture["Xz"] - 1
+        )
+        extension["ordered_fiber_vertex_ids_equal"] = (
+            [fiber["v"] for fiber in fibers] == [fiber["v"] for fiber in capture["Fz"]]
+        )
+        extension["ordered_radii_equal"] = np.array_equal(radii, capture["Rz"])
+        extension["ordered_vertex_connectivity_equal"] = info == capture["Vz"]
+        extension["ordered_fiber_connectivity_equal"] = (
+            [fiber["f"] for fiber in fibers] == capture["Fz_neighbors"]
         )
         # Retain MATLAB coordinate values and axis order to isolate fiberproc.
         xa, fa, _, _, _ = backend.process_fibers(
