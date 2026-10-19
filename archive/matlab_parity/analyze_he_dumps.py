@@ -73,10 +73,41 @@ HE_STEPS = (
 
 
 def _as_bool(a: np.ndarray) -> np.ndarray:
+    """Squeeze an array and cast it to bool.
+
+    Parameters
+    ----------
+    a : numpy.ndarray
+        Mask from Python or a MATLAB dump. Non-zero values become true.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean array.
+    """
     return np.asarray(a).squeeze().astype(bool)
 
 
 def _report(name: str, kind: str, py: np.ndarray, ml: np.ndarray) -> dict[str, Any]:
+    """Compare one Python intermediate to the MATLAB dump of the same name.
+
+    Parameters
+    ----------
+    name : str
+        Step name written into the report.
+    kind : {'bool', 'uint8', 'labels', 'float'}
+        How to compare. ``'labels'`` adds 1 to the Python array because
+        MATLAB cluster ids are 1-based.
+    py : numpy.ndarray
+        Python value.
+    ml : numpy.ndarray
+        MATLAB value.
+
+    Returns
+    -------
+    dict
+        ``n_diff`` for discrete kinds, ``max_abs`` for floats and uint8.
+    """
     py_a = np.asarray(py)
     ml_a = np.asarray(ml)
     if kind == "bool":
@@ -108,11 +139,31 @@ def _report(name: str, kind: str, py: np.ndarray, ml: np.ndarray) -> dict[str, A
 
 
 def _load_images(case_dir: Path) -> dict[str, Any]:
+    """Load one case's ``images.mat``, dropping scipy's ``__header__`` keys.
+
+    Parameters
+    ----------
+    case_dir : pathlib.Path
+        Directory that contains ``images.mat``.
+
+    Returns
+    -------
+    dict
+        Array name to array.
+    """
     mat = sio.loadmat(str(case_dir / "images.mat"), squeeze_me=True)
     return {k: v for k, v in mat.items() if not k.startswith("__")}
 
 
 def analyze_primitives() -> list[dict[str, Any]]:
+    """Compare ``histeq``, disk, strel, ``padarray``, and ``im2bw`` to the probe.
+
+    Returns
+    -------
+    list of dict
+        One row per primitive. A single ``missing`` row when the probe mat
+        is absent.
+    """
     path = DUMPS / "annotation_primitives.mat"
     if not path.is_file():
         return [{"name": "annotation_primitives.mat", "missing": True}]
@@ -154,6 +205,27 @@ def analyze_primitives() -> list[dict[str, Any]]:
 
 
 def analyze_he2(case_id: str, he_dir: Path, fname: str, ppm: float, *, preproc: bool) -> dict[str, Any]:
+    """Compare one HE2 case to its MATLAB dump.
+
+    Parameters
+    ----------
+    case_id : str
+        Dump directory name, for example ``he2_test1``.
+    he_dir : pathlib.Path
+        Directory of the registered H&E TIFF.
+    fname : str
+        TIFF file name.
+    ppm : float
+        Native pixels per micron.
+    preproc : bool
+        When true, compare every named intermediate. Otherwise only ``BDmask``.
+
+    Returns
+    -------
+    dict
+        Case id, resolution, per-step diffs, and the pixel count versus the
+        committed golden when that TIFF is present.
+    """
     dump = DUMPS / case_id
     images = dump / "images.mat"
     he_path = he_dir / fname
@@ -177,6 +249,29 @@ def analyze_he2(case_id: str, he_dir: Path, fname: str, ppm: float, *, preproc: 
 
 
 def analyze_he(case_id: str, he_dir: Path, fname: str, ppm: float, *, preproc: bool) -> dict[str, Any]:
+    """Compare one RGB k-means case to its MATLAB dump.
+
+    The seed is read from ``kmeansSeed`` in the dump, or the package default
+    when that field is absent.
+
+    Parameters
+    ----------
+    case_id : str
+        Dump directory name, for example ``he_test1``.
+    he_dir : pathlib.Path
+        Directory of the registered H&E TIFF.
+    fname : str
+        TIFF file name.
+    ppm : float
+        Native pixels per micron.
+    preproc : bool
+        When true, compare every named intermediate. Otherwise only ``BDmask``.
+
+    Returns
+    -------
+    dict
+        Case id, seed, per-step diffs, and whether the chosen cluster matches.
+    """
     dump = DUMPS / case_id
     images = dump / "images.mat"
     he_path = he_dir / fname
@@ -201,6 +296,13 @@ def analyze_he(case_id: str, he_dir: Path, fname: str, ppm: float, *, preproc: b
 
 
 def _print_case(row: dict[str, Any]) -> None:
+    """Print one case report, marking the first step that disagrees.
+
+    Parameters
+    ----------
+    row : dict
+        Result of :func:`analyze_he2` or :func:`analyze_he`.
+    """
     if row.get("missing"):
         print(f"  {row.get('case', '?')}: MISSING dump or fixture")
         return
@@ -225,6 +327,20 @@ def _print_case(row: dict[str, Any]) -> None:
 
 
 def main(argv: list[str]) -> int:
+    """Run the primitive probe and the requested HE2 / HE cases.
+
+    Parameters
+    ----------
+    argv : list of str
+        Arguments after the script name. ``--preproc`` compares intermediates.
+        Any other token is a case id (``he2_test1``, ``he_test2``, ...).
+        With no case ids, every case is reported.
+
+    Returns
+    -------
+    int
+        Process status. ``0`` after the summary JSON is written.
+    """
     preproc = "--preproc" in argv
     wanted = [a for a in argv if not a.startswith("-")]
     summary: dict[str, Any] = {"primitives": analyze_primitives(), "he2": [], "he": []}
