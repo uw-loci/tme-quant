@@ -36,61 +36,56 @@ except ImportError as exc:
 
 def smooth(v, sigma):
     """
-    Smooths v by convolving with a Gaussian box of radius r.
-    Equivalent to the MATLAB 'smooth' function provided.
+    Apply CT-FIRE's separable, zero-padded Gaussian filter.
+
+    MATLAB imfilter preserves single inputs, including coefficient rounding
+    and single-precision multiply/add operations. scipy.ndimage.convolve uses
+    wider accumulation even with a float32 output, which can turn unequal LMP
+    scores into ties. Use deterministic single arithmetic for float32 images;
+    MATLAB's optimized summation order can still differ for other inputs.
+    Retain double filtering for other types, as used for image thresholding.
     """
-    v = np.asanyarray(v, dtype=float)
+    v = np.asarray(v)
+    v = v.astype(np.float32 if v.dtype == np.float32 else np.float64, copy=False)
     ndims = v.ndim
-
-    # Handle sigma inputs
-    if np.all(sigma == 0):
-        return v
-
     if np.isscalar(sigma):
-        s = np.full(ndims, sigma)
+        s = np.full(ndims, sigma, dtype=float)
     elif len(sigma) == ndims:
-        s = np.array(sigma)
+        s = np.asarray(sigma, dtype=float)
     else:
         raise ValueError("Improper input for sigma")
 
-    # Calculate Radius (R)
-    R = np.ceil(2 * s).astype(int)
+    # The original MATLAB guard is `if all(sigma)==0`: any zero component
+    # returns the input, including a mixed zero/nonzero sigma vector.
+    if np.any(s == 0):
+        return v
 
-    # --- Generate 1D Kernels ---
-
-    # Kernel for Axis 0 (Vertical/Rows)
-    x1 = np.arange(-R[0], R[0] + 1)
-    gx1 = np.exp(-(x1**2) / (2 * s[0] ** 2))
-    gx1 /= gx1.sum()
-    # Reshape to (N, 1, 1) or (N, 1) depending on ndims
-    shape1 = [1] * ndims
-    shape1[0] = len(x1)
-    gx1 = gx1.reshape(shape1)
-
-    # Kernel for Axis 1 (Horizontal/Cols)
-    x2 = np.arange(-R[1], R[1] + 1)
-    gx2 = np.exp(-(x2**2) / (2 * s[1] ** 2))
-    gx2 /= gx2.sum()
-    shape2 = [1] * ndims
-    shape2[1] = len(x2)
-    gx2 = gx2.reshape(shape2)
-
-    # Apply first two filters.
-    # Use mode='constant', cval=0 (zero-padding) to match MATLAB's imfilter default.
-    # MATLAB's imfilter(v, kernel, 'same') uses zero-padding by default (the 'same'
-    # argument specifies output size, not boundary behavior; the default boundary is 0).
-    v = convolve(v, gx1, mode="constant", cval=0.0)
-    v = convolve(v, gx2, mode="constant", cval=0.0)
-
-    # Kernel for Axis 2 (Depth/Slices) if 3D
-    if ndims == 3:
-        x3 = np.arange(-R[2], R[2] + 1)
-        gx3 = np.exp(-(x3**2) / (2 * s[2] ** 2))
-        gx3 /= gx3.sum()
-        shape3 = [1, 1, len(x3)]
-        gx3 = gx3.reshape(shape3)
-
-        v = convolve(v, gx3, mode="constant", cval=0.0)
+    for axis, width in enumerate(s):
+        radius = int(np.ceil(2 * width))
+        offsets = np.arange(-radius, radius + 1)
+        kernel = np.exp(-(offsets**2) / (2 * width**2))
+        kernel /= kernel.sum()
+        if v.dtype == np.float32:
+            kernel = kernel.astype(np.float32)
+            padding = [(0, 0)] * ndims
+            padding[axis] = (radius, radius)
+            padded = np.pad(v, padding, mode="constant")
+            filtered = np.zeros_like(v)
+            product = np.empty_like(v)
+            for k, weight in enumerate(kernel):
+                if weight == 0:
+                    continue
+                sample = [slice(None)] * ndims
+                sample[axis] = slice(k, k + v.shape[axis])
+                # Separate multiply/add ufuncs retain rounding at both steps;
+                # do not replace this with a wider accumulator or fused sum.
+                np.multiply(padded[tuple(sample)], weight, out=product)
+                np.add(filtered, product, out=filtered)
+            v = filtered
+        else:
+            shape = [1] * ndims
+            shape[axis] = len(kernel)
+            v = convolve(v, kernel.reshape(shape), mode="constant", cval=0.0)
 
     return v
 

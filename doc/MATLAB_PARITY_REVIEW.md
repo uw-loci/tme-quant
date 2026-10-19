@@ -329,6 +329,128 @@ pass after rebuilding. Targeted Ruff checks, documentation links, and
 `git diff --check` passed. No tolerance, skip condition, or reference output was
 changed.
 
+## Smoothing-precision investigation and fix — October 19, 2026
+
+This follow-up addresses issue 3. After the merge-order fix, Python preprocessing
+still produced three different final paths, even though processing on the exact
+MATLAB DSM reproduced all 191 paths. The investigation and implementation below
+close that gap for the captured `real1` FIRE input. Exact arithmetic across all
+MATLAB configurations and implementations remains a separate validation target.
+
+### Source of the three divergent paths
+
+MATLAB was run on the capture to save the original distance transform, Gaussian
+kernel, and each successive `imfilter` output. The distance transform and the
+double-precision kernel matched Python exactly. The differences began inside
+filtering, not in distance calculation, nucleation order, or processing.
+
+All three extension trajectories diverged when small single-precision value
+differences became ties. For example, at extension point `(223,280)`:
+
+| Boundary candidate `(x,y)` | MATLAB DSM | Previous Python DSM |
+| --- | ---: | ---: |
+| (226,281) | **4.9578309059143066** | 4.9578304290771484 |
+| (226,280) | 4.9578304290771484 | 4.9578304290771484 |
+
+MATLAB chose the higher value. Python saw equal values and chose the earlier
+candidate. The other two first divergent choices were `(387,436)` versus
+`(386,436)`, and `(507,279)` versus `(506,279)`. Their search radii agreed at
+the first divergence points. The three altered extension paths propagated to
+final fibers 68, 121, and 164 in this comparison (MATLAB one-based coordinates
+and fiber numbering).
+
+Previously, `smooth` promoted the single-precision distance image to double,
+then cast it back only after filtering. Merely requesting float32 output from
+SciPy's convolution did not reproduce MATLAB: coefficient and accumulation
+precision also affect the result.
+
+### Implemented arithmetic
+
+[fire_2d_angle.py](../src/ctfire_py/fire_2d_angle.py) now preserves float32 input
+and applies each separable filter using:
+
+1. The existing double-precision Gaussian construction and normalization.
+2. A float32 coefficient cast before filtering single-precision images.
+3. Zero padding and deterministic increasing-offset tap traversal.
+4. Separate float32 multiplication and addition, with rounding at each step;
+   no wider accumulator or fused multiply/add substitution.
+5. Float32 output passed into the next axis filter.
+
+The existing singleton-depth convolution remains in place. Double inputs retain
+the SciPy/double path; integer inputs continue to be promoted to double, preserving
+the existing raw-image preprocessing convention rather than implementing generic
+integer `imfilter` semantics. The original MATLAB guard `if all(sigma)==0` is now
+also reproduced for sigma vectors: any zero component returns the input without
+filtering, including mixed zero/nonzero vectors.
+
+No LMP tolerance, candidate comparison, search radius, random perturbation, or
+reference output was adjusted to force a match.
+
+### Broader reference fixtures and numerical limits
+
+The original MATLAB `smooth.m` generated 98 portable fixtures: seven shapes,
+seven sigma configurations, and both single and double inputs. Shapes include
+rectangular 2D images, leading/middle singleton axes, row vectors, and small
+volumes. Sigma cases include 0, 0.3, 0.5, 1, 2, positive anisotropic vectors, and
+mixed zero/nonzero vectors. Inputs are deterministic nonnegative values.
+
+[matlab_smoothing.json](../tests/test_results/smoothing_test_files/matlab_smoothing.json)
+records the MATLAB version, original source hash, generator code, inputs, and
+expected outputs. The tests require neither a MATLAB installation nor the
+external real-image capture.
+
+Three additional compact distance-map patches preserve the actual candidate
+pairs responsible for the `real1` divergences. Their expected candidate scores
+come from the captured MATLAB DSM, with the capture checksum retained in the
+fixture. The patches include the full filter support for the two queried pixels;
+their regressions require exact scores and the original strict preference, not
+a tolerance-based tie.
+
+The wider sweep also exposed shape- and kernel-dependent accumulation behavior
+inside MATLAB's optimized filtering. A fixed forward or reverse accumulation
+order, or a fused-operation model, did not reproduce every tested pass. A
+shape-specific reversal heuristic was investigated and rejected rather than
+hardcoded into production.
+
+Consequently, the assertions distinguish the supported evidence:
+
+- The single-precision singleton-depth, scalar-0.3 configuration corresponding
+  to this capture is tested with exact equality.
+- Across all 49 single-precision fixtures, 35 match bitwise and the remaining
+  14 differ by at most **two float32 ULPs**. General fixture tests enforce that
+  explicit bound; they do not claim universal bitwise agreement.
+- Double fixtures allow a small double-roundoff bound (four machine epsilons
+  in relative and absolute tolerance), preserving the existing SciPy path.
+- Tests also verify dtype preservation, input immutability, and the existing
+  promotion behavior for integer images.
+
+These are new, independently generated numerical-reference tests. Existing
+parity tolerances were not loosened. The remaining two-ULP differences in other
+configurations can still affect LMP decisions and remain a broader parity risk.
+
+### Captured-input result
+
+| Metric | Before this fix | After this fix | MATLAB |
+| --- | ---: | ---: | ---: |
+| DSM differing pixels | 56,702 | **0** | 0 |
+| Maximum DSM absolute error | 7.15256e-7 | **0** | 0 |
+| Shared nucleation points | 358 | **358** | 358 |
+| Final fibers | 191 | **191** | 191 |
+| Exact shared final paths | 188 | **191** | 191 |
+| Total length, pixels | 7,921.213811 | **7,921.061988** | 7,921.061988 |
+
+This establishes exact final paths and total length when starting from the
+captured MATLAB FIRE image. It does not establish Python curvelet reconstruction
+parity from the raw image, equality of unused output-array entries or all
+metadata, or exact smoothing for every image/sigma configuration.
+
+Validation: the complete curvelet- and GUI-enabled suite finished with
+**254 passed, 32 missing-fixture skips, and 0 failures**. The smoothing module's
+102 cases also passed separately: 98 MATLAB references, one integer-promotion
+check, and three strict LMP preference regressions. Targeted Ruff checks,
+documentation links, and `git diff --check` passed. No existing tolerance, skip
+condition, or MATLAB reference output was changed.
+
 ## Sources and comparison method
 
 - MATLAB source: `CurveletsSourceCode_CurveAlign5.0_CT-FIRE3.0/CT-FIRE3.0_src`, including its `FIRE` subfolder.
@@ -392,11 +514,11 @@ MATLAB smooths the three-dimensional `1 x H x W` distance image. Zero-padding al
 
 ### 3. Smoothing arithmetic and intermediate precision
 
-**Status: source difference confirmed; residual numerical cause needs validation. Fixable: likely, with numerical comparison.**
+**Status: fixed for the captured FIRE configuration; up to two float32 ULPs remain in broader smoothing fixtures.**
 
-MATLAB filters a single-precision distance image through successive `imfilter` calls. Python's `smooth` promotes the input to double and casts back after convolution. Kernel construction and convolution arithmetic can also differ.
+MATLAB filters a single-precision distance image through successive `imfilter` calls. Python previously promoted the input to double and cast back after convolution. The smoothing follow-up above preserves single-precision coefficients, multiplication, addition, and intermediate results. Kernel construction and optimized convolution arithmetic can still differ in other configurations.
 
-**Fix:** compare individual filtering passes, kernel values, accumulation order, and output casts. Preserve exact values around integer radius boundaries and decision thresholds. A float32 diagnostic did not produce exact equality, so simply changing the array dtype is insufficient evidence of a solution.
+**Implemented fix and remaining work:** individual filtering passes established the precision mismatch, and the captured DSM is now exact. Simply changing the output dtype was insufficient. Continue validating optimized accumulation order and kernel generation across other inputs and MATLAB versions; small residuals can still change candidate decisions.
 
 ### 4. LMP sorting and maximum-value tie-breaking
 

@@ -97,6 +97,18 @@ review so this section stays useful for future troubleshooting.
 This branch converts the MATLAB **ctFIRE** pipeline to Python + C++ (it does not develop
 the napari plugin or the CurveAlign / curvelet ports — those already live in `main`).
 
+- 2026-10-19 (smoothing-precision follow-up): preserve single-precision distance
+  images, coefficients, multiplication, accumulation, and axis-filter outputs.
+  The captured DSM and all 191 final paths now match MATLAB exactly. Add 98
+  portable MATLAB smoothing references, three actual LMP tie regressions, and
+  an integer-promotion regression.
+  Broader single-precision fixtures retain at most two ULPs of residual error;
+  universal bitwise equivalence and raw-image reconstruction remain unproven.
+  See [MATLAB_PARITY_REVIEW.md](MATLAB_PARITY_REVIEW.md) for arithmetic details,
+  fixture provenance, measurements, and limits.
+  Full curvelet/GUI suite: 254 passed, 32 missing-fixture skips, 0 failed;
+  102 smoothing regression cases passed independently.
+
 - 2026-10-19 (merge-order follow-up): direct MATLAB stage traces isolate the
   first processing discrepancy to unsorted endpoint lists after `mergefiber`.
   Match sorted `setdiff`/append updates and unique membership lists; add a
