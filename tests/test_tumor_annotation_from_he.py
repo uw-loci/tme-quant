@@ -91,7 +91,7 @@ def test_tumor_annotation_rgb_kmeans_runs() -> None:
     mask, debug = tumor_annotation_from_he(params, save_output=False, return_debug=True)
     assert mask.dtype == np.bool_
     assert mask.ndim == 2
-    assert "labels" in debug
+    assert "pixel_labels" in debug
     assert str(debug["annotation_method"][0]) == "rgb_kmeans"
     assert debug["BDmask"].dtype == np.uint8
 
