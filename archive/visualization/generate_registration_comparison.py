@@ -253,7 +253,7 @@ def generate(
 
 
 def main() -> None:
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_registration_viz" / "current"
     if len(sys.argv) > 1:
         if sys.argv[1].startswith("--"):
             raise SystemExit(f"unknown option {sys.argv[1]}")

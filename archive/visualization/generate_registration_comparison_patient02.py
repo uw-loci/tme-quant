@@ -329,7 +329,7 @@ def generate(
 
 def main() -> None:
     """``[out_dir] [--cases id1,id2]``."""
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_registration_viz" / "current"
     selected: list[str] | None = None
     it = iter(sys.argv[1:])
     for a in it:
