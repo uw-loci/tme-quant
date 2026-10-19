@@ -1,11 +1,21 @@
-"""
-MATLAB-exact primitives and morphology for ``BDcreationHE2.m`` / ``BDcreationHE.m``.
+"""MATLAB-exact primitives for ``BDcreationHE2.m`` and ``BDcreationHE.m``.
 
 Registration helpers stay in :mod:`pycurvelets._he_bdc_common` and
-:mod:`pycurvelets._he_bdc_reg1` (PR #63). This module is annotation-only:
-histogram equalization, ``fspecial('disk')``, ``padarray``, ``im2bw``, HE
-cluster ranking, and the HE2/HE pipelines that use Adams ``strel('disk')``
-rather than a Euclidean disk.
+:mod:`pycurvelets._he_bdc_reg1`. This module is annotation-only.
+
+``annotate_he2`` is the HSV path (``BDcreationHE2.m``). It caps the working
+resolution at 2 px/um with scalar ``imresize`` (``ceil``), builds nuclei and
+collagen masks, and smooths the tumor mask before thresholding it back onto
+the original grid.
+
+``annotate_he`` is the RGB k-means path (``BDcreationHE.m``). It runs
+``decorrstretch``, ``histeq``, and ``fspecial('disk')`` at native resolution,
+then picks the epithelial cluster. MATLAB ``kmeans`` is unseeded;
+``kmeans_seed`` replays ``rng(seed, 'twister')``.
+
+Morphology uses Adams ``strel('disk')`` (:func:`pycurvelets._he_bdc_reg1.matlab_strel_disk`),
+not a Euclidean disk. Histogram equalization, ``fspecial('disk')``, symmetric
+``padarray``, and ``im2bw`` live here because registration does not call them.
 """
 
 from __future__ import annotations
@@ -596,7 +606,11 @@ def annotate_he2(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarray,
     bd_mask : numpy.ndarray
         Boolean tumor mask at the original image size.
     debug : dict
-        Named intermediates (adjusted image, nuclei, collagen, smoothed mask).
+        MATLAB-named intermediates: ``he_adjusted``, ``BW_nuclei``,
+        ``maskednucleiImage``, ``BW_collagen1``, ``BW_nobackground``,
+        ``sat_thresh``, ``epith_cell_BW``, ``BWx``, ``mask_image1``, ``B``
+        (smoothed mask), ``mask_temp``, ``mask_thresh``, ``BDmask``, and
+        ``pixpermic_working`` (the capped resolution).
     """
     orig_row, orig_col = int(he_raw.shape[0]), int(he_raw.shape[1])
     he_data, pix = prepare_he2_image(matlab_im2double(he_raw), float(pixelpermicron))
@@ -742,7 +756,11 @@ def annotate_he(
     mask : numpy.ndarray
         Boolean tumor mask.
     debug : dict
-        Decorrelated image, cluster labels, and the uint8 ``BDmask``.
+        ``S`` (decorrstretched image), ``k3``, 0-based ``pixel_labels``,
+        ``cluster_center``, 0-based ``blue_cluster_num``, ``epith_cell_BW``,
+        ``BWx``, ``mask_image``, the uint8 ``BDmask`` MATLAB saves (0 or 255),
+        ``kmeans_seed``, and ``kmeans_debug`` (seed and each replicate's
+        objective).
 
     Raises
     ------
