@@ -224,3 +224,6 @@ tests/test_images/**/ctFIREout/
 # local-only dev notes (kept on disk, not tracked in GitHub)
 CLAUDE_CTFIRE.md
 .claude/session-summary.md
+
+# Reproducible MATLAB reconstruction reference generator
+!tests/test_results/reconstruction_test_files/generate_matlab.m

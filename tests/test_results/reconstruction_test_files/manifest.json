@@ -1,0 +1,120 @@
+{
+  "matlab_version": "26.1.0.3276743 (R2026a) Update 3",
+  "source_files": {
+    "fdct_wrapping.m": "2867111e8538df255917c930ee0c8aa6ca4f66b62f8cb23dabb2133baefa6580",
+    "ifdct_wrapping.m": "e7deb9a0649581adefa8dab8b4d2cf7480d66fc44cd5d365d2a177a64f17f22b",
+    "fdct_wrapping_window.m": "8706c49bcaa89ec50e371d18118c76b902f462c553e1259c56911d2e5ddfeb46"
+  },
+  "cases": [
+    {
+      "file": "matlab_case_01.npz",
+      "sha256": "f29d6aab2136f7c4bf9d46b4e59ea8600a43a94d86e3e4179ffb44f0681b39c0",
+      "shape": [
+        64,
+        64
+      ],
+      "angles": 16,
+      "description": "modular ramp",
+      "integration_threshold_test": true
+    },
+    {
+      "file": "matlab_case_02.npz",
+      "sha256": "2cb4531531a0419b7d2fb0fbd5c50ff42bfeca11099c03b330de231c34a59662",
+      "shape": [
+        96,
+        128
+      ],
+      "angles": 16,
+      "description": "modular ramp",
+      "integration_threshold_test": true
+    },
+    {
+      "file": "matlab_case_03.npz",
+      "sha256": "2cca7bea73ae1c2246faf36fbcfc9d5c98b135e13bb113b6b6de2d3bff3a4703",
+      "shape": [
+        97,
+        129
+      ],
+      "angles": 16,
+      "description": "modular ramp",
+      "integration_threshold_test": true
+    },
+    {
+      "file": "matlab_case_04.npz",
+      "sha256": "b11628a20de12ec049815a5e4156a37b37919d1184d08500aa9ea39c41908420",
+      "shape": [
+        128,
+        96
+      ],
+      "angles": 16,
+      "description": "modular ramp",
+      "integration_threshold_test": true
+    },
+    {
+      "file": "matlab_case_05.npz",
+      "sha256": "93cd99a9b2cc3ed46cac09b7fee3ea22a2c144f64353f8eee80ce393f055e436",
+      "shape": [
+        192,
+        192
+      ],
+      "angles": 16,
+      "description": "modular ramp",
+      "integration_threshold_test": true
+    },
+    {
+      "file": "matlab_case_06.npz",
+      "sha256": "f47bf88f71a4e8157923f66079aed51d32304666d091a75df1663d3ae898898c",
+      "shape": [
+        65,
+        80
+      ],
+      "angles": 16,
+      "description": "modular ramp",
+      "integration_threshold_test": true
+    },
+    {
+      "file": "matlab_case_07.npz",
+      "sha256": "d001d21c779ea77e88174574605b2b270d94aadd1cd198f017b01c76d8899924",
+      "shape": [
+        128,
+        128
+      ],
+      "angles": 8,
+      "description": "modular ramp",
+      "integration_threshold_test": true
+    },
+    {
+      "file": "matlab_case_08.npz",
+      "sha256": "e1b48f6805bc0c3517e7af8abf584fbda0505feca3cd4411c8ac510ea9315906",
+      "shape": [
+        128,
+        128
+      ],
+      "angles": 32,
+      "description": "modular ramp",
+      "integration_threshold_test": true
+    },
+    {
+      "file": "matlab_case_09.npz",
+      "sha256": "be316f6e5206efce5bdec0b8f02f1851122deb9cf18552db555849e4ef6a849c",
+      "shape": [
+        64,
+        64
+      ],
+      "angles": 16,
+      "description": "zero",
+      "integration_threshold_test": true
+    },
+    {
+      "file": "matlab_case_10.npz",
+      "sha256": "24a91dfdb88116f23294cd009c5d6b704b54dcac09e04b6f3ed458167f95f8ab",
+      "shape": [
+        64,
+        64
+      ],
+      "angles": 16,
+      "description": "impulse",
+      "integration_threshold_test": false
+    }
+  ]
+}

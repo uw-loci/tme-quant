@@ -1,8 +1,8 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import math
 from pycurvelets.utils.math import round_mlab
+from ctfire_py import matlab_wrapping
 
 
 def ct_reconstruction(
@@ -38,14 +38,6 @@ def ct_reconstruction(
     reconstructed_image : np.ndarray
         2D array of the reconstructed image with denoising and edge enhancement applied
     """
-    try:
-        from curvelops import fdct2d_wrapper
-    except ImportError as e:
-        raise ImportError(
-            "curvelops is required for ct_reconstruction. "
-            "Install it with: pip install 'tme-quant[curvelops]'"
-        ) from e
-
     # Derive a safe output filename for the optional plot save.
     # Prefix with "CTRimg_" and force a .tif extension so the saved figure
     # never shares a name with the source image (which would overwrite it).
@@ -56,14 +48,9 @@ def ct_reconstruction(
     is_img = np.asanyarray(img, dtype=np.float64)
     img_height, img_width = is_img.shape
 
-    # Match fdct_wrapping(double(IS), 0): its default scale count uses ceil.
-    # The native wrapper's ac flag selects the finest-scale representation;
-    # ac=0 is a finest wavelet, matching MATLAB's default finest=2.
-    M, N = is_img.shape
-    ac = 0
-    nbscales = math.ceil(math.log2(min(M, N)) - 3)
-    nbangles_coarse = 16  # default
-    c = fdct2d_wrapper.fdct2d_forward_wrap(nbscales, nbangles_coarse, ac, is_img)
+    # CTrec_1 uses the MATLAB wrapping geometry, which differs from the
+    # native CurveLab transform exposed by curvelops.
+    c = matlab_wrapping.forward(is_img)
 
     # 3. Thresholding Logic
     # Flatten all coefficients across all scales and wedges into one array
@@ -112,9 +99,7 @@ def ct_reconstruction(
         curvelet_coefficients.append(scale_wedges)
 
     # 6. Inverse Curvelet Transform
-    reconstructed_image = fdct2d_wrapper.fdct2d_inverse_wrap(
-        M, N, nbscales, 16, 0, curvelet_coefficients
-    )
+    reconstructed_image = matlab_wrapping.inverse(curvelet_coefficients)
     reconstructed_image = np.real(reconstructed_image)
 
     # 7. Plotting and Saving

@@ -9,7 +9,7 @@ I worked with Codex to review the differences in our output and that of the orig
 
 Substantially closer parity is achievable. The remaining differences include reproducible algorithm and indexing mismatches, rather than only floating-point drift. None of the identified issues establishes a fundamental barrier to reproducing MATLAB's fiber geometry and connectivity on a fixed reference environment.
 
-Exact matching remains an objective, not a demonstrated outcome. Individual fixes can interact, and their effect must be measured using matching intermediate inputs. Universal byte-for-byte agreement across platforms is a harder target than reproducing fiber paths, connectivity, and measurements for a defined MATLAB version.
+Exact final paths and total path length have now been demonstrated for the captured `real1` configuration, including reconstruction from its raw TIFF (see the reconstruction follow-up below). This does not establish equality of every output field or universal parity. Individual fixes can interact, and their effect must be measured using matching intermediate inputs. Universal byte-for-byte agreement across platforms is a harder target than reproducing fiber paths, connectivity, and measurements for a defined MATLAB version.
 
 Fiber count agreement is not a percentage of fiber parity. Two networks can have similar counts while containing different paths and connections.
 
@@ -450,6 +450,186 @@ Validation: the complete curvelet- and GUI-enabled suite finished with
 check, and three strict LMP preference regressions. Targeted Ruff checks,
 documentation links, and `git diff --check` passed. No existing tolerance, skip
 condition, or MATLAB reference output was changed.
+
+## Raw-image reconstruction investigation (trace only)
+
+The next comparison starts from `tests/test_images/real1.tif`, rather than the
+captured reconstructed FIRE input. No production implementation was changed
+during this investigation.
+
+### Reference and controls
+
+The original MATLAB `CTrec_1.m` operations were rerun with the captured
+`matlab_path`, `pct=0.2`, `SS=3`, and original-image mask `raw > 5`.
+MATLAB resolves both `fdct_wrapping` and `ifdct_wrapping` to
+`CurveLab-2.1.2/fdct_wrapping_matlab`, **not** its separate C++ implementation.
+The newly reconstructed, masked image equals `squeeze(runtime_reference.im)`
+exactly: maximum error zero, with no foreground-mask differences. The raw TIFF
+SHA-256 is `dfd22ea3bb4b733a687a0430811ee1837e1faee0f33350c0b121ed2a3dfaadfb`.
+Python uses curvelops 0.23.4 (commit
+`d6dc5fde8bcf399e57f81c5beb38449eb8863e45`) and its native CurveLab wrapper.
+
+For this uint8 grayscale image, Python's float32 input conversion preserves
+every intensity exactly, and its original-image mask matches MATLAB. Both
+implementations use six scales, 16 coarse angles, a finest wavelet, a strict
+`abs(coefficient) > cutoff` test, and selected MATLAB scales 3–5. The earlier
+threshold-index and scale-count fixes are already present.
+
+### First divergence: the transform backend
+
+The forward transforms produce different coefficient grids. For example,
+MATLAB scale 2 begins with wedges of shapes `(18,22)`, `(16,22)`, `(16,22)`,
+and `(18,22)`; curvelops reports `(23,19)` for each of those four wedges.
+Its wrapper reverses native matrix dimensions when exposing coefficients to
+NumPy, but transposing those shapes still does not reconcile their sizes.
+
+The supplied MATLAB and C++ CurveLab sources implement different discrete
+window sampling and wrapping geometry. MATLAB constructs low-pass ramps from
+integer-derived window lengths and has separate corner/interior wedge sizes.
+The C++ implementation samples its low-pass window using continuous scale
+ranges and forces wedge dimensions to odd lengths. The curvelops wrapper
+exposes the native implementation; it does not implement the MATLAB routines.
+
+| Measurement | MATLAB | Current Python |
+| --- | ---: | ---: |
+| Total coefficients | 739,001 | 748,041 |
+| Threshold cutoff at `pct=0.2` | 5.505283059856382 | 5.579389033730728 |
+| Positive pixels after reconstruction and mask | 37,429 | 37,446 |
+
+The masked images have maximum absolute difference **3.07394739**, RMSE
+**0.29564023**, and correlation **0.99976752**. Despite the high correlation,
+**907 pixels differ in the `image > 0` foreground decision used by FIRE**.
+
+Controls rule out a cutoff-only or axis-layout explanation:
+
+- With all coefficients retained, each backend reconstructs the original raw
+  image to maximum absolute error about `1.14e-13`.
+- Reconstructing each scale separately, without thresholding, still differs
+  between backends. Maximum errors across scales 1–6 are approximately
+  `0.6872`, `0.9340`, `0.7542`, `0.6101`, `0.2295`, and `0.1727`.
+- Giving MATLAB the Python cutoff still leaves masked reconstruction RMSE
+  **0.29228404** relative to Python. Matching the cutoff alone is insufficient.
+
+### Downstream consequence and proposed fix
+
+Feeding the Python reconstructed/masked image into the current extraction code
+changes 9,146 DSM pixels (maximum error about 2.95416). It yields 361 nucleation
+points, of which 319 match MATLAB's 358 points. Both outputs contain 191 final
+fibers, but only **85 final paths match exactly**; Python's total length is
+**7,855.884937**, versus MATLAB's **7,921.061988** pixels. The previous 191/191
+exact result remains valid when starting from the captured MATLAB FIRE input.
+Equal final counts therefore conceal substantial reconstruction-induced path
+differences.
+
+This is fixable by implementing the MATLAB wrapping algorithm's forward and
+inverse operations, including its window construction, rounding, corner wedges,
+indexing, and FFT normalization. The source is available locally; no additional
+user files are needed for this investigation. A NumPy/SciPy implementation can
+avoid requiring MATLAB at application runtime. Swapping coefficient order,
+adjusting only the cutoff, or tuning extraction thresholds cannot reproduce
+the measured MATLAB transform.
+
+Before integration, generate durable MATLAB coefficient and reconstruction
+fixtures for deterministic inputs, including rectangular and non-power-of-two
+shapes. Validate forward coefficients, inverse reconstruction, threshold masks,
+and then raw `real1` final paths. FFT rounding can still prevent bitwise
+coefficient equality, so numerical agreement and downstream decisions must be
+checked separately. General RGB/high-bit-depth input normalization also remains
+outside this uint8 grayscale trace.
+
+The diagnostic MATLAB scripts, coefficient arrays, scale controls, and Python
+comparisons for this run are in `/tmp/tme-reconstruction-trace`; these temporary
+files are not committed fixtures. This was a numerical investigation, not a
+full-suite test run or an implementation fix.
+
+## MATLAB wrapping reconstruction fix
+
+The trace above is the pre-fix baseline. Reconstruction now uses
+[matlab_wrapping.py](../src/ctfire_py/matlab_wrapping.py), a NumPy implementation
+adapted from Laurent Demanet's original MATLAB wrapping routines. It implements
+the complex transform with a finest wavelet (`is_real=0`, `finest=2`), matching
+`CTrec_1`; real-valued coefficient packing and a finest curvelet are outside
+its scope. Other CurveAlign transforms continue to use curvelops.
+
+The port shares wrapping geometry between forward and inverse operations,
+including MATLAB half-away-from-zero rounding, quadrant-dependent even-sized
+wedge origins, corner windows, periodic wrapping, centered FFT normalization,
+and inverse assignment order for repeated corner indices. Reconstruction
+retains the previous strict threshold, rank indexing, scale selection, and
+original-image mask. Package exports no longer require curvelops to expose
+CT-FIRE reconstruction or extraction; the extraction backend is still required.
+
+### Durable numerical references
+
+Ten independent MATLAB cases are stored as pickle-free NPZ files with source
+and fixture checksums in
+[reconstruction_test_files](../tests/test_results/reconstruction_test_files/README.md).
+The generator and conversion script are included. Cases cover square,
+rectangular, odd-sized and non-power-of-two images, 8/16/32 coarse angles,
+zero input, and an impulse. Each checks forward coefficient values and shapes,
+inverse reconstruction from MATLAB-filtered coefficients, and full round trips.
+Seven cases additionally exercise the actual CT-FIRE reconstruction function
+with curvelops unavailable. A package-export regression verifies that dependency
+change. Existing rank-selection tests now mock the new backend; numerical
+references independently cover the default scale count and angular layout.
+
+Across these ten cases, maximum forward coefficient error is about `1.71e-13`,
+filtered inverse error about `2.49e-14`, and round-trip input error about
+`7.17e-14`. Tests use `rtol=2e-13`, `atol=5e-13` for FFT arithmetic, and require
+exact coefficient shapes and wedge counts. Existing parity tolerances were
+not loosened.
+
+The symmetric impulse exposes a remaining numerical limitation: at the 20%
+cutoff, theoretically equal magnitudes straddle the strict threshold differently
+after tiny FFT rounding differences. Its final reconstructed-image difference
+is about `4.23e-5` despite coefficient agreement at about `1.15e-16`. This case
+tests forward and inverse transforms independently; it is explicitly excluded
+from the strict-threshold integration parameter list. No skip/xfail or relaxed
+integration tolerance conceals that limitation. Matching FFT implementations
+or defining a new shared tie policy would be separate work; changing the
+MATLAB strict-threshold policy is not part of this fix.
+
+### Actual raw-image CT-FIRE result
+
+The comparison command now exercises `ct_fire` itself, including input
+conversion and masking:
+
+```bash
+OMP_NUM_THREADS=1 MPLBACKEND=Agg .venv/bin/python \
+  scripts/compare_matlab_reconstruction.py /path/to/runtime_reference.mat \
+  tests/test_images/real1.tif --fraction 0.2 --scales 3 --threshold 5 \
+  --output /tmp/reconstruction-parity.json
+```
+
+The raw image/capture and parameters must come from the same MATLAB run.
+The command records their checksums and compares reconstructed input, DSM,
+nucleation, final paths (allowing whole-path reversal), and total path length.
+It requires `h5py` and the compiled extraction backend, with no MATLAB runtime.
+
+| Metric | Before backend replacement | After replacement | MATLAB |
+| --- | ---: | ---: | ---: |
+| Reconstructed masked image maximum absolute error | 3.07394739 | **8.52651e-14** | 0 |
+| Reconstructed masked image RMSE | 0.29564023 | **3.71744e-15** | 0 |
+| Foreground mask differing pixels | 907 | **0** | 0 |
+| DSM differing pixels | 9,146 | **0** | 0 |
+| Nucleation points | 361 | **358** | 358 |
+| Shared nucleation points | 319 | **358** | 358 |
+| Final fibers | 191 | **191** | 191 |
+| Exact shared final paths | 85 | **191** | 191 |
+| Total length, pixels | 7,855.884937 | **7,921.061988** | 7,921.061988 |
+
+This extends the earlier captured-input result to the actual raw `real1.tif`
+pipeline for this configuration. It does not prove every measurement/metadata
+field, other captures, RGB/high-bit-depth input conversion, or platform-wide
+bitwise equivalence. Broader missing MATLAB fixtures remain outstanding.
+
+Validation: the full curvelet- and GUI-enabled suite completed with **292
+passed, 32 missing-fixture skips, and 0 failures** (21 warnings). The focused
+reconstruction run completed with **41 passed**: 38 new transform/integration/
+export cases and three existing rank-selection cases. The raw-image comparison
+command separately produced the results above. Targeted Ruff checks and
+`git diff --check` passed. No new skip/xfail or relaxed existing tolerance was
+introduced.
 
 ## Sources and comparison method
 

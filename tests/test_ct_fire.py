@@ -45,18 +45,14 @@ try:
 except ImportError:
     SCIPY_AVAILABLE = False
 
-# By default, skip curvelops-dependent tests (e.g., on CI). Enable locally with:
+# Keep the existing opt-in for the longer CT-FIRE suite. Reconstruction
+# itself uses NumPy and no longer requires curvelops. Enable locally with:
 #   TMEQ_RUN_CURVELETS=1 pytest -q
 if os.environ.get("TMEQ_RUN_CURVELETS") != "1":
     pytest.skip(
-        "curvelops tests disabled (set TMEQ_RUN_CURVELETS=1 to enable)",
+        "CT-FIRE tests disabled (set TMEQ_RUN_CURVELETS=1 to enable)",
         allow_module_level=True,
     )
-
-try:
-    from curvelops import fdct2d_wrapper
-except ImportError:
-    pytest.skip("curvelops not available; skipping ct_fire tests", allow_module_level=True)
 
 # ---------------------------------------------------------------------------
 # Path setup

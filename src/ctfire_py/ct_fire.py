@@ -86,7 +86,7 @@ def ct_fire(
     # preserving fiber signal where the original image is bright.
     mask_ori = img > ctfire_params["value"]["thresh_im2"]
 
-    from ctfire_py.ct_reconstruction import ct_reconstruction  # lazy: requires curvelops
+    from ctfire_py.ct_reconstruction import ct_reconstruction
     reconstructed_ct = ct_reconstruction(
         img=img,
         output_filename=image_name,

@@ -607,7 +607,7 @@ if __name__ == "__main__":
 
     import os
     import matplotlib.pyplot as plt
-    from ctfire_py.ct_reconstruction import ct_reconstruction  # lazy: requires curvelops
+    from ctfire_py.ct_reconstruction import ct_reconstruction
 
     img = plt.imread(
         os.path.join(

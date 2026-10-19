@@ -1,6 +1,7 @@
 from .ct_fire import load_ctfire_params
+from .ct_reconstruction import ct_reconstruction
 
-__all__ = ["load_ctfire_params"]
+__all__ = ["load_ctfire_params", "ct_reconstruction"]
 
 # Check for curvelops backend
 try:
@@ -20,10 +21,6 @@ if HAS_FIBER_BACKEND:
     from .fire_2d_angle import fire_2d_angle
     __all__.append("fire_2d_angle")
 
-if HAS_CURVELOPS:
-    from .ct_reconstruction import ct_reconstruction
-    __all__.append("ct_reconstruction")
-
-if HAS_CURVELOPS and HAS_FIBER_BACKEND:
+if HAS_FIBER_BACKEND:
     from .ct_fire import ct_fire
     __all__.append("ct_fire")

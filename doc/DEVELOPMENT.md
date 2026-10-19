@@ -39,6 +39,16 @@ On macOS, `make -C src/ctfire_py/CPP` builds the backend used by these tests.
 comparisons run without that flag; missing input/reference files still skip.
 Use `-rs` to distinguish fixture skips from unavailable optional backends.
 
+CT-FIRE reconstruction now uses the NumPy MATLAB wrapping port and does not
+require curvelops. The longer `test_ct_fire.py` suite retains its existing
+`TMEQ_RUN_CURVELETS=1` opt-in; CurveAlign's other curvelet modules still require
+curvelops. The portable reconstruction references always run:
+
+```bash
+MPLBACKEND=Agg .venv/bin/python -m pytest \
+  tests/test_matlab_wrapping.py tests/test_ct_reconstruction_parity.py -q
+```
+
 ### Which environment (Windows / MSYS2)
 
 The C++ `fiber_backend` extension is ABI-specific: pytest must run under the **same Python
@@ -96,6 +106,18 @@ review so this section stays useful for future troubleshooting.
 
 This branch converts the MATLAB **ctFIRE** pipeline to Python + C++ (it does not develop
 the napari plugin or the CurveAlign / curvelet ports — those already live in `main`).
+
+- 2026-10-19 (raw-image reconstruction follow-up): replace CT-FIRE's native
+  CurveLab transform with the MATLAB wrapping geometry in NumPy, including
+  matching forward/inverse windows, wedge layouts, rounding, and corner
+  assignment order. Add ten portable MATLAB coefficient/inverse references,
+  dependency/export coverage, and a raw-image comparison command. Raw `real1`
+  now reproduces all 191 final paths, DSM, nucleation points, and total length;
+  reconstructed intensities differ by at most 8.53e-14. Symmetric coefficient
+  ties remain sensitive to FFT rounding. Other curvelet modules retain
+  curvelops. See [MATLAB_PARITY_REVIEW.md](MATLAB_PARITY_REVIEW.md) for provenance,
+  validation, and limits. Full curvelet/GUI suite: 292 passed, 32 missing-fixture
+  skips, 0 failed; focused reconstruction checks: 41 passed.
 
 - 2026-10-19 (smoothing-precision follow-up): preserve single-precision distance
   images, coefficients, multiplication, accumulation, and axis-filter outputs.
