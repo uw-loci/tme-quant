@@ -23,6 +23,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.io as sio
 from matplotlib.patches import FancyBboxPatch
 from scipy import ndimage
 from skimage import io
@@ -121,7 +122,6 @@ def _load_he_dump_mask(case_id: str) -> np.ndarray | None:
     path = DUMPS / f"he_{case_id}" / "images.mat"
     if not path.is_file():
         return None
-    import scipy.io as sio  # noqa: E402
 
     ml = sio.loadmat(str(path), squeeze_me=True)
     return _as_bool_mask(ml["BDmask"])
