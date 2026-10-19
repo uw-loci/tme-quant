@@ -76,10 +76,6 @@ def _as_bool(a: np.ndarray) -> np.ndarray:
     return np.asarray(a).squeeze().astype(bool)
 
 
-def _squeeze(a: np.ndarray) -> np.ndarray:
-    return np.asarray(a).squeeze()
-
-
 def _report(name: str, kind: str, py: np.ndarray, ml: np.ndarray) -> dict[str, Any]:
     py_a = np.asarray(py)
     ml_a = np.asarray(ml)
@@ -137,7 +133,7 @@ def analyze_primitives() -> list[dict[str, Any]]:
         py = matlab_strel_disk(r)
         rows.append(_report(key, "bool", py, m[key]))
     if "pad_src" in m:
-        py = matlab_padarray(m["pad_src"], 2, mode="symmetric")
+        py = matlab_padarray(m["pad_src"], 2)
         rows.append(_report("pad_sym", "uint8", py, m["pad_sym"]))
     if "histeq_rand_in" in m:
         py = matlab_histeq(m["histeq_rand_in"])
@@ -172,10 +168,7 @@ def analyze_he2(case_id: str, he_dir: Path, fname: str, ppm: float, *, preproc: 
         if ml_key not in ml:
             out["steps"].append({"name": ml_key, "missing_ml": True})
             continue
-        py_val = dbg[py_key]
-        if kind == "bool" and py_key == "mask_image1":
-            py_val = np.asarray(dbg["mask_image1"]) > 0
-        out["steps"].append(_report(ml_key, kind, py_val, ml[ml_key]))
+        out["steps"].append(_report(ml_key, kind, dbg[py_key], ml[ml_key]))
     golden = GOLDEN_DIR / f"BDcreationHE_{case_id.replace('he2_', '')}results_mask for patient_001.tif.tif"
     if golden.is_file():
         g = io.imread(str(golden)) > 0
