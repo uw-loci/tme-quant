@@ -475,7 +475,7 @@ def prepare_he2_image(he: np.ndarray, pixel_per_micron: float) -> tuple[np.ndarr
     return he_rgb, pix
 
 
-def he2_nuclei_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.ndarray, np.ndarray, float]:
+def he2_nuclei_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.ndarray, np.ndarray]:
     """HSV nuclei mask from ``BDcreationHE2.m``.
 
     Parameters
@@ -491,8 +491,6 @@ def he2_nuclei_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.nda
         Boolean nuclei mask.
     masked : numpy.ndarray
         H&E with non-nuclei pixels set to 0.
-    sat_thresh : float
-        Otsu threshold on the saturation channel.
     """
     hsv = matlab_rgb2hsv(he_adjusted)
     sat_thresh = matlab_graythresh(hsv[..., 1])
@@ -506,7 +504,7 @@ def he2_nuclei_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.nda
     bw_nuclei = _imopen(bw, _disk_nhood(pix_per_mic / 2.0, how="ceil"))
     masked = np.asarray(he_adjusted, dtype=np.float64).copy()
     masked[~bw_nuclei] = 0.0
-    return bw_nuclei, masked, sat_thresh
+    return bw_nuclei, masked
 
 
 def he2_collagen_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.ndarray, np.ndarray, float]:
@@ -548,7 +546,7 @@ def _he2_epithelial_morphology(
     epith_cell_bw: np.ndarray,
     bw_collagen1: np.ndarray,
     pix_per_mic: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Grow the epithelial mask and punch out collagen.
 
     Dilate, fill holes, drop small holes and small objects, then dilate
@@ -565,12 +563,8 @@ def _he2_epithelial_morphology(
 
     Returns
     -------
-    opened : numpy.ndarray
-        Dilated epithelial mask.
     bwx : numpy.ndarray
         Filled mask.
-    mask_image : numpy.ndarray
-        Mask after the two area openings.
     mask_image1 : numpy.ndarray
         Final mask with collagen removed.
     """
@@ -584,7 +578,7 @@ def _he2_epithelial_morphology(
         mask_image,
         _disk_nhood(FINAL_MASK_DILATION_RADIUS_MULTIPLIER * pix_per_mic, how="round"),
     ) & (~bw_collagen1)
-    return opened, bwx, mask_image, mask_image1
+    return bwx, mask_image1
 
 
 def annotate_he2(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarray, dict[str, Any]]:
@@ -607,16 +601,14 @@ def annotate_he2(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarray,
     orig_row, orig_col = int(he_raw.shape[0]), int(he_raw.shape[1])
     he_data, pix = prepare_he2_image(matlab_im2double(he_raw), float(pixelpermicron))
     he_adjusted = adjust_rgb_mean_std(he_data)
-    bw_nuclei, maskednuclei, _sat_n = he2_nuclei_mask(he_adjusted, pix)
+    bw_nuclei, maskednuclei = he2_nuclei_mask(he_adjusted, pix)
     bw_collagen1, bw_nobackground, sat_thresh = he2_collagen_mask(he_adjusted, pix)
     epith_cell_bw = (
         matlab_im2bw(matlab_rgb2gray(maskednuclei), EPITH_BINARY_THRESHOLD)
         & (~bw_collagen1)
         & bw_nobackground
     )
-    _opened, bwx, _mask_image, mask_image1 = _he2_epithelial_morphology(
-        epith_cell_bw, bw_collagen1, pix
-    )
+    bwx, mask_image1 = _he2_epithelial_morphology(epith_cell_bw, bw_collagen1, pix)
     smoothed = gaussian_filter_matlab_like(
         mask_image1.astype(np.float64),
         sigma=FINAL_MASK_GAUSSIAN_SIGMA,
