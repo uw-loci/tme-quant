@@ -22,8 +22,6 @@ from pycurvelets.models import (
     OutputControlParameters,
 )
 
-STRICT_MATLAB_PARITY = os.environ.get("TMEQ_VALIDATE_MATLAB") == "1"
-
 # By default, skip curvelops-dependent tests (e.g., on CI). Enable locally with:
 #   TMEQ_RUN_CURVELETS=1 pytest -q
 if os.environ.get("TMEQ_RUN_CURVELETS") != "1":
@@ -228,8 +226,8 @@ def test_process_image_returns_fiber_features(test_name, test_case, tmp_path):
     assert isinstance(fib_feat_df, pd.DataFrame), "fib_feat_df should be a DataFrame"
     assert len(fib_feat_df) > 0, "fib_feat_df should not be empty"
 
-    # Compare with reference CSV only in strict parity mode
-    if STRICT_MATLAB_PARITY and "matlab_reference_csv" in test_case:
+    # Compare with reference CSV if specified in test case
+    if "matlab_reference_csv" in test_case:
         reference_csv_name = test_case["matlab_reference_csv"]
         reference_csv_path = os.path.join(
             os.path.dirname(__file__),

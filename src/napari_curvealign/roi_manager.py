@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import os
 import json
-import struct
 import zipfile
+import importlib.util
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Optional, Tuple, Union, Iterable, Sequence, Any
-from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from enum import Enum
 
 try:
@@ -34,7 +33,7 @@ except ImportError:
 try:
     from skimage import io
     from skimage.color import rgb2gray
-    from skimage.measure import label, regionprops
+    from skimage.measure import regionprops
     # binary_dilation/erosion deprecated in skimage 0.20, moved to morphology.erosion/dilation
     # but some versions still have them at top level. Check morphology module first.
     from skimage import morphology
@@ -56,7 +55,7 @@ except ImportError:
     disk = None
 
 # Local Boundary type for pycurvelets compatibility (coordinates dict format)
-from typing import NamedTuple, Literal, Union, Any
+from typing import NamedTuple, Literal
 _BoundaryData = Union[np.ndarray, Any]
 
 class Boundary(NamedTuple):
@@ -73,11 +72,7 @@ try:
 except ImportError:
     HAS_PYCURVELETS = False
 
-try:
-    import roifile
-    HAS_ROIFILE = True
-except ImportError:
-    HAS_ROIFILE = False
+HAS_ROIFILE = importlib.util.find_spec("roifile") is not None
 
 
 class ROIShape(Enum):
@@ -1066,11 +1061,6 @@ class ROIManager:
             "alignment": alignment,
             "density": density,
         }
-        # Simple curvelet-like objects for features (angle_deg, weight)
-        curvelets = [
-            type("Curvelet", (), {"angle_deg": float(row["angle"]), "weight": 1.0})()
-            for _, row in fiber_structure.iterrows()
-        ]
         features = {
             "angle": fiber_structure["angle"].values,
             "center_row": fiber_structure["center_row"].values,
@@ -1837,7 +1827,7 @@ class ROIManager:
             try:
                 with open(metadata_path, 'r') as f:
                     metadata = json.load(f)
-            except:
+            except Exception:
                 pass
         
         # Extract unique labels

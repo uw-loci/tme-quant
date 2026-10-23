@@ -7,7 +7,8 @@ cell analysis modules.
 """
 
 import numpy as np
-from typing import Optional, List, Dict, Tuple, Literal
+import importlib.util
+from typing import Optional, List, Dict
 from enum import Enum
 from dataclasses import dataclass
 
@@ -31,12 +32,7 @@ except ImportError:
     binary_dilation = None
     binary_erosion = None
 
-try:
-    import cellpose
-    from cellpose import models
-    HAS_CELLPOSE = True
-except ImportError:
-    HAS_CELLPOSE = False
+HAS_CELLPOSE = importlib.util.find_spec("cellpose") is not None
 
 try:
     import cellcast.models as _cellcast_models

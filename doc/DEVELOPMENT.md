@@ -26,6 +26,26 @@ Headless (no GUI): `QT_QPA_PLATFORM=offscreen make test`
 
 Curvelet tests run automatically when curvelops is installed; otherwise they are skipped.
 
+### SHG–HE registration (BDcreation_reg / BDcreation_reg2)
+
+| Suite | When it runs | Needs |
+| --- | --- | --- |
+| `tests/test_he_bdc_reg1.py` | CI | nothing extra |
+| `tests/test_shg_he_registration.py` | CI | patient fixtures in the clone (not in wheel/sdist) |
+| `tests/test_shg_he_registration_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `archive/matlab_parity/dumps` (git only) |
+| `tests/test_shg_he_registration_gt.py` | `TMEQ_RUN_MATLAB_PARITY=1` | dumps + patient_02 GT HE TIFFs (git only) |
+
+See [MATLAB_PARITY.md](MATLAB_PARITY.md), [BDC_REGISTRATION_COMPARISONS.md](BDC_REGISTRATION_COMPARISONS.md), and [ARTIFACTS.md](ARTIFACTS.md). Comparison figures are generated locally.
+
+## Wheel vs sdist
+
+| Command | Output |
+| --- | --- |
+| `make wheel` | `dist/*.whl` — `src/` only (users) |
+| `make sdist` | `dist/*.tar.gz` — source + docs + lightweight tests (no tests 1-9 / dumps) |
+
+`tests/test_packaging.py` checks the contract.
+
 ## Troubleshooting
 
 | Issue | Fix |
