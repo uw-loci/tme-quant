@@ -10,6 +10,27 @@ The figures record the Python port of `BDcreation_reg2.m` and
 MATLAB `imregtform`. Tests 1-7 use `pipeline="reg2"` (HSV collagen mask).
 Tests 8-9 use `pipeline="reg1"`.
 
+## Choosing reg2 or reg1
+
+`pipeline` selects which MATLAB script the port runs. Use `reg2` unless the
+comparison target is historical `BDcreation_reg` output. The two pipelines
+build different moving images at different resolutions, so one is not a
+correction for a poor result of the other.
+
+**reg2 (default).** `BDcreation_reg2.m`, the current CurveAlign script, and
+the golden for tests 1-7.
+
+- SHG is capped at 2 px/µm. The warped H&E is then resized back to the original SHG grid.
+- The moving image is a binary HSV collagen mask (`ecm_method="hsv"`). `ecm_method="rgb"` uses the fixed RGB cuts from `BDcreation_reg` on that same grid and does not run k-means.
+- Deterministic. No k-means.
+- test5 (patient_02 roi4, ppm 1.5) stays about 69 px from synthetic ground truth in both MATLAB and Python. That is MATLAB's local optimum on this case. Parity with `BDcreation_reg2` is the goal there, so reg2 stays the pipeline for that case.
+
+**reg1.** `BDcreation_reg.m`. Use it to reproduce that older script (tests 8-9).
+
+- SHG stays at native resolution. There is no 2 px/µm cap. The output is warped onto the SHG grid.
+- The moving image is decorrstretch, fixed RGB cuts, then CIELAB a*b* k-means (k=3, 3 replicates).
+- MATLAB leaves `kmeans` unseeded, so a raw rerun of `BDcreation_reg.m` is not deterministic. Python `kmeans_seed` (default 28) replays `rng(28,'twister')` and matches the tests 8-9 goldens. Those goldens sit about 8 px from the synthetic ground-truth H&E, which is MATLAB's accuracy on those cases.
+
 Regenerate (tests 4-9 use the patient_02 fixtures in the clone):
 
 ```bash

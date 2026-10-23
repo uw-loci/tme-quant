@@ -10,7 +10,11 @@ Default output_dir: tests/artifacts/bdc_regression_viz/current
 Calls ``pycurvelets.shg_he_registration`` with ``SHGHERegistrationParameters``.
 ``pipeline`` is ``"reg2"`` for tests 4-7 and ``"reg1"`` for tests 8-9.
 The registrar is the ITK v3 (1+1)-ES port. ``kmeans_seed`` stays at the
-default (28) so tests 8-9 match the committed goldens.
+default (28) so tests 8-9 match the committed goldens. That seed is
+``rng(28, 'twister')`` immediately before ``kmeans`` in
+``archive/matlab_parity/dump_bdc_reg1.m``. Unmodified ``BDcreation_reg.m``
+(line 69) does not seed ``kmeans``, so a raw call of that function is not
+the same reference as these goldens.
 
 Test case definitions:
   Tests 4-7 use BDcreation_reg2.m goldens (HSV-based registration).

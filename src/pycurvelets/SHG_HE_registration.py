@@ -14,6 +14,9 @@ Two MATLAB pipelines are available through ``pipeline``:
   itself is not deterministic here; ``kmeans_seed`` selects the k-means optimum,
   and the default reproduces the reference goldens).
 
+Which pipeline to run: see ``doc/BDC_REGISTRATION_COMPARISONS.md``
+("Choosing reg2 or reg1").
+
 Registration is the ITK v3 (1+1)-ES port of MATLAB ``imregtform``:
 
 1. Build the collagen moving image from the H&E exactly as ``BDcreation_reg2``

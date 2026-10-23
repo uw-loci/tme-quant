@@ -7,39 +7,61 @@
 % Outputs under dumps/<case_id>/ :
 %   HEmoving.tif, fixedSHG.tif, tform_similarity.txt, tform_affine.txt
 %   meta.mat (optimizer params, pixpermic, shapes)
-% Optionally runs case test2 twice for determinism check.
+%   registered_original.tif
+%       only when callOriginal is true: the TIFF written by CurveAlign
+%       BDcreation_reg2.m. That script has no kmeans, so this file is the
+%       deterministic MATLAB reference. MAE vs the committed golden is printed.
+% Optionally runs case test2 twice for determinism check. The re-run does
+% not call the original function again.
+%
+% Fixtures are tests/test_for_shg_he_registration_BDcreation (repo root).
 
-function dump_bdc_reg2(caseFilter, captureTrace)
+function dump_bdc_reg2(caseFilter, captureTrace, callOriginal, curveAlignDir)
     % dump_bdc_reg2()                    -> all cases + determinism re-run
     % dump_bdc_reg2('test1', true)       -> one case, with DisplayOptimization
     %                                       trace saved to optimization_trace.txt
-    if nargin < 1; caseFilter = ''; end
-    if nargin < 2; captureTrace = false; end
+    % dump_bdc_reg2('', false, true, '/path/to/CurveAlign_CT-FIRE')
+    %     also call BDcreation_reg2.m -> dumps/<case>/registered_original.tif
+    %     curveAlignDir may be omitted when CURVEALIGN_MATLAB is set.
+    if nargin < 1 || isempty(caseFilter); caseFilter = ''; end
+    if nargin < 2 || isempty(captureTrace); captureTrace = false; end
+    if nargin < 3 || isempty(callOriginal); callOriginal = false; end
+    if nargin < 4; curveAlignDir = ''; end
     thisDir = fileparts(mfilename('fullpath'));
-    fixtureRoot = fullfile(thisDir, '..', 'test_for_shg_he_registration_BDcreation');
+    % archive/matlab_parity -> repo tests/. The old '../test_for_...' path
+    % pointed at archive/ and skipped every case.
+    fixtureRoot = fullfile(thisDir, '..', '..', 'tests', 'test_for_shg_he_registration_BDcreation');
     outRoot = fullfile(thisDir, 'dumps');
     if ~exist(outRoot, 'dir'); mkdir(outRoot); end
+    if callOriginal
+        curveAlignDir = resolve_curvealign_dir(curveAlignDir, 'BDcreation_reg2.m');
+        addpath(curveAlignDir);
+    end
+    p02 = fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7');
 
     cases = {
-        % case_id, he_dir, he_file, shg_dir, ppm
+        % case_id, he_dir, he_file, shg_dir, ppm, golden_dir
         'test1', fullfile(fixtureRoot, 'HE'), 'patient_001.tif', ...
-            fullfile(fixtureRoot, 'SHG'), 1.5;
+            fullfile(fixtureRoot, 'SHG'), 1.5, ...
+            fullfile(fixtureRoot, 'HE', 'HE_registered_test1');
         'test2', fullfile(fixtureRoot, 'HE'), 'patient_001.tif', ...
-            fullfile(fixtureRoot, 'SHG'), 2.0;
+            fullfile(fixtureRoot, 'SHG'), 2.0, ...
+            fullfile(fixtureRoot, 'HE', 'HE_registered_test2');
         'test3', fullfile(fixtureRoot, 'HE'), 'patient_001.tif', ...
-            fullfile(fixtureRoot, 'SHG'), 3.0;
-        'test4', fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7', 'HE'), ...
-            'patient_02_roi2.tif', ...
-            fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7', 'SHG'), 2.6;
-        'test5', fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7', 'HE'), ...
-            'patient_02_roi4.tif', ...
-            fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7', 'SHG'), 1.5;
-        'test6', fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7', 'HE'), ...
-            'patient_02_roi4.tif', ...
-            fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7', 'SHG'), 2.6;
-        'test7', fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7', 'HE'), ...
-            'patient_02_roi5.tif', ...
-            fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7', 'SHG'), 2.6;
+            fullfile(fixtureRoot, 'SHG'), 3.0, ...
+            fullfile(fixtureRoot, 'HE', 'HE_registered_test3');
+        'test4', fullfile(p02, 'HE'), 'patient_02_roi2.tif', ...
+            fullfile(p02, 'SHG'), 2.6, ...
+            fullfile(p02, 'HE', 'HE_registered_for_reg2_test4_roi2_ppm2p6');
+        'test5', fullfile(p02, 'HE'), 'patient_02_roi4.tif', ...
+            fullfile(p02, 'SHG'), 1.5, ...
+            fullfile(p02, 'HE', 'HE_registered_for_reg2_test5_roi4_ppm1p5');
+        'test6', fullfile(p02, 'HE'), 'patient_02_roi4.tif', ...
+            fullfile(p02, 'SHG'), 2.6, ...
+            fullfile(p02, 'HE', 'HE_registered_for_reg2_test6_roi4_ppm2p6');
+        'test7', fullfile(p02, 'HE'), 'patient_02_roi5.tif', ...
+            fullfile(p02, 'SHG'), 2.6, ...
+            fullfile(p02, 'HE', 'HE_registered_for_reg2_test7_roi5_ppm2p6');
     };
 
     for i = 1:size(cases, 1)
@@ -52,21 +74,26 @@ function dump_bdc_reg2(caseFilter, captureTrace)
         shgDir = cases{i, 4};
         ppm = cases{i, 5};
         fprintf('\n===== DUMP %s ppm=%.2f =====\n', caseId, ppm);
-        dump_one(caseId, heDir, heFile, shgDir, ppm, outRoot, captureTrace);
+        dump_one(caseId, heDir, heFile, shgDir, ppm, outRoot, captureTrace, ...
+            callOriginal, curveAlignDir, cases{i, 6});
     end
 
     if isempty(caseFilter)
-        % Determinism: run test2 a second time into dumps/test2_rerun/
+        % Determinism: run test2 a second time into dumps/test2_rerun/.
+        % The original CurveAlign function is not called again.
         fprintf('\n===== DETERMINISM re-run test2 =====\n');
         dump_one('test2_rerun', cases{2, 2}, cases{2, 3}, cases{2, 4}, ...
-            cases{2, 5}, outRoot, false);
+            cases{2, 5}, outRoot, false, false, '', '');
     end
 
     fprintf('\nAll dumps written under %s\n', outRoot);
 end
 
 
-function dump_one(caseId, heDir, heFile, shgDir, ppm, outRoot, captureTrace)
+function dump_one(caseId, heDir, heFile, shgDir, ppm, outRoot, captureTrace, callOriginal, curveAlignDir, goldenDir)
+    if nargin < 8 || isempty(callOriginal); callOriginal = false; end
+    if nargin < 9; curveAlignDir = ''; end
+    if nargin < 10; goldenDir = ''; end
     outDir = fullfile(outRoot, caseId);
     if ~exist(outDir, 'dir'); mkdir(outDir); end
 
@@ -199,4 +226,10 @@ function dump_one(caseId, heDir, heFile, shgDir, ppm, outRoot, captureTrace)
 
     fprintf('  saved %s  mask_coverage=%.4f  sim.T(1,1)=%.6f  aff.T(1,1)=%.6f\n', ...
         outDir, meta.mask_coverage, tformSimilarity.T(1,1), tform.T(1,1));
+
+    if callOriginal
+        call_original_bdc('reg2', heDir, heFile, shgDir, ppm, outDir, goldenDir, curveAlignDir);
+        fprintf(['  registered_original.tif is BDcreation_reg2.m ' ...
+            '(no kmeans; this is the deterministic MATLAB reference).\n']);
+    end
 end

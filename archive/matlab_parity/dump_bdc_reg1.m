@@ -9,20 +9,42 @@
 %                       (double(uint8) -> 0..255)
 %   intermediates.mat   every preprocessing intermediate
 %   tform_similarity.txt, tform_affine.txt, meta.mat
-%   registered.tif      the imwrite'd output; compared with the golden
+%   registered.tif      the imwrite'd output; compared with the golden.
+%                       kmeans is rng(kmeansSeed,'twister') immediately
+%                       before the call. Default seed is 28.
 %   kmeans_probe.txt    whether the collagen cluster depends on the RNG seed
 %   optimization_trace.txt (captureTrace=true)
+%   registered_original.tif
+%                       only when callOriginal is true: the TIFF written by
+%                       CurveAlign BDcreation_reg.m. That function does not
+%                       seed kmeans, so this file is not the seeded golden.
+%
+% Fixtures are tests/test_for_shg_he_registration_BDcreation (repo root).
 
-function dump_bdc_reg1(caseFilter, captureTrace, kmeansSeed, outSuffix)
-    % dump_bdc_reg1()                         all cases, rng('default') before kmeans
-    % dump_bdc_reg1('test8', true)            one case + DisplayOptimization trace
-    % dump_bdc_reg1('test8', false, 3, '_s3') one case with rng(3) -> dumps/test8_s3
-    if nargin < 1; caseFilter = ''; end
-    if nargin < 2; captureTrace = false; end
-    if nargin < 3; kmeansSeed = []; end
-    if nargin < 4; outSuffix = ''; end
+function dump_bdc_reg1(caseFilter, captureTrace, kmeansSeed, outSuffix, callOriginal, curveAlignDir)
+    % dump_bdc_reg1()
+    %     all cases, rng(28,'twister') immediately before kmeans
+    % dump_bdc_reg1('test8', true)
+    %     one case + DisplayOptimization trace
+    % dump_bdc_reg1('test8', false, 3, '_s3')
+    %     one case with rng(3,'twister') -> dumps/test8_s3
+    % dump_bdc_reg1('', false, 28, '', true, '/path/to/CurveAlign_CT-FIRE')
+    %     also call BDcreation_reg.m -> dumps/<case>/registered_original.tif
+    %     curveAlignDir may be omitted when CURVEALIGN_MATLAB is set.
+    if nargin < 1 || isempty(caseFilter); caseFilter = ''; end
+    if nargin < 2 || isempty(captureTrace); captureTrace = false; end
+    if nargin < 3 || isempty(kmeansSeed); kmeansSeed = 28; end
+    if nargin < 4 || isempty(outSuffix); outSuffix = ''; end
+    if nargin < 5 || isempty(callOriginal); callOriginal = false; end
+    if nargin < 6; curveAlignDir = ''; end
     thisDir = fileparts(mfilename('fullpath'));
-    fixtureRoot = fullfile(thisDir, '..', 'test_for_shg_he_registration_BDcreation');
+    % archive/matlab_parity -> repo tests/. The old '../test_for_...' path
+    % pointed at archive/ and skipped every case.
+    fixtureRoot = fullfile(thisDir, '..', '..', 'tests', 'test_for_shg_he_registration_BDcreation');
+    if callOriginal
+        curveAlignDir = resolve_curvealign_dir(curveAlignDir, 'BDcreation_reg.m');
+        addpath(curveAlignDir);
+    end
     p02 = fullfile(fixtureRoot, 'new_test_datasets_tests4-5-6-7');
     outRoot = fullfile(thisDir, 'dumps');
     if ~exist(outRoot, 'dir'); mkdir(outRoot); end
@@ -42,13 +64,15 @@ function dump_bdc_reg1(caseFilter, captureTrace, kmeansSeed, outSuffix)
         end
         fprintf('\n===== DUMP %s ppm=%.2f (reg1) =====\n', caseId, cases{i, 5});
         dump_one([caseId outSuffix], cases{i, 2}, cases{i, 3}, cases{i, 4}, cases{i, 5}, ...
-            cases{i, 6}, outRoot, captureTrace, kmeansSeed);
+            cases{i, 6}, outRoot, captureTrace, kmeansSeed, callOriginal, curveAlignDir);
     end
     fprintf('\nAll reg1 dumps written under %s\n', outRoot);
 end
 
 
-function dump_one(caseId, heDir, heFile, shgDir, pixelpermicron, goldenDir, outRoot, captureTrace, kmeansSeed)
+function dump_one(caseId, heDir, heFile, shgDir, pixelpermicron, goldenDir, outRoot, captureTrace, kmeansSeed, callOriginal, curveAlignDir)
+    if nargin < 10 || isempty(callOriginal); callOriginal = false; end
+    if nargin < 11; curveAlignDir = ''; end
     outDir = fullfile(outRoot, caseId);
     if ~exist(outDir, 'dir'); mkdir(outDir); end
 
@@ -120,13 +144,12 @@ function dump_one(caseId, heDir, heFile, shgDir, pixelpermicron, goldenDir, outR
     end
     fclose(fid);
 
-    % The real run: default session RNG state as in matlab -batch, unless a
-    % seed was requested to reproduce an alternative k-means optimum.
-    if isempty(kmeansSeed)
-        rng('default');
-    else
-        rng(kmeansSeed, 'twister');
-    end
+    % Reproducible reference. BDcreation_reg.m line 69 does not seed kmeans,
+    % so a raw call of that function is not the committed golden. This line
+    % is rng(seed,'twister') immediately before kmeans. Default seed 28
+    % matches dumps/test8_km3, dumps/test9_km3, and Python kmeans_seed.
+    % The probe above leaves the generator in another state, so reseed here.
+    rng(kmeansSeed, 'twister');
     [cluster_idx, cluster_center] = kmeans(ab, nColors, 'distance', 'sqEuclidean', ...
         'Replicates', 3);
     pixel_labels = reshape(cluster_idx, nrows, ncols);
@@ -230,4 +253,14 @@ function dump_one(caseId, heDir, heFile, shgDir, pixelpermicron, goldenDir, outR
     end
     fprintf('  saved %s  mask_coverage=%.4f  sim.T(1,1)=%.6f  aff.T(1,1)=%.6f\n', ...
         outDir, meta.mask_coverage, tformSimilarity.T(1,1), tform.T(1,1));
+
+    if callOriginal
+        call_original_bdc('reg1', heDir, heFile, shgDir, pixelpermicron, ...
+            outDir, goldenDir, curveAlignDir);
+        fprintf(['  registered_original.tif follows unseeded kmeans in ' ...
+            'BDcreation_reg.m (line 69 does not call rng). It is not the ' ...
+            'seeded golden. The reproducible reference is registered.tif ' ...
+            'from this dump (rng(%d, ''twister'') immediately before kmeans).\n'], ...
+            kmeansSeed);
+    end
 end

@@ -57,15 +57,26 @@ from typing import Any
 import itk  # type: ignore[import-untyped]
 import numpy as np
 
-# MATLAB ``imregconfig('multimodal')`` defaults
-# (``registration.optimizer.OnePlusOneEvolutionary`` /
-#  ``registration.metric.MattesMutualInformation``).
-MATLAB_DEFAULT_INITIAL_RADIUS = 6.25e-3
-MATLAB_DEFAULT_GROWTH_FACTOR = 1.05
-MATLAB_DEFAULT_EPSILON = 1.5e-6
-MATLAB_DEFAULT_MAX_ITERATIONS = 100
-MATLAB_DEFAULT_HISTOGRAM_BINS = 50
+# Defaults of ``[optimizer, metric] = imregconfig('multimodal')``.
+# MathWorks documents these as properties of the objects that call returns,
+# not as arguments of ``imregconfig`` itself:
+# https://www.mathworks.com/help/images/ref/imregconfig.html
+#
+# ``registration.optimizer.OnePlusOneEvolutionary``
+MATLAB_DEFAULT_INITIAL_RADIUS = 6.25e-3  # optimizer.InitialRadius
+MATLAB_DEFAULT_GROWTH_FACTOR = 1.05  # optimizer.GrowthFactor
+MATLAB_DEFAULT_EPSILON = 1.5e-6  # optimizer.Epsilon
+MATLAB_DEFAULT_MAX_ITERATIONS = 100  # optimizer.MaximumIterations
+# ``registration.metric.MattesMutualInformation``
+MATLAB_DEFAULT_HISTOGRAM_BINS = 50  # metric.NumberOfHistogramBins
+# ``imregtform`` name-value ``'PyramidLevels'`` (default 3). This is not an
+# ``imregconfig`` field:
+# https://www.mathworks.com/help/images/ref/imregtform.html
 MATLAB_DEFAULT_PYRAMID_LEVELS = 3
+# BDcreation does not run these defaults unchanged.
+# ``register_bdcreation_reg2_matlab`` divides ``InitialRadius`` by 3.5 and
+# sets ``MaximumIterations`` to 700, matching ``BDcreation_reg.m`` /
+# ``BDcreation_reg2.m`` after ``imregconfig``.
 # ITK examples (and, as far as we can tell, MATLAB's bridge) seed the normal
 # variate generator with this constant.
 DEFAULT_SEED = 12345
