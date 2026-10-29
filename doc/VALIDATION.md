@@ -1,7 +1,7 @@
 # Validation Tests
 
-This directory contains optional parity checks against historical MATLAB
-reference outputs. These checks are useful during calibration work, but they
+Optional parity checks against historical MATLAB reference outputs live in
+`tests/validation/`. These checks are useful during calibration work, but they
 are intentionally kept out of default CI because they depend on a specific
 CurveLab-enabled environment and strict numerical matching to reference
 artifacts. Small implementation changes can legitimately shift values by tiny
