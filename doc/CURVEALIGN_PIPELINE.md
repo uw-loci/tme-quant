@@ -21,6 +21,8 @@ source <path to your curvelops environment>/bin/activate
 export PYTHONPATH=src
 ```
 
+**`No module named 'tkinter'`:** `process_image` imports Tk. The Python that `bin/install.sh` sets up on WSL includes it, but other Python installs may not. Install it for the Python you're using, for example `sudo apt install python3-tk` on Ubuntu or `brew install python-tk` with Homebrew.
+
 ## 2. Run it
 
 Run these from the repo root. Only the image path is required.
