@@ -11,9 +11,11 @@ plugin's @Parameter fields, and load_grayscale() stands in for the open image.
     out["features"]          # per-fiber DataFrame, or None if no fibers were found
     out["files"]["overlay"]  # path to the overlay TIFF
 
+Full instructions and all parameters: doc/CURVEALIGN_PIPELINE.md
+
 Setup (curvelet mode needs the curvelops extra; see doc/INSTALL.md):
     Linux, WSL, macOS:  bash bin/install.sh, then prefix commands with "uv run"
-    Windows:            activate your MSYS2 UCRT64 curvelops environment
+    Windows:            activate your MSYS2 UCRT64 curvelops environment; export PYTHONPATH=src
 
 Run from the repo root:
     python examples/curvealign_pipeline.py tests/test_images/real1.tif

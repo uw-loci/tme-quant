@@ -57,6 +57,10 @@ Windows options:
 - Recommended: use WSL2 (Ubuntu). Follow the macOS/Linux steps inside WSL.
 - Native Windows: use MSYS2 (for `gcc`, `make`) or Visual Studio toolchain; build FFTW 2.1.5 and CurveLab from source, set `FFTW` and `FDCT` env vars to their install roots, then use `uv` commands as above.
 
+### Command-line pipeline
+
+To run a full CurveAlign analysis on one image without a GUI, see [doc/CURVEALIGN_PIPELINE.md](doc/CURVEALIGN_PIPELINE.md). This script is also the reference for the Fiji plugin.
+
 ### Development
 
 See [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) for plugin setup and troubleshooting. Running tests:

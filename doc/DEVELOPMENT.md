@@ -28,7 +28,7 @@ Curvelet tests run automatically when curvelops is installed; otherwise they are
 
 ### Command-line pipeline (`examples/curvealign_pipeline.py`)
 
-This script is the reference for the Fiji plugin and must work on every platform. `tests/test_curvealign_pipeline.py` runs unchanged on all of them. Without `TMEQ_RUN_CURVELETS=1`, only the fast tests run, and those don't need curvelops.
+This script is the reference for the Fiji plugin and must work on every platform. See [CURVEALIGN_PIPELINE.md](CURVEALIGN_PIPELINE.md) for how to run it and set its parameters. `tests/test_curvealign_pipeline.py` runs unchanged on all of them. Without `TMEQ_RUN_CURVELETS=1`, only the fast tests run, and those don't need curvelops.
 
 Linux, WSL and macOS, with CurveLab extracted to `../utils`:
 
