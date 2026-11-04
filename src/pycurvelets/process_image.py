@@ -7,7 +7,6 @@ import pandas as pd
 from PIL import Image
 from skimage.draw import polygon, polygon2mask
 from skimage.measure import regionprops, label, find_contours
-import tkinter as tk
 import time
 from multiprocessing import Pool
 from typing import Optional

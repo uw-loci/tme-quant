@@ -26,6 +26,27 @@ Headless (no GUI): `QT_QPA_PLATFORM=offscreen make test`
 
 Curvelet tests run automatically when curvelops is installed; otherwise they are skipped.
 
+### Command-line pipeline (`examples/curvealign_pipeline.py`)
+
+This script is the reference for the Fiji plugin and must work on every platform. `tests/test_curvealign_pipeline.py` runs unchanged on all of them. Without `TMEQ_RUN_CURVELETS=1`, only the fast tests run, and those don't need curvelops.
+
+Linux, WSL and macOS, with CurveLab extracted to `../utils`:
+
+```bash
+bash bin/install.sh
+TMEQ_RUN_CURVELETS=1 uv run pytest tests/test_curvealign_pipeline.py -v -rs
+uv run python examples/curvealign_pipeline.py tests/test_images/real1.tif --output-dir /tmp/ca_out
+```
+
+- **WSL:** use a clone inside the Linux file system, not `/mnt/c` or `/mnt/h`. `bin/install.sh` deletes the project's `.venv` and rebuilds CurveLab in `../utils`, which would break a Windows setup sharing those folders.
+- **macOS:** CI does not cover macOS, so run this locally before relying on the script there. Install the compilers first with `xcode-select --install`.
+
+Windows, from an MSYS2 UCRT64 shell with your curvelops environment activated:
+
+```bash
+TMEQ_RUN_CURVELETS=1 PYTHONPATH=src python -m pytest tests/test_curvealign_pipeline.py -v -rs
+```
+
 ### SHG–HE registration (BDcreation_reg / BDcreation_reg2)
 
 | Suite | When it runs | Needs |

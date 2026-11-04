@@ -10,6 +10,11 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
+import matplotlib
+
+# process_image draws figures; a GUI backend such as TkAgg fails intermittently on MSYS2.
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 
 from pycurvelets.models import (
