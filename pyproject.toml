@@ -41,6 +41,9 @@ segmentation = [
   "cellcast",
   "cellpose",
 ]
+fiji = [
+  "appose>=0.12,<0.13",
+]
 
 [project.entry-points."napari.manifest"]
 napari-curvealign = "napari_curvealign:napari.yaml"

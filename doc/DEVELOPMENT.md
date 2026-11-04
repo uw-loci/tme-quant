@@ -52,6 +52,7 @@ See [MATLAB_PARITY.md](MATLAB_PARITY.md), [BDC_REGISTRATION_COMPARISONS.md](BDC_
 |-------|-----|
 | uv not found | Install from https://docs.astral.sh/uv/ |
 | FFTW build errors | macOS: `xcode-select --install`; Linux: `apt-get install build-essential gcc g++ make curl`; use `CFLAGS="-fPIC"` |
-| CurveLab not found | Download from curvelet.org, place in `../utils/` |
+| CurveLab not found | Download from curvelet.org, extract as `utils/CurveLab-<version>/` inside this repository |
+| `curvelops` reports MSVC is required | Native Windows needs `cl.exe` and MSVC-compatible FFTW/CurveLab libraries; use WSL2 for the verified install path |
 | curvelops build errors | Ensure `FFTW` and `FDCT` (or `CPPFLAGS`/`LDFLAGS`) point to install roots |
 | Plugin not showing | `uv pip install -e .`
