@@ -116,7 +116,7 @@ except ImportError:
 
             QT_VERSION = 5
 
-from pycurvelets.process_image import process_image
+from pycurvelets.process_image import process_image_to_files
 from pycurvelets.models import (
     AdvancedAnalysisOptions,
     BoundaryParameters,
@@ -872,7 +872,7 @@ class ProcessImageGUI(QMainWindow):
             print("Starting Analysis...")
             print("=" * 60)
 
-            result = process_image(
+            result = process_image_to_files(
                 image_params=image_params,
                 fiber_params=fiber_params,
                 output_params=output_params,
@@ -1046,7 +1046,7 @@ def main_cli():
     )
 
     # Call process_image with new parameter structure
-    result = process_image(
+    result = process_image_to_files(
         image_params=image_params,
         fiber_params=fiber_params,
         output_params=output_params,
