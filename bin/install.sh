@@ -306,10 +306,26 @@ create_env_and_install() {
   # uv builds curvelops in an isolated environment and does not forward shell
   # exports. curvelops' setup.py reads FFTW and FDCT from that environment.
   # uv.toml is gitignored because the paths are local to this machine.
+  local build_fftw="$FFTW"
+  local build_fdct="$FDCT"
+  case "$(uname -s)" in
+    MINGW*|MSYS*)
+      if ! command -v cygpath >/dev/null 2>&1; then
+        print_error "cygpath is required to convert FFTW and CurveLab paths for the Windows compiler."
+        return 1
+      fi
+      if ! build_fftw="$(cygpath -m "$FFTW")" || ! build_fdct="$(cygpath -m "$FDCT")"; then
+        print_error "Could not convert FFTW and CurveLab paths for the Windows compiler."
+        return 1
+      fi
+      print_info "Using Windows-format paths for the curvelops build."
+      ;;
+  esac
+
   print_info "Writing uv.toml so the curvelops build can see FFTW and CurveLab..."
   cat > "$PROJECT_ROOT/uv.toml" <<EOF
 # Written by bin/install.sh. Local paths; do not commit.
-extra-build-variables = { curvelops = { FFTW = "${FFTW}", FDCT = "${FDCT}" } }
+extra-build-variables = { curvelops = { FFTW = "${build_fftw}", FDCT = "${build_fdct}" } }
 EOF
 
   # Reinstall curvelops against the current FFTW/CurveLab without deleting the
