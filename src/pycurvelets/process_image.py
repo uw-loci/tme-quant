@@ -1,4 +1,5 @@
 from functools import partial
+from io import BytesIO
 import math
 import matplotlib.pyplot as plt
 import numpy as np
@@ -93,7 +94,8 @@ def process_image(
     Returns
     -------
     dict or None
-        Returns a dictionary containing processing results if successful:
+        Returns processing results if successful:
+        - 'images': dict[str, ndarray] for requested image results
         - 'fib_feat_df': pd.DataFrame (if make_feature_file is True)
             Fiber features dataframe with all computed features
         Returns None if processing failed.
@@ -120,6 +122,7 @@ def process_image(
     fire_directory = fiber_params.fire_directory
 
     output_directory = output_params.output_directory
+    os.makedirs(output_directory, exist_ok=True)
     make_associations = output_params.make_associations
     make_map = output_params.make_map
     make_overlay = output_params.make_overlay
@@ -309,19 +312,17 @@ def process_image(
         img_name=img_name,
     )
 
+    images = {}
+
     # Inverse curvelet transform (only for curvelet mode)
     if fiber_mode == 0:
-        generate_reconstruction(
-            img=img,
-            curvelet_coefficients=curvelet_coefficients,
-            output_directory=output_directory,
-            img_name=img_name,
-            num_sections=num_sections,
+        images["reconstruction"] = generate_reconstruction(
+            img=img, curvelet_coefficients=curvelet_coefficients
         )
 
     # Create overlay figure if requested
     if make_overlay:
-        generate_overlay(
+        images["overlay"] = generate_overlay(
             img=img,
             fiber_structure=fiber_structure,
             coordinates=coordinates,
@@ -352,7 +353,7 @@ def process_image(
 
     # Generate heatmap if requested
     if make_map:
-        generate_heatmap(
+        images["heatmap"] = generate_heatmap(
             img=img,
             fiber_structure=fiber_structure,
             in_curvs_flag=(
@@ -376,12 +377,50 @@ def process_image(
 
     # plt.show()
 
-    # Return results for testing
-    results = {}
+    results = {"images": images, "image_name": img_name}
     if fib_feat_df is not None:
         results["fib_feat_df"] = fib_feat_df
 
-    return results if results else None
+    return results if images or fib_feat_df is not None else None
+
+
+def process_image_to_files(
+    image_params: ImageInputParameters,
+    fiber_params: FiberAnalysisParameters,
+    output_params: OutputControlParameters,
+    boundary_params: Optional[BoundaryParameters] = None,
+    advanced_options: Optional[AdvancedAnalysisOptions] = None,
+):
+    """Run :func:`process_image` and save its returned image arrays as TIFFs."""
+    os.makedirs(output_params.output_directory, exist_ok=True)
+    results = process_image(
+        image_params=image_params,
+        fiber_params=fiber_params,
+        output_params=output_params,
+        boundary_params=boundary_params,
+        advanced_options=advanced_options,
+    )
+    if results is None:
+        return None
+
+    suffixes = {
+        "reconstruction": "reconstructed",
+        "overlay": "overlay",
+        "heatmap": "procmap",
+    }
+    image_paths = {}
+    for key, suffix in suffixes.items():
+        image = results["images"].get(key)
+        if image is None:
+            continue
+        path = os.path.join(
+            output_params.output_directory,
+            f"{results['image_name']}_{suffix}.tiff",
+        )
+        Image.fromarray(image).save(path)
+        image_paths[key] = path
+    results["image_paths"] = image_paths
+    return results
 
 
 def process_single_roi(
@@ -958,11 +997,9 @@ def save_fiber_features(
     return fib_feat_df
 
 
-def generate_reconstruction(
-    img, curvelet_coefficients, output_directory, img_name, num_sections
-):
+def generate_reconstruction(img, curvelet_coefficients):
     """
-    Generate and save inverse curvelet transform (reconstruction).
+    Generate the inverse curvelet transform (reconstruction).
 
     Parameters
     ----------
@@ -970,12 +1007,11 @@ def generate_reconstruction(
         Original image
     curvelet_coefficients : array
         Curvelet coefficients from get_ct
-    output_directory : str
-        Output directory
-    img_name : str
-        Image name
-    num_sections : int
-        Number of sections in stack
+
+    Returns
+    -------
+    ndarray
+        Reconstructed image as float32 pixels.
     """
     print("Computing inverse curvelet transform.")
     M, N = img.shape
@@ -994,20 +1030,7 @@ def generate_reconstruction(
 
     recon = np.real(temp_inverse)
 
-    # Save reconstructed image
-    if num_sections > 1:
-        save_recon = os.path.join(output_directory, f"{img_name}_reconstructed.tiff")
-        # Append mode for multiple sections
-        recon_img = Image.fromarray(recon.astype(np.float32))
-        if os.path.exists(save_recon):
-            recon_img.save(save_recon, append_images=[recon_img], save_all=True)
-        else:
-            recon_img.save(save_recon)
-    else:
-        save_recon = os.path.join(output_directory, f"{img_name}_reconstructed.tiff")
-        Image.fromarray(recon.astype(np.float32)).save(save_recon)
-
-    print(f"Saved reconstructed image to {save_recon}")
+    return recon.astype(np.float32)
 
 
 def save_histogram(
@@ -1093,6 +1116,14 @@ def save_histogram(
     plt.xlabel("Value")
     plt.ylabel("Count")
     plt.title("Histogram")
+
+
+def _figure_to_rgb_array(fig):
+    buffer = BytesIO()
+    fig.savefig(buffer, format="tiff", dpi=200, bbox_inches="tight", pad_inches=0)
+    buffer.seek(0)
+    with Image.open(buffer) as image:
+        return np.asarray(image.convert("RGB")).copy()
 
 
 def generate_overlay(
@@ -1248,16 +1279,10 @@ def generate_overlay(
         )
     # TODO: tif_boundary 1, 2 implementation
 
-    print("Saving overlay")
-
-    # Save overlay
-    save_overlay = os.path.join(output_directory, f"{img_name}_overlay.tiff")
-
     plt.tight_layout(pad=0)
-    plt.savefig(save_overlay, dpi=200, bbox_inches="tight", pad_inches=0)
+    overlay = _figure_to_rgb_array(fig)
     plt.close(fig)
-
-    print(f"Saved overlay to {save_overlay}")
+    return overlay
 
 
 def generate_heatmap(
@@ -1366,15 +1391,9 @@ def generate_heatmap(
     ax.imshow(proc_map, cmap=cmap, alpha=0.5)
     ax.axis("off")
 
-    print("Saving map")
-
-    # Save map
-    save_map = os.path.join(output_directory, f"{img_name}_procmap.tiff")
     plt.tight_layout(pad=0)
-    plt.savefig(save_map, dpi=200, bbox_inches="tight", pad_inches=0)
+    heatmap = _figure_to_rgb_array(fig)
     plt.close(fig)
-
-    print(f"Saved heatmap to {save_map}")
 
     # Save values CSV
     save_values = os.path.join(output_directory, f"{img_name}_values.csv")
@@ -1391,6 +1410,7 @@ def generate_heatmap(
 
     np.savetxt(save_values, values_data, delimiter=",")
     print(f"Saved values to {save_values}")
+    return heatmap
 
 
 def save_roi_tif_file(
@@ -1628,7 +1648,7 @@ if __name__ == "__main__":
         min_dist=[],
     )
 
-    process_image(
+    process_image_to_files(
         image_params=image_params,
         fiber_params=fiber_params,
         output_params=output_params,
