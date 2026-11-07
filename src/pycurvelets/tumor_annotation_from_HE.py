@@ -157,29 +157,33 @@ def _load_he(path: Path) -> np.ndarray:
 
 
 def _save_image_uint8(path: str | Path, image: np.ndarray) -> None:
-    """Write ``image`` as uint8, matching MATLAB ``imwrite`` on a double image.
+    """Write the uint8 mask TIFF these two scripts produce.
 
-    Boolean images become 0 or 255. Integer images are scaled by their own
-    maximum. Floating images are clipped to ``[0, 1]`` and rounded to uint8.
+    This is not a general ``imwrite``. ``BDcreationHE2`` saves a logical
+    mask and ``BDcreationHE`` saves ``uint8(255 * mask)``. MATLAB stores
+    both as an 8-bit TIFF whose values are 0 or 255. A boolean mask becomes
+    0 or 255. A uint8 mask is written unchanged. Any other dtype is rejected
+    so a float image cannot be scaled by accident.
 
     Parameters
     ----------
     path : str or pathlib.Path
         Destination path.
     image : numpy.ndarray
-        Mask or image to save.
+        Boolean or uint8 mask.
+
+    Raises
+    ------
+    TypeError
+        If ``image`` is not bool or uint8.
     """
-    arr = image
+    arr = np.asarray(image)
     if arr.dtype == np.bool_:
         out = arr.astype(np.uint8) * 255
+    elif arr.dtype == np.uint8:
+        out = np.array(arr, copy=True)
     else:
-        if np.issubdtype(arr.dtype, np.integer):
-            arr_float = arr.astype(np.float64)
-            arr_float = arr_float / max(float(arr_float.max()), 1.0)
-        else:
-            arr_float = arr.astype(np.float64)
-        out = np.clip(arr_float, 0.0, 1.0)
-        out = np.round(out * 255.0).astype(np.uint8)
+        raise TypeError(f"mask must be bool or uint8, got {arr.dtype}")
     io.imsave(str(path), out, check_contrast=False)
 
 
@@ -194,8 +198,9 @@ def tumor_annotation_from_he(
     ``BDcreationHE2.m``. ``'rgb_kmeans'`` follows ``BDcreationHE.m``.
 
     When ``save_output`` is true, the mask is written under
-    ``<SHGfilepath>/CA_Boundary/``. The HSV path writes a boolean mask. The
-    RGB path writes the uint8 mask MATLAB saves (0 or 255).
+    ``<SHGfilepath>/CA_Boundary/`` as a uint8 TIFF of 0 and 255. The HSV
+    path starts from a boolean mask. The RGB path starts from the uint8
+    mask MATLAB saves.
 
     Parameters
     ----------
