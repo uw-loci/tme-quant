@@ -592,7 +592,13 @@ def _he2_epithelial_morphology(
 
 
 def annotate_he2(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarray, dict[str, Any]]:
-    """Run ``BDcreationHE2.m`` on one registered H&E image.
+    """HSV tumor mask from ``BDcreationHE2.m`` on one registered H&E image.
+
+    This is the hue path. It caps the working resolution at 2 px/um, builds
+    nuclei and collagen masks, and returns a boolean mask at the original
+    size. It does not cluster colors. The RGB k-means path is
+    :func:`annotate_he` (``BDcreationHE.m``), which stays at native
+    resolution and stores a uint8 0/255 mask.
 
     Parameters
     ----------
@@ -735,11 +741,14 @@ def annotate_he(
     *,
     kmeans_seed: int = DEFAULT_KMEANS_SEED,
 ) -> tuple[np.ndarray, dict[str, Any]]:
-    """
-    Pixel-exact ``BDcreationHE.m``.
+    """RGB k-means tumor mask from ``BDcreationHE.m`` on one registered H&E image.
 
-    Returns a boolean mask (``BDmask > 0``) plus debug arrays. MATLAB's
-    saved mask is ``uint8(255 * mask)`` and is stored as ``debug['BDmask']``.
+    This path stays at native resolution. It runs ``decorrstretch``, picks
+    the epithelial cluster, and stores the saved mask as uint8 0/255 in
+    ``debug['BDmask']``. The returned mask is that array as a boolean
+    (``BDmask > 0``). The HSV path is :func:`annotate_he2`
+    (``BDcreationHE2.m``), which caps resolution at 2 px/um and does not
+    cluster colors.
 
     Parameters
     ----------
@@ -748,8 +757,10 @@ def annotate_he(
     pixelpermicron : float
         Native resolution. This path does not cap ppm at 2.
     kmeans_seed : int, optional
-        Seed for ``rng(seed, 'twister')`` before ``kmeans``. Default is the
-        seed that matches the committed goldens.
+        Seed for ``rng(seed, 'twister')`` before ``kmeans``. MATLAB's
+        ``kmeans`` is unseeded, so a reference mask matches only this seed.
+        The default, 28, matches ``dumps/he_testN`` and the RGB
+        ``CA_Boundary`` TIFFs. The HSV ``CA_Boundary`` TIFFs do not use it.
 
     Returns
     -------
