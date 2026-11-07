@@ -2,7 +2,28 @@
 
 Bit-exact dumps live in ``test_tumor_annotation_matlab_parity.py`` (dev-only).
 This module only covers cheap invariants so a broken port is caught in CI
-without MATLAB dumps.
+without MATLAB dumps. Read a test as the MATLAB call it locks:
+
+- ``test_hsv_thresholds_match_bdcreation_he2`` — hue cuts and the 2 px/um cap.
+- ``test_histeq_uint8_keeps_class_and_uses_default_64_levels`` — ``histeq``
+  of uint8 stays uint8 and uses 64 bins.
+- ``test_histeq_double_default_n64`` — ``histeq`` of a double stays in ``[0, 1]``.
+- ``test_fspecial_disk_is_normalized_odd_kernel`` — ``fspecial('disk')`` is an
+  odd kernel that sums to 1.
+- ``test_padarray_symmetric_duplicates_edge`` — ``padarray(A, [pr pc],
+  'symmetric')`` pads each axis on both sides. That is not ``np.pad(A, (pr, pc))``.
+- ``test_im2bw_double_is_strict_greater`` — ``im2bw`` is a strict ``>`` after
+  ``im2double``.
+- ``test_strel_disk_r3_is_adams_5x5_not_euclidean`` — ``strel('disk', 3)`` is
+  the Adams 5x5 neighborhood.
+- ``test_prepare_he2_ppm3_uses_ceil_imresize_size`` — scalar ``imresize`` uses
+  ``ceil``, so 512 * 2/3 is 342.
+- ``test_he_cluster_pick_is_product_of_1based_ranks`` — the epithelial cluster
+  is the lowest product of the two 1-based ranks.
+- ``test_he2_mask_is_bool_original_shape`` — the HSV mask is boolean and matches
+  the registered image shape.
+- ``test_he_mask_is_bool_with_uint8_bdmask`` — the RGB mask is boolean and the
+  saved ``BDmask`` is uint8 0/255. The default k-means seed is 28.
 """
 
 from __future__ import annotations
@@ -38,6 +59,7 @@ _FIXTURE_ROOT = Path(__file__).resolve().parent / "test_for_shg_he_registration_
 
 
 def test_hsv_thresholds_match_bdcreation_he2() -> None:
+    """BDcreationHE2 hue windows and the 2 px/um working-resolution cap."""
     assert (NUCLEI_HUE_MIN, NUCLEI_HUE_MAX) == (0.500, 0.790)
     assert (COLLAGEN_HUE_MIN, COLLAGEN_HUE_MAX) == (0.837, 0.066)
     assert EPITH_BINARY_THRESHOLD == 0.001
@@ -45,6 +67,7 @@ def test_hsv_thresholds_match_bdcreation_he2() -> None:
 
 
 def test_histeq_uint8_keeps_class_and_uses_default_64_levels() -> None:
+    """histeq of a uint8 image stays uint8 and uses the default 64 bins."""
     ramp = np.arange(256, dtype=np.uint8).reshape(16, 16)
     out = matlab_histeq(ramp)
     assert out.dtype == np.uint8 and out.shape == ramp.shape
@@ -54,6 +77,7 @@ def test_histeq_uint8_keeps_class_and_uses_default_64_levels() -> None:
 
 
 def test_histeq_double_default_n64() -> None:
+    """histeq of a double image stays float64 and inside [0, 1]."""
     x = np.linspace(0.0, 1.0, 64)
     out = matlab_histeq(x)
     assert out.dtype == np.float64
@@ -62,6 +86,7 @@ def test_histeq_double_default_n64() -> None:
 
 
 def test_fspecial_disk_is_normalized_odd_kernel() -> None:
+    """fspecial('disk') returns a non-negative odd kernel that sums to 1."""
     for r in (1, 3, 11):
         h = matlab_fspecial_disk(r)
         assert h.ndim == 2 and h.shape[0] == h.shape[1] and h.shape[0] % 2 == 1
@@ -85,6 +110,7 @@ def test_padarray_symmetric_duplicates_edge() -> None:
 
 
 def test_im2bw_double_is_strict_greater() -> None:
+    """im2bw keeps pixels strictly above the level, after im2double for uint8."""
     x = np.array([0.0, 0.001, 0.5, 1.0])
     np.testing.assert_array_equal(matlab_im2bw(x, 0.001), np.array([False, False, True, True]))
     u8 = np.array([0, 1, 255], dtype=np.uint8)
@@ -93,11 +119,13 @@ def test_im2bw_double_is_strict_greater() -> None:
 
 
 def test_strel_disk_r3_is_adams_5x5_not_euclidean() -> None:
+    """strel('disk', 3) is the filled Adams 5x5 neighborhood, not a Euclidean disk."""
     d3 = matlab_strel_disk(3)
     assert d3.shape == (5, 5) and bool(np.all(d3))
 
 
 def test_prepare_he2_ppm3_uses_ceil_imresize_size() -> None:
+    """Above 2 px/um, BDcreationHE2 resizes with ceil: 512 * 2/3 is 342, not 341."""
     # MATLAB imresize(I, 2/3) on 512x512 -> ceil(512*2/3) = 342, not round()=341.
     img = np.zeros((512, 512, 3), dtype=np.float64)
     out, pix = prepare_he2_image(img, 3.0)
@@ -106,6 +134,7 @@ def test_prepare_he2_ppm3_uses_ceil_imresize_size() -> None:
 
 
 def test_he_cluster_pick_is_product_of_1based_ranks() -> None:
+    """BDcreationHE picks the cluster with the lowest product of 1-based ranks."""
     # Cluster 0 darkest+dimmest -> ranks 1,1 product 1 (picked).
     centers = np.array([[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0], [4.0, 4.0, 4.0]])
     intensity = np.array([10.0, 20.0, 30.0, 40.0])
@@ -134,6 +163,7 @@ def _he_fixture(case: str) -> Path:
 
 @pytest.mark.parametrize("case,ppm", [("test1", 1.5), ("test2", 2.0), ("test3", 3.0)])
 def test_he2_mask_is_bool_original_shape(case: str, ppm: float) -> None:
+    """The HSV mask is boolean and has the registered image's shape."""
     he = io.imread(str(_he_fixture(case)))
     mask, debug = annotate_he2(he, ppm)
     assert mask.dtype == np.bool_ and mask.shape == he.shape[:2]
@@ -143,6 +173,7 @@ def test_he2_mask_is_bool_original_shape(case: str, ppm: float) -> None:
 
 @pytest.mark.parametrize("case,ppm", [("test2", 2.0)])
 def test_he_mask_is_bool_with_uint8_bdmask(case: str, ppm: float) -> None:
+    """The RGB mask is boolean; the saved BDmask is uint8 with values 0 or 255."""
     he = io.imread(str(_he_fixture(case)))
     mask, debug = annotate_he(he, ppm, kmeans_seed=DEFAULT_KMEANS_SEED)
     assert mask.dtype == np.bool_ and mask.shape == he.shape[:2]
