@@ -117,11 +117,14 @@ def matlab_im2bw(image: np.ndarray, thresh: float) -> np.ndarray:
 
 
 def matlab_padarray(image: np.ndarray, pad: int | tuple[int, int]) -> np.ndarray:
-    """Pad both sides the way ``padarray(A, [pr pc], 'symmetric')`` does.
+    """Pad with ``np.pad(..., mode='symmetric')`` using MATLAB ``[pr pc]`` widths.
 
-    MATLAB's symmetric reflection duplicates the edge pixel, which is
-    ``numpy.pad(..., mode='symmetric')``. That is the only padding
-    ``BDcreationHE`` uses, so there is no mode argument.
+    ``padarray(A, [pr pc], 'symmetric')`` adds ``pr`` rows and ``pc`` columns
+    on both sides: ``np.pad(A, ((pr, pr), (pc, pc)), mode='symmetric')``.
+    ``np.pad(A, (pr, pc), mode='symmetric')`` is a different call. NumPy
+    reads a 2-tuple as ``(before, after)`` on every axis. A scalar pad is
+    the same in both. Symmetric mode duplicates the edge pixel. This is
+    the only padding ``BDcreationHE`` uses, so there is no mode argument.
 
     Parameters
     ----------

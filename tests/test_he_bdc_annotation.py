@@ -70,12 +70,18 @@ def test_fspecial_disk_is_normalized_odd_kernel() -> None:
 
 
 def test_padarray_symmetric_duplicates_edge() -> None:
+    """padarray [pr pc] pads both sides of each axis; np.pad(A, (pr, pc)) does not."""
     src = np.arange(1, 17, dtype=np.uint8).reshape(4, 4)
     out = matlab_padarray(src, 2)
     assert out.shape == (8, 8) and out.dtype == np.uint8
     assert out[2, 2] == src[0, 0]
     np.testing.assert_array_equal(out[1, 2:6], src[0])
     np.testing.assert_array_equal(out[2:6, 1], src[:, 0])
+    # (1, 2) is one row and two columns on both sides, shape (6, 8).
+    # np.pad(src, (1, 2)) pads before=1 and after=2 on every axis, shape (7, 7).
+    per_axis = matlab_padarray(src, (1, 2))
+    np.testing.assert_array_equal(per_axis, np.pad(src, ((1, 1), (2, 2)), mode="symmetric"))
+    assert per_axis.shape != np.pad(src, (1, 2), mode="symmetric").shape
 
 
 def test_im2bw_double_is_strict_greater() -> None:
