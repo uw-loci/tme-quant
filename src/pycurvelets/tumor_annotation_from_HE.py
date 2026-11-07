@@ -26,6 +26,11 @@ from ._he_bdc_reg1 import DEFAULT_KMEANS_SEED
 class TumorAnnotationFromHEParameters:
     """Inputs for :func:`tumor_annotation_from_he`.
 
+    ``@dataclass`` generates the constructor. Pass the four required
+    paths and the resolution; ``annotation_method`` and ``kmeans_seed``
+    have defaults. A dict is not accepted: unknown keys would otherwise
+    reach the annotation call unchecked.
+
     Attributes
     ----------
     HEfilepath : str
@@ -43,8 +48,23 @@ class TumorAnnotationFromHEParameters:
         Default is ``'hsv'``.
     kmeans_seed : int, optional
         Seed for the RGB k-means path. MATLAB's ``kmeans`` is unseeded; this
-        seed replays ``rng(seed, 'twister')``. Default matches the committed
-        goldens.
+        seed replays ``rng(seed, 'twister')``. Default is 28, the seed of
+        the RGB dumps. The HSV path does not use it.
+
+    Examples
+    --------
+    HSV is the default. Omit ``annotation_method`` and ``kmeans_seed``:
+
+    >>> params = TumorAnnotationFromHEParameters(
+    ...     HEfilepath="HE_registered",
+    ...     HEfilename="patient_001.tif",
+    ...     pixelpermicron=2.0,
+    ...     SHGfilepath="SHG",
+    ... )
+    >>> params.annotation_method
+    'hsv'
+    >>> params.kmeans_seed
+    28
     """
     HEfilepath: str
     HEfilename: str
@@ -58,24 +78,14 @@ class TumorAnnotationFromHEParameters:
     # dump harness (same policy as registration's DEFAULT_KMEANS_SEED).
     kmeans_seed: int = DEFAULT_KMEANS_SEED
 
-
-def _to_params(
-    params: TumorAnnotationFromHEParameters | dict[str, Any],
-) -> TumorAnnotationFromHEParameters:
-    """Accept a parameter object or a dict of the same fields.
-
-    Parameters
-    ----------
-    params : TumorAnnotationFromHEParameters or dict
-        Annotation inputs.
-
-    Returns
-    -------
-    TumorAnnotationFromHEParameters
-    """
-    if isinstance(params, TumorAnnotationFromHEParameters):
-        return params
-    return TumorAnnotationFromHEParameters(**params)
+    def __post_init__(self) -> None:
+        method = str(self.annotation_method).lower()
+        if method not in ("hsv", "rgb_kmeans"):
+            raise ValueError(
+                f"Unknown annotation_method={self.annotation_method!r}; "
+                f"expected 'hsv' or 'rgb_kmeans'."
+            )
+        self.annotation_method = method
 
 
 def _resolve_save_dir(params: TumorAnnotationFromHEParameters, *, he2_fallback: bool) -> Path:
@@ -174,7 +184,7 @@ def _save_image_uint8(path: str | Path, image: np.ndarray) -> None:
 
 
 def tumor_annotation_from_he(
-    params: TumorAnnotationFromHEParameters | dict[str, Any],
+    params: TumorAnnotationFromHEParameters,
     save_output: bool = True,
     return_debug: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, dict[str, Any]]:
@@ -189,7 +199,7 @@ def tumor_annotation_from_he(
 
     Parameters
     ----------
-    params : TumorAnnotationFromHEParameters or dict
+    params : TumorAnnotationFromHEParameters
         Paths, resolution, method, and k-means seed.
     save_output : bool, optional
         Write the mask TIFF. Default is true.
@@ -209,7 +219,7 @@ def tumor_annotation_from_he(
     ValueError
         If ``annotation_method`` is not ``'hsv'`` or ``'rgb_kmeans'``.
     """
-    p = _to_params(params)
+    p = params
     he_path = Path(p.HEfilepath) / p.HEfilename
     he_raw = _load_he(he_path)
 
@@ -239,14 +249,12 @@ def tumor_annotation_from_he(
     return bd_mask.astype(bool), debug
 
 
-def BDcreationHE2(
-    BDCparameters: TumorAnnotationFromHEParameters | dict[str, Any],
-) -> np.ndarray:
+def BDcreationHE2(BDCparameters: TumorAnnotationFromHEParameters) -> np.ndarray:
     """Run ``BDcreationHE2.m`` and save the HSV tumor mask.
 
     Parameters
     ----------
-    BDCparameters : TumorAnnotationFromHEParameters or dict
+    BDCparameters : TumorAnnotationFromHEParameters
         Annotation inputs. ``annotation_method`` is forced to ``'hsv'``.
 
     Returns
@@ -254,18 +262,16 @@ def BDcreationHE2(
     numpy.ndarray
         Boolean tumor mask.
     """
-    p = replace(_to_params(BDCparameters), annotation_method="hsv")
+    p = replace(BDCparameters, annotation_method="hsv")
     return tumor_annotation_from_he(p, save_output=True, return_debug=False)
 
 
-def BDcreationHE(
-    BDCparameters: TumorAnnotationFromHEParameters | dict[str, Any],
-) -> np.ndarray:
+def BDcreationHE(BDCparameters: TumorAnnotationFromHEParameters) -> np.ndarray:
     """Run ``BDcreationHE.m`` and save the RGB k-means tumor mask.
 
     Parameters
     ----------
-    BDCparameters : TumorAnnotationFromHEParameters or dict
+    BDCparameters : TumorAnnotationFromHEParameters
         Annotation inputs. ``annotation_method`` is forced to ``'rgb_kmeans'``.
 
     Returns
@@ -273,5 +279,5 @@ def BDcreationHE(
     numpy.ndarray
         Boolean tumor mask. The file on disk is the uint8 0/255 mask.
     """
-    p = replace(_to_params(BDCparameters), annotation_method="rgb_kmeans")
+    p = replace(BDCparameters, annotation_method="rgb_kmeans")
     return tumor_annotation_from_he(p, save_output=True, return_debug=False)

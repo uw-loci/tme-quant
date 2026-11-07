@@ -96,6 +96,18 @@ def test_tumor_annotation_rgb_kmeans_runs() -> None:
     assert debug["BDmask"].dtype == np.uint8
 
 
+def test_annotation_method_rejects_unknown_value() -> None:
+    """The constructor accepts only 'hsv' and 'rgb_kmeans'."""
+    with pytest.raises(ValueError, match="annotation_method"):
+        TumorAnnotationFromHEParameters(
+            HEfilepath=".",
+            HEfilename="a.tif",
+            pixelpermicron=2.0,
+            SHGfilepath=".",
+            annotation_method="lab",
+        )
+
+
 def test_register_then_annotate_end_to_end_smoke() -> None:
     if not _HE_RAW.is_file() or not (_SHG_DIR / "patient_001.tif").is_file():
         pytest.skip("patient_001 HE/SHG fixtures missing")
