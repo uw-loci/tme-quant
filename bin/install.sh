@@ -3,7 +3,7 @@
 # tme-quant Installation Script
 #
 # Automates installation of tme-quant with curvelops (curvelet backend).
-# User prerequisites: 1) clone this repo, 2) download CurveLab to ../utils
+# User prerequisite: download CurveLab into this repo's utils/ directory.
 #
 # Usage: bash bin/install.sh
 ################################################################################
@@ -20,7 +20,7 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-UTILS_DIR="$(cd "$PROJECT_ROOT/../utils" && pwd || echo "$PROJECT_ROOT/../utils")"
+UTILS_DIR="$PROJECT_ROOT/utils"
 PYTHON_VERSION="3.11"
 FFTW_VERSION="2.1.5"
 
@@ -31,9 +31,38 @@ print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 print_error()   { echo -e "${RED}[✗]${NC} $1"; }
 print_header()  { echo -e "${CYAN}$1${NC}"; }
 
+report_failure() {
+  local status=$?
+  print_error "Installation stopped (exit code $status). Review the error above."
+  exit "$status"
+}
+trap report_failure ERR
+
 # Fancy way to calculate cores for multithread build
 nproc_opt() {
   nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4
+}
+
+# MinGW make can expand Git Bash's /bin/sh to an unquoted Windows path with spaces.
+make_with_shell() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*)
+      if ! command -v cygpath >/dev/null 2>&1; then
+        print_error "cygpath is required to select a safe Git Bash shell path."
+        return 1
+      fi
+      local shell_path
+      if ! shell_path="$(cygpath -s -m /usr/bin/sh)" || [ -z "$shell_path" ] || [[ "$shell_path" == *" "* ]]; then
+        print_error "Could not get a space-free path to Git Bash sh.exe; use WSL2 or a toolchain with a space-free shell path."
+        return 1
+      fi
+      print_info "Using space-free make shell: $shell_path"
+      make "SHELL=$shell_path" "$@"
+      ;;
+    *)
+      make "$@"
+      ;;
+  esac
 }
 
 ################################################################################
@@ -54,8 +83,72 @@ ensure_uv() {
   exit 1
 }
 
+ensure_build_tools() {
+  local missing=0
+  for tool in curl tar make gcc; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      print_error "Required build tool not found: $tool"
+      missing=1
+    fi
+  done
+  if [ "$missing" -ne 0 ]; then
+    print_info "Install the GNU build tools for your platform, or use WSL2 on Windows."
+    return 1
+  fi
+}
+
+ensure_native_python_compiler() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*)
+      if ! command -v cl >/dev/null 2>&1; then
+        print_error "Native Windows curvelops builds require MSVC (cl.exe); MinGW gcc is not a substitute."
+        print_info "Install Visual Studio C++ Build Tools and launch Git Bash from a developer environment, or use WSL2."
+        print_warning "The GNU-built FFTW and CurveLab libraries may also need MSVC-compatible builds."
+        return 1
+      fi
+      ;;
+  esac
+}
+
+has_curvelab_sources() {
+  [ -f "$1/fdct_wrapping_cpp/src/makefile" ] && [ -f "$1/fdct3d/src/makefile" ]
+}
+
+check_curvelab() {
+  local -a candidates=()
+  local candidate nested
+  for candidate in "$UTILS_DIR"/CurveLab-*; do
+    [ -d "$candidate" ] || continue
+    if has_curvelab_sources "$candidate"; then
+      candidates+=("$candidate")
+      continue
+    fi
+    for nested in "$candidate"/*; do
+      [ -d "$nested" ] || continue
+      if has_curvelab_sources "$nested"; then
+        candidates+=("$nested")
+      fi
+    done
+  done
+
+  if [ "${#candidates[@]}" -gt 1 ]; then
+    print_error "More than one CurveLab source tree found in $UTILS_DIR; keep only the version you want to build."
+    return 1
+  fi
+  if [ "${#candidates[@]}" -eq 0 ]; then
+    print_error "CurveLab source not found in $UTILS_DIR"
+    echo "  Expected fdct_wrapping_cpp/src/makefile and fdct3d/src/makefile under CurveLab-<version>."
+    echo "  Download it from https://curvelet.org/download.php and extract it into $UTILS_DIR"
+    return 1
+  fi
+
+  FDCT="${candidates[0]}"
+  export FDCT
+  print_success "CurveLab source found at: $FDCT"
+}
+
 ################################################################################
-# Step 2: Download and build FFTW (to ../utils)
+# Step 2: Download and build FFTW (to this repo's utils/)
 ################################################################################
 setup_fftw() {
   print_header "═══════════════════════════════════════════════════════════════"
@@ -64,61 +157,92 @@ setup_fftw() {
   echo ""
 
   mkdir -p "$UTILS_DIR"
-  UTILS_DIR="$(cd "$UTILS_DIR" && pwd)"
   FFTW_PATH="$UTILS_DIR/fftw-${FFTW_VERSION}"
+  FFTW_ARCHIVE="$UTILS_DIR/fftw-${FFTW_VERSION}.tar.gz"
 
   if [ -d "$FFTW_PATH" ] && [ -f "$FFTW_PATH/include/fftw.h" ] && [ -f "$FFTW_PATH/lib/libfftw.a" ]; then
     # Verify FFTW was built in double precision (not --enable-float).
     # Double-precision FFTW exports 'fftw_create_plan'; float-precision exports 'sfftw_create_plan'.
-    if nm "$FFTW_PATH/lib/libfftw.a" 2>/dev/null | grep -q '_fftw_create_plan'; then
+    if ! command -v nm >/dev/null 2>&1; then
+      print_warning "nm not found; reusing existing FFTW without checking its precision."
+      export FFTW="$FFTW_PATH"
+      return 0
+    fi
+
+    if nm "$FFTW_PATH/lib/libfftw.a" 2>/dev/null | grep -Eq '(^|[[:space:]])_?fftw_create_plan([[:space:]]|$)'; then
       print_success "FFTW already built (double precision) at: $FFTW_PATH"
       export FFTW="$FFTW_PATH"
       return 0
-    else
-      print_warning "FFTW at $FFTW_PATH appears to be float-precision (--enable-float). Rebuilding..."
-      rm -rf "$FFTW_PATH"
+    fi
+
+    print_error "FFTW at $FFTW_PATH is not verified as double precision."
+    print_info "Move or remove that directory yourself, then rerun this script to rebuild it."
+    return 1
+  fi
+
+  if [ -d "$FFTW_PATH" ]; then
+    print_info "Found FFTW source at $FFTW_PATH; build outputs are missing, so it will be built now."
+  fi
+
+  if [ ! -s "$FFTW_ARCHIVE" ]; then
+    print_info "Downloading FFTW ${FFTW_VERSION}..."
+    if ! curl -fSsL --retry 3 -o "$FFTW_ARCHIVE" "https://www.fftw.org/fftw-${FFTW_VERSION}.tar.gz"; then
+      rm -f "$FFTW_ARCHIVE"
+      print_error "Could not download FFTW. Check your network connection and try again."
+      return 1
     fi
   fi
 
-  # Install build tools if needed
-  if ! command -v gcc &>/dev/null || ! command -v make &>/dev/null; then
-    print_warning "No gcc/make detected, your FFTW build might fail."
-    print_warning "On Mac: xcode-select --install"
-    print_warning "On Debian/Ubuntu: sudo apt-get install -y build-essential gcc g++ make curl"
+  if ! tar -tzf "$FFTW_ARCHIVE" >/dev/null; then
+    print_error "The FFTW archive is invalid or incomplete: $FFTW_ARCHIVE"
+    print_info "Remove or replace that archive, then rerun this script."
+    return 1
   fi
 
-  cd "$UTILS_DIR"
-
-  if [ ! -f "fftw-${FFTW_VERSION}.tar.gz" ]; then
-    print_info "Downloading FFTW ${FFTW_VERSION}..."
-    curl -sL -O "http://www.fftw.org/fftw-${FFTW_VERSION}.tar.gz"
-  fi
-
-  if [ ! -d "fftw-${FFTW_VERSION}" ]; then
+  if [ ! -d "$FFTW_PATH" ]; then
     print_info "Extracting FFTW..."
-    tar xzf "fftw-${FFTW_VERSION}.tar.gz"
+    if ! tar -xzf "$FFTW_ARCHIVE" -C "$UTILS_DIR"; then
+      print_error "Could not extract FFTW into $UTILS_DIR"
+      return 1
+    fi
   fi
 
-  cd "fftw-${FFTW_VERSION}"
+  if [ ! -f "$FFTW_PATH/configure" ]; then
+    print_error "FFTW source directory is incomplete: $FFTW_PATH"
+    print_info "Move or remove it yourself, then rerun this script to extract a clean copy."
+    return 1
+  fi
 
-  # Download config scripts (pinned for reproducible builds; avoids configure failure on modern macOS)
-  # Commit a2287c3 (2025-07-10): https://git.savannah.gnu.org/cgit/config.git
-  CONFIG_COMMIT="a2287c3041a3f2a204eb942e09c015eab00dc7dd"
-  if [ ! -f config-scripts-downloaded ] || [ "$(cat config-scripts-downloaded 2>/dev/null)" != "$CONFIG_COMMIT" ]; then
+  # Update old config scripts bundled with FFTW 2.1.5 for modern build hosts.
+  # Pin the GCC mirror revision so the downloaded scripts are reproducible.
+  CONFIG_COMMIT="bec1b0a2f0c64ee462f6ba4f093803d0308d5a82"
+  CONFIG_URL="https://raw.githubusercontent.com/gcc-mirror/gcc/${CONFIG_COMMIT}"
+  if [ ! -f "$FFTW_PATH/config-scripts-downloaded" ] || [ "$(cat "$FFTW_PATH/config-scripts-downloaded" 2>/dev/null)" != "$CONFIG_COMMIT" ]; then
     print_info "Downloading config.guess and config.sub (commit $CONFIG_COMMIT)..."
-    curl -fsL -o config.guess "https://git.savannah.gnu.org/cgit/config.git/plain/config.guess?id=$CONFIG_COMMIT"
-    curl -fsL -o config.sub "https://git.savannah.gnu.org/cgit/config.git/plain/config.sub?id=$CONFIG_COMMIT"
-    chmod +x config.guess config.sub
-    echo "$CONFIG_COMMIT" > config-scripts-downloaded
+    if ! curl -fSsL -o "$FFTW_PATH/config.guess.tmp" "$CONFIG_URL/config.guess" ||
+      ! curl -fSsL -o "$FFTW_PATH/config.sub.tmp" "$CONFIG_URL/config.sub"; then
+      rm -f "$FFTW_PATH/config.guess.tmp" "$FFTW_PATH/config.sub.tmp"
+      print_error "Could not download the FFTW config scripts. Check your network connection and try again."
+      return 1
+    fi
+    mv "$FFTW_PATH/config.guess.tmp" "$FFTW_PATH/config.guess"
+    mv "$FFTW_PATH/config.sub.tmp" "$FFTW_PATH/config.sub"
+    chmod +x "$FFTW_PATH/config.guess" "$FFTW_PATH/config.sub"
+    printf '%s\n' "$CONFIG_COMMIT" > "$FFTW_PATH/config-scripts-downloaded"
   fi
 
   print_info "Configuring FFTW ..."
-  (set -x; ./configure --prefix="$(pwd)" --disable-fortran CFLAGS="-fPIC")
+  if ! (cd "$FFTW_PATH" && set -x && ./configure --prefix="$FFTW_PATH" --disable-fortran CFLAGS="-fPIC"); then
+    print_error "FFTW configuration failed."
+    return 1
+  fi
   print_info "Building FFTW (this may take several minutes)..."
-  (set -x; make -j"$(nproc_opt)" && make install)
-  export FFTW="$(pwd)"
+  if ! (cd "$FFTW_PATH" && set -x && make_with_shell -j"$(nproc_opt)" && make_with_shell install); then
+    print_error "FFTW build failed."
+    return 1
+  fi
+  export FFTW="$FFTW_PATH"
   print_success "FFTW built at: $FFTW"
-  cd "$PROJECT_ROOT"
   echo ""
 }
 
@@ -131,66 +255,37 @@ setup_curvelab() {
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
 
-  UTILS_DIR="$(cd "$UTILS_DIR" && pwd)"
-  FDCT=""
-
-  for d in "$UTILS_DIR"/CurveLab-*; do
-    if [ -d "$d" ]; then
-      FDCT="$d"
-      break
-    fi
-  done
-
-  if [ -z "$FDCT" -o ! -d "$FDCT" ]; then
-    print_error "CurveLab not found in $UTILS_DIR"
-    echo ""
-    echo "  CurveLab cannot be redistributed. You must:"
-    echo "  1. Visit https://curvelet.org/download.php"
-    echo "  2. Agree to the license and download CurveLab"
-    echo "  3. Extract it to: $UTILS_DIR/"
-    echo "     (e.g. $UTILS_DIR/CurveLab-2.1.3)"
-    echo ""
-    exit 1
-  fi
-
-  export FDCT
-  print_success "CurveLab found at: $FDCT"
+  print_info "Building CurveLab at: $FDCT"
 
   # Ensure FFTW directory layout matches what CurveLab's makefile.opt expects:
   #   ${FFTW_DIR}/fftw/fftw.h  and  ${FFTW_DIR}/fftw/.libs/libfftw.a
-  if [ -n "${FFTW:-}" ]; then
-    mkdir -p "${FFTW}/fftw/.libs"
-    # Headers: makefile.opt uses -I${FFTW_DIR}/fftw
-    if [ -f "${FFTW}/include/fftw.h" ] && [ ! -f "${FFTW}/fftw/fftw.h" ]; then
-      ln -sf "${FFTW}/include/fftw.h" "${FFTW}/fftw/fftw.h"
-      print_info "Symlinked fftw.h → ${FFTW}/fftw/fftw.h"
-    fi
-    # Libs: makefile.opt uses -L${FFTW_DIR}/fftw/.libs
-    for lib in "${FFTW}/lib"/libfftw*; do
-      [ -f "$lib" ] || continue
-      base="$(basename "$lib")"
-      if [ ! -f "${FFTW}/fftw/.libs/${base}" ]; then
-        ln -sf "$lib" "${FFTW}/fftw/.libs/${base}"
-        print_info "Symlinked ${base} → ${FFTW}/fftw/.libs/${base}"
-      fi
-    done
+  mkdir -p "${FFTW}/fftw/.libs"
+  # CurveLab's makefile expects headers and libraries under these paths.
+  if [ -f "${FFTW}/include/fftw.h" ] && [ ! -f "${FFTW}/fftw/fftw.h" ]; then
+    ln -sf "${FFTW}/include/fftw.h" "${FFTW}/fftw/fftw.h"
+    print_info "Symlinked fftw.h → ${FFTW}/fftw/fftw.h"
   fi
+  for lib in "${FFTW}/lib"/libfftw*; do
+    [ -f "$lib" ] || continue
+    base="$(basename "$lib")"
+    if [ ! -f "${FFTW}/fftw/.libs/${base}" ]; then
+      ln -sf "$lib" "${FFTW}/fftw/.libs/${base}"
+      print_info "Symlinked ${base} → ${FFTW}/fftw/.libs/${base}"
+    fi
+  done
 
   # Clean and rebuild CurveLab components to ensure they link the correct FFTW
-  if [ -d "$FDCT/fdct_wrapping_cpp/src" ]; then
-    print_info "Cleaning and building CurveLab fdct_wrapping_cpp..."
-    (cd "$FDCT/fdct_wrapping_cpp/src" && make clean && make FFTW_DIR="${FFTW:-}") || true
-  fi
-  if [ -d "$FDCT/fdct/src" ]; then
-    print_info "Cleaning and building CurveLab fdct..."
-    (cd "$FDCT/fdct/src" && make clean && make FFTW_DIR="${FFTW:-}") || true
-  fi
-  if [ -d "$FDCT/fdct3d/src" ]; then
-    print_info "Cleaning and building CurveLab fdct3d..."
-    (cd "$FDCT/fdct3d/src" && make clean && make FFTW_DIR="${FFTW:-}") || true
-  fi
+  for component in fdct_wrapping_cpp fdct fdct3d; do
+    source_dir="$FDCT/$component/src"
+    if [ -d "$source_dir" ]; then
+      print_info "Cleaning and building CurveLab $component..."
+      if ! (cd "$source_dir" && make_with_shell clean && make_with_shell "FFTW_DIR=$FFTW"); then
+        print_error "CurveLab $component build failed."
+        return 1
+      fi
+    fi
+  done
 
-  cd "$PROJECT_ROOT"
   echo ""
 }
 
@@ -208,38 +303,49 @@ create_env_and_install() {
 
   cd "$PROJECT_ROOT"
 
-  # PYTHON_VERSION is otherwise unused, and requires-python is only ">=3.11",
-  # so uv would pick the newest interpreter on PATH (for example 3.14).
-  print_info "Pinning Python ${PYTHON_VERSION}..."
-  uv python pin "$PYTHON_VERSION"
-
   # uv builds curvelops in an isolated environment and does not forward shell
   # exports. curvelops' setup.py reads FFTW and FDCT from that environment.
   # uv.toml is gitignored because the paths are local to this machine.
+  local build_fftw="$FFTW"
+  local build_fdct="$FDCT"
+  case "$(uname -s)" in
+    MINGW*|MSYS*)
+      if ! command -v cygpath >/dev/null 2>&1; then
+        print_error "cygpath is required to convert FFTW and CurveLab paths for the Windows compiler."
+        return 1
+      fi
+      if ! build_fftw="$(cygpath -m "$FFTW")" || ! build_fdct="$(cygpath -m "$FDCT")"; then
+        print_error "Could not convert FFTW and CurveLab paths for the Windows compiler."
+        return 1
+      fi
+      print_info "Using Windows-format paths for the curvelops build."
+      ;;
+  esac
+
   print_info "Writing uv.toml so the curvelops build can see FFTW and CurveLab..."
   cat > "$PROJECT_ROOT/uv.toml" <<EOF
 # Written by bin/install.sh. Local paths; do not commit.
-extra-build-variables = { curvelops = { FFTW = "${FFTW}", FDCT = "${FDCT}" } }
+extra-build-variables = { curvelops = { FFTW = "${build_fftw}", FDCT = "${build_fdct}" } }
 EOF
 
-  # Purge stale curvelops artifacts so uv rebuilds from source against the
-  # current FFTW/CurveLab.  setuptools caches .so files in uv's git checkout
-  # build/ dirs and reuses them even when the underlying C libraries change.
-  if [ -d "$PROJECT_ROOT/.venv" ]; then
-    print_info "Removing existing .venv for a clean curvelops rebuild..."
-    rm -rf "$PROJECT_ROOT/.venv"
+  # Reinstall curvelops against the current FFTW/CurveLab without deleting the
+  # user's entire environment or unrelated uv source-build caches.
+  if ! uv cache clean curvelops; then
+    print_warning "Could not clear the curvelops uv cache; continuing with a forced reinstall."
   fi
-  uv cache clean curvelops 2>/dev/null || true
-  for bdir in "$HOME"/.cache/uv/git-v0/checkouts/*/*/build; do
-    [ -d "$bdir" ] && rm -rf "$bdir"
-  done
 
   print_info "Syncing uv environment..."
-  uv sync --python "$PYTHON_VERSION" --extra curvelops --extra segmentation &&
+  if ! uv sync --python "$PYTHON_VERSION" --extra curvelops --extra segmentation --extra fiji --reinstall-package curvelops; then
+    print_error "uv sync failed."
+    return 1
+  fi
   print_success "Environment configured."
 
   print_info "Installing tme-quant..."
-  uv pip install -e .
+  if ! uv pip install -e .; then
+    print_error "Installing tme-quant failed."
+    return 1
+  fi
 
   print_success "Installation complete."
   echo ""
@@ -254,7 +360,7 @@ verify_installation() {
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
 
-  uv run python -c "
+  if uv run python -c "
 import sys
 errors = []
 try:
@@ -263,31 +369,34 @@ try:
     print(f'    HAS_CURVELETS = {pc.HAS_CURVELETS}')
     if not pc.HAS_CURVELETS:
         errors.append('pycurvelets: HAS_CURVELETS is False (curvelet backend not functional; check FFTW/FDCT)')
-except ImportError as e:
+except Exception as e:
     errors.append(f'pycurvelets: {e}')
 try:
     import curvelops
     print(f'  ✓ curvelops {curvelops.__version__}')
-except ImportError as e:
+except Exception as e:
     errors.append(f'curvelops: {e}')
 try:
     import napari_curvealign
     print('  ✓ napari_curvealign')
-except ImportError as e:
+except Exception as e:
     errors.append(f'napari_curvealign: {e}')
+try:
+    import appose
+    print('  ✓ appose-python worker')
+except Exception as e:
+    errors.append(f'appose-python worker: {e}')
 if errors:
     print('\\n✗ Validation failed:')
     for e in errors:
         print(f'  - {e}')
     sys.exit(1)
 print('\\n✅ All imports successful!')
-"
-
-  if [ $? -eq 0 ]; then
+"; then
     print_success "Verification passed."
   else
     print_error "Verification failed."
-    exit 1
+    return 1
   fi
   echo ""
 }
@@ -302,13 +411,14 @@ main() {
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
   echo "Prerequisites:"
-  echo "  1. Clone this repository"
+  echo "  1. Run this script from a checked-out copy of the repository"
   echo "  2. Install uv (https://docs.astral.sh/uv/)"
-  echo "  3. Download CurveLab to ../utils (see https://curvelet.org/download.php)"
+  echo "  3. Download CurveLab into $UTILS_DIR (see https://curvelet.org/download.php)"
+  echo "     Expected folder name: CurveLab-<version>"
   echo ""
   echo "This script will:"
-  echo "  - Download and build FFTW in ../utils"
-  echo "  - Detect CurveLab in ../utils then build it"
+  echo "  - Download and build FFTW in $UTILS_DIR"
+  echo "  - Build CurveLab from $UTILS_DIR"
   echo "  - Create and sync uv env with needed packages"
   echo "  - Run verification to ensure all is functional"
   echo ""
@@ -316,6 +426,10 @@ main() {
   echo ""
 
   ensure_uv
+  mkdir -p "$UTILS_DIR"
+  ensure_build_tools
+  ensure_native_python_compiler
+  check_curvelab
   setup_fftw
   setup_curvelab
   create_env_and_install
