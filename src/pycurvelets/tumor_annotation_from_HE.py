@@ -156,7 +156,7 @@ def _load_he(path: Path) -> np.ndarray:
     return img[..., :3]
 
 
-def _save_image_uint8(path: str | Path, image: np.ndarray) -> None:
+def _save_mask(path: str | Path, image: np.ndarray) -> None:
     """Write the uint8 mask TIFF these two scripts produce.
 
     This is not a general ``imwrite``. ``BDcreationHE2`` saves a logical
@@ -247,7 +247,7 @@ def tumor_annotation_from_he(
         save_dir = _resolve_save_dir(p, he2_fallback=he2_fallback)
         if not he2_fallback:
             save_dir.mkdir(parents=True, exist_ok=True)
-        _save_image_uint8(save_dir / _resolve_mask_name(p.HEfilename), save_arr)
+        _save_mask(save_dir / _resolve_mask_name(p.HEfilename), save_arr)
 
     if not return_debug:
         return bd_mask.astype(bool)

@@ -143,12 +143,12 @@ def test_tumor_annotation_rgb_kmeans_matches_matlab_tiff(
 
 def test_save_mask_tiff_round_trip_bool_and_uint8(tmp_path: Path) -> None:
     """A bool mask and a uint8 0/255 mask both come back as uint8 0/255."""
-    from pycurvelets.tumor_annotation_from_HE import _save_image_uint8
+    from pycurvelets.tumor_annotation_from_HE import _save_mask
 
     bool_mask = np.array([[False, True], [True, False]])
     u8_mask = np.array([[0, 255], [255, 0]], dtype=np.uint8)
-    _save_image_uint8(tmp_path / "bool.tif", bool_mask)
-    _save_image_uint8(tmp_path / "u8.tif", u8_mask)
+    _save_mask(tmp_path / "bool.tif", bool_mask)
+    _save_mask(tmp_path / "u8.tif", u8_mask)
     bool_back = io.imread(str(tmp_path / "bool.tif"))
     u8_back = io.imread(str(tmp_path / "u8.tif"))
     assert bool_back.dtype == np.uint8 and u8_back.dtype == np.uint8
@@ -156,7 +156,7 @@ def test_save_mask_tiff_round_trip_bool_and_uint8(tmp_path: Path) -> None:
     np.testing.assert_array_equal(u8_back, u8_mask)
     assert set(np.unique(bool_back).tolist()) == {0, 255}
     with pytest.raises(TypeError, match="bool or uint8"):
-        _save_image_uint8(tmp_path / "float.tif", bool_mask.astype(np.float64))
+        _save_mask(tmp_path / "float.tif", bool_mask.astype(np.float64))
 
 
 def test_annotation_method_rejects_unknown_value() -> None:
