@@ -24,8 +24,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from pycurvelets._he_bdc_annotation import (  # noqa: E402
-    annotate_he,
-    annotate_he2,
+    annotate_he_hsv,
+    annotate_he_kmeans,
     matlab_fspecial_disk,
     matlab_histeq,
     matlab_im2bw,
@@ -233,7 +233,7 @@ def analyze_he2(case_id: str, he_dir: Path, fname: str, ppm: float, *, preproc: 
         return {"case": case_id, "missing": True}
     ml = _load_images(dump)
     he = io.imread(str(he_path))
-    _mask, dbg = annotate_he2(he, ppm)
+    _mask, dbg = annotate_he_hsv(he, ppm)
     out: dict[str, Any] = {"case": case_id, "ppm": ppm, "steps": []}
     keys = HE2_STEPS if preproc else (("BDmask", "BDmask", "bool"),)
     for py_key, ml_key, kind in keys:
@@ -280,7 +280,7 @@ def analyze_he(case_id: str, he_dir: Path, fname: str, ppm: float, *, preproc: b
     ml = _load_images(dump)
     he = io.imread(str(he_path))
     seed = int(ml["kmeansSeed"]) if "kmeansSeed" in ml else DEFAULT_KMEANS_SEED
-    _mask, dbg = annotate_he(he, ppm, kmeans_seed=seed)
+    _mask, dbg = annotate_he_kmeans(he, ppm, kmeans_seed=seed)
     out: dict[str, Any] = {"case": case_id, "ppm": ppm, "kmeans_seed": seed, "steps": []}
     if "blue_cluster_num" in ml:
         ml_blue = int(np.asarray(ml["blue_cluster_num"]).squeeze())

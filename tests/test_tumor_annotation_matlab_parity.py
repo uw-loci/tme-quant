@@ -28,8 +28,8 @@ import scipy.io as sio
 from skimage import io
 
 from pycurvelets._he_bdc_annotation import (
-    annotate_he,
-    annotate_he2,
+    annotate_he_hsv,
+    annotate_he_kmeans,
     matlab_fspecial_disk,
     matlab_histeq,
     matlab_im2bw,
@@ -116,7 +116,7 @@ def test_he2_intermediates_match_matlab_dump(case_id: str, ppm: float, he_folder
     he_path = _FIXTURE_ROOT / "HE" / he_folder / "patient_001.tif"
     _skip_unless_files(dump, he_path)
     ml = _loadmat(dump)
-    _mask, dbg = annotate_he2(io.imread(str(he_path)), ppm)
+    _mask, dbg = annotate_he_hsv(io.imread(str(he_path)), ppm)
 
     np.testing.assert_allclose(dbg["he_adjusted"], ml["he_adjusted"], atol=1e-12, rtol=0.0)
     np.testing.assert_array_equal(_as_bool(dbg["BW_nuclei"]), _as_bool(ml["BW_nuclei"]))
@@ -145,7 +145,7 @@ def test_he2_bdmask_is_pixel_identical(case_id: str, ppm: float, he_folder: str)
     golden = _GOLDEN_DIR / f"BDcreationHE_{case_id}results_mask for patient_001.tif.tif"
     _skip_unless_files(dump, he_path, golden)
     ml = _loadmat(dump)
-    mask, dbg = annotate_he2(io.imread(str(he_path)), ppm)
+    mask, dbg = annotate_he_hsv(io.imread(str(he_path)), ppm)
     n_dump = int(np.count_nonzero(_as_bool(mask) != _as_bool(ml["BDmask"])))
     n_golden = int(np.count_nonzero(_as_bool(mask) != (io.imread(str(golden)) > 0)))
     assert n_dump == 0, f"[{case_id}] HE2 vs dump BDmask differs in {n_dump} pixels"
@@ -183,7 +183,7 @@ def test_he_bdmask_is_pixel_identical_at_seed_28(case_id: str, ppm: float, he_fo
     seed = int(np.asarray(ml["kmeansSeed"]).squeeze()) if "kmeansSeed" in ml else DEFAULT_KMEANS_SEED
     assert seed == DEFAULT_KMEANS_SEED
     he = io.imread(str(he_path))
-    mask, dbg = annotate_he(he, ppm, kmeans_seed=seed)
+    mask, dbg = annotate_he_kmeans(he, ppm, kmeans_seed=seed)
 
     np.testing.assert_array_equal(dbg["S"], ml["S"])
     # uint8 imfilter (IPP) can differ by 1 gray level from float64 + round;
@@ -208,4 +208,4 @@ def test_he_bdmask_is_pixel_identical_at_seed_28(case_id: str, ppm: float, he_fo
     )
     public = tumor_annotation_from_he(params, save_output=False, return_debug=False)
     n_public = int(np.count_nonzero(_as_bool(public) != (dbg["BDmask"] > 0)))
-    assert n_public == 0, f"[{case_id}] public RGB API differs from annotate_he in {n_public} pixels"
+    assert n_public == 0, f"[{case_id}] public RGB API differs from annotate_he_kmeans in {n_public} pixels"

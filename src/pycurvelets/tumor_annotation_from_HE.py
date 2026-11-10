@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 from skimage import io
 
-from ._he_bdc_annotation import annotate_he, annotate_he2
+from ._he_bdc_annotation import annotate_he_hsv, annotate_he_kmeans
 from ._he_bdc_reg1 import DEFAULT_KMEANS_SEED
 
 
@@ -230,11 +230,11 @@ def tumor_annotation_from_he(
 
     method = (p.annotation_method or "hsv").lower()
     if method == "hsv":
-        bd_mask, debug = annotate_he2(he_raw, p.pixelpermicron)
+        bd_mask, debug = annotate_he_hsv(he_raw, p.pixelpermicron)
         save_arr: np.ndarray = bd_mask
         he2_fallback = True
     elif method == "rgb_kmeans":
-        bd_mask, debug = annotate_he(he_raw, p.pixelpermicron, kmeans_seed=int(p.kmeans_seed))
+        bd_mask, debug = annotate_he_kmeans(he_raw, p.pixelpermicron, kmeans_seed=int(p.kmeans_seed))
         save_arr = np.asarray(debug["BDmask"])
         he2_fallback = False
     else:

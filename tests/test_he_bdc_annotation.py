@@ -38,8 +38,8 @@ from skimage import io
 from pycurvelets._he_bdc_annotation import (
     EPITH_BINARY_THRESHOLD,
     HE2_PPM_CAP,
-    annotate_he,
-    annotate_he2,
+    annotate_he_hsv,
+    annotate_he_kmeans,
     matlab_fspecial_disk,
     matlab_histeq,
     matlab_im2bw,
@@ -166,7 +166,7 @@ def _he_fixture(case: str) -> Path:
 def test_he2_mask_is_bool_original_shape(case: str, ppm: float) -> None:
     """The HSV mask is boolean and has the registered image's shape."""
     he = io.imread(str(_he_fixture(case)))
-    mask, debug = annotate_he2(he, ppm)
+    mask, debug = annotate_he_hsv(he, ppm)
     assert mask.dtype == np.bool_ and mask.shape == he.shape[:2]
     assert debug["BDmask"].shape == mask.shape
     assert str(debug["annotation_method"][0]) == "hsv"
@@ -176,7 +176,7 @@ def test_he2_mask_is_bool_original_shape(case: str, ppm: float) -> None:
 def test_he_mask_is_bool_with_uint8_bdmask(case: str, ppm: float) -> None:
     """The RGB mask is boolean; the saved BDmask is uint8 with values 0 or 255."""
     he = io.imread(str(_he_fixture(case)))
-    mask, debug = annotate_he(he, ppm, kmeans_seed=DEFAULT_KMEANS_SEED)
+    mask, debug = annotate_he_kmeans(he, ppm, kmeans_seed=DEFAULT_KMEANS_SEED)
     assert mask.dtype == np.bool_ and mask.shape == he.shape[:2]
     assert debug["BDmask"].dtype == np.uint8
     assert int(debug["BDmask"].max()) in (0, 255)

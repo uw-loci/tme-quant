@@ -3,12 +3,12 @@
 Registration helpers stay in :mod:`pycurvelets._he_bdc_common` and
 :mod:`pycurvelets._he_bdc_reg1`. This module is annotation-only.
 
-``annotate_he2`` is the HSV path (``BDcreationHE2.m``). It caps the working
+``annotate_he_hsv`` is the HSV path (``BDcreationHE2.m``). It caps the working
 resolution at 2 px/um with scalar ``imresize`` (``ceil``), builds nuclei and
 collagen masks, and smooths the tumor mask before thresholding it back onto
 the original grid.
 
-``annotate_he`` is the RGB k-means path (``BDcreationHE.m``). It runs
+``annotate_he_kmeans`` is the RGB k-means path (``BDcreationHE.m``). It runs
 ``decorrstretch``, ``histeq``, and ``fspecial('disk')`` at native resolution,
 then picks the epithelial cluster. MATLAB ``kmeans`` is unseeded;
 ``kmeans_seed`` replays ``rng(seed, 'twister')``.
@@ -595,13 +595,13 @@ def _he2_epithelial_morphology(
     return bwx, mask_image1
 
 
-def annotate_he2(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarray, dict[str, Any]]:
+def annotate_he_hsv(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarray, dict[str, Any]]:
     """HSV tumor mask from ``BDcreationHE2.m`` on one registered H&E image.
 
     This is the hue path. It caps the working resolution at 2 px/um, builds
     nuclei and collagen masks, and returns a boolean mask at the original
     size. It does not cluster colors. The RGB k-means path is
-    :func:`annotate_he` (``BDcreationHE.m``), which stays at native
+    :func:`annotate_he_kmeans` (``BDcreationHE.m``), which stays at native
     resolution and stores a uint8 0/255 mask.
 
     Parameters
@@ -739,7 +739,7 @@ def _mean_nonzero_gray(segmented: np.ndarray) -> float:
     return float(nz.mean())
 
 
-def annotate_he(
+def annotate_he_kmeans(
     he_u8: np.ndarray,
     pixelpermicron: float,
     *,
@@ -750,7 +750,7 @@ def annotate_he(
     This path stays at native resolution. It runs ``decorrstretch``, picks
     the epithelial cluster, and stores the saved mask as uint8 0/255 in
     ``debug['BDmask']``. The returned mask is that array as a boolean
-    (``BDmask > 0``). The HSV path is :func:`annotate_he2`
+    (``BDmask > 0``). The HSV path is :func:`annotate_he_hsv`
     (``BDcreationHE2.m``), which caps resolution at 2 px/um and does not
     cluster colors.
 
