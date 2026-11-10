@@ -117,14 +117,15 @@ def matlab_im2bw(image: np.ndarray, thresh: float) -> np.ndarray:
 
 
 def matlab_padarray(image: np.ndarray, pad: int | tuple[int, int]) -> np.ndarray:
-    """Pad with ``np.pad(..., mode='symmetric')`` using MATLAB ``[pr pc]`` widths.
+    """Translate MATLAB ``padarray(A, [pr pc], 'symmetric')`` into ``np.pad``.
 
-    ``padarray(A, [pr pc], 'symmetric')`` adds ``pr`` rows and ``pc`` columns
-    on both sides: ``np.pad(A, ((pr, pr), (pc, pc)), mode='symmetric')``.
-    ``np.pad(A, (pr, pc), mode='symmetric')`` is a different call. NumPy
-    reads a 2-tuple as ``(before, after)`` on every axis. A scalar pad is
-    the same in both. Symmetric mode duplicates the edge pixel. This is
-    the only padding ``BDcreationHE`` uses, so there is no mode argument.
+    The body is the NumPy call that matches that MATLAB size:
+    ``np.pad(A, ((pr, pr), (pc, pc)), mode='symmetric')``. ``[1, 2]`` on a
+    4 by 4 image is 6 by 8. ``np.pad(A, (1, 2), mode='symmetric')`` is a
+    different argument: NumPy reads that pair as 1 before and 2 after on
+    every axis, so the same image becomes 7 by 7. A scalar pad agrees in
+    both. Symmetric mode duplicates the edge pixel. This is the only
+    padding ``BDcreationHE`` uses, so there is no mode argument.
 
     Parameters
     ----------

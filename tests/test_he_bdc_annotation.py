@@ -11,7 +11,8 @@ without MATLAB dumps. Read a test as the MATLAB call it locks:
 - ``test_fspecial_disk_is_normalized_odd_kernel`` — ``fspecial('disk')`` is an
   odd kernel that sums to 1.
 - ``test_padarray_symmetric_duplicates_edge`` — ``padarray(A, [pr pc],
-  'symmetric')`` pads each axis on both sides. That is not ``np.pad(A, (pr, pc))``.
+  'symmetric')`` is ``np.pad(A, ((pr, pr), (pc, pc)), mode='symmetric')``.
+  ``np.pad(A, (pr, pc))`` is a different NumPy argument.
 - ``test_im2bw_double_is_strict_greater`` — ``im2bw`` is a strict ``>`` after
   ``im2double``.
 - ``test_strel_disk_r3_is_adams_5x5_not_euclidean`` — ``strel('disk', 3)`` is
@@ -95,7 +96,7 @@ def test_fspecial_disk_is_normalized_odd_kernel() -> None:
 
 
 def test_padarray_symmetric_duplicates_edge() -> None:
-    """padarray [pr pc] pads both sides of each axis; np.pad(A, (pr, pc)) does not."""
+    """padarray [pr pc] is np.pad(((pr, pr), (pc, pc))); np.pad((pr, pc)) is not."""
     src = np.arange(1, 17, dtype=np.uint8).reshape(4, 4)
     out = matlab_padarray(src, 2)
     assert out.shape == (8, 8) and out.dtype == np.uint8
