@@ -2,21 +2,27 @@
 % Instrumented BDcreationHE.m on MATLAB-registered HE (tests 1-3).
 % kmeans is unseeded in the original; this dump pins rng(28,'twister')
 % immediately before kmeans (same seed policy as dump_bdc_reg1.m).
+% Also imwrites the uint8 0/255 mask into the fixture CA_Boundary folder.
 %   /Applications/MATLAB_R2025b.app/bin/matlab -batch ...
 %     "cd('.../archive/matlab_parity'); dump_bdc_he"
 
 function dump_bdc_he(caseFilter, kmeansSeed)
     if nargin < 1; caseFilter = ''; end
     if nargin < 2; kmeansSeed = 28; end
+    fprintf('dump_bdc_he MATLAB %s\n', version);
     thisDir = fileparts(mfilename('fullpath'));
     fixtureRoot = fullfile(thisDir, '..', '..', 'tests', 'test_for_shg_he_registration_BDcreation');
     outRoot = fullfile(thisDir, 'dumps');
     if ~exist(outRoot, 'dir'); mkdir(outRoot); end
+    boundary = fullfile(fixtureRoot, 'SHG', 'CA_Boundary');
 
     cases = {
-        'test1', fullfile(fixtureRoot, 'HE', 'HE_registered_test1'), 'patient_001.tif', 1.5;
-        'test2', fullfile(fixtureRoot, 'HE', 'HE_registered_test2'), 'patient_001.tif', 2.0;
-        'test3', fullfile(fixtureRoot, 'HE', 'HE_registered_test3'), 'patient_001.tif', 3.0;
+        'test1', fullfile(fixtureRoot, 'HE', 'HE_registered_test1'), 'patient_001.tif', 1.5, ...
+            fullfile(boundary, 'BDcreationHE_rgb_kmeans_test1_mask for patient_001.tif.tif');
+        'test2', fullfile(fixtureRoot, 'HE', 'HE_registered_test2'), 'patient_001.tif', 2.0, ...
+            fullfile(boundary, 'BDcreationHE_rgb_kmeans_test2_mask for patient_001.tif.tif');
+        'test3', fullfile(fixtureRoot, 'HE', 'HE_registered_test3'), 'patient_001.tif', 3.0, ...
+            fullfile(boundary, 'BDcreationHE_rgb_kmeans_test3_mask for patient_001.tif.tif');
     };
 
     for i = 1:size(cases, 1)
@@ -24,12 +30,12 @@ function dump_bdc_he(caseFilter, kmeansSeed)
         if ~isempty(caseFilter) && ~strcmp(caseId, caseFilter)
             continue;
         end
-        dump_one_he(caseId, cases{i, 2}, cases{i, 3}, cases{i, 4}, outRoot, kmeansSeed);
+        dump_one_he(caseId, cases{i, 2}, cases{i, 3}, cases{i, 4}, outRoot, kmeansSeed, cases{i, 5});
     end
 end
 
 
-function dump_one_he(caseId, heDir, heFile, ppm, outRoot, kmeansSeed)
+function dump_one_he(caseId, heDir, heFile, ppm, outRoot, kmeansSeed, tiffPath)
     outDir = fullfile(outRoot, ['he_' caseId]);
     if ~exist(outDir, 'dir'); mkdir(outDir); end
     IMGpath = fullfile(heDir, heFile);
@@ -112,7 +118,15 @@ function dump_one_he(caseId, heDir, heFile, ppm, outRoot, kmeansSeed)
     meta.class_k1 = class_k1;
     meta.class_k3 = class_k3;
     meta.BDmask_coverage = mean(BDmask(:) > 0);
+    meta.matlab_version = version;
     save(fullfile(outDir, 'meta.mat'), '-struct', 'meta');
+    if ~isempty(tiffPath)
+        tiffDir = fileparts(tiffPath);
+        if ~exist(tiffDir, 'dir'); mkdir(tiffDir); end
+        % BDmask is already uint8(255 * logical). imwrite keeps those values.
+        imwrite(BDmask, tiffPath);
+        fprintf('  imwrite %s\n', tiffPath);
+    end
     fprintf('  saved %s  class(S)=%s class(k2)=%s class(k1)=%s class(k3)=%s coverage=%.4f\n', ...
         outDir, class_S, class_k2, class_k1, class_k3, meta.BDmask_coverage);
 end

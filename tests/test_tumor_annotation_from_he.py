@@ -1,14 +1,15 @@
 """
-Smoke tests for ``tumor_annotation_from_he``.
+Tests for ``tumor_annotation_from_he``.
 
 Pixel-exact MATLAB dumps live in ``test_tumor_annotation_matlab_parity.py``
-(``TMEQ_RUN_MATLAB_PARITY=1``). This file only checks that the public API
-runs on the clone fixtures and that HE2 matches the committed CA_Boundary
-goldens (refreshed from ``BDcreationHE2.m``).
+(``TMEQ_RUN_MATLAB_PARITY=1``). This file checks the public API against the
+committed ``CA_Boundary`` TIFFs: HE2 for patient_001 and RGB k-means
+``imwrite`` masks for patient_001.
 """
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +34,11 @@ ANNOTATION_CASES: tuple[tuple[str, float, str, str], ...] = (
     ("test1", 1.5, "HE_registered_test1", "BDcreationHE_test1results_mask for patient_001.tif.tif"),
     ("test2", 2.0, "HE_registered_test2", "BDcreationHE_test2results_mask for patient_001.tif.tif"),
     ("test3", 3.0, "HE_registered_test3", "BDcreationHE_test3results_mask for patient_001.tif.tif"),
+)
+RGB_ANNOTATION_CASES: tuple[tuple[str, float, str, str], ...] = (
+    ("test1", 1.5, "HE_registered_test1", "BDcreationHE_rgb_kmeans_test1_mask for patient_001.tif.tif"),
+    ("test2", 2.0, "HE_registered_test2", "BDcreationHE_rgb_kmeans_test2_mask for patient_001.tif.tif"),
+    ("test3", 3.0, "HE_registered_test3", "BDcreationHE_rgb_kmeans_test3_mask for patient_001.tif.tif"),
 )
 
 
@@ -76,24 +82,63 @@ def test_tumor_annotation_he2_matches_committed_golden(
     assert n_diff == 0, f"[{case_id}] HE2 vs golden differs in {n_diff} pixels"
 
 
-def test_tumor_annotation_rgb_kmeans_runs() -> None:
-    he_dir, _ = _require_annotation_fixtures(
-        "HE_registered_test2",
-        "BDcreationHE_test2results_mask for patient_001.tif.tif",
-    )
-    params = TumorAnnotationFromHEParameters(
-        HEfilepath=str(he_dir),
-        HEfilename="patient_001.tif",
-        pixelpermicron=2.0,
-        SHGfilepath=str(_SHG_DIR),
+def _assert_saved_tiff_matches_golden(
+    *,
+    he_dir: Path,
+    he_filename: str,
+    pixelpermicron: float,
+    annotation_method: str,
+    golden_path: Path,
+    max_diff: int = 0,
+) -> None:
+    """Run the public API with save_output and compare the uint8 TIFF."""
+    if not (he_dir / he_filename).is_file() or not golden_path.is_file():
+        pytest.skip(f"missing annotation fixture or golden: {he_dir / he_filename} / {golden_path}")
+    golden = np.squeeze(io.imread(str(golden_path)))
+    with tempfile.TemporaryDirectory() as tmp:
+        params = TumorAnnotationFromHEParameters(
+            HEfilepath=str(he_dir),
+            HEfilename=he_filename,
+            pixelpermicron=pixelpermicron,
+            SHGfilepath=tmp,
+            annotation_method=annotation_method,
+        )
+        mask = tumor_annotation_from_he(params, save_output=True, return_debug=False)
+        written = Path(tmp) / "CA_Boundary" / f"mask for {he_filename.replace('HE', 'SHG')}.tif"
+        saved = np.squeeze(io.imread(str(written)))
+    assert saved.dtype == np.uint8
+    assert set(np.unique(saved).tolist()) <= {0, 255}
+    golden_arr = np.asarray(golden)
+    n_diff = int(np.count_nonzero(saved != golden_arr))
+    assert n_diff <= max_diff, f"{annotation_method} TIFF differs in {n_diff} pixels"
+    np.testing.assert_array_equal(mask, saved > 0)
+
+
+@pytest.mark.parametrize(
+    "case_id,pixelpermicron,he_registered_folder,golden_mask_filename",
+    RGB_ANNOTATION_CASES,
+    ids=[c[0] for c in RGB_ANNOTATION_CASES],
+)
+def test_tumor_annotation_rgb_kmeans_matches_matlab_tiff(
+    case_id: str,
+    pixelpermicron: float,
+    he_registered_folder: str,
+    golden_mask_filename: str,
+) -> None:
+    """RGB wrapper and its saved 0/255 TIFF match the MATLAB imwrite golden.
+
+    MATLAB ``kmeans`` is unseeded. These TIFFs were written with
+    ``rng(28, 'twister')``, which is the API default.
+    """
+    he_dir = _FIXTURE_ROOT / "HE" / he_registered_folder
+    _assert_saved_tiff_matches_golden(
+        he_dir=he_dir,
+        he_filename="patient_001.tif",
+        pixelpermicron=pixelpermicron,
         annotation_method="rgb_kmeans",
+        golden_path=_SHG_DIR / "CA_Boundary" / golden_mask_filename,
     )
-    mask, debug = tumor_annotation_from_he(params, save_output=False, return_debug=True)
-    assert mask.dtype == np.bool_
-    assert mask.ndim == 2
-    assert "pixel_labels" in debug
-    assert str(debug["annotation_method"][0]) == "rgb_kmeans"
-    assert debug["BDmask"].dtype == np.uint8
+    assert case_id in {"test1", "test2", "test3"}
 
 
 def test_save_mask_tiff_round_trip_bool_and_uint8(tmp_path: Path) -> None:
@@ -138,8 +183,6 @@ def test_register_then_annotate_end_to_end_smoke() -> None:
     )
     registered = shg_he_registration(reg_params, save_output=False, return_debug=False)
     assert registered.ndim == 3
-
-    import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         he_name = "patient_001_pyreg.tif"

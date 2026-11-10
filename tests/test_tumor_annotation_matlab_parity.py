@@ -6,8 +6,10 @@ Layers (a regression points at one stage):
    ``im2bw``) against ``dumps/annotation_primitives.mat``.
 2. Preprocessing intermediates vs ``dumps/he2_<case>/images.mat`` and
    ``dumps/he_<case>/images.mat``.
-3. Full ``BDmask``: 0 differing pixels on tests 1-3 (HE2 always; HE at
-   ``kmeans_seed=28``).
+3. Full ``BDmask``: 0 differing pixels on tests 1-3. HE2 is deterministic.
+   HE matches only when MATLAB was run with ``rng(28, 'twister')``
+   immediately before ``kmeans``. MATLAB's own ``kmeans`` is unseeded, so
+   an unseeded reference is not expected to match.
 
 Offline MATLAB: ``dump_annotation_primitives.m``, ``dump_bdc_he2.m``,
 ``dump_bdc_he.m``. Enable with::
@@ -168,6 +170,12 @@ def test_he2_bdmask_is_pixel_identical(case_id: str, ppm: float, he_folder: str)
 
 @pytest.mark.parametrize("case_id,ppm,he_folder", HE2_CASES, ids=_IDS)
 def test_he_bdmask_is_pixel_identical_at_seed_28(case_id: str, ppm: float, he_folder: str) -> None:
+    """RGB BDmask matches the dump only at the pinned seed.
+
+    MATLAB ``kmeans`` is unseeded. ``dump_bdc_he.m`` calls
+    ``rng(28, 'twister')`` before ``kmeans``. A dump from any other seed,
+    or from an unseeded session, is not a reference for this test.
+    """
     dump = _DUMPS / f"he_{case_id}" / "images.mat"
     he_path = _FIXTURE_ROOT / "HE" / he_folder / "patient_001.tif"
     _skip_unless_files(dump, he_path)
@@ -188,4 +196,16 @@ def test_he_bdmask_is_pixel_identical_at_seed_28(case_id: str, ppm: float, he_fo
     np.testing.assert_array_equal(_as_bool(dbg["mask_image"]), _as_bool(ml["mask_image"]))
     n_diff = int(np.count_nonzero(dbg["BDmask"] != ml["BDmask"]))
     assert n_diff == 0, f"[{case_id}] HE vs dump BDmask differs in {n_diff} pixels"
-    assert int(np.count_nonzero(_as_bool(mask) != (np.asarray(ml["BDmask"]) > 0))) == 0
+    assert int(np.count_nonzero(_as_bool(mask) != (dbg["BDmask"] > 0))) == 0
+
+    params = TumorAnnotationFromHEParameters(
+        HEfilepath=str(he_path.parent),
+        HEfilename=he_path.name,
+        pixelpermicron=ppm,
+        SHGfilepath=str(_FIXTURE_ROOT / "SHG"),
+        annotation_method="rgb_kmeans",
+        kmeans_seed=seed,
+    )
+    public = tumor_annotation_from_he(params, save_output=False, return_debug=False)
+    n_public = int(np.count_nonzero(_as_bool(public) != (dbg["BDmask"] > 0)))
+    assert n_public == 0, f"[{case_id}] public RGB API differs from annotate_he in {n_public} pixels"
