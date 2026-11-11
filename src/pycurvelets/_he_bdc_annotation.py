@@ -14,8 +14,9 @@ then picks the epithelial cluster. MATLAB ``kmeans`` is unseeded;
 ``kmeans_seed`` replays ``rng(seed, 'twister')``.
 
 Morphology uses Adams ``strel('disk')`` (:func:`pycurvelets._he_bdc_reg1.matlab_strel_disk`),
-not a Euclidean disk. Histogram equalization, ``fspecial('disk')``, symmetric
-``padarray``, and ``im2bw`` live here because registration does not call them.
+not a Euclidean disk. Histogram equalization, ``fspecial('disk')``, and ``im2bw``
+live here because registration does not call them. The RGB path pads with
+``np.pad(..., mode="symmetric")``.
 """
 
 from __future__ import annotations
@@ -114,37 +115,6 @@ def matlab_im2bw(image: np.ndarray, thresh: float) -> np.ndarray:
     if a.dtype == np.bool_:
         return a.copy()
     return matlab_im2double(a) > float(thresh)
-
-
-def matlab_padarray(image: np.ndarray, pad: int | tuple[int, int]) -> np.ndarray:
-    """Translate MATLAB ``padarray(A, [pr pc], 'symmetric')`` into ``np.pad``.
-
-    The body is the NumPy call that matches that MATLAB size:
-    ``np.pad(A, ((pr, pr), (pc, pc)), mode='symmetric')``. ``[1, 2]`` on a
-    4 by 4 image is 6 by 8. ``np.pad(A, (1, 2), mode='symmetric')`` is a
-    different argument: NumPy reads that pair as 1 before and 2 after on
-    every axis, so the same image becomes 7 by 7. A scalar pad agrees in
-    both. Symmetric mode duplicates the edge pixel. This is the only
-    padding ``BDcreationHE`` uses, so there is no mode argument.
-
-    Parameters
-    ----------
-    image : numpy.ndarray
-        2-D array to pad.
-    pad : int or tuple of int
-        ``(row_pad, col_pad)``, or one integer used for both axes.
-
-    Returns
-    -------
-    numpy.ndarray
-        Padded array.
-    """
-    a = np.asarray(image)
-    if isinstance(pad, tuple):
-        pr, pc = int(pad[0]), int(pad[1])
-    else:
-        pr = pc = int(pad)
-    return np.pad(a, ((pr, pr), (pc, pc)), mode="symmetric")
 
 
 def matlab_fspecial_disk(radius: float) -> np.ndarray:
@@ -794,7 +764,8 @@ def annotate_he_kmeans(
     disk = matlab_fspecial_disk(float(matlab_round(HE_RGB_DISK_RADIUS_MULTIPLIER * pix)))
     k3 = np.empty((m, n, 3), dtype=s.dtype)
     for j in range(3):
-        padded = matlab_padarray(s[..., j], HE_RGB_PAD)
+        # padarray(S(:,:,j), [70 70], 'symmetric'): a scalar width pads every side.
+        padded = np.pad(s[..., j], HE_RGB_PAD, mode="symmetric")
         k2 = matlab_histeq(padded)
         k1 = matlab_imfilter_keep_class(k2, disk, boundary="zero")
         k1 = matlab_imfilter_keep_class(k1, disk, boundary="zero")

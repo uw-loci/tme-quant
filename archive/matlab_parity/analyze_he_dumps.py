@@ -29,7 +29,6 @@ from pycurvelets._he_bdc_annotation import (  # noqa: E402
     matlab_fspecial_disk,
     matlab_histeq,
     matlab_im2bw,
-    matlab_padarray,
 )
 from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED, matlab_strel_disk  # noqa: E402
 
@@ -156,7 +155,7 @@ def _load_images(case_dir: Path) -> dict[str, Any]:
 
 
 def analyze_primitives() -> list[dict[str, Any]]:
-    """Compare ``histeq``, disk, strel, ``padarray``, and ``im2bw`` to the probe.
+    """Compare ``histeq``, disk, strel, symmetric ``np.pad``, and ``im2bw`` to the probe.
 
     Returns
     -------
@@ -184,7 +183,7 @@ def analyze_primitives() -> list[dict[str, Any]]:
         py = matlab_strel_disk(r)
         rows.append(_report(key, "bool", py, m[key]))
     if "pad_src" in m:
-        py = matlab_padarray(m["pad_src"], 2)
+        py = np.pad(m["pad_src"], 2, mode="symmetric")
         rows.append(_report("pad_sym", "uint8", py, m["pad_sym"]))
     if "histeq_rand_in" in m:
         py = matlab_histeq(m["histeq_rand_in"])

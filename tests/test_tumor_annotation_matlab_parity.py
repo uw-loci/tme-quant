@@ -2,8 +2,9 @@
 
 Layers (a regression points at one stage):
 
-1. Primitive ports (``histeq``, ``fspecial('disk')``, ``strel``, ``padarray``,
-   ``im2bw``) against ``dumps/annotation_primitives.mat``.
+1. Primitive ports (``histeq``, ``fspecial('disk')``, ``strel``,
+   ``np.pad(..., mode="symmetric")``, ``im2bw``) against
+   ``dumps/annotation_primitives.mat``.
 2. Preprocessing intermediates vs ``dumps/he2_<case>/images.mat`` and
    ``dumps/he_<case>/images.mat``.
 3. Full ``BDmask``: 0 differing pixels on tests 1-3. HE2 is deterministic.
@@ -33,7 +34,6 @@ from pycurvelets._he_bdc_annotation import (
     matlab_fspecial_disk,
     matlab_histeq,
     matlab_im2bw,
-    matlab_padarray,
 )
 from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED, matlab_strel_disk
 from pycurvelets.tumor_annotation_from_HE import (
@@ -90,7 +90,9 @@ def test_primitives_match_matlab_probe() -> None:
     np.testing.assert_allclose(matlab_fspecial_disk(10.5), m["disk_r10p5"], atol=1e-15, rtol=0.0)
     for r in (1, 2, 3, 4, 5, 7, 11):
         np.testing.assert_array_equal(matlab_strel_disk(r), m[f"strel_r{r}"].astype(bool))
-    np.testing.assert_array_equal(matlab_padarray(m["pad_src"], 2), m["pad_sym"])
+    np.testing.assert_array_equal(
+        np.pad(m["pad_src"], 2, mode="symmetric"), m["pad_sym"]
+    )
     np.testing.assert_array_equal(matlab_histeq(m["histeq_rand_in"]), m["histeq_rand_out"])
     np.testing.assert_array_equal(matlab_histeq(m["histeq_u8_in"]), m["histeq_u8_out"])
     np.testing.assert_allclose(

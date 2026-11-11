@@ -10,9 +10,6 @@ without MATLAB dumps. Read a test as the MATLAB call it locks:
 - ``test_histeq_double_default_n64`` — ``histeq`` of a double stays in ``[0, 1]``.
 - ``test_fspecial_disk_is_normalized_odd_kernel`` — ``fspecial('disk')`` is an
   odd kernel that sums to 1.
-- ``test_padarray_symmetric_duplicates_edge`` — ``padarray(A, [pr pc],
-  'symmetric')`` is ``np.pad(A, ((pr, pr), (pc, pc)), mode='symmetric')``.
-  ``np.pad(A, (pr, pc))`` is a different NumPy argument.
 - ``test_im2bw_double_is_strict_greater`` — ``im2bw`` is a strict ``>`` after
   ``im2double``.
 - ``test_strel_disk_r3_is_adams_5x5_not_euclidean`` — ``strel('disk', 3)`` is
@@ -43,7 +40,6 @@ from pycurvelets._he_bdc_annotation import (
     matlab_fspecial_disk,
     matlab_histeq,
     matlab_im2bw,
-    matlab_padarray,
     pick_he_epithelial_cluster,
     prepare_he2_image,
 )
@@ -93,21 +89,6 @@ def test_fspecial_disk_is_normalized_odd_kernel() -> None:
         assert h.ndim == 2 and h.shape[0] == h.shape[1] and h.shape[0] % 2 == 1
         assert h.sum() == pytest.approx(1.0, abs=1e-15)
         assert np.all(h >= -1e-15)
-
-
-def test_padarray_symmetric_duplicates_edge() -> None:
-    """padarray [pr pc] is np.pad(((pr, pr), (pc, pc))); np.pad((pr, pc)) is not."""
-    src = np.arange(1, 17, dtype=np.uint8).reshape(4, 4)
-    out = matlab_padarray(src, 2)
-    assert out.shape == (8, 8) and out.dtype == np.uint8
-    assert out[2, 2] == src[0, 0]
-    np.testing.assert_array_equal(out[1, 2:6], src[0])
-    np.testing.assert_array_equal(out[2:6, 1], src[:, 0])
-    # (1, 2) is one row and two columns on both sides, shape (6, 8).
-    # np.pad(src, (1, 2)) pads before=1 and after=2 on every axis, shape (7, 7).
-    per_axis = matlab_padarray(src, (1, 2))
-    np.testing.assert_array_equal(per_axis, np.pad(src, ((1, 1), (2, 2)), mode="symmetric"))
-    assert per_axis.shape != np.pad(src, (1, 2), mode="symmetric").shape
 
 
 def test_im2bw_double_is_strict_greater() -> None:
