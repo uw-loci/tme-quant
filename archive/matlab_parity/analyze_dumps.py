@@ -52,9 +52,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from pycurvelets._he_bdc_common import (  # noqa: E402
     adjust_rgb_mean_std,
     decorrelation_stretch,
-    matlab_rgb2gray,
     prepare_registration_pair,
 )
+from pycurvelets._matlab_util import matlab_rgb2gray  # noqa: E402
 from pycurvelets._itk_v3_matlab_engine import (  # noqa: E402
     OnePlusOneConfig,
     forward_0based_to_moving_to_fixed_1based,
@@ -336,12 +336,14 @@ def compare_preprocessing(case_id: str, he_dir: Path, he_file: str, shg_dir: Pat
 
     from pycurvelets._he_bdc_common import (
         disk_se,
-        gaussian_filter_matlab_like,
         make_collagen_mask,
         make_nuclei_mask,
+        remove_small_components,
+    )
+    from pycurvelets._matlab_util import (
+        gaussian_filter_matlab_like,
         matlab_graythresh,
         matlab_rgb2hsv,
-        remove_small_components,
     )
 
     dump = DUMPS / case_id

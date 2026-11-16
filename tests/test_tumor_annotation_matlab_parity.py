@@ -28,14 +28,14 @@ import pytest
 import scipy.io as sio
 from skimage import io
 
-from pycurvelets._he_bdc_annotation import (
-    annotate_he_hsv,
-    annotate_he_kmeans,
+from pycurvelets._he_bdc_annotation import annotate_he_hsv, annotate_he_kmeans
+from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED
+from pycurvelets._matlab_util import (
     matlab_fspecial_disk,
     matlab_histeq,
     matlab_im2bw,
+    matlab_strel_disk,
 )
-from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED, matlab_strel_disk
 from pycurvelets.tumor_annotation_from_HE import (
     TumorAnnotationFromHEParameters,
     tumor_annotation_from_he,

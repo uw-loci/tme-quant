@@ -37,9 +37,6 @@ from pycurvelets._he_bdc_annotation import (
     HE2_PPM_CAP,
     annotate_he_hsv,
     annotate_he_kmeans,
-    matlab_fspecial_disk,
-    matlab_histeq,
-    matlab_im2bw,
     pick_he_epithelial_cluster,
     prepare_he2_image,
 )
@@ -49,7 +46,13 @@ from pycurvelets._he_bdc_common import (
     NUCLEI_HUE_MAX,
     NUCLEI_HUE_MIN,
 )
-from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED, matlab_strel_disk
+from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED
+from pycurvelets._matlab_util import (
+    matlab_fspecial_disk,
+    matlab_histeq,
+    matlab_im2bw,
+    matlab_strel_disk,
+)
 from pycurvelets.tumor_annotation_from_HE import TumorAnnotationFromHEParameters
 
 _FIXTURE_ROOT = Path(__file__).resolve().parent / "test_for_shg_he_registration_BDcreation"

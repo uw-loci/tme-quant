@@ -114,7 +114,7 @@ class RegmexResult:
     ``moving_to_fixed_1based_3x3`` is its inverse, i.e. MATLAB's ``tform.A``.
     ``forward_2x3_0based`` is the same forward transform re-expressed in the
     0-based pixel-centre convention used by
-    :func:`pycurvelets._he_bdc_common.matlab_imwarp_bilinear`.
+    :func:`pycurvelets._matlab_util.matlab_imwarp_bilinear`.
 
     Attributes
     ----------
@@ -779,7 +779,7 @@ def register_bdcreation_reg2_matlab(
     -------
     forward_2x3 : np.ndarray
         Forward affine (moving -> fixed) in 0-based pixel-centre convention,
-        ready for :func:`pycurvelets._he_bdc_common.matlab_imwarp_bilinear`
+        ready for :func:`pycurvelets._matlab_util.matlab_imwarp_bilinear`
         via ``_affine_fixed_to_moving_from_forward``.
     debug : dict
         Both stage results (traces, MATLAB-convention ``tform.A`` matrices).

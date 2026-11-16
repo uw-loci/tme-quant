@@ -25,7 +25,7 @@ from skimage import io
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from pycurvelets._he_bdc_common import matlab_rgb2gray
+from pycurvelets._matlab_util import matlab_rgb2gray
 from pycurvelets._registration_quality import (
     compute_registration_quality_metrics,
     make_checkerboard,

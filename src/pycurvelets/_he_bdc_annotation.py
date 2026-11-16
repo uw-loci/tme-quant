@@ -1,7 +1,8 @@
-"""MATLAB-exact primitives for ``BDcreationHE2.m`` and ``BDcreationHE.m``.
+"""HSV and RGB k-means tumor annotation (``BDcreationHE2.m`` / ``BDcreationHE.m``).
 
 Registration helpers stay in :mod:`pycurvelets._he_bdc_common` and
-:mod:`pycurvelets._he_bdc_reg1`. This module is annotation-only.
+:mod:`pycurvelets._he_bdc_reg1`. MATLAB Image Processing Toolbox ports live in
+:mod:`pycurvelets._matlab_util`. This module is the annotation pipeline only.
 
 ``annotate_he_hsv`` is the HSV path (``BDcreationHE2.m``). It caps the working
 resolution at 2 px/um with scalar ``imresize`` (``ceil``), builds nuclei and
@@ -13,10 +14,9 @@ the original grid.
 then picks the epithelial cluster. MATLAB ``kmeans`` is unseeded;
 ``kmeans_seed`` replays ``rng(seed, 'twister')``.
 
-Morphology uses Adams ``strel('disk')`` (:func:`pycurvelets._he_bdc_reg1.matlab_strel_disk`),
-not a Euclidean disk. Histogram equalization, ``fspecial('disk')``, and ``im2bw``
-live here because registration does not call them. The RGB path pads with
-``np.pad(..., mode="symmetric")``.
+Morphology uses Adams ``strel('disk')``
+(:func:`pycurvelets._matlab_util.matlab_strel_disk`), not a Euclidean disk.
+The RGB path pads with ``np.pad(..., mode="symmetric")``.
 """
 
 from __future__ import annotations
@@ -35,23 +35,26 @@ from ._he_bdc_common import (
     NUCLEI_MIN_AREA,
     adjust_rgb_mean_std,
     ensure_rgb,
-    gaussian_filter_matlab_like,
-    matlab_graythresh,
-    matlab_imfilter,
-    matlab_rgb2gray,
-    matlab_rgb2hsv,
-    matlab_round,
     remove_small_components,
 )
-from ._he_bdc_reg1 import (
-    DEFAULT_KMEANS_SEED,
+from ._he_bdc_reg1 import DEFAULT_KMEANS_SEED
+from ._matlab_util import (
+    gaussian_filter_matlab_like,
     matlab_decorrstretch_uint8,
-    matlab_imhist_counts,
+    matlab_fspecial_disk,
+    matlab_graythresh,
+    matlab_histeq,
+    matlab_im2bw,
+    matlab_im2double,
+    matlab_imfilter_keep_class,
+    matlab_imresize,
     matlab_kmeans,
+    matlab_rgb2gray,
     matlab_rgb2gray_uint8,
+    matlab_rgb2hsv,
+    matlab_round,
     matlab_strel_disk,
 )
-from ._matlab_imresize import matlab_imresize
 
 # BDcreationHE2.m morphology heuristics (working ppm).
 EPITH_BINARY_THRESHOLD = 0.001
@@ -70,281 +73,6 @@ HE_RGB_EPITH_DILATION_MULTIPLIER = 4.0
 
 # Working-resolution cap in BDcreationHE2.m (not used by BDcreationHE.m).
 HE2_PPM_CAP = 2.0
-
-
-def matlab_im2double(image: np.ndarray) -> np.ndarray:
-    """Scale an image to ``[0, 1]`` the way MATLAB ``im2double`` does.
-
-    Parameters
-    ----------
-    image : numpy.ndarray
-        uint8, uint16, bool, or float image.
-
-    Returns
-    -------
-    numpy.ndarray
-        Float64 image. uint8 is divided by 255, uint16 by 65535. Float input
-        is not rescaled.
-    """
-    a = np.asarray(image)
-    if a.dtype == np.uint8:
-        return a.astype(np.float64) / 255.0
-    if a.dtype == np.uint16:
-        return a.astype(np.float64) / 65535.0
-    if a.dtype == np.bool_:
-        return a.astype(np.float64)
-    return np.asarray(a, dtype=np.float64)
-
-
-def matlab_im2bw(image: np.ndarray, thresh: float) -> np.ndarray:
-    """Threshold an image the way ``im2bw(I, level)`` does.
-
-    Parameters
-    ----------
-    image : numpy.ndarray
-        Image to threshold. A boolean image is copied.
-    thresh : float
-        Level in ``[0, 1]`` after ``im2double``.
-
-    Returns
-    -------
-    numpy.ndarray
-        Boolean mask, true where the scaled image is strictly above ``thresh``.
-    """
-    a = np.asarray(image)
-    if a.dtype == np.bool_:
-        return a.copy()
-    return matlab_im2double(a) > float(thresh)
-
-
-def matlab_fspecial_disk(radius: float) -> np.ndarray:
-    """Circular averaging kernel matching ``fspecial('disk', radius)``.
-
-    Parameters
-    ----------
-    radius : float
-        Disk radius in pixels. Must be greater than 0.
-
-    Returns
-    -------
-    numpy.ndarray
-        Kernel that sums to 1.
-
-    Raises
-    ------
-    ValueError
-        If ``radius`` is not positive.
-    RuntimeError
-        If the kernel sums to zero.
-    """
-    rad = float(radius)
-    if rad <= 0:
-        raise ValueError(f"disk radius must be > 0, got {rad}")
-    crad = int(np.ceil(rad - 0.5))
-    yy, xx = np.meshgrid(
-        np.arange(-crad, crad + 1, dtype=np.float64),
-        np.arange(-crad, crad + 1, dtype=np.float64),
-        indexing="ij",
-    )
-    maxxy = np.maximum(np.abs(xx), np.abs(yy))
-    minxy = np.minimum(np.abs(xx), np.abs(yy))
-    rad2 = rad * rad
-    max_p = maxxy + 0.5
-    max_m = maxxy - 0.5
-    min_p = minxy + 0.5
-    min_m = minxy - 0.5
-    m1 = np.where(
-        rad2 < max_p**2 + min_m**2,
-        min_m,
-        np.sqrt(np.maximum(rad2 - max_p**2, 0.0)),
-    )
-    m2 = np.where(
-        rad2 > max_m**2 + min_p**2,
-        min_p,
-        np.sqrt(np.maximum(rad2 - max_m**2, 0.0)),
-    )
-    # asin domain; float noise can push m/rad slightly outside [-1, 1].
-    a1 = np.arcsin(np.clip(m1 / rad, -1.0, 1.0))
-    a2 = np.arcsin(np.clip(m2 / rad, -1.0, 1.0))
-    ring = (
-        (rad2 < max_p**2 + min_p**2) & (rad2 > max_m**2 + min_m**2)
-    ) | ((minxy == 0) & (max_m < rad) & (max_p >= rad))
-    sgrid = (
-        rad2 * (0.5 * (a2 - a1) + 0.25 * (np.sin(2.0 * a2) - np.sin(2.0 * a1)))
-        - max_m * (m2 - m1)
-        + (m1 - minxy + 0.5)
-    ) * ring
-    sgrid = sgrid + ((max_p**2 + min_p**2) < rad2)
-    sgrid[crad, crad] = min(np.pi * rad2, np.pi / 2.0)
-    if crad > 0 and rad > (crad - 0.5) and rad2 < (crad - 0.5) ** 2 + 0.25:
-        m1s = np.sqrt(rad2 - (crad - 0.5) ** 2)
-        m1n = m1s / rad
-        sg0 = 2.0 * (rad2 * (0.5 * np.arcsin(m1n) + 0.25 * np.sin(2.0 * np.arcsin(m1n))) - m1s * (crad - 0.5))
-        sgrid[2 * crad, crad] = sg0
-        sgrid[crad, 2 * crad] = sg0
-        sgrid[crad, 0] = sg0
-        sgrid[0, crad] = sg0
-        sgrid[2 * crad - 1, crad] = sgrid[2 * crad - 1, crad] - sg0
-        sgrid[crad, 2 * crad - 1] = sgrid[crad, 2 * crad - 1] - sg0
-        sgrid[crad, 1] = sgrid[crad, 1] - sg0
-        sgrid[1, crad] = sgrid[1, crad] - sg0
-    sgrid[crad, crad] = min(float(sgrid[crad, crad]), 1.0)
-    total = float(sgrid.sum())
-    if total == 0.0:
-        raise RuntimeError("fspecial('disk') kernel summed to 0")
-    return sgrid / total
-
-
-def _histeq_transform(counts: np.ndarray, hgram: np.ndarray, n_pixels: int) -> np.ndarray:
-    """Build the intensity map used inside MATLAB ``histeq``.
-
-    Parameters
-    ----------
-    counts : numpy.ndarray
-        Input histogram.
-    hgram : numpy.ndarray
-        Desired histogram. Its length is the number of output levels.
-    n_pixels : int
-        Number of pixels. Used as the error sentinels in ``histeq.m``.
-
-    Returns
-    -------
-    numpy.ndarray
-        Lookup values in ``[0, 1]``, one per input bin.
-    """
-    nn = np.asarray(counts, dtype=np.float64).ravel()
-    desired = np.asarray(hgram, dtype=np.float64).ravel()
-    m = desired.size
-    cum = np.cumsum(nn)
-    cumd = np.cumsum(desired)
-    # nn with first and last bins zeroed, then /2 (histeq.m ``tol``).
-    tol = nn.copy()
-    tol[0] = 0.0
-    tol[-1] = 0.0
-    tol *= 0.5
-    err = cumd[:, None] - cum[None, :] + tol[None, :]
-    thresh = -float(n_pixels) * np.sqrt(np.finfo(np.float64).eps)
-    err = np.where(err < thresh, float(n_pixels), err)
-    t_idx = np.argmin(err, axis=0)
-    return t_idx.astype(np.float64) / (m - 1)
-
-
-def matlab_grayxform(image: np.ndarray, transform: np.ndarray) -> np.ndarray:
-    """Apply a lookup table the way MATLAB ``grayxform`` does.
-
-    ``transform`` holds values in ``[0, 1]``. A uint8 image with a 256-entry
-    table maps ``floor(255 * T(I) + 0.5)``. A double image indexes
-    ``floor(I * (N - 1) + 0.5)`` and clamps values outside ``[0, 1]`` to the
-    end bins.
-
-    Parameters
-    ----------
-    image : numpy.ndarray
-        uint8 or double image.
-    transform : numpy.ndarray
-        Lookup table. At least two entries.
-
-    Returns
-    -------
-    numpy.ndarray
-        Mapped image. uint8 in, uint8 out. Double in, double out.
-
-    Raises
-    ------
-    ValueError
-        If ``transform`` has fewer than two entries.
-    """
-    t = np.asarray(transform, dtype=np.float64).ravel()
-    if t.size < 2:
-        raise ValueError("grayxform transform must have at least 2 entries")
-    a = np.asarray(image)
-    n_levels = t.size - 1
-    if a.dtype == np.uint8:
-        if n_levels == 255:
-            mapped = 255.0 * t[a.astype(np.int64)] + 0.5
-            return np.clip(np.floor(mapped), 0, 255).astype(np.uint8)
-        scale = n_levels / 255.0
-        index = np.floor(scale * a.astype(np.float64) + 0.5).astype(np.int64)
-        index = np.clip(index, 0, n_levels)
-        mapped = 255.0 * t[index] + 0.5
-        return np.clip(np.floor(mapped), 0, 255).astype(np.uint8)
-    x = a.astype(np.float64)
-    idx = np.empty(x.shape, dtype=np.int64)
-    inside = (x >= 0.0) & (x <= 1.0)
-    idx[inside] = np.floor(x[inside] * n_levels + 0.5).astype(np.int64)
-    idx[x > 1.0] = n_levels
-    idx[x < 0.0] = 0
-    idx = np.clip(idx, 0, n_levels)
-    return t[idx]
-
-
-def matlab_histeq(image: np.ndarray, n_levels: int = 64) -> np.ndarray:
-    """Histogram-equalize an image the way MATLAB ``histeq`` does.
-
-    MATLAB's default is 64 output levels for every class, including uint8.
-    ``BDcreationHE.m`` calls ``histeq`` with that default. The input histogram
-    always uses 256 bins. The output keeps the input class.
-
-    Parameters
-    ----------
-    image : numpy.ndarray
-        uint8 or double image.
-    n_levels : int, optional
-        Output levels. Default is 64. Must be at least 2.
-
-    Returns
-    -------
-    numpy.ndarray
-        Equalized image, same dtype as ``image``.
-
-    Raises
-    ------
-    ValueError
-        If ``n_levels`` is less than 2.
-    """
-    a = np.asarray(image)
-    npts = 256
-    m = int(n_levels)
-    if m < 2:
-        raise ValueError(f"histeq N must be >= 2, got {m}")
-    counts = matlab_imhist_counts(a, npts)
-    hgram = np.full(m, a.size / m, dtype=np.float64)
-    transform = _histeq_transform(counts, hgram, a.size)
-    return matlab_grayxform(a, transform)
-
-
-def matlab_imfilter_keep_class(
-    image: np.ndarray,
-    kernel: np.ndarray,
-    *,
-    boundary: str = "zero",
-) -> np.ndarray:
-    """Filter an image and return the same numeric class.
-
-    The filter runs in double precision. Integer results are rounded half
-    away from zero and clipped to the dtype range.
-
-    Parameters
-    ----------
-    image : numpy.ndarray
-        uint8, uint16, or double image.
-    kernel : numpy.ndarray
-        Convolution kernel.
-    boundary : {'zero', 'replicate', 'symmetric'}, optional
-        How ``imfilter`` fills the border. Default is ``'zero'``.
-
-    Returns
-    -------
-    numpy.ndarray
-        Filtered image, same dtype as ``image``.
-    """
-    a = np.asarray(image)
-    out = matlab_imfilter(a.astype(np.float64), kernel, boundary=boundary)
-    if a.dtype == np.uint8:
-        return np.clip(np.floor(out + 0.5), 0, 255).astype(np.uint8)
-    if a.dtype == np.uint16:
-        return np.clip(np.floor(out + 0.5), 0, 65535).astype(np.uint16)
-    return out.astype(np.float64)
 
 
 def _disk_nhood(radius: float, *, how: str) -> np.ndarray:

@@ -24,8 +24,8 @@ from pycurvelets._he_bdc_common import (
     RGB_NUCLEI_R_MAX,
     rgb_threshold_masks_uint8,
 )
-from pycurvelets._he_bdc_reg1 import (
-    DEFAULT_KMEANS_SEED,
+from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED
+from pycurvelets._matlab_util import (
     matlab_im2uint8,
     matlab_srgb2lab_uint8,
     matlab_strel_disk,

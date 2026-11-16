@@ -23,14 +23,14 @@ from skimage import io
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from pycurvelets._he_bdc_annotation import (  # noqa: E402
-    annotate_he_hsv,
-    annotate_he_kmeans,
+from pycurvelets._he_bdc_annotation import annotate_he_hsv, annotate_he_kmeans  # noqa: E402
+from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED  # noqa: E402
+from pycurvelets._matlab_util import (  # noqa: E402
     matlab_fspecial_disk,
     matlab_histeq,
     matlab_im2bw,
+    matlab_strel_disk,
 )
-from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED, matlab_strel_disk  # noqa: E402
 
 DUMPS = Path(__file__).resolve().parent / "dumps"
 FIXTURE = ROOT / "tests" / "test_for_shg_he_registration_BDcreation"

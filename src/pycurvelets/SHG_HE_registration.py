@@ -10,9 +10,10 @@ Two MATLAB pipelines are available through ``pipeline``:
   ``decorrstretch`` + fixed RGB cuts + CIELAB k-means for the eosin/collagen
   moving image (continuous grey levels), output warped on the SHG grid. Ported
   exactly in :mod:`pycurvelets._he_bdc_reg1`, including a bit-exact replay of
-  MATLAB's ``kmeans`` (which ``BDcreation_reg.m`` leaves *unseeded*, so MATLAB
-  itself is not deterministic here; ``kmeans_seed`` selects the k-means optimum,
-  and the default reproduces the reference goldens).
+  MATLAB's ``kmeans`` (:func:`pycurvelets._matlab_util.matlab_kmeans`).
+  ``BDcreation_reg.m`` leaves ``kmeans`` *unseeded*, so MATLAB itself is not
+  deterministic here; ``kmeans_seed`` selects the k-means optimum, and the
+  default reproduces the reference goldens.
 
 Registration is the ITK v3 (1+1)-ES port of MATLAB ``imregtform``:
 
@@ -24,7 +25,8 @@ Registration is the ITK v3 (1+1)-ES port of MATLAB ``imregtform``:
    scales, centre, seed (12345) and per-level radius/epsilon refiner, run
    through the ``itk`` package (no MATLAB involved). Stage 1 similarity, stage
    2 affine initialised from it. See :mod:`pycurvelets._itk_v3_matlab_engine`.
-3. Warp the raw HE RGB onto the SHG grid via :func:`matlab_imwarp_bilinear`,
+3. Warp the raw HE RGB onto the SHG grid via
+   :func:`pycurvelets._matlab_util.matlab_imwarp_bilinear`,
    which matches MATLAB ``imref2d`` + ``imwarp`` conventions (pixel-centre
    sampling, pixel-centre inside test, no fill blending, ``FillValues=255``).
 
@@ -55,19 +57,21 @@ from ._he_bdc_common import (
     adjust_rgb_mean_std,
     decorrelation_stretch,
     disk_se,
-    gaussian_filter_matlab_like,
     make_collagen_mask,
     make_ecm_mask_rgb,
     make_nuclei_mask,
     make_nuclei_mask_rgb,
-    matlab_imwarp_bilinear,
-    matlab_rgb2gray,
     prepare_registration_pair,
     remove_small_components,
     resize_like,
 )
 from ._he_bdc_reg1 import DEFAULT_KMEANS_SEED, bdcreation_reg1_preprocess
-from ._matlab_imresize import matlab_imresize
+from ._matlab_util import (
+    gaussian_filter_matlab_like,
+    matlab_imresize,
+    matlab_imwarp_bilinear,
+    matlab_rgb2gray,
+)
 from ._registration_quality import compute_shg_alignment_metrics
 
 

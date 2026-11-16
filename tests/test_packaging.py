@@ -24,7 +24,7 @@ _WHEEL_REGISTRATION_MODULES = (
     "_he_bdc_common.py",
     "_he_bdc_reg1.py",
     "_itk_v3_matlab_engine.py",
-    "_matlab_imresize.py",
+    "_matlab_util.py",
     "_registration_quality.py",
 )
 _WHEEL_ANNOTATION_MODULES = (

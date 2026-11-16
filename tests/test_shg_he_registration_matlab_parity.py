@@ -34,19 +34,19 @@ import pytest
 import scipy.io as sio
 from skimage import io
 
-from pycurvelets._he_bdc_common import (
-    adjust_rgb_mean_std,
+from pycurvelets._he_bdc_common import adjust_rgb_mean_std, prepare_registration_pair
+from pycurvelets._itk_v3_matlab_engine import (
+    DEFAULT_SEED,
+    matlab_T_to_A,
+    register_bdcreation_reg2_matlab,
+)
+from pycurvelets._matlab_util import (
     matlab_fspecial_gaussian,
     matlab_graythresh,
     matlab_imfilter,
     matlab_imwarp_bilinear,
     matlab_rgb2gray,
-    prepare_registration_pair,
-)
-from pycurvelets._itk_v3_matlab_engine import (
-    DEFAULT_SEED,
-    matlab_T_to_A,
-    register_bdcreation_reg2_matlab,
+    matlab_rgb2hsv,
 )
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
@@ -119,8 +119,6 @@ def test_graythresh_matches_matlab_dumped_saturation_threshold() -> None:
     _skip_unless_files(mat, _FIXTURE_ROOT / "HE" / "patient_001.tif", _FIXTURE_ROOT / "SHG" / "patient_001.tif")
     he, shg = _load_inputs(_FIXTURE_ROOT / "HE", "patient_001.tif", _FIXTURE_ROOT / "SHG")
     he_scaled, _fixed, _pix = prepare_registration_pair(he, shg, 1.5)
-    from pycurvelets._he_bdc_common import matlab_rgb2hsv
-
     hsv = matlab_rgb2hsv(adjust_rgb_mean_std(he_scaled))
     # Value captured from MATLAB's dump_bdc_reg2 run (0.0902 == 23/255).
     assert matlab_graythresh(hsv[..., 1]) == pytest.approx(23 / 255, abs=1e-12)
