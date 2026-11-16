@@ -7,6 +7,7 @@ verifying that fiber features are computed correctly.
 
 import json
 import os
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
@@ -32,7 +33,11 @@ if os.environ.get("TMEQ_RUN_CURVELETS") != "1":
 
 # Optional: attempt import; skip module if curvelet backend is missing
 try:
-    from pycurvelets.process_image import process_image, generate_overlay
+    from pycurvelets.process_image import (
+        generate_overlay,
+        process_image,
+        process_image_to_files,
+    )
 except ModuleNotFoundError:
     pytest.skip(
         "curvelops not available; skipping process_image tests", allow_module_level=True
@@ -219,6 +224,9 @@ def test_process_image_returns_fiber_features(test_name, test_case, tmp_path):
     # Check that results were returned
     assert results is not None, "process_image should return results"
     assert "fib_feat_df" in results, "results should contain fib_feat_df"
+    assert isinstance(results.get("images"), dict), "results should contain image arrays"
+    assert all(isinstance(image, np.ndarray) for image in results["images"].values())
+    assert not list(tmp_path.glob("*.tif*")), "process_image should not write image files"
 
     fib_feat_df = results["fib_feat_df"]
 
@@ -463,6 +471,30 @@ def test_generate_overlay(test_name, test_case, tmp_path, monkeypatch):
             msg_lines.append(f"  x={cap['x']}, y={cap['y']}")
 
         pytest.fail("\n".join(msg_lines))
+
+
+def test_process_image_to_files_saves_returned_images(tmp_path, monkeypatch):
+    from pycurvelets import process_image as process_image_module
+
+    images = {
+        "overlay": np.zeros((2, 3, 3), dtype=np.uint8),
+        "heatmap": np.zeros((2, 3, 3), dtype=np.uint8),
+        "reconstruction": np.zeros((2, 3), dtype=np.float32),
+    }
+    monkeypatch.setattr(
+        process_image_module,
+        "process_image",
+        lambda **kwargs: {"image_name": "sample", "images": images},
+    )
+
+    result = process_image_to_files(
+        image_params=ImageInputParameters(img=np.zeros((2, 3)), img_name="sample"),
+        fiber_params=FiberAnalysisParameters(),
+        output_params=OutputControlParameters(output_directory=str(tmp_path)),
+    )
+
+    assert result["image_paths"].keys() == images.keys()
+    assert all(Path(path).is_file() for path in result["image_paths"].values())
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@
 
 3. **Download CurveLab** (required; cannot be redistributed)
    - https://curvelet.org/download.php
-   - Extract to `../utils/` relative to tme-quant (e.g. `../utils/CurveLab-2.1.3`)
+   - Extract it into `utils/` inside this repository (e.g. `tme-quant/utils/CurveLab-2.1.3`)
 
 ## Install
 
@@ -23,7 +23,9 @@
 bash bin/install.sh
 ```
 
-The script checks for uv, downloads FFTW, detects CurveLab in `../utils`, builds both, syncs the env with `curvelops` and segmentation extras, and verifies.
+The script resolves paths from its own location, so it can be launched from any working directory. It creates `utils/` inside this repository, downloads FFTW there, detects and builds CurveLab there, syncs the environment, and verifies the installation.
+
+The native Windows path is not verified end to end: building the `curvelops` Python extension requires MSVC (`cl.exe`), while the FFTW and CurveLab build steps use GNU tools. Their libraries must also be compatible with MSVC. WSL2 is the supported Windows route; build all dependencies inside WSL rather than reusing Windows-built libraries.
 
 ## Run
 
@@ -36,11 +38,10 @@ uv run napari
 ## Directory layout
 
 ```
-parent/
-├── tme-quant/          # This repo
+tme-quant/
 └── utils/
-    ├── fftw-2.1.5/     # Created by install.sh
-    └── CurveLab-2.1.3/ # You must download and extract here
+   ├── fftw-2.1.5/     # Created by install.sh
+   └── CurveLab-2.1.3/ # You must download and extract here
 ```
 
 ## Without curvelops
