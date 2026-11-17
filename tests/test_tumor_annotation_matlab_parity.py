@@ -31,10 +31,10 @@ from skimage import io
 from pycurvelets._he_bdc_annotation import annotate_he_hsv, annotate_he_kmeans
 from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED
 from pycurvelets._matlab_util import (
-    matlab_fspecial_disk,
-    matlab_histeq,
-    matlab_im2bw,
-    matlab_strel_disk,
+    fspecial_disk,
+    histeq,
+    im2bw,
+    strel_disk,
 )
 from pycurvelets.tumor_annotation_from_HE import (
     TumorAnnotationFromHEParameters,
@@ -85,24 +85,24 @@ def test_primitives_match_matlab_probe() -> None:
     m = _loadmat(mat)
     for r in (1, 2, 3, 4, 5, 7, 11, 14, 21):
         np.testing.assert_allclose(
-            matlab_fspecial_disk(float(r)), m[f"disk_r{r}"], atol=1e-15, rtol=0.0
+            fspecial_disk(float(r)), m[f"disk_r{r}"], atol=1e-15, rtol=0.0
         )
-    np.testing.assert_allclose(matlab_fspecial_disk(10.5), m["disk_r10p5"], atol=1e-15, rtol=0.0)
+    np.testing.assert_allclose(fspecial_disk(10.5), m["disk_r10p5"], atol=1e-15, rtol=0.0)
     for r in (1, 2, 3, 4, 5, 7, 11):
-        np.testing.assert_array_equal(matlab_strel_disk(r), m[f"strel_r{r}"].astype(bool))
+        np.testing.assert_array_equal(strel_disk(r), m[f"strel_r{r}"].astype(bool))
     np.testing.assert_array_equal(
         np.pad(m["pad_src"], 2, mode="symmetric"), m["pad_sym"]
     )
-    np.testing.assert_array_equal(matlab_histeq(m["histeq_rand_in"]), m["histeq_rand_out"])
-    np.testing.assert_array_equal(matlab_histeq(m["histeq_u8_in"]), m["histeq_u8_out"])
+    np.testing.assert_array_equal(histeq(m["histeq_rand_in"]), m["histeq_rand_out"])
+    np.testing.assert_array_equal(histeq(m["histeq_u8_in"]), m["histeq_u8_out"])
     np.testing.assert_allclose(
-        matlab_histeq(np.asarray(m["histeq_dbl_in"], dtype=np.float64)),
+        histeq(np.asarray(m["histeq_dbl_in"], dtype=np.float64)),
         np.asarray(m["histeq_dbl_out"], dtype=np.float64),
         atol=1e-15,
         rtol=0.0,
     )
     np.testing.assert_array_equal(
-        matlab_im2bw(np.asarray(m["im2bw_in"], dtype=np.float64), 0.5),
+        im2bw(np.asarray(m["im2bw_in"], dtype=np.float64), 0.5),
         _as_bool(m["im2bw_out"]),
     )
 

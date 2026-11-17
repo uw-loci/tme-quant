@@ -15,7 +15,7 @@ then picks the epithelial cluster. MATLAB ``kmeans`` is unseeded;
 ``kmeans_seed`` replays ``rng(seed, 'twister')``.
 
 Morphology uses Adams ``strel('disk')``
-(:func:`pycurvelets._matlab_util.matlab_strel_disk`), not a Euclidean disk.
+(:func:`pycurvelets._matlab_util.strel_disk`), not a Euclidean disk.
 The RGB path pads with ``np.pad(..., mode="symmetric")``.
 """
 
@@ -39,21 +39,21 @@ from ._he_bdc_common import (
 )
 from ._he_bdc_reg1 import DEFAULT_KMEANS_SEED
 from ._matlab_util import (
-    gaussian_filter_matlab_like,
-    matlab_decorrstretch_uint8,
-    matlab_fspecial_disk,
-    matlab_graythresh,
-    matlab_histeq,
-    matlab_im2bw,
-    matlab_im2double,
-    matlab_imfilter_keep_class,
-    matlab_imresize,
-    matlab_kmeans,
-    matlab_rgb2gray,
-    matlab_rgb2gray_uint8,
-    matlab_rgb2hsv,
-    matlab_round,
-    matlab_strel_disk,
+    decorrstretch_uint8,
+    fspecial_disk,
+    gaussian_filter,
+    graythresh,
+    histeq,
+    im2bw,
+    im2double,
+    imfilter_keep_class,
+    imresize,
+    kmeans,
+    rgb2gray,
+    rgb2gray_uint8,
+    rgb2hsv,
+    round,
+    strel_disk,
 )
 
 # BDcreationHE2.m morphology heuristics (working ppm).
@@ -98,10 +98,10 @@ def _disk_nhood(radius: float, *, how: str) -> np.ndarray:
     if how == "ceil":
         r = int(np.ceil(radius))
     elif how == "round":
-        r = int(matlab_round(radius))
+        r = int(round(radius))
     else:
         raise ValueError(f"how must be 'ceil' or 'round', got {how!r}")
-    return matlab_strel_disk(max(r, 0))
+    return strel_disk(max(r, 0))
 
 
 def _imdilate(mask: np.ndarray, nhood: np.ndarray) -> np.ndarray:
@@ -182,7 +182,7 @@ def prepare_he2_image(he: np.ndarray, pixel_per_micron: float) -> tuple[np.ndarr
     he_rgb = ensure_rgb(he)
     pix = float(pixel_per_micron)
     if pix > HE2_PPM_CAP:
-        he_rgb = matlab_imresize(he_rgb, scalar_scale=HE2_PPM_CAP / pix, method="bicubic")
+        he_rgb = imresize(he_rgb, scalar_scale=HE2_PPM_CAP / pix, method="bicubic")
         pix = HE2_PPM_CAP
     return he_rgb, pix
 
@@ -204,8 +204,8 @@ def he2_nuclei_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.nda
     masked : numpy.ndarray
         H&E with non-nuclei pixels set to 0.
     """
-    hsv = matlab_rgb2hsv(he_adjusted)
-    sat_thresh = matlab_graythresh(hsv[..., 1])
+    hsv = rgb2hsv(he_adjusted)
+    sat_thresh = graythresh(hsv[..., 1])
     bw = (
         (hsv[..., 0] >= NUCLEI_HUE_MIN)
         & (hsv[..., 0] <= NUCLEI_HUE_MAX)
@@ -240,8 +240,8 @@ def he2_collagen_mask(he_adjusted: np.ndarray, pix_per_mic: float) -> tuple[np.n
     sat_thresh : float
         Otsu threshold on the saturation channel.
     """
-    hsv = matlab_rgb2hsv(he_adjusted)
-    sat_thresh = matlab_graythresh(hsv[..., 1])
+    hsv = rgb2hsv(he_adjusted)
+    sat_thresh = graythresh(hsv[..., 1])
     collagen = (
         ((hsv[..., 0] >= COLLAGEN_HUE_MIN) | (hsv[..., 0] <= COLLAGEN_HUE_MAX))
         & (hsv[..., 1] >= sat_thresh)
@@ -282,8 +282,8 @@ def _he2_epithelial_morphology(
     """
     opened = _imdilate(epith_cell_bw, _disk_nhood(EPITH_DILATION_RADIUS_MULTIPLIER * pix_per_mic, how="round"))
     bwx = ndimage.binary_fill_holes(opened)
-    hole_area = int(matlab_round((BACKGROUND_HOLE_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2))
-    tumor_area = int(matlab_round((TUMOR_MASK_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2))
+    hole_area = int(round((BACKGROUND_HOLE_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2))
+    tumor_area = int(round((TUMOR_MASK_MIN_AREA_MULTIPLIER * pix_per_mic) ** 2))
     bwy = remove_small_components(~bwx, hole_area)
     mask_image = remove_small_components(~bwy, tumor_area)
     mask_image1 = _imdilate(
@@ -321,25 +321,25 @@ def annotate_he_hsv(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarr
         ``pixpermic_working`` (the capped resolution).
     """
     orig_row, orig_col = int(he_raw.shape[0]), int(he_raw.shape[1])
-    he_data, pix = prepare_he2_image(matlab_im2double(he_raw), float(pixelpermicron))
+    he_data, pix = prepare_he2_image(im2double(he_raw), float(pixelpermicron))
     he_adjusted = adjust_rgb_mean_std(he_data)
     bw_nuclei, maskednuclei = he2_nuclei_mask(he_adjusted, pix)
     bw_collagen1, bw_nobackground, sat_thresh = he2_collagen_mask(he_adjusted, pix)
     epith_cell_bw = (
-        matlab_im2bw(matlab_rgb2gray(maskednuclei), EPITH_BINARY_THRESHOLD)
+        im2bw(rgb2gray(maskednuclei), EPITH_BINARY_THRESHOLD)
         & (~bw_collagen1)
         & bw_nobackground
     )
     bwx, mask_image1 = _he2_epithelial_morphology(epith_cell_bw, bw_collagen1, pix)
-    smoothed = gaussian_filter_matlab_like(
+    smoothed = gaussian_filter(
         mask_image1.astype(np.float64),
         sigma=FINAL_MASK_GAUSSIAN_SIGMA,
         kernel_size=FINAL_MASK_GAUSSIAN_KERNEL_SIZE,
         boundary="replicate",
     )
-    mask_temp = matlab_imresize(smoothed, output_shape=(orig_row, orig_col), method="bicubic")
-    mask_thresh = matlab_graythresh(mask_temp)
-    bd_mask = matlab_im2bw(mask_temp, mask_thresh)
+    mask_temp = imresize(smoothed, output_shape=(orig_row, orig_col), method="bicubic")
+    mask_thresh = graythresh(mask_temp)
+    bd_mask = im2bw(mask_temp, mask_thresh)
     debug: dict[str, Any] = {
         "annotation_method": np.array(["hsv"]),
         "he_adjusted": he_adjusted,
@@ -360,8 +360,10 @@ def annotate_he_hsv(he_raw: np.ndarray, pixelpermicron: float) -> tuple[np.ndarr
     return bd_mask.astype(bool), debug
 
 
-def _matlab_argsort_asc(x: np.ndarray) -> np.ndarray:
-    """Stable ascending argsort with NaNs last, matching MATLAB ``sort``.
+def _argsort_asc(x: np.ndarray) -> np.ndarray:
+    """Migrated from MATLAB ``sort``.
+
+    Stable ascending argsort with NaNs last, matching MATLAB ``sort``.
 
     Parameters
     ----------
@@ -402,14 +404,14 @@ def pick_he_epithelial_cluster(
     """
     n = int(cluster_center.shape[0])
     mean_cluster_value = np.mean(np.asarray(cluster_center, dtype=np.float64), axis=1)
-    idx = _matlab_argsort_asc(mean_cluster_value)
-    idx1 = _matlab_argsort_asc(mean_cluster_intensity)
+    idx = _argsort_asc(mean_cluster_value)
+    idx1 = _argsort_asc(mean_cluster_intensity)
     cluster_val = np.empty(n, dtype=np.float64)
     for k in range(n):
         rank_c = int(np.flatnonzero(idx == k)[0]) + 1
         rank_i = int(np.flatnonzero(idx1 == k)[0]) + 1
         cluster_val[k] = float(rank_c * rank_i)
-    idx2 = _matlab_argsort_asc(cluster_val)
+    idx2 = _argsort_asc(cluster_val)
     return int(idx2[0])
 
 
@@ -427,10 +429,10 @@ def _mean_nonzero_gray(segmented: np.ndarray) -> float:
         Mean of nonzero gray values, or NaN when every pixel is zero.
     """
     if segmented.dtype == np.uint8:
-        gray = matlab_rgb2gray_uint8(segmented)
+        gray = rgb2gray_uint8(segmented)
         nz = gray[gray > 0]
     else:
-        gray = matlab_rgb2gray(segmented)
+        gray = rgb2gray(segmented)
         nz = gray[gray != 0]
     if nz.size == 0:
         return float("nan")
@@ -485,22 +487,22 @@ def annotate_he_kmeans(
         raise ValueError(f"BDcreationHE expects uint8 RGB, got shape {he.shape}")
     he = he[..., :3]
     if he.dtype != np.uint8:
-        he = np.clip(np.floor(matlab_im2double(he) * 255.0 + 0.5), 0, 255).astype(np.uint8)
+        he = np.clip(np.floor(im2double(he) * 255.0 + 0.5), 0, 255).astype(np.uint8)
     pix = float(pixelpermicron)
-    s = matlab_decorrstretch_uint8(he, tol=0.01)
+    s = decorrstretch_uint8(he, tol=0.01)
     m, n, _ = s.shape
-    disk = matlab_fspecial_disk(float(matlab_round(HE_RGB_DISK_RADIUS_MULTIPLIER * pix)))
+    disk = fspecial_disk(float(round(HE_RGB_DISK_RADIUS_MULTIPLIER * pix)))
     k3 = np.empty((m, n, 3), dtype=s.dtype)
     for j in range(3):
         # padarray(S(:,:,j), [70 70], 'symmetric'): a scalar width pads every side.
         padded = np.pad(s[..., j], HE_RGB_PAD, mode="symmetric")
-        k2 = matlab_histeq(padded)
-        k1 = matlab_imfilter_keep_class(k2, disk, boundary="zero")
-        k1 = matlab_imfilter_keep_class(k1, disk, boundary="zero")
+        k2 = histeq(padded)
+        k1 = imfilter_keep_class(k2, disk, boundary="zero")
+        k1 = imfilter_keep_class(k1, disk, boundary="zero")
         k3[..., j] = k1[HE_RGB_PAD : HE_RGB_PAD + m, HE_RGB_PAD : HE_RGB_PAD + n]
     ab = np.asarray(k3, dtype=np.float64)
     ab_flat = ab.reshape((m * n, 3), order="F")
-    labels0, centers, _sumd, km_debug = matlab_kmeans(
+    labels0, centers, _sumd, km_debug = kmeans(
         ab_flat, HE_RGB_N_COLORS, seed=int(kmeans_seed), replicates=3
     )
     pixel_labels = labels0.reshape((m, n), order="F")  # 0-based
@@ -512,12 +514,12 @@ def annotate_he_kmeans(
         segmented.append(color)
         mean_intensity[k] = _mean_nonzero_gray(color)
     blue = pick_he_epithelial_cluster(centers, mean_intensity)
-    epith = matlab_im2double(segmented[blue])
-    epith_cell_bw = matlab_im2bw(matlab_rgb2gray(epith), EPITH_BINARY_THRESHOLD)
+    epith = im2double(segmented[blue])
+    epith_cell_bw = im2bw(rgb2gray(epith), EPITH_BINARY_THRESHOLD)
     opened = _imdilate(epith_cell_bw, _disk_nhood(HE_RGB_EPITH_DILATION_MULTIPLIER * pix, how="round"))
     bwx = ndimage.binary_fill_holes(opened)
-    hole_area = int(matlab_round((BACKGROUND_HOLE_MIN_AREA_MULTIPLIER * pix) ** 2))
-    tumor_area = int(matlab_round((TUMOR_MASK_MIN_AREA_MULTIPLIER * pix) ** 2))
+    hole_area = int(round((BACKGROUND_HOLE_MIN_AREA_MULTIPLIER * pix) ** 2))
+    tumor_area = int(round((TUMOR_MASK_MIN_AREA_MULTIPLIER * pix) ** 2))
     bwy = remove_small_components(~bwx, hole_area)
     mask_image = remove_small_components(~bwy, tumor_area)
     bd_u8 = (np.asarray(mask_image, dtype=np.uint8) * 255)

@@ -48,10 +48,10 @@ from pycurvelets._he_bdc_common import (
 )
 from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED
 from pycurvelets._matlab_util import (
-    matlab_fspecial_disk,
-    matlab_histeq,
-    matlab_im2bw,
-    matlab_strel_disk,
+    fspecial_disk,
+    histeq,
+    im2bw,
+    strel_disk,
 )
 from pycurvelets.tumor_annotation_from_HE import TumorAnnotationFromHEParameters
 
@@ -69,7 +69,7 @@ def test_hsv_thresholds_match_bdcreation_he2() -> None:
 def test_histeq_uint8_keeps_class_and_uses_default_64_levels() -> None:
     """histeq of a uint8 image stays uint8 and uses the default 64 bins."""
     ramp = np.arange(256, dtype=np.uint8).reshape(16, 16)
-    out = matlab_histeq(ramp)
+    out = histeq(ramp)
     assert out.dtype == np.uint8 and out.shape == ramp.shape
     # Flattening a full 0..255 histogram must use every output bucket of the
     # default N=64 mapping (T = k/63).
@@ -79,7 +79,7 @@ def test_histeq_uint8_keeps_class_and_uses_default_64_levels() -> None:
 def test_histeq_double_default_n64() -> None:
     """histeq of a double image stays float64 and inside [0, 1]."""
     x = np.linspace(0.0, 1.0, 64)
-    out = matlab_histeq(x)
+    out = histeq(x)
     assert out.dtype == np.float64
     assert out.min() == pytest.approx(0.0)
     assert out.max() == pytest.approx(1.0)
@@ -88,7 +88,7 @@ def test_histeq_double_default_n64() -> None:
 def test_fspecial_disk_is_normalized_odd_kernel() -> None:
     """fspecial('disk') returns a non-negative odd kernel that sums to 1."""
     for r in (1, 3, 11):
-        h = matlab_fspecial_disk(r)
+        h = fspecial_disk(r)
         assert h.ndim == 2 and h.shape[0] == h.shape[1] and h.shape[0] % 2 == 1
         assert h.sum() == pytest.approx(1.0, abs=1e-15)
         assert np.all(h >= -1e-15)
@@ -97,15 +97,15 @@ def test_fspecial_disk_is_normalized_odd_kernel() -> None:
 def test_im2bw_double_is_strict_greater() -> None:
     """im2bw keeps pixels strictly above the level, after im2double for uint8."""
     x = np.array([0.0, 0.001, 0.5, 1.0])
-    np.testing.assert_array_equal(matlab_im2bw(x, 0.001), np.array([False, False, True, True]))
+    np.testing.assert_array_equal(im2bw(x, 0.001), np.array([False, False, True, True]))
     u8 = np.array([0, 1, 255], dtype=np.uint8)
     # im2double(uint8) then > 0.001 -> 1/255 ≈ 0.0039 is True.
-    np.testing.assert_array_equal(matlab_im2bw(u8, 0.001), np.array([False, True, True]))
+    np.testing.assert_array_equal(im2bw(u8, 0.001), np.array([False, True, True]))
 
 
 def test_strel_disk_r3_is_adams_5x5_not_euclidean() -> None:
     """strel('disk', 3) is the filled Adams 5x5 neighborhood, not a Euclidean disk."""
-    d3 = matlab_strel_disk(3)
+    d3 = strel_disk(3)
     assert d3.shape == (5, 5) and bool(np.all(d3))
 
 

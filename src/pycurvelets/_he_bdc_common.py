@@ -14,12 +14,12 @@ from scipy import ndimage
 from skimage import color, morphology
 
 from ._matlab_util import (
-    matlab_graythresh,
-    matlab_imresize,
-    matlab_rgb2gray,
-    matlab_rgb2hsv,
-    matlab_round,
-    matlab_std_std_2d,
+    graythresh,
+    imresize,
+    rgb2gray,
+    rgb2hsv,
+    round,
+    std_std_2d,
 )
 
 # MATLAB-derived HSV threshold defaults from:
@@ -133,8 +133,8 @@ def resize_like(
         return image.copy()
     arr = np.asarray(image, dtype=np.float64)
     if arr.ndim == 2:
-        return matlab_imresize(arr, output_shape=(out_shape[0], out_shape[1]), method="bicubic")
-    return matlab_imresize(arr, output_shape=(out_shape[0], out_shape[1]), method="bicubic")
+        return imresize(arr, output_shape=(out_shape[0], out_shape[1]), method="bicubic")
+    return imresize(arr, output_shape=(out_shape[0], out_shape[1]), method="bicubic")
 
 def adjust_rgb_mean_std(rgb: np.ndarray, axis: int = 2) -> np.ndarray:
     """Stretch each RGB channel the way CurveAlign's ``imadjust`` call does.
@@ -167,7 +167,7 @@ def adjust_rgb_mean_std(rgb: np.ndarray, axis: int = 2) -> np.ndarray:
     out = np.zeros_like(rgb_arr, dtype=np.float64)
     for ch in range(3):
         channel = rgb_arr[..., ch]
-        std_std = matlab_std_std_2d(channel)
+        std_std = std_std_2d(channel)
         high = float(np.mean(channel) + 2.0 * std_std)
         high = min(max(high, 1e-8), 1.0)
         out[..., ch] = np.clip(channel / high, 0.0, 1.0)
@@ -229,7 +229,7 @@ def prepare_registration_pair(
         # round() + output_shape here produced a 1-px smaller grid for e.g.
         # ppm=3 (341 vs 342), which put the whole registration on a different
         # image than MATLAB's.
-        fixed_shg = matlab_imresize(g, scalar_scale=2.0 / pix, method="bicubic")
+        fixed_shg = imresize(g, scalar_scale=2.0 / pix, method="bicubic")
         pix = 2.0
     else:
         fixed_shg = g
@@ -283,7 +283,7 @@ def disk_se(radius: float) -> np.ndarray:
     numpy.ndarray
         Boolean neighborhood.
     """
-    r = max(int(matlab_round(radius)), 0)
+    r = max(int(round(radius)), 0)
     if r <= 0:
         return np.ones((1, 1), dtype=bool)
     return morphology.disk(r)
@@ -375,7 +375,7 @@ def make_ecm_mask_rgb(
 
     masked = np.zeros_like(he_decorr_rgb, dtype=np.float64)
     masked[eosin] = np.asarray(he_decorr_rgb, dtype=np.float64)[eosin]
-    ecm_gray = matlab_rgb2gray(masked)
+    ecm_gray = rgb2gray(masked)
     return ecm_gray.astype(np.float64), eosin.astype(bool)
 
 
@@ -403,9 +403,9 @@ def make_nuclei_mask(
     masked : numpy.ndarray
         ``he_rgb_adjusted`` with non-nuclei pixels set to 0.
     """
-    hsv = matlab_rgb2hsv(he_rgb_adjusted)
+    hsv = rgb2hsv(he_rgb_adjusted)
     saturation = hsv[..., 1]
-    sat_thresh = matlab_graythresh(saturation)
+    sat_thresh = graythresh(saturation)
 
     nuclei_raw = (
         (hsv[..., 0] >= NUCLEI_HUE_MIN)
@@ -444,9 +444,9 @@ def make_collagen_mask(
     sat_thresh : float
         Otsu threshold applied to the saturation channel.
     """
-    hsv = matlab_rgb2hsv(he_rgb_adjusted)
+    hsv = rgb2hsv(he_rgb_adjusted)
     saturation = hsv[..., 1]
-    sat_thresh = matlab_graythresh(saturation)
+    sat_thresh = graythresh(saturation)
 
     collagen = (
         ((hsv[..., 0] >= COLLAGEN_HUE_MIN) | (hsv[..., 0] <= COLLAGEN_HUE_MAX))
@@ -465,7 +465,7 @@ def decorrelation_stretch(rgb: np.ndarray, tol: float = 0.01) -> np.ndarray:
     Channels are whitened with PCA, then each channel is stretched between
     the ``tol`` and ``1 - tol`` percentiles. The bit-exact uint8 port used by
     reg1 and ``BDcreationHE`` is
-    :func:`pycurvelets._matlab_util.matlab_decorrstretch_uint8`.
+    :func:`pycurvelets._matlab_util.decorrstretch_uint8`.
 
     Parameters
     ----------

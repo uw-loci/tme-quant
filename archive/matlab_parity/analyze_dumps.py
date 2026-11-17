@@ -54,12 +54,12 @@ from pycurvelets._he_bdc_common import (  # noqa: E402
     decorrelation_stretch,
     prepare_registration_pair,
 )
-from pycurvelets._matlab_util import matlab_rgb2gray  # noqa: E402
+from pycurvelets._matlab_util import rgb2gray  # noqa: E402
 from pycurvelets._itk_v3_matlab_engine import (  # noqa: E402
     OnePlusOneConfig,
     forward_0based_to_moving_to_fixed_1based,
-    matlab_T_to_A,
-    matlab_imregtform_v3,
+    T_to_A,
+    imregtform_v3,
     moving_to_fixed_1based_to_forward_0based,
     register_bdcreation_reg2_matlab,
 )
@@ -117,13 +117,13 @@ def _python_pipeline(
     he = io.imread(str(he_path)).astype(np.float64) / 255.0
     shg = io.imread(str(shg_path)).astype(np.float64) / 255.0
     if shg.ndim == 3:
-        shg = matlab_rgb2gray(shg)
+        shg = rgb2gray(shg)
     he_scaled, fixed_shg, pix = prepare_registration_pair(he, shg, float(ppm))
     he_adj = adjust_rgb_mean_std(he_scaled)
     he_dec = decorrelation_stretch(he_adj, tol=0.01)
     fixed = fixed_shg.astype(np.float64)
     if fixed.ndim == 3:
-        fixed = matlab_rgb2gray(fixed)
+        fixed = rgb2gray(fixed)
     he_moving, _mode, _extras = _build_he_moving(he_adj, pix, "hsv")
     return he_moving.astype(np.float64), fixed, pix, he.shape[:2], shg.shape[:2]
 
@@ -341,9 +341,9 @@ def compare_preprocessing(case_id: str, he_dir: Path, he_file: str, shg_dir: Pat
         remove_small_components,
     )
     from pycurvelets._matlab_util import (
-        gaussian_filter_matlab_like,
-        matlab_graythresh,
-        matlab_rgb2hsv,
+        gaussian_filter,
+        graythresh,
+        rgb2hsv,
     )
 
     dump = DUMPS / case_id
@@ -355,7 +355,7 @@ def compare_preprocessing(case_id: str, he_dir: Path, he_file: str, shg_dir: Pat
     he = io.imread(str(he_dir / he_file)).astype(np.float64) / 255.0
     shg = io.imread(str(shg_dir / he_file)).astype(np.float64) / 255.0
     if shg.ndim == 3:
-        shg = matlab_rgb2gray(shg)
+        shg = rgb2gray(shg)
     he_scaled, _fixed, pix = prepare_registration_pair(he, shg, float(ppm))
     he_adj = adjust_rgb_mean_std(he_scaled)
 
@@ -381,8 +381,8 @@ def compare_preprocessing(case_id: str, he_dir: Path, he_file: str, shg_dir: Pat
     }
     cmp_float("HEdata (imadjust)", he_adj, m["HEdata"])
 
-    hsv = matlab_rgb2hsv(he_adj)
-    sat_thresh = matlab_graythresh(hsv[..., 1])
+    hsv = rgb2hsv(he_adj)
+    sat_thresh = graythresh(hsv[..., 1])
     out["channel2Min (graythresh S)"] = {
         "python": sat_thresh, "matlab": float(m["channel2Min"].item()),
         "matlab_collagen": float(m["channel2Min_c"].item()),
@@ -398,10 +398,10 @@ def compare_preprocessing(case_id: str, he_dir: Path, he_file: str, shg_dir: Pat
     bw_col, _, _ = make_collagen_mask(he_adj)
     cmp_mask("BW_collagen", bw_col, m["BW_collagen"])
 
-    gray_nuclei = matlab_rgb2gray(masked)
+    gray_nuclei = rgb2gray(masked)
     cmp_float("gray_nuclei (rgb2gray masked)", gray_nuclei, m["gray_nuclei"])
     ksize = max(1, int(np.floor(pix)))
-    nuclei_filtered = gaussian_filter_matlab_like(gray_nuclei, sigma=0.5, kernel_size=ksize, boundary="zero")
+    nuclei_filtered = gaussian_filter(gray_nuclei, sigma=0.5, kernel_size=ksize, boundary="zero")
     cmp_float("nuclei_filtered (imfilter gaussian)", nuclei_filtered, m["nuclei_filtered"])
     bw_n2 = nuclei_filtered > 0.001
     cmp_mask("BW_nuclei2 (im2bw 0.001)", bw_n2, m["BW_nuclei2"])
@@ -498,8 +498,8 @@ def main(argv: list[str]) -> None:
         entry["matlab_mask_coverage"] = float((ml_he > 0.5).mean())
         entry["python_mask_coverage"] = float((py_he > 0.5).mean())
 
-        A_sim_ml = matlab_T_to_A(np.loadtxt(dump / "tform_similarity.txt"))
-        A_aff_ml = matlab_T_to_A(np.loadtxt(dump / "tform_affine.txt"))
+        A_sim_ml = T_to_A(np.loadtxt(dump / "tform_similarity.txt"))
+        A_aff_ml = T_to_A(np.loadtxt(dump / "tform_affine.txt"))
         entry["matlab_similarity"] = _decomp_A(A_sim_ml)
         entry["matlab_affine"] = _decomp_A(A_aff_ml)
         entry["matlab_affine_forward_2x3_0based"] = moving_to_fixed_1based_to_forward_0based(
@@ -515,8 +515,8 @@ def main(argv: list[str]) -> None:
             # (2) engine on MATLAB's exact inputs
             t0 = time.time()
             cfg = OnePlusOneConfig(initial_radius=6.25e-3 / 3.5, maximum_iterations=700)
-            sim = matlab_imregtform_v3(ml_he, ml_shg, "similarity", cfg)
-            aff = matlab_imregtform_v3(
+            sim = imregtform_v3(ml_he, ml_shg, "similarity", cfg)
+            aff = imregtform_v3(
                 ml_he, ml_shg, "affine", cfg, initial_fixed_to_moving_3x3=sim.fixed_to_moving_3x3
             )
             e_sim = _param_error(sim.moving_to_fixed_1based_3x3, A_sim_ml, ml_he.shape)

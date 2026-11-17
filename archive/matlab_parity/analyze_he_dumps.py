@@ -26,10 +26,10 @@ sys.path.insert(0, str(ROOT / "src"))
 from pycurvelets._he_bdc_annotation import annotate_he_hsv, annotate_he_kmeans  # noqa: E402
 from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED  # noqa: E402
 from pycurvelets._matlab_util import (  # noqa: E402
-    matlab_fspecial_disk,
-    matlab_histeq,
-    matlab_im2bw,
-    matlab_strel_disk,
+    fspecial_disk,
+    histeq,
+    im2bw,
+    strel_disk,
 )
 
 DUMPS = Path(__file__).resolve().parent / "dumps"
@@ -172,33 +172,33 @@ def analyze_primitives() -> list[dict[str, Any]]:
         key = f"disk_r{r}"
         if key not in m:
             continue
-        py = matlab_fspecial_disk(float(r))
+        py = fspecial_disk(float(r))
         rows.append(_report(key, "float", py, m[key]))
     if "disk_r10p5" in m:
-        rows.append(_report("disk_r10p5", "float", matlab_fspecial_disk(10.5), m["disk_r10p5"]))
+        rows.append(_report("disk_r10p5", "float", fspecial_disk(10.5), m["disk_r10p5"]))
     for r in (1, 2, 3, 4, 5, 7, 11):
         key = f"strel_r{r}"
         if key not in m:
             continue
-        py = matlab_strel_disk(r)
+        py = strel_disk(r)
         rows.append(_report(key, "bool", py, m[key]))
     if "pad_src" in m:
         py = np.pad(m["pad_src"], 2, mode="symmetric")
         rows.append(_report("pad_sym", "uint8", py, m["pad_sym"]))
     if "histeq_rand_in" in m:
-        py = matlab_histeq(m["histeq_rand_in"])
+        py = histeq(m["histeq_rand_in"])
         rows.append(_report("histeq_rand_out", "uint8", py, m["histeq_rand_out"]))
     if "histeq_u8_in" in m:
-        py = matlab_histeq(m["histeq_u8_in"])
+        py = histeq(m["histeq_u8_in"])
         rows.append(_report("histeq_u8_out", "uint8", py, m["histeq_u8_out"]))
     if "histeq_ramp" in m:
-        py = matlab_histeq(np.arange(256, dtype=np.uint8).reshape((16, 16), order="F"))
+        py = histeq(np.arange(256, dtype=np.uint8).reshape((16, 16), order="F"))
         rows.append(_report("histeq_ramp", "uint8", py, m["histeq_ramp"]))
     if "histeq_dbl_in" in m:
-        py = matlab_histeq(np.asarray(m["histeq_dbl_in"], dtype=np.float64))
+        py = histeq(np.asarray(m["histeq_dbl_in"], dtype=np.float64))
         rows.append(_report("histeq_dbl_out", "float", py, m["histeq_dbl_out"]))
     if "im2bw_in" in m:
-        py = matlab_im2bw(np.asarray(m["im2bw_in"], dtype=np.float64), 0.5)
+        py = im2bw(np.asarray(m["im2bw_in"], dtype=np.float64), 0.5)
         rows.append(_report("im2bw_out", "bool", py, m["im2bw_out"]))
     return rows
 

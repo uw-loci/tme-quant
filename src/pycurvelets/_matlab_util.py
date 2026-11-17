@@ -7,15 +7,15 @@ these functions. They do not redefine them.
 
 The module is private. :mod:`pycurvelets` still exports only the pipeline entry
 points (``shg_he_registration``, ``tumor_annotation_from_he``, and the
-``BDcreation*`` aliases). The ``matlab_`` prefix stays on each function because
-the result is the MATLAB call, which is not what NumPy or scikit-image return
-for the same name.
+``BDcreation*`` aliases). Function names are the MATLAB operation. Each
+docstring says the body was migrated from that MATLAB call, because the
+numerics are not what NumPy or scikit-image return for the same name.
 
-``matlab_imresize`` is adapted from https://github.com/fatheral/matlab_imresize
+``imresize`` is adapted from https://github.com/fatheral/matlab_imresize
 (MIT).
 
 The ITK v3 ``imregtform`` engine stays in :mod:`pycurvelets._itk_v3_matlab_engine`.
-``matlab_imregtform_v3``, ``matlab_default_settings``, and ``matlab_T_to_A`` are
+``imregtform_v3``, ``default_settings``, and ``T_to_A`` are
 that engine, not image helpers, and they need the ITK classes defined beside them.
 """
 
@@ -35,32 +35,32 @@ _GRAYTHRESH_BINS = 256
 _RGB2GRAY_COEF = (0.298936021293775, 0.587043074451121, 0.114020904255103)
 
 __all__ = [
-    "gaussian_filter_matlab_like",
-    "matlab_decorrstretch_uint8",
-    "matlab_fspecial_disk",
-    "matlab_fspecial_gaussian",
-    "matlab_graythresh",
-    "matlab_grayxform",
-    "matlab_histeq",
-    "matlab_im2bw",
-    "matlab_im2double",
-    "matlab_im2uint8",
-    "matlab_imadjust_auto_integer",
-    "matlab_imadjust_double_rgb",
-    "matlab_imfilter",
-    "matlab_imfilter_keep_class",
-    "matlab_imhist_counts",
-    "matlab_imresize",
-    "matlab_imwarp_bilinear",
-    "matlab_kmeans",
-    "matlab_rgb2gray",
-    "matlab_rgb2gray_uint8",
-    "matlab_rgb2hsv",
-    "matlab_round",
-    "matlab_srgb2lab_uint8",
-    "matlab_std_std_2d",
-    "matlab_strel_disk",
-    "matlab_stretchlim",
+    "decorrstretch_uint8",
+    "fspecial_disk",
+    "fspecial_gaussian",
+    "gaussian_filter",
+    "graythresh",
+    "grayxform",
+    "histeq",
+    "im2bw",
+    "im2double",
+    "im2uint8",
+    "imadjust_auto_integer",
+    "imadjust_double_rgb",
+    "imfilter",
+    "imfilter_keep_class",
+    "imhist_counts",
+    "imresize",
+    "imwarp_bilinear",
+    "kmeans",
+    "rgb2gray",
+    "rgb2gray_uint8",
+    "rgb2hsv",
+    "round",
+    "srgb2lab_uint8",
+    "std_std_2d",
+    "strel_disk",
+    "stretchlim",
 ]
 
 # ---------------------------------------------------------------------------
@@ -287,14 +287,15 @@ def _resize_along_dim(
     return _imresizevec(a, weights, indices, dim)
 
 
-def matlab_imresize(
+def imresize(
     image: np.ndarray,
     *,
     scalar_scale: float | None = None,
     output_shape: tuple[int, int] | None = None,
     method: str = "bicubic",
 ) -> np.ndarray:
-    """
+    """Migrated from MATLAB ``imresize``.
+
     Resize 2-D grayscale or channel-last RGB to match MATLAB ``imresize``.
 
     Parameters
@@ -364,8 +365,10 @@ def matlab_imresize(
 # Color, threshold, and filtering.
 # ---------------------------------------------------------------------------
 
-def matlab_rgb2hsv(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
-    """Convert float RGB in ``[0, 1]`` to MATLAB ``rgb2hsv`` order.
+def rgb2hsv(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
+    """Migrated from MATLAB ``rgb2hsv``.
+
+    Convert float RGB in ``[0, 1]`` to MATLAB ``rgb2hsv`` order.
 
     Hue, saturation, and value are each in ``[0, 1]``. Hue wraps the same way
     as MathWorks ``rgb2hsv``, which is what the CurveAlign hue bands assume.
@@ -415,8 +418,10 @@ def matlab_rgb2hsv(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
     return out
 
 
-def matlab_round(x: float | np.ndarray) -> float | np.ndarray:
-    """Round half away from zero, matching MATLAB ``round``.
+def round(x: float | np.ndarray) -> float | np.ndarray:
+    """Migrated from MATLAB ``round``.
+
+    Round half away from zero, matching MATLAB ``round``.
 
     ``numpy.round`` sends halves to the nearest even integer. MATLAB sends
     them away from zero, which changes structuring-element radii.
@@ -438,8 +443,10 @@ def matlab_round(x: float | np.ndarray) -> float | np.ndarray:
     return out
 
 
-def matlab_rgb2gray(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
-    """Convert RGB to grayscale with MATLAB's full-precision coefficients.
+def rgb2gray(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
+    """Migrated from MATLAB ``rgb2gray``.
+
+    Convert RGB to grayscale with MATLAB's full-precision coefficients.
 
     MATLAB ``rgb2gray`` uses the first row of ``inv([1 0.956 0.621; 1 -0.272
     -0.647; 1 -1.106 1.703])``. The rounded ``[0.2989, 0.5870, 0.1140]`` set
@@ -472,8 +479,10 @@ def matlab_rgb2gray(rgb: np.ndarray, axis: int = -1) -> np.ndarray:
     return cr * r + cg * g + cb * b
 
 
-def matlab_graythresh(image: np.ndarray) -> float:
-    """Otsu threshold matching MATLAB ``graythresh`` on a double image.
+def graythresh(image: np.ndarray) -> float:
+    """Migrated from MATLAB ``graythresh``.
+
+    Otsu threshold matching MATLAB ``graythresh`` on a double image.
 
     MATLAB does ``counts = imhist(im2uint8(I(:)), 256)``: one bin per uint8
     level after rounding ``I * 255``. Otsu then runs on bin indices ``1..256``,
@@ -525,8 +534,10 @@ def matlab_graythresh(image: np.ndarray) -> float:
     return float((idx - 1.0) / (nbins - 1))
 
 
-def matlab_fspecial_gaussian(size: int, sigma: float) -> np.ndarray:
-    """Square Gaussian kernel matching ``fspecial('gaussian', size, sigma)``.
+def fspecial_gaussian(size: int, sigma: float) -> np.ndarray:
+    """Migrated from MATLAB ``fspecial('gaussian')``.
+
+    Square Gaussian kernel matching ``fspecial('gaussian', size, sigma)``.
 
     Parameters
     ----------
@@ -555,13 +566,15 @@ def matlab_fspecial_gaussian(size: int, sigma: float) -> np.ndarray:
     return h / np.sum(h)
 
 
-def matlab_imfilter(
+def imfilter(
     image: np.ndarray,
     kernel: np.ndarray,
     *,
     boundary: str = "zero",
 ) -> np.ndarray:
-    """Correlate ``image`` with ``kernel``, matching MATLAB ``imfilter``.
+    """Migrated from MATLAB ``imfilter``.
+
+    Correlate ``image`` with ``kernel``, matching MATLAB ``imfilter``.
 
     MATLAB centres an even-sized kernel on the top-left of the two middle
     samples. SciPy centres it on the bottom-right, so even axes use
@@ -608,8 +621,10 @@ def matlab_imfilter(
 # Class conversion, histogram equalization, and disk kernels.
 # ---------------------------------------------------------------------------
 
-def matlab_im2double(image: np.ndarray) -> np.ndarray:
-    """Scale an image to ``[0, 1]`` the way MATLAB ``im2double`` does.
+def im2double(image: np.ndarray) -> np.ndarray:
+    """Migrated from MATLAB ``im2double``.
+
+    Scale an image to ``[0, 1]`` the way MATLAB ``im2double`` does.
 
     Parameters
     ----------
@@ -632,8 +647,10 @@ def matlab_im2double(image: np.ndarray) -> np.ndarray:
     return np.asarray(a, dtype=np.float64)
 
 
-def matlab_im2bw(image: np.ndarray, thresh: float) -> np.ndarray:
-    """Threshold an image the way ``im2bw(I, level)`` does.
+def im2bw(image: np.ndarray, thresh: float) -> np.ndarray:
+    """Migrated from MATLAB ``im2bw``.
+
+    Threshold an image the way ``im2bw(I, level)`` does.
 
     Parameters
     ----------
@@ -650,11 +667,13 @@ def matlab_im2bw(image: np.ndarray, thresh: float) -> np.ndarray:
     a = np.asarray(image)
     if a.dtype == np.bool_:
         return a.copy()
-    return matlab_im2double(a) > float(thresh)
+    return im2double(a) > float(thresh)
 
 
-def matlab_fspecial_disk(radius: float) -> np.ndarray:
-    """Circular averaging kernel matching ``fspecial('disk', radius)``.
+def fspecial_disk(radius: float) -> np.ndarray:
+    """Migrated from MATLAB ``fspecial('disk')``.
+
+    Circular averaging kernel matching ``fspecial('disk', radius)``.
 
     Parameters
     ----------
@@ -765,8 +784,10 @@ def _histeq_transform(counts: np.ndarray, hgram: np.ndarray, n_pixels: int) -> n
     return t_idx.astype(np.float64) / (m - 1)
 
 
-def matlab_grayxform(image: np.ndarray, transform: np.ndarray) -> np.ndarray:
-    """Apply a lookup table the way MATLAB ``grayxform`` does.
+def grayxform(image: np.ndarray, transform: np.ndarray) -> np.ndarray:
+    """Migrated from MATLAB ``grayxform``.
+
+    Apply a lookup table the way MATLAB ``grayxform`` does.
 
     ``transform`` holds values in ``[0, 1]``. A uint8 image with a 256-entry
     table maps ``floor(255 * T(I) + 0.5)``. A double image indexes
@@ -814,8 +835,10 @@ def matlab_grayxform(image: np.ndarray, transform: np.ndarray) -> np.ndarray:
     return t[idx]
 
 
-def matlab_histeq(image: np.ndarray, n_levels: int = 64) -> np.ndarray:
-    """Histogram-equalize an image the way MATLAB ``histeq`` does.
+def histeq(image: np.ndarray, n_levels: int = 64) -> np.ndarray:
+    """Migrated from MATLAB ``histeq``.
+
+    Histogram-equalize an image the way MATLAB ``histeq`` does.
 
     MATLAB's default is 64 output levels for every class, including uint8.
     ``BDcreationHE.m`` calls ``histeq`` with that default. The input histogram
@@ -843,19 +866,21 @@ def matlab_histeq(image: np.ndarray, n_levels: int = 64) -> np.ndarray:
     m = int(n_levels)
     if m < 2:
         raise ValueError(f"histeq N must be >= 2, got {m}")
-    counts = matlab_imhist_counts(a, npts)
+    counts = imhist_counts(a, npts)
     hgram = np.full(m, a.size / m, dtype=np.float64)
     transform = _histeq_transform(counts, hgram, a.size)
-    return matlab_grayxform(a, transform)
+    return grayxform(a, transform)
 
 
-def matlab_imfilter_keep_class(
+def imfilter_keep_class(
     image: np.ndarray,
     kernel: np.ndarray,
     *,
     boundary: str = "zero",
 ) -> np.ndarray:
-    """Filter an image and return the same numeric class.
+    """Migrated from MATLAB ``imfilter``, keeping the input numeric class.
+
+    Filter an image and return the same numeric class.
 
     The filter runs in double precision. Integer results are rounded half
     away from zero and clipped to the dtype range.
@@ -875,7 +900,7 @@ def matlab_imfilter_keep_class(
         Filtered image, same dtype as ``image``.
     """
     a = np.asarray(image)
-    out = matlab_imfilter(a.astype(np.float64), kernel, boundary=boundary)
+    out = imfilter(a.astype(np.float64), kernel, boundary=boundary)
     if a.dtype == np.uint8:
         return np.clip(np.floor(out + 0.5), 0, 255).astype(np.uint8)
     if a.dtype == np.uint16:
@@ -886,8 +911,10 @@ def matlab_imfilter_keep_class(
 # Nested std, bilinear warp, and the fspecial+imfilter Gaussian.
 # ---------------------------------------------------------------------------
 
-def matlab_std_std_2d(channel: np.ndarray) -> float:
-    """Nested sample standard deviation, matching MATLAB ``std(std(channel))``.
+def std_std_2d(channel: np.ndarray) -> float:
+    """Migrated from MATLAB ``std(std(channel))``.
+
+    Nested sample standard deviation, matching MATLAB ``std(std(channel))``.
 
     MATLAB ``std`` of a matrix is one value per column. The outer ``std``
     reduces that vector to a scalar. That is not the same as ``std`` of the
@@ -921,13 +948,15 @@ def matlab_std_std_2d(channel: np.ndarray) -> float:
         return float(np.std(flat, ddof=1)) if flat.size > 1 else 0.0
     return float(np.std(col_std, ddof=1))
 
-def matlab_imwarp_bilinear(
+
+def imwarp_bilinear(
     src: np.ndarray,
     out_shape: tuple[int, int],
     A: np.ndarray,
     fill_value: float = 0.0,
 ) -> np.ndarray:
-    """
+    """Migrated from MATLAB bilinear ``imwarp``.
+
     MATLAB-parity bilinear warp replicating ``imwarp(moving, Rmoving, tform, 'OutputView',
     Rfixed, 'FillValues', fill_value)`` with ``imref2d(size)`` defaults.
 
@@ -1066,14 +1095,16 @@ def matlab_imwarp_bilinear(
     return np.stack(out_channels, axis=-1).astype(np.float64)
 
 
-def gaussian_filter_matlab_like(
+def gaussian_filter(
     image: np.ndarray,
     sigma: float,
     kernel_size: int,
     *,
     boundary: str = "zero",
 ) -> np.ndarray:
-    """Gaussian filter matching ``fspecial`` plus ``imfilter``.
+    """Migrated from MATLAB ``fspecial('gaussian')`` followed by ``imfilter``.
+
+    Gaussian filter matching ``fspecial`` plus ``imfilter``.
 
     Parameters
     ----------
@@ -1085,7 +1116,7 @@ def gaussian_filter_matlab_like(
         Square kernel side length. MATLAB always passes this explicitly
         (``floor(ppm)`` for nuclei, ``101`` for the HE2 mask).
     boundary : {'zero', 'replicate'}, optional
-        Passed to :func:`matlab_imfilter`. Registration uses ``'zero'``.
+        Passed to :func:`imfilter`. Registration uses ``'zero'``.
         The HE2 mask uses ``'replicate'``. Default is ``'zero'``.
 
     Returns
@@ -1094,15 +1125,17 @@ def gaussian_filter_matlab_like(
         Filtered float64 image.
     """
     sz = max(int(kernel_size), 1)
-    h = matlab_fspecial_gaussian(sz, float(sigma))
-    return matlab_imfilter(image.astype(np.float64), h, boundary=boundary)
+    h = fspecial_gaussian(sz, float(sigma))
+    return imfilter(image.astype(np.float64), h, boundary=boundary)
 
 # ---------------------------------------------------------------------------
 # imadjust, decorrstretch, sRGB to Lab, strel, and k-means.
 # ---------------------------------------------------------------------------
 
-def matlab_im2uint8(x: np.ndarray) -> np.ndarray:
-    """Convert a double image to uint8 the way MATLAB ``im2uint8`` does.
+def im2uint8(x: np.ndarray) -> np.ndarray:
+    """Migrated from MATLAB ``im2uint8``.
+
+    Convert a double image to uint8 the way MATLAB ``im2uint8`` does.
 
     Parameters
     ----------
@@ -1119,8 +1152,10 @@ def matlab_im2uint8(x: np.ndarray) -> np.ndarray:
     return np.clip(np.floor(v + 0.5), 0, 255).astype(np.uint8)
 
 
-def matlab_rgb2gray_uint8(rgb_u8: np.ndarray) -> np.ndarray:
-    """Convert uint8 RGB to uint8 grayscale with MATLAB's ``rgb2gray`` weights.
+def rgb2gray_uint8(rgb_u8: np.ndarray) -> np.ndarray:
+    """Migrated from MATLAB ``rgb2gray`` on uint8 RGB.
+
+    Convert uint8 RGB to uint8 grayscale with MATLAB's ``rgb2gray`` weights.
 
     Parameters
     ----------
@@ -1137,8 +1172,10 @@ def matlab_rgb2gray_uint8(rgb_u8: np.ndarray) -> np.ndarray:
     return np.clip(np.floor(lin + 0.5), 0, 255).astype(np.uint8)
 
 
-def matlab_imhist_counts(plane: np.ndarray, nbins: int) -> np.ndarray:
-    """Histogram counts matching ``imhist(I, nbins)``.
+def imhist_counts(plane: np.ndarray, nbins: int) -> np.ndarray:
+    """Migrated from MATLAB ``imhist``.
+
+    Histogram counts matching ``imhist(I, nbins)``.
 
     Integer images are binned by their stored value. Double images use
     ``floor(x * (nbins - 1) + 0.5)``, and values outside ``[0, 1]`` are
@@ -1168,8 +1205,10 @@ def matlab_imhist_counts(plane: np.ndarray, nbins: int) -> np.ndarray:
     return np.bincount(idx.ravel(), minlength=nbins).astype(np.float64)
 
 
-def matlab_stretchlim(img: np.ndarray, tol: tuple[float, float] = (0.01, 0.99)) -> np.ndarray:
-    """Find the low and high limits MATLAB ``stretchlim`` would use.
+def stretchlim(img: np.ndarray, tol: tuple[float, float] = (0.01, 0.99)) -> np.ndarray:
+    """Migrated from MATLAB ``stretchlim``.
+
+    Find the low and high limits MATLAB ``stretchlim`` would use.
 
     The histogram has 256 bins for uint8 and 65536 otherwise. ``ilow`` is the
     first bin whose CDF exceeds the low tolerance. ``ihigh`` is the first
@@ -1197,7 +1236,7 @@ def matlab_stretchlim(img: np.ndarray, tol: tuple[float, float] = (0.01, 0.99)) 
         out[1, :] = 1.0
         return out
     for i in range(planes.shape[-1]):
-        counts = matlab_imhist_counts(planes[..., i], nbins)
+        counts = imhist_counts(planes[..., i], nbins)
         cdf = np.cumsum(counts) / counts.sum()
         ilow = int(np.argmax(cdf > tol_low)) + 1          # 1-based like MATLAB find
         ihigh = int(np.argmax(cdf >= tol_high)) + 1
@@ -1230,8 +1269,10 @@ def _adjust_array(x: np.ndarray, low_in: float, high_in: float, low_out: float =
     return out * (high_out - low_out) + low_out
 
 
-def matlab_imadjust_auto_integer(img: np.ndarray) -> np.ndarray:
-    """``imadjust(I)`` with no extra arguments, on a 2-D uint8 or uint16 image.
+def imadjust_auto_integer(img: np.ndarray) -> np.ndarray:
+    """Migrated from MATLAB ``imadjust`` with no extra arguments.
+
+    ``imadjust(I)`` with no extra arguments, on a 2-D uint8 or uint16 image.
 
     Limits come from ``stretchlim``. The stretch is linear and the result
     keeps the input integer class.
@@ -1262,14 +1303,16 @@ def matlab_imadjust_auto_integer(img: np.ndarray) -> np.ndarray:
         scale = 65535.0
     else:
         raise TypeError(f"expected uint8/uint16 SHG, got {a.dtype}")
-    low, high = matlab_stretchlim(a)[:, 0]
+    low, high = stretchlim(a)[:, 0]
     lut_in = np.arange(int(scale) + 1, dtype=np.float64) / scale
     lut = np.clip(np.floor(_adjust_array(lut_in, low, high) * scale + 0.5), 0, scale)
     return lut.astype(a.dtype)[a]
 
 
-def matlab_imadjust_double_rgb(img: np.ndarray, low_in: float, high_in: float) -> np.ndarray:
-    """``imadjust`` on a double RGB image with one input range for every channel.
+def imadjust_double_rgb(img: np.ndarray, low_in: float, high_in: float) -> np.ndarray:
+    """Migrated from MATLAB ``imadjust`` on a double RGB image.
+
+    ``imadjust`` on a double RGB image with one input range for every channel.
 
     Parameters
     ----------
@@ -1286,8 +1329,10 @@ def matlab_imadjust_double_rgb(img: np.ndarray, low_in: float, high_in: float) -
     return _adjust_array(img, float(low_in), float(high_in))
 
 
-def _matlab_pinv_diag(D: np.ndarray) -> np.ndarray:
-    """Pseudoinverse of a diagonal matrix, matching ``fitdecorrtrans``.
+def _pinv_diag(D: np.ndarray) -> np.ndarray:
+    """Migrated from MATLAB ``pinv`` of a diagonal matrix.
+
+    Pseudoinverse of a diagonal matrix, matching ``fitdecorrtrans``.
 
     Singular values at or below ``n * max(d) * sqrt(eps)`` become zero.
 
@@ -1309,8 +1354,10 @@ def _matlab_pinv_diag(D: np.ndarray) -> np.ndarray:
     return np.diag(s)
 
 
-def matlab_decorrstretch_uint8(rgb_u8: np.ndarray, tol: float = 0.01) -> np.ndarray:
-    """Decorrelation stretch of a uint8 RGB image.
+def decorrstretch_uint8(rgb_u8: np.ndarray, tol: float = 0.01) -> np.ndarray:
+    """Migrated from MATLAB ``decorrstretch``.
+
+    Decorrelation stretch of a uint8 RGB image.
 
     Follows ``decorrstretch.m`` / ``fitdecorrtrans.m`` with correlation mode:
     sample covariance, whitening, stretch back to the original sigma, then
@@ -1344,24 +1391,24 @@ def matlab_decorrstretch_uint8(rgb_u8: np.ndarray, tol: float = 0.01) -> np.ndar
 
     S = np.diag(np.sqrt(np.diag(cov)))
     target_sigma = S
-    pS = _matlab_pinv_diag(S)
+    pS = _pinv_diag(S)
     corr = pS @ cov @ pS
     np.fill_diagonal(corr, 1.0)
     evals, V = np.linalg.eigh(corr)
     D = np.diag(np.maximum(evals, 0.0))
-    W = np.sqrt(_matlab_pinv_diag(D))
+    W = np.sqrt(_pinv_diag(D))
     T = pS @ V @ W @ V.T @ target_sigma
-    T = T @ _matlab_pinv_diag(np.diag(np.sqrt(np.diag(T.T @ cov @ T)))) @ target_sigma
+    T = T @ _pinv_diag(np.diag(np.sqrt(np.diag(T.T @ cov @ T)))) @ target_sigma
     offset = mean_b - mean_b @ T
     Sd = (A @ T + offset).reshape(h, w, nb)
 
     tol_lh = (float(tol), 1.0 - float(tol))
-    low_high = matlab_stretchlim(Sd, tol_lh)
+    low_high = stretchlim(Sd, tol_lh)
     out = np.empty_like(Sd)
     for p in range(nb):
         out[..., p] = _adjust_array(Sd[..., p], low_high[0, p], low_high[1, p])
     out = np.clip(out, 0.0, 1.0)
-    return matlab_im2uint8(out)
+    return im2uint8(out)
 
 
 def _load_srgb2lab_components() -> dict[str, np.ndarray]:
@@ -1380,8 +1427,10 @@ def _load_srgb2lab_components() -> dict[str, np.ndarray]:
 _SRGB2LAB: dict[str, np.ndarray] | None = None
 
 
-def matlab_srgb2lab_uint8(rgb_u8: np.ndarray) -> np.ndarray:
-    """Convert uint8 RGB to uint8 Lab the way MATLAB ``applycform`` does.
+def srgb2lab_uint8(rgb_u8: np.ndarray) -> np.ndarray:
+    """Migrated from MATLAB ``applycform`` sRGB to Lab.
+
+    Convert uint8 RGB to uint8 Lab the way MATLAB ``applycform`` does.
 
     Uses the sRGB ICC tables exported by
     ``archive/matlab_parity/dump_srgb2lab_components.m``: tone curve, colorant
@@ -1427,8 +1476,10 @@ def matlab_srgb2lab_uint8(rgb_u8: np.ndarray) -> np.ndarray:
     return lab.astype(np.uint8).reshape(a.shape)
 
 
-def matlab_strel_disk(r: int, n: int = 4) -> np.ndarray:
-    """Neighborhood of ``strel('disk', r, n)``.
+def strel_disk(r: int, n: int = 4) -> np.ndarray:
+    """Migrated from MATLAB ``strel('disk')``.
+
+    Neighborhood of ``strel('disk', r, n)``.
 
     Radii below 3, and ``n == 0``, use the exact Euclidean disk. Larger radii
     use Adams' periodic-line approximation. That is not a Euclidean disk:
@@ -1686,7 +1737,7 @@ def _lloyd_batch_matlab(
     return idx, C, totsumD, sumD, it
 
 
-def matlab_kmeans(
+def kmeans(
     X: np.ndarray,
     k: int,
     *,
@@ -1694,7 +1745,9 @@ def matlab_kmeans(
     replicates: int = 3,
     max_iter: int = 100,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-    """Replay MATLAB ``kmeans`` with squared Euclidean distance.
+    """Migrated from MATLAB ``kmeans``.
+
+    Replay MATLAB ``kmeans`` with squared Euclidean distance.
 
     Rows of ``X`` must already be in MATLAB observation order (column-major
     flatten of the a/b image).

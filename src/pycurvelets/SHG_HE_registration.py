@@ -10,7 +10,7 @@ Two MATLAB pipelines are available through ``pipeline``:
   ``decorrstretch`` + fixed RGB cuts + CIELAB k-means for the eosin/collagen
   moving image (continuous grey levels), output warped on the SHG grid. Ported
   exactly in :mod:`pycurvelets._he_bdc_reg1`, including a bit-exact replay of
-  MATLAB's ``kmeans`` (:func:`pycurvelets._matlab_util.matlab_kmeans`).
+  MATLAB's ``kmeans`` (:func:`pycurvelets._matlab_util.kmeans`).
   ``BDcreation_reg.m`` leaves ``kmeans`` *unseeded*, so MATLAB itself is not
   deterministic here; ``kmeans_seed`` selects the k-means optimum, and the
   default reproduces the reference goldens.
@@ -29,7 +29,7 @@ Registration is the ITK v3 (1+1)-ES port of MATLAB ``imregtform``:
    through the ``itk`` package (no MATLAB involved). Stage 1 similarity, stage
    2 affine initialised from it. See :mod:`pycurvelets._itk_v3_matlab_engine`.
 3. Warp the raw HE RGB onto the SHG grid via
-   :func:`pycurvelets._matlab_util.matlab_imwarp_bilinear`,
+   :func:`pycurvelets._matlab_util.imwarp_bilinear`,
    which matches MATLAB ``imref2d`` + ``imwarp`` conventions (pixel-centre
    sampling, pixel-centre inside test, no fill blending, ``FillValues=255``).
 
@@ -70,10 +70,10 @@ from ._he_bdc_common import (
 )
 from ._he_bdc_reg1 import DEFAULT_KMEANS_SEED, bdcreation_reg1_preprocess
 from ._matlab_util import (
-    gaussian_filter_matlab_like,
-    matlab_imresize,
-    matlab_imwarp_bilinear,
-    matlab_rgb2gray,
+    gaussian_filter,
+    imresize,
+    imwarp_bilinear,
+    rgb2gray,
 )
 from ._registration_quality import compute_shg_alignment_metrics
 
@@ -213,9 +213,9 @@ def _refine_nuclei_filled(
     numpy.ndarray
         Boolean filled nuclei mask.
     """
-    gray_nuclei = matlab_rgb2gray(masked_nuclei_image)
+    gray_nuclei = rgb2gray(masked_nuclei_image)
     ksize = max(1, int(np.floor(pixpermic)))
-    nuclei_filtered = gaussian_filter_matlab_like(
+    nuclei_filtered = gaussian_filter(
         gray_nuclei, sigma=0.5, kernel_size=ksize, boundary="zero"
     )
     bw_nuclei = nuclei_filtered > 0.001
@@ -268,7 +268,7 @@ def _build_he_moving_hsv(
     extras["mask_coverage"] = mask_coverage
     mode = "hsv"
     if mask_coverage < _MIN_MASK_COVERAGE:
-        he_gray_inv = 1.0 - matlab_rgb2gray(he_adjusted)
+        he_gray_inv = 1.0 - rgb2gray(he_adjusted)
         tissue_mask = (~bw_nuclei_filled).astype(np.float64)
         he_moving_fb = he_gray_inv * tissue_mask
         fb_coverage = float((he_moving_fb > 0.01).mean())
@@ -404,7 +404,7 @@ def _score_forward_vs_shg(
         Mutual information, normalized correlation, and the transform summary.
     """
     A_inv = _affine_fixed_to_moving_from_forward(forward_2x3)
-    warped = matlab_imwarp_bilinear(
+    warped = imwarp_bilinear(
         he_moving.astype(np.float64),
         fixed.shape[:2],
         A_inv,
@@ -479,11 +479,11 @@ def _reg1_core(
     debug["shg_alignment_identity_mi"] = float(_score_forward_vs_shg(he_moving, fixed_unit, identity)["shg_mi"])
 
     A_inv = _affine_fixed_to_moving_from_forward(forward_2x3)
-    he_data_registered = matlab_imresize(pre["HEdata"], output_shape=fixed_shape, method="bicubic")
-    registered = matlab_imwarp_bilinear(he_data_registered.astype(np.float64), fixed_shape, A_inv, fill_value=255.0)
+    he_data_registered = imresize(pre["HEdata"], output_shape=fixed_shape, method="bicubic")
+    registered = imwarp_bilinear(he_data_registered.astype(np.float64), fixed_shape, A_inv, fill_value=255.0)
     registered_img = np.clip(registered, 0.0, 1.0)
 
-    reg_luma = matlab_rgb2gray(registered_img)
+    reg_luma = rgb2gray(registered_img)
     debug["shg_alignment_fullres"] = compute_shg_alignment_metrics(reg_luma, fixed_unit, forward_2x3=None)
     return registered_img, backend, debug
 
@@ -539,7 +539,7 @@ def _shg_he_registration_core(
     he_img = io.imread(he_path).astype(np.float64) / 255.0
     shg_img = io.imread(shg_path).astype(np.float64) / 255.0
     if shg_img.ndim == 3:
-        shg_img = matlab_rgb2gray(shg_img)
+        shg_img = rgb2gray(shg_img)
 
     original_shg_shape = shg_img.shape[:2]
     he_scaled, fixed_shg, pixpermic = prepare_registration_pair(
@@ -550,7 +550,7 @@ def _shg_he_registration_core(
 
     fixed = fixed_shg.astype(np.float64)
     if fixed.ndim == 3:
-        fixed = matlab_rgb2gray(fixed)
+        fixed = rgb2gray(fixed)
 
     debug: dict[str, Any] = {
         "ecm_method_requested": ecm_requested,
@@ -582,7 +582,7 @@ def _shg_he_registration_core(
     rgb_for_warp = resize_like(he_img, fixed.shape[:2])
     # MATLAB: imwarp(RGB, ..., 'FillValues', 255) on a *double* image, then
     # imresize(B, size(SHG)) and imwrite (clip to [0, 1]).
-    registered = matlab_imwarp_bilinear(
+    registered = imwarp_bilinear(
         rgb_for_warp.astype(np.float64),
         fixed.shape[:2],
         A_inv,
@@ -592,10 +592,10 @@ def _shg_he_registration_core(
     registered_img = resize_like(registered, original_shg_shape)
     registered_img = np.clip(registered_img, 0.0, 1.0)
 
-    reg_luma = matlab_rgb2gray(registered_img)
+    reg_luma = rgb2gray(registered_img)
     shg_full = shg_img.astype(np.float64)
     if shg_full.ndim == 3:
-        shg_full = matlab_rgb2gray(shg_full)
+        shg_full = rgb2gray(shg_full)
     debug["shg_alignment_fullres"] = compute_shg_alignment_metrics(
         reg_luma, shg_full, forward_2x3=None
     )
