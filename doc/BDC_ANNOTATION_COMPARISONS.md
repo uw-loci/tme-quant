@@ -2,7 +2,7 @@
 
 Annotation only (`BDcreationHE2` / `BDcreationHE`). The script calls
 `pycurvelets.tumor_annotation_from_he` and writes PNGs under
-`tests/artifacts/bdc_annotation_viz/current/`. That directory is gitignored.
+`pycurvelets-core/tests/artifacts/bdc_annotation_viz/current/`. That directory is gitignored.
 File names are listed in [ARTIFACTS.md](ARTIFACTS.md). Registration figures
 are described in [BDC_REGISTRATION_COMPARISONS.md](BDC_REGISTRATION_COMPARISONS.md).
 

@@ -27,10 +27,10 @@ Curvelet tests run automatically when curvelops is installed; otherwise they are
 
 | Suite | When it runs | Needs |
 | --- | --- | --- |
-| `tests/test_he_bdc_reg1.py` | CI | nothing extra |
-| `tests/test_shg_he_registration.py` | CI | patient fixtures in the clone (not in wheel/sdist) |
-| `tests/test_shg_he_registration_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `archive/matlab_parity/dumps` (git only) |
-| `tests/test_shg_he_registration_gt.py` | `TMEQ_RUN_MATLAB_PARITY=1` | dumps + patient_02 GT HE TIFFs (git only) |
+| `pycurvelets-core/tests/test_he_bdc_reg1.py` | CI | nothing extra |
+| `pycurvelets-core/tests/test_shg_he_registration.py` | CI | patient fixtures in the clone (not in wheel/sdist) |
+| `pycurvelets-core/tests/test_shg_he_registration_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `archive/matlab_parity/dumps` (git only) |
+| `pycurvelets-core/tests/test_shg_he_registration_gt.py` | `TMEQ_RUN_MATLAB_PARITY=1` | dumps + patient_02 GT HE TIFFs (git only) |
 
 See [MATLAB_PARITY.md](MATLAB_PARITY.md), [BDC_REGISTRATION_COMPARISONS.md](BDC_REGISTRATION_COMPARISONS.md), [BDC_ANNOTATION_COMPARISONS.md](BDC_ANNOTATION_COMPARISONS.md), and [ARTIFACTS.md](ARTIFACTS.md).
 
@@ -38,9 +38,9 @@ See [MATLAB_PARITY.md](MATLAB_PARITY.md), [BDC_REGISTRATION_COMPARISONS.md](BDC_
 
 | Suite | When it runs | Needs |
 | --- | --- | --- |
-| `tests/test_he_bdc_annotation.py` | CI | nothing extra |
-| `tests/test_tumor_annotation_from_he.py` | CI | patient_001 HE fixtures + CA_Boundary goldens (clone) |
-| `tests/test_tumor_annotation_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `archive/matlab_parity/dumps/he2_*` and `he_*` (git only) |
+| `pycurvelets-core/tests/test_he_bdc_annotation.py` | CI | nothing extra |
+| `pycurvelets-core/tests/test_tumor_annotation_from_he.py` | CI | patient_001 HE fixtures + CA_Boundary goldens (clone) |
+| `pycurvelets-core/tests/test_tumor_annotation_matlab_parity.py` | `TMEQ_RUN_MATLAB_PARITY=1` | `archive/matlab_parity/dumps/he2_*` and `he_*` (git only) |
 
 Default `annotation_method="hsv"` is `BDcreationHE2.m`. `annotation_method="rgb_kmeans"` is `BDcreationHE.m` (unseeded MATLAB `kmeans`; Python replays `rng(28,'twister')`). MATLAB Image Processing Toolbox ports live in `_matlab_util.py`. Their names are the MATLAB operation (`rgb2gray`, `imresize`, `kmeans`); each docstring says the body was migrated from MATLAB, because those numerics are not what NumPy or scikit-image return for the same name. Pipeline steps stay in `_he_bdc_common.py`, `_he_bdc_reg1.py`, and `_he_bdc_annotation.py`. The ITK `imregtform` engine stays in `_itk_v3_matlab_engine.py`. Comparison figures are generated locally; see [ARTIFACTS.md](ARTIFACTS.md).
 
@@ -51,7 +51,7 @@ Default `annotation_method="hsv"` is `BDcreationHE2.m`. `annotation_method="rgb_
 | `make wheel` | `dist/*.whl` — `src/` only (users) |
 | `make sdist` | `dist/*.tar.gz` — source + docs + lightweight tests (no tests 1-9 / dumps) |
 
-`tests/test_packaging.py` checks the contract.
+`pycurvelets-core/tests/test_packaging.py` checks the contract.
 
 ## Troubleshooting
 

@@ -7,8 +7,8 @@ Interactive front ends live in their own repositories and call this library:
 - napari plugin: [uw-loci/napari-curvealign](https://github.com/uw-loci/napari-curvealign)
 
 ### About this repo
-- `src/pycurvelets`: Python implementation using the curvelet transform, including the SHG–HE registration port (`SHG_HE_registration`), tumor annotation, and the segmentation, preprocessing and TACS helpers the plugins drive
-- `tests/`: pytest suite (data-driven tests)
+- `pycurvelets-core/src/pycurvelets`: Python implementation using the curvelet transform, including the SHG–HE registration port (`SHG_HE_registration`), tumor annotation, and the segmentation, preprocessing and TACS helpers the plugins drive
+- `pycurvelets-core/tests/`: pytest suite (data-driven tests)
 - `.github/workflows/ci.yml`: GitHub Actions workflow (runs core tests only)
 
 ### Wheel vs sdist
@@ -24,7 +24,7 @@ Registration tests 1-9, annotation tests 1-3, MATLAB dumps, and ground-truth
 TIFFs live in git (clone / CI) only. They are not release artifacts.
 Comparison PNGs are not stored; regenerate them with
 `archive/visualization/` (see [doc/ARTIFACTS.md](doc/ARTIFACTS.md)).
-`tests/test_packaging.py` asserts this split. Bit-exact MATLAB parity needs
+`pycurvelets-core/tests/test_packaging.py` asserts this split. Bit-exact MATLAB parity needs
 a clone plus `TMEQ_RUN_MATLAB_PARITY=1`; see [doc/MATLAB_PARITY.md](doc/MATLAB_PARITY.md).
 
 ### Licensing and prerequisites
@@ -71,7 +71,7 @@ make test
 - Enable curvelet-dependent tests:
 ```bash
 export TMEQ_RUN_CURVELETS=1
-uv run pytest -q tests/test_get_ct.py tests/test_new_curv.py tests/test_process_image.py -rs
+uv run pytest -q pycurvelets-core/tests/test_get_ct.py pycurvelets-core/tests/test_new_curv.py pycurvelets-core/tests/test_process_image.py -rs
 ```
 
 - Enable strict MATLAB-reference parity assertions:
@@ -80,27 +80,27 @@ export TMEQ_VALIDATE_MATLAB=1
 ```
 
 - SHG–HE registration (issue 33). CI always runs the cheap gates in
-  `tests/test_shg_he_registration.py` and `tests/test_he_bdc_reg1.py`
+  `pycurvelets-core/tests/test_shg_he_registration.py` and `pycurvelets-core/tests/test_he_bdc_reg1.py`
   (fixtures are in the clone, not the wheel or sdist). The bit-exact dump
   suite (tests 1-9) is git-only; enable it with:
 ```bash
 export TMEQ_RUN_MATLAB_PARITY=1
 uv run pytest -q \
-    tests/test_shg_he_registration.py \
-    tests/test_he_bdc_reg1.py \
-    tests/test_shg_he_registration_matlab_parity.py \
-    tests/test_shg_he_registration_gt.py
+    pycurvelets-core/tests/test_shg_he_registration.py \
+    pycurvelets-core/tests/test_he_bdc_reg1.py \
+    pycurvelets-core/tests/test_shg_he_registration_matlab_parity.py \
+    pycurvelets-core/tests/test_shg_he_registration_gt.py
 ```
 
-- Tumor annotation (issue 34). CI always runs `tests/test_he_bdc_annotation.py`
-  and `tests/test_tumor_annotation_from_he.py`. The bit-exact HE2/HE dump
+- Tumor annotation (issue 34). CI always runs `pycurvelets-core/tests/test_he_bdc_annotation.py`
+  and `pycurvelets-core/tests/test_tumor_annotation_from_he.py`. The bit-exact HE2/HE dump
   suite is git-only; enable it with the same `TMEQ_RUN_MATLAB_PARITY=1` flag:
 ```bash
 export TMEQ_RUN_MATLAB_PARITY=1
 uv run pytest -q \
-    tests/test_he_bdc_annotation.py \
-    tests/test_tumor_annotation_from_he.py \
-    tests/test_tumor_annotation_matlab_parity.py
+    pycurvelets-core/tests/test_he_bdc_annotation.py \
+    pycurvelets-core/tests/test_tumor_annotation_from_he.py \
+    pycurvelets-core/tests/test_tumor_annotation_matlab_parity.py
 ```
 
 Notes:
@@ -110,7 +110,7 @@ Testing policy:
 - Tests must not write files to the repository root. Use a system
   temporary directory instead (e.g., `tempfile.TemporaryDirectory`).
 - If a deterministic artifact is needed across runs, commit it under
-  `tests/test_resources/` and read from there during tests.
+  `pycurvelets-core/tests/test_resources/` and read from there during tests.
 
 ### Continuous integration
 - CI has two lanes in `.github/workflows/ci.yml`:

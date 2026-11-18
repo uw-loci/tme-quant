@@ -4,7 +4,7 @@ Usage:
     python archive/visualization/generate_registration_comparison_patient02.py \
         [output_dir] [--cases id1,id2]
 
-Default output_dir: tests/artifacts/bdc_regression_viz/current
+Default output_dir: pycurvelets-core/tests/artifacts/bdc_regression_viz/current
 (gitignored; not an input to the registration API).
 
 Calls ``pycurvelets.shg_he_registration`` with ``SHGHERegistrationParameters``.
@@ -22,7 +22,7 @@ Test case definitions:
 Every case is also scored against ground truth (the un-transformed HE ROI +
 ``archive/matlab_parity/dumps/gt_affine_<case>.json``): corner displacement in
 px, angle/scale error and SSIM vs the GT-aligned HE, for both Python and
-MATLAB. Ground-truth helpers come from ``tests/_registration_gt_eval.py``.
+MATLAB. Ground-truth helpers come from ``pycurvelets-core/tests/_registration_gt_eval.py``.
 
 Output: ``comparison_<case_id>_matlab_hsv.png`` per case.
 """
@@ -38,8 +38,8 @@ from matplotlib.patches import FancyBboxPatch
 from skimage import io
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "tests"))
+sys.path.insert(0, str(ROOT / "pycurvelets-core" / "src"))
+sys.path.insert(0, str(ROOT / "pycurvelets-core" / "tests"))
 
 from _registration_gt_eval import (
     gt_forward_to_working_grid,
@@ -52,7 +52,7 @@ from pycurvelets.SHG_HE_registration import (
     shg_he_registration,
 )
 
-NEW_DATA = ROOT / "tests" / "test_for_shg_he_registration_BDcreation" / "new_test_datasets_tests4-5-6-7"
+NEW_DATA = ROOT / "pycurvelets-core" / "tests" / "test_for_shg_he_registration_BDcreation" / "new_test_datasets_tests4-5-6-7"
 HE_DIR = NEW_DATA / "HE"
 SHG_DIR = NEW_DATA / "SHG"
 # Ground truth: the un-transformed HE ROI (already on the SHG grid) and the
@@ -333,7 +333,7 @@ def generate(
 
 def main() -> None:
     """``[out_dir] [--cases id1,id2]``."""
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_registration_viz" / "current"
+    out_dir = ROOT / "pycurvelets-core" / "tests" / "artifacts" / "bdc_registration_viz" / "current"
     selected: list[str] | None = None
     it = iter(sys.argv[1:])
     for a in it:

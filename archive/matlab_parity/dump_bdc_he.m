@@ -11,7 +11,7 @@ function dump_bdc_he(caseFilter, kmeansSeed)
     if nargin < 2; kmeansSeed = 28; end
     fprintf('dump_bdc_he MATLAB %s\n', version);
     thisDir = fileparts(mfilename('fullpath'));
-    fixtureRoot = fullfile(thisDir, '..', '..', 'tests', 'test_for_shg_he_registration_BDcreation');
+    fixtureRoot = fullfile(thisDir, '..', '..', 'pycurvelets-core', 'tests', 'test_for_shg_he_registration_BDcreation');
     outRoot = fullfile(thisDir, 'dumps');
     if ~exist(outRoot, 'dir'); mkdir(outRoot); end
     boundary = fullfile(fixtureRoot, 'SHG', 'CA_Boundary');

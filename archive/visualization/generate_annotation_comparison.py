@@ -5,7 +5,7 @@ Usage:
     python archive/visualization/generate_annotation_comparison.py [output_dir] --method hsv
     python archive/visualization/generate_annotation_comparison.py [output_dir] --method rgb_kmeans
 
-Default output_dir: tests/artifacts/bdc_annotation_viz/current
+Default output_dir: pycurvelets-core/tests/artifacts/bdc_annotation_viz/current
 (gitignored; not an input to the annotation API).
 
 Calls ``pycurvelets.tumor_annotation_from_he`` with
@@ -29,7 +29,7 @@ from scipy import ndimage
 from skimage import io
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "pycurvelets-core" / "src"))
 
 from pycurvelets._registration_quality import compute_mask_boundary_metrics  # noqa: E402
 from pycurvelets.tumor_annotation_from_HE import (  # noqa: E402
@@ -37,7 +37,7 @@ from pycurvelets.tumor_annotation_from_HE import (  # noqa: E402
     tumor_annotation_from_he,
 )
 
-FIXTURE = ROOT / "tests" / "test_for_shg_he_registration_BDcreation"
+FIXTURE = ROOT / "pycurvelets-core" / "tests" / "test_for_shg_he_registration_BDcreation"
 HE_ROOT = FIXTURE / "HE"
 SHG_DIR = FIXTURE / "SHG"
 GOLDEN_DIR = SHG_DIR / "CA_Boundary"
@@ -484,7 +484,7 @@ def main() -> None:
     A positional argument replaces the default output directory. ``--method``
     selects ``hsv``, ``rgb_kmeans``, or both when it is omitted.
     """
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_annotation_viz" / "current"
+    out_dir = ROOT / "pycurvelets-core" / "tests" / "artifacts" / "bdc_annotation_viz" / "current"
     methods = ["hsv", "rgb_kmeans"]
     it = iter(sys.argv[1:])
     for a in it:

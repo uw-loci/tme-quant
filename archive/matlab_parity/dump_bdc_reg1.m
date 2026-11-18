@@ -19,7 +19,7 @@
 %                       CurveAlign BDcreation_reg.m. That function does not
 %                       seed kmeans, so this file is not the seeded golden.
 %
-% Fixtures are tests/test_for_shg_he_registration_BDcreation (repo root).
+% Fixtures are pycurvelets-core/tests/test_for_shg_he_registration_BDcreation.
 
 function dump_bdc_reg1(caseFilter, captureTrace, kmeansSeed, outSuffix, callOriginal, curveAlignDir)
     % dump_bdc_reg1()
@@ -38,9 +38,9 @@ function dump_bdc_reg1(caseFilter, captureTrace, kmeansSeed, outSuffix, callOrig
     if nargin < 5 || isempty(callOriginal); callOriginal = false; end
     if nargin < 6; curveAlignDir = ''; end
     thisDir = fileparts(mfilename('fullpath'));
-    % archive/matlab_parity -> repo tests/. The old '../test_for_...' path
+    % archive/matlab_parity -> pycurvelets-core/tests/. The old '../test_for_...' path
     % pointed at archive/ and skipped every case.
-    fixtureRoot = fullfile(thisDir, '..', '..', 'tests', 'test_for_shg_he_registration_BDcreation');
+    fixtureRoot = fullfile(thisDir, '..', '..', 'pycurvelets-core', 'tests', 'test_for_shg_he_registration_BDcreation');
     if callOriginal
         curveAlignDir = resolve_curvealign_dir(curveAlignDir, 'BDcreation_reg.m');
         addpath(curveAlignDir);

@@ -2,7 +2,7 @@
 
 Registration only (`BDcreation_reg` / `BDcreation_reg2`). The scripts call
 `pycurvelets.shg_he_registration` and write PNGs under
-`tests/artifacts/bdc_regression_viz/current/`. That directory is gitignored.
+`pycurvelets-core/tests/artifacts/bdc_regression_viz/current/`. That directory is gitignored.
 File names are listed in [ARTIFACTS.md](ARTIFACTS.md).
 
 The figures record the Python port of `BDcreation_reg2.m` and
