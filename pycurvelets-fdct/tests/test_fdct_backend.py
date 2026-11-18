@@ -20,7 +20,7 @@ def test_registered_under_fdct_entry_point():
     assert isinstance(load_backend("fdct"), FDCTBackend)
 
 
-@pytest.mark.parametrize("shape", [(256, 256), (240, 320)])
+@pytest.mark.parametrize("shape", [(256, 256), (240, 320), (512, 512)])
 def test_conforms_to_backend_protocol(shape):
     check_backend(FDCTBackend(), shape=shape)
 
