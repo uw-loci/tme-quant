@@ -15,15 +15,17 @@ if os.environ.get("TMEQ_RUN_CURVELETS") != "1":
         allow_module_level=True,
     )
 
-# Optional: attempt import; skip module if curvelet backend is missing
-try:
-    from pycurvelets.get_ct import get_ct
-except ModuleNotFoundError:
-    pytest.skip(
-        "curvelops not available; skipping get_ct tests", allow_module_level=True
-    )
-
+from pycurvelets.backends import available_backends
 from pycurvelets.get_ct import get_ct
+
+# The expected results were generated with CurveLab, so these tests pin FDCT.
+TEST_BACKEND = "fdct"
+if TEST_BACKEND not in available_backends():
+    pytest.skip(
+        f"curvelet backend {TEST_BACKEND!r} not installed (pycurvelets-fdct); "
+        "skipping get_ct tests",
+        allow_module_level=True,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -61,6 +63,7 @@ def standard_control_parameters():
         keep=0.05,
         scale=advanced_options["selected_scale"],
         radius=advanced_options["curvelets_group_radius"],
+        backend=TEST_BACKEND,
     )
 
     return curve_cp, feature_cp

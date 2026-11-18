@@ -3,8 +3,7 @@ import math
 import numpy as np
 import pandas as pd
 
-from curvelops import fdct2d_wrapper
-
+from pycurvelets.backends import load_backend
 from pycurvelets.models import CurveletControlParameters
 from pycurvelets.utils.math import round_mlab
 
@@ -12,11 +11,14 @@ from pycurvelets.utils.math import round_mlab
 def new_curv(img, curve_cp: CurveletControlParameters):
     """
     Python implementation of newCurv.m
-    SAME IMPLEMENTATION WHEN USING CPP WRAPPER -- NOT MATLAB.
 
-    This function applies the Fast Discrete Curvelet Transform to an image, then extracts
+    This function applies a discrete curvelet transform to an image, then extracts
     the curvelet coefficients at a given scale with magnitude above a given threshold.
     The orientation (angle, in degrees) and center point of each curvelet is then stored.
+
+    The transform comes from the backend named by ``curve_cp.backend`` (see
+    :mod:`pycurvelets.backends.registry`). With the ``fdct`` backend the output
+    matches MATLAB CurveAlign.
 
     Parameters:
     -----------
@@ -30,6 +32,9 @@ def new_curv(img, curve_cp: CurveletControlParameters):
                 Scale to be analyzed.
             - radius : float
                 Radius to group adjacent curvelets.
+            - backend : str or None
+                Curvelet backend name; None picks one as described in
+                :func:`pycurvelets.backends.load_backend`.
 
     Returns:
     --------
@@ -47,21 +52,9 @@ def new_curv(img, curve_cp: CurveletControlParameters):
     s_scale = curve_cp.scale
     radius = curve_cp.radius
 
-    # Apply the FDCT to the image
-    # Note: Python implementation uses different parameter ordering from MATLAB
-    # is_real=0 in MATLAB corresponds to ac=1 in Python (complex-valued transform)
-    M, N = img.shape
-    is_real = 0  # 0 means complex
-    ac = 0  # 1 is curvelets, 0 is wavelets
-    nbscales = math.floor(math.log2(min(M, N)) - 3)
-    nbangles_coarse = 16  # default
-    c = fdct2d_wrapper.fdct2d_forward_wrap(nbscales, nbangles_coarse, ac, img)
-
-    # Debug: print FDCT parameters
-    # print(f"Debug: M={M}, N={N}, nbscales={nbscales}, nbangles_coarse={nbangles_coarse}")
-    # print(f"Debug: len(c)={len(c)}")
-    # for i, scale in enumerate(c):
-    #     print(f"Debug: scale {i}: {len(scale)} wedges")
+    # Apply the curvelet transform to the image
+    backend = load_backend(curve_cp.backend)
+    c = backend.forward(img)
 
     # Create an empty structure of the same dimensions
     curvelet_coefficients = [
@@ -110,76 +103,22 @@ def new_curv(img, curve_cp: CurveletControlParameters):
     # print(f"Debug: total non-zero coefficients after thresholding: {total_nnz}")
 
     # Get locations of curvelet centers and find angles
-    m, n = img.shape
-    nbangles_coarse = 16
-
-    sx, sy, fx, fy, nx, ny = fdct2d_wrapper.fdct2d_param_wrap(
-        m, n, nbscales, nbangles_coarse, 0
-    )
-
-    long = len(c[s]) // 2
-    # print(f"Debug: len(c[s])={len(c[s])}, long={long}")
+    geometry = backend.scale_geometry(img.shape, s)
+    long = len(geometry.wedges)
     angs = [np.array([]) for _ in range(long)]
     row = [np.array([]) for _ in range(long)]
     col = [np.array([]) for _ in range(long)]
-    inc = 360 / len(c[s])
-    start_ang = 225
+    inc = geometry.angle_step_deg
 
-    SX, SY, FX, FY, NX, NY = fdct2d_wrapper.fdct2d_param_wrap(
-        m, n, nbscales, nbangles_coarse, 0
-    )
-
-    for scl in range(nbscales):
-        for wedge_scl in range(len(FX[scl])):
-            nx = NX[scl][wedge_scl]
-            ny = NY[scl][wedge_scl]
-            cx = math.ceil((nx + 1) / 2)
-            cy = math.ceil((ny + 1) / 2)
-
-            sx = SX[scl][wedge_scl]
-            sy = SY[scl][wedge_scl]
-            IX, IY = np.meshgrid(
-                np.arange(1, nx + 1), np.arange(1, ny + 1), indexing="ij"
-            )
-            SX[scl][wedge_scl] = 1 + M * (sx * (IX - cx) + 0.5)
-            SY[scl][wedge_scl] = 1 + N * (sy * (IY - cy) + 0.5)
-
-    for w in range(long):
+    for w, wedge in enumerate(geometry.wedges):
         # Find non-zero coefficients
         # MATLAB: test = find(Ct{s}{w});
         test = np.flatnonzero(curvelet_coefficients[s][w])
 
         if len(test) > 0:
-            test_idx_y, test_idx_x = np.unravel_index(
-                test, curvelet_coefficients[s][w].shape
-            )
-            angle = np.zeros(len(test))
-            for bb in range(2):
-                # print(len(test))
-                for aa in range(len(test)):
-                    # Convert angular wedge to measured angle in degrees (MATLAB: (w-1) and w)
-                    temp_angle = start_ang - (inc * w)
-                    shift_temp = start_ang - (inc * (w + 1))
-                    angle[aa] = np.mean([temp_angle, shift_temp])
-
-            # Adjust angles
-            ind = angle < 0
-            angle[ind] += 360
-
-            IND = angle > 225
-            angle[IND] -= 180
-
-            idx = angle < 45
-            angle[idx] += 180
-
-            row[w] = np.zeros(len(test), dtype=int)
-            col[w] = np.zeros(len(test), dtype=int)
-
-            angs[w] = np.array(angle)
-            row[w] = round_mlab(SX[s][w].ravel(order="F")[test])
-            col[w] = round_mlab(SY[s][w].ravel(order="F")[test])
-
-            angle = []
+            angs[w] = np.full(len(test), wedge.angle_deg)
+            row[w] = round_mlab(wedge.rows[test])
+            col[w] = round_mlab(wedge.cols[test])
         else:
             angs[w] = np.array([0])
             row[w] = np.array([0])

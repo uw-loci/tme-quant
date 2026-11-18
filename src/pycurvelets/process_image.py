@@ -13,8 +13,7 @@ import time
 from multiprocessing import Pool
 from typing import Optional
 
-from curvelops import FDCT2D, curveshow, fdct2d_wrapper
-
+from pycurvelets.backends import load_backend
 from pycurvelets.get_alignment_to_roi import get_alignment_to_roi
 from pycurvelets.models import (
     AdvancedAnalysisOptions,
@@ -62,6 +61,8 @@ def process_image(
         - fiber_mode : int - Determines fiber processing method (0=curvelet, 1/2/3=FIRE)
         - keep : float - Percentage of curvelet coefficients to keep (default 0.05)
         - fire_directory : str - Directory containing FIRE fiber results (optional)
+        - backend : str - Curvelet backend name, e.g. "fdct" or "udct" (optional;
+          see pycurvelets.backends.load_backend)
 
     output_params : OutputControlParameters
         Output generation control flags including:
@@ -120,6 +121,7 @@ def process_image(
     fiber_mode = fiber_params.fiber_mode
     keep = fiber_params.keep
     fire_directory = fiber_params.fire_directory
+    backend = fiber_params.backend
 
     output_directory = output_params.output_directory
     os.makedirs(output_directory, exist_ok=True)
@@ -184,6 +186,7 @@ def process_image(
                 if isinstance(advanced_options, AdvancedAnalysisOptions)
                 else advanced_options["curvelets_group_radius"]
             ),
+            backend=backend,
         )
         # Call getCT
         fiber_structure, density_df, alignment_df, curvelet_coefficients = get_ct(
@@ -317,7 +320,7 @@ def process_image(
     # Inverse curvelet transform (only for curvelet mode)
     if fiber_mode == 0:
         images["reconstruction"] = generate_reconstruction(
-            img=img, curvelet_coefficients=curvelet_coefficients
+            img=img, curvelet_coefficients=curvelet_coefficients, backend=backend
         )
 
     # Create overlay figure if requested
@@ -997,7 +1000,7 @@ def save_fiber_features(
     return fib_feat_df
 
 
-def generate_reconstruction(img, curvelet_coefficients):
+def generate_reconstruction(img, curvelet_coefficients, backend=None):
     """
     Generate the inverse curvelet transform (reconstruction).
 
@@ -1007,6 +1010,10 @@ def generate_reconstruction(img, curvelet_coefficients):
         Original image
     curvelet_coefficients : array
         Curvelet coefficients from get_ct
+    backend : str, optional
+        Curvelet backend that produced the coefficients; must be the same one
+        get_ct used. None chooses as described in
+        pycurvelets.backends.load_backend.
 
     Returns
     -------
@@ -1014,19 +1021,7 @@ def generate_reconstruction(img, curvelet_coefficients):
         Reconstructed image as float32 pixels.
     """
     print("Computing inverse curvelet transform.")
-    M, N = img.shape
-    is_real = 0  # 0 means complex
-    ac = 0  # 1 is curvelets, 0 is wavelets
-    nbscales = math.floor(math.log2(min(M, N)) - 3)
-    nbangles_coarse = 16  # default
-    temp_inverse = fdct2d_wrapper.fdct2d_inverse_wrap(
-        img.shape[0],
-        img.shape[1],
-        nbscales,
-        nbangles_coarse,
-        ac,
-        curvelet_coefficients,
-    )
+    temp_inverse = load_backend(backend).inverse(curvelet_coefficients, img.shape)
 
     recon = np.real(temp_inverse)
 

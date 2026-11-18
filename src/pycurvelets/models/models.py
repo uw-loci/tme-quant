@@ -40,6 +40,9 @@ class CurveletControlParameters:
     keep: float
     scale: Union[int, float]
     radius: float
+    # Curvelet backend name ("fdct", "udct", ...); None lets
+    # pycurvelets.backends.load_backend choose.
+    backend: Optional[str] = None
 
     def __post_init__(self) -> None:
         # new_curv uses ``len(c) - scale - 1`` as a list index; a float scale (e.g. 1.0)
@@ -117,6 +120,9 @@ class FiberAnalysisParameters:
     fiber_mode: int = 0  # 0=curvelet, 1/2/3=FIRE
     keep: float = 0.05  # Percentage of curvelets to keep
     fire_directory: Optional[str] = None
+    # Curvelet backend for fiber_mode 0 ("fdct", "udct", ...); None lets
+    # pycurvelets.backends.load_backend choose.
+    backend: Optional[str] = None
 
 
 @dataclass
