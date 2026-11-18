@@ -1,8 +1,9 @@
 # Two installable views
 # ---------------------
 # WHEEL (pip install / python -m build --wheel):
-#   [tool.setuptools.packages.find] where=["src"] → only src/pycurvelets
-#   and src/napari_curvealign, plus package-data (napari.yaml, data/*.npz).
+#   [tool.setuptools.packages.find] where=["src"] → only src/pycurvelets,
+#   plus package-data (data/*.npz). The napari and Fiji plugins live in
+#   uw-loci/napari-curvealign and uw-loci/fiji-curvealign.
 #
 # SDIST (pip install --no-binary tme-quant / python -m build --sdist):
 #   What is needed to rebuild the wheel: src/ + docs + the lightweight

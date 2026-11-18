@@ -34,19 +34,19 @@ import pytest
 import scipy.io as sio
 from skimage import io
 
-from pycurvelets._he_bdc_common import (
-    adjust_rgb_mean_std,
-    matlab_fspecial_gaussian,
-    matlab_graythresh,
-    matlab_imfilter,
-    matlab_imwarp_bilinear,
-    matlab_rgb2gray,
-    prepare_registration_pair,
-)
+from pycurvelets._he_bdc_common import adjust_rgb_mean_std, prepare_registration_pair
 from pycurvelets._itk_v3_matlab_engine import (
     DEFAULT_SEED,
-    matlab_T_to_A,
+    T_to_A,
     register_bdcreation_reg2_matlab,
+)
+from pycurvelets._matlab_util import (
+    fspecial_gaussian,
+    graythresh,
+    imfilter,
+    imwarp_bilinear,
+    rgb2gray,
+    rgb2hsv,
 )
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
@@ -89,7 +89,7 @@ def _load_inputs(he_dir: Path, fname: str, shg_dir: Path) -> tuple[np.ndarray, n
     he = io.imread(str(he_dir / fname)).astype(np.float64) / 255.0
     shg = io.imread(str(shg_dir / fname)).astype(np.float64) / 255.0
     if shg.ndim == 3:
-        shg = matlab_rgb2gray(shg)
+        shg = rgb2gray(shg)
     return he, shg
 
 
@@ -109,7 +109,7 @@ def _python_he_moving_and_fixed(he_dir: Path, fname: str, shg_dir: Path, ppm: fl
 
 def test_graythresh_matches_matlab_on_uniform_ramp() -> None:
     # MATLAB: graythresh((0:255)/255) == 127/255 (single arg-max at bin 128).
-    level = matlab_graythresh(np.arange(256) / 255.0)
+    level = graythresh(np.arange(256) / 255.0)
     assert level == pytest.approx(127 / 255, abs=1e-12)
 
 
@@ -119,11 +119,9 @@ def test_graythresh_matches_matlab_dumped_saturation_threshold() -> None:
     _skip_unless_files(mat, _FIXTURE_ROOT / "HE" / "patient_001.tif", _FIXTURE_ROOT / "SHG" / "patient_001.tif")
     he, shg = _load_inputs(_FIXTURE_ROOT / "HE", "patient_001.tif", _FIXTURE_ROOT / "SHG")
     he_scaled, _fixed, _pix = prepare_registration_pair(he, shg, 1.5)
-    from pycurvelets._he_bdc_common import matlab_rgb2hsv
-
-    hsv = matlab_rgb2hsv(adjust_rgb_mean_std(he_scaled))
+    hsv = rgb2hsv(adjust_rgb_mean_std(he_scaled))
     # Value captured from MATLAB's dump_bdc_reg2 run (0.0902 == 23/255).
-    assert matlab_graythresh(hsv[..., 1]) == pytest.approx(23 / 255, abs=1e-12)
+    assert graythresh(hsv[..., 1]) == pytest.approx(23 / 255, abs=1e-12)
 
 
 def test_imfilter_even_kernel_uses_matlab_centre() -> None:
@@ -134,7 +132,7 @@ def test_imfilter_even_kernel_uses_matlab_centre() -> None:
     """
     img = np.zeros((5, 5))
     img[2, 2] = 1.0
-    out = matlab_imfilter(img, matlab_fspecial_gaussian(2, 0.5))
+    out = imfilter(img, fspecial_gaussian(2, 0.5))
     expected = np.zeros((5, 5))
     expected[1:3, 1:3] = 0.25
     np.testing.assert_allclose(out, expected, atol=1e-15)
@@ -149,7 +147,7 @@ def test_imwarp_bilinear_matches_matlab_interp2d_probe() -> None:
     fill = float(m["fill"].item())
     # imwarp with T = [1 0 0; 0 1 0; 0.3 -0.2 1] => inverse map x_in = x_out-0.3, y_in = y_out+0.2
     A = np.array([[1.0, 0.0, -0.3], [0.0, 1.0, 0.2]])
-    warped_py = matlab_imwarp_bilinear(img, (6, 7), A, fill_value=fill)
+    warped_py = imwarp_bilinear(img, (6, 7), A, fill_value=fill)
     np.testing.assert_allclose(warped_py, m["warped"], atol=1e-12)
 
     # Edge rule: samples in the half-pixel band [0.5, 1) are pure fill, and
@@ -202,7 +200,7 @@ def test_itk_v3_engine_reproduces_matlab_tform_on_matlab_inputs(case_id, he_dir,
         seed=DEFAULT_SEED,
     )
     A_py = np.asarray(dbg["aff_matlab_tform_A"])
-    A_ml = matlab_T_to_A(np.loadtxt(tform_txt))
+    A_ml = T_to_A(np.loadtxt(tform_txt))
     max_diff = float(np.max(np.abs(A_py - A_ml)))
     assert max_diff < 1e-6, (
         f"[{case_id}] tform.A differs from MATLAB by {max_diff:.3e}\n"
@@ -310,7 +308,7 @@ def test_reg1_itk_v3_engine_reproduces_matlab_tform_on_matlab_inputs(
         seed=DEFAULT_SEED,
     )
     A_py = np.asarray(dbg["aff_matlab_tform_A"])
-    A_ml = matlab_T_to_A(np.loadtxt(tform_txt))
+    A_ml = T_to_A(np.loadtxt(tform_txt))
     max_diff = float(np.max(np.abs(A_py - A_ml)))
     assert max_diff < 1e-6, (
         f"[{case_id}] tform.A differs from MATLAB by {max_diff:.3e}\n"
