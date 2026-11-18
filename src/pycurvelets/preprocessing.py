@@ -1,8 +1,8 @@
 """
-Preprocessing module for CurveAlign Napari plugin.
+Image preprocessing for curvelet analysis.
 
 Provides preprocessing options including:
-- Bio-Formats import (via aicsimageio or napari-imagej)
+- Bio-Formats import (via aicsimageio)
 - Tubeness filter (via skimage.filters)
 - Frangi filter (via skimage.filters)
 - Autothreshold options (Otsu, Triangle, Isodata, etc.)
@@ -29,12 +29,6 @@ try:
     HAS_AICSIO = True
 except ImportError:
     HAS_AICSIO = False
-
-try:
-    import napari_imagej
-    HAS_IMAGEJ = True
-except ImportError:
-    HAS_IMAGEJ = False
 
 
 def to_2d_grayscale_for_curvelets(image: np.ndarray) -> np.ndarray:
@@ -114,36 +108,20 @@ class PreprocessingOptions:
         self.gaussian_sigma = gaussian_sigma
 
 
-def load_image_with_bioformats(
-    file_path: str,
-    use_napari_imagej: bool = False
-) -> Tuple[np.ndarray, dict]:
+def load_image_with_bioformats(file_path: str) -> Tuple[np.ndarray, dict]:
     """
-    Load image using Bio-Formats (via aicsimageio or napari-imagej).
+    Load image using Bio-Formats (via aicsimageio).
     
     Parameters
     ----------
     file_path : str
         Path to image file
-    use_napari_imagej : bool, default False
-        If True, use napari-imagej bridge. Otherwise use aicsimageio.
         
     Returns
     -------
     Tuple[np.ndarray, dict]
         Image data and metadata dictionary
     """
-    if use_napari_imagej and HAS_IMAGEJ:
-        # Use napari-imagej bridge to Fiji
-        try:
-            ij = napari_imagej.init()
-            reader = ij.scifio().datasetIO().open(file_path)
-            image_data = np.array(reader.data())
-            metadata = {"source": "napari-imagej", "shape": image_data.shape}
-            return image_data, metadata
-        except Exception as e:
-            print(f"napari-imagej loading failed: {e}, falling back to aicsimageio")
-    
     if HAS_AICSIO:
         # Use aicsimageio (pure Python Bio-Formats)
         try:

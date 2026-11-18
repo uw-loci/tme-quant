@@ -1,11 +1,14 @@
 ### tme-quant
 
-Python translation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) with the goal of unifying cell and collagen analysis, provided as a modern Python `src/` package and a napari plugin.
+Python translation of [CurveAlign](https://loci.wisc.edu/software/curvealign/) with the goal of unifying cell and collagen analysis, provided as a modern Python `src/` package.
+
+Interactive front ends live in their own repositories and call this library:
+- Fiji plugin: [uw-loci/fiji-curvealign](https://github.com/uw-loci/fiji-curvealign)
+- napari plugin: [uw-loci/napari-curvealign](https://github.com/uw-loci/napari-curvealign)
 
 ### About this repo
-- `src/pycurvelets`: Python implementation using the curvelet transform, including the SHG–HE registration port (`SHG_HE_registration`)
-- `src/napari_curvealign`: napari plugin surface for interactive use
-- `tests/`: pytest suite (data-driven tests and headless napari smoke test)
+- `src/pycurvelets`: Python implementation using the curvelet transform, including the SHG–HE registration port (`SHG_HE_registration`), tumor annotation, and the segmentation, preprocessing and TACS helpers the plugins drive
+- `tests/`: pytest suite (data-driven tests)
 - `.github/workflows/ci.yml`: GitHub Actions workflow (runs core tests only)
 
 ### Wheel vs sdist
@@ -14,7 +17,7 @@ Two installable views. Both are produced from a clone (`make wheel` /
 
 | View | How to get it | What it contains |
 | --- | --- | --- |
-| **Wheel** | `pip install tme-quant` or `make wheel` | Runtime only: `src/` (`pycurvelets`, `napari_curvealign`, `data/*.npz`). |
+| **Wheel** | `pip install tme-quant` or `make wheel` | Runtime only: `src/` (`pycurvelets`, `data/*.npz`). |
 | **sdist** | `pip install tme-quant --no-binary tme-quant` or `make sdist` | Source to rebuild the wheel, plus docs and the lightweight pytest suite. |
 
 Registration tests 1-9, annotation tests 1-3, MATLAB dumps, and ground-truth
@@ -32,13 +35,12 @@ Base requirements:
 - macOS, Linux, or Windows (see notes below)
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
-- napari uses PyQt6 (included in dependencies)
 
 ### Quick start (without curvelets)
 
 ```bash
 uv sync
-uv run napari
+uv run pytest -q
 ```
 
 ### Optional: curvelet backend (curvelops)
@@ -59,11 +61,7 @@ Windows options:
 
 ### Development
 
-See [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) for plugin setup and troubleshooting. Running tests:
-
-- Headless (no GUI): set Qt to offscreen
-  - macOS/Linux: `export QT_QPA_PLATFORM=offscreen`
-  - Windows/PowerShell: `$env:QT_QPA_PLATFORM = 'offscreen'`
+See [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) for setup and troubleshooting. Running tests:
 
 - Default test suite:
 ```bash
@@ -73,7 +71,7 @@ make test
 - Enable curvelet-dependent tests:
 ```bash
 export TMEQ_RUN_CURVELETS=1
-QT_QPA_PLATFORM=offscreen uv run pytest -q tests/test_get_ct.py tests/test_new_curv.py tests/test_process_image.py -rs
+uv run pytest -q tests/test_get_ct.py tests/test_new_curv.py tests/test_process_image.py -rs
 ```
 
 - Enable strict MATLAB-reference parity assertions:
@@ -87,7 +85,7 @@ export TMEQ_VALIDATE_MATLAB=1
   suite (tests 1-9) is git-only; enable it with:
 ```bash
 export TMEQ_RUN_MATLAB_PARITY=1
-QT_QPA_PLATFORM=offscreen uv run pytest -q -p no:napari \
+uv run pytest -q \
     tests/test_shg_he_registration.py \
     tests/test_he_bdc_reg1.py \
     tests/test_shg_he_registration_matlab_parity.py \
@@ -99,14 +97,13 @@ QT_QPA_PLATFORM=offscreen uv run pytest -q -p no:napari \
   suite is git-only; enable it with the same `TMEQ_RUN_MATLAB_PARITY=1` flag:
 ```bash
 export TMEQ_RUN_MATLAB_PARITY=1
-QT_QPA_PLATFORM=offscreen uv run pytest -q -p no:napari \
+uv run pytest -q \
     tests/test_he_bdc_annotation.py \
     tests/test_tumor_annotation_from_he.py \
     tests/test_tumor_annotation_matlab_parity.py
 ```
 
 Notes:
-- The napari test is an import-only smoke test (no `Viewer` is created); it runs headless.
 - MATLAB parity tests are opt-in because they validate exact numerical agreement with historical MATLAB reference artifacts.
 
 Testing policy:
@@ -119,7 +116,6 @@ Testing policy:
 - CI has two lanes in `.github/workflows/ci.yml`:
   - `test-basic`: default Python matrix without CurveLab secret requirements.
   - `test-curvelab`: secure lane that fetches/builds CurveLab + FFTW and runs curvelet-enabled tests.
-- Both lanes run with `QT_QPA_PLATFORM=offscreen`.
 
 ### Working with secrets in GitHub Actions
 This project uses GitHub Actions secrets for tasks that require authentication or access to private resources. Secrets can be configured in the [Settings tab of the repostiory](https://github.com/uw-loci/tme-quant/settings/secrets/actions). For more information about secrets, see:
@@ -129,6 +125,4 @@ This project uses GitHub Actions secrets for tasks that require authentication o
 Never hardcode secrets or access tokens in workflow files; always use the `secrets:` context.
 
 ### Troubleshooting
-- Qt error ("No Qt bindings could be found"): ensure `uv sync` completed; pyproject includes PyQt6.
-- Segfault on Viewer creation: avoid creating a `napari.Viewer()` in tests; we only import napari and run offscreen.
 - curvelops build errors: ensure `FFTW` and `FDCT` point to your install roots and the 2D/3D libraries were built.
