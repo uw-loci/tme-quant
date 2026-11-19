@@ -14,6 +14,9 @@ dependencies = [
   "numpy>=2.2.6",
   # Pure Python (NumPy), MIT licensed, on PyPI; no native build needed.
   "curvelets>=1.2,<2",
+  # curvelets 1.2 imports typing_extensions.TypeAliasType on every Python but
+  # only declares the dependency for Python <= 3.10.
+  "typing-extensions>=4.6",
 ]
 
 [project.entry-points."pycurvelets.backends"]

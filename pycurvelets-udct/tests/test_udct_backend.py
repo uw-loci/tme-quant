@@ -2,9 +2,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
-pytest.importorskip("curvelets")
-
 from pycurvelets.backends import available_backends, load_backend
 from pycurvelets.backends.conformance import _line_image, check_backend
 from pycurvelets.models import CurveletControlParameters
