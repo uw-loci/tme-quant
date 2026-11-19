@@ -40,6 +40,32 @@ jobs:
         run: |
           pytest -q -rs
 
+  # The UDCT backend is pure Python, so it runs on every PR without secrets.
+  test-udct:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pycurvelets-core and pycurvelets-udct
+        run: |
+          python -m pip install --upgrade pip
+          # One command, so pip satisfies udct's pycurvelets-core pin with the checkout.
+          python -m pip install -e ./pycurvelets-core -e ./pycurvelets-udct
+          python -m pip install pytest
+          python -c "from pycurvelets.backends import available_backends; print(available_backends())"
+
+      - name: Run pycurvelets-udct tests
+        working-directory: pycurvelets-udct
+        run: |
+          pytest -q -rs
+
   # Secure build with CurveLab; skip on forked PRs (no secrets on forks).
   test-fdct:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -153,7 +179,7 @@ jobs:
       - name: Build sdists and wheels
         run: |
           python -m pip install --upgrade pip build twine
-          for project in pycurvelets-core pycurvelets-fdct; do
+          for project in pycurvelets-core pycurvelets-fdct pycurvelets-udct; do
             python -m build --outdir dist "$project"
           done
           ls -l dist
