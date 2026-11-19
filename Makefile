@@ -1,42 +1,60 @@
 # Makefile for tme-quant
-# Convenience commands for common tasks
+# Convenience commands for common tasks. The repository holds several
+# independently built projects (pycurvelets-core, pycurvelets-fdct, ...);
+# there is no project at the root, so targets loop over PROJECTS and use the
+# shared .venv that bin/install.sh creates.
 
-.PHONY: help setup test check clean wheel sdist
+.PHONY: help setup test check clean wheel sdist dist
+
+PROJECTS := pycurvelets-core pycurvelets-fdct
+PYTHON ?= $(CURDIR)/.venv/bin/python
+DIST_DIR := dist
 
 help:
 	@echo "tme-quant Makefile Commands"
 	@echo ""
 	@echo "Setup & Installation:"
-	@echo "  make setup        - Automated installation with curvelops (uses bin/install.sh)"
+	@echo "  make setup        - Install core + FDCT backend into .venv (uses bin/install.sh)"
 	@echo ""
 	@echo "Development:"
-	@echo "  make test         - Run test suite"
+	@echo "  make test         - Run each project's test suite"
 	@echo "  make check        - Run linting"
 	@echo "  make clean        - Clean build artifacts"
 	@echo ""
-	@echo "Packaging (see README.md 'Wheel vs sdist'):"
-	@echo "  make wheel        - Build the runtime wheel (src/ only)"
-	@echo "  make sdist        - Build the source dist (src + docs + lightweight tests)"
+	@echo "Packaging (see README.md 'Wheel vs sdist'), output in $(DIST_DIR)/:"
+	@echo "  make wheel        - Build a wheel per project"
+	@echo "  make sdist        - Build a source dist per project"
+	@echo "  make dist         - Both"
 	@echo ""
+	@echo "Projects: $(PROJECTS)"
 
 setup:
 	@echo "Running automated installation..."
 	bash bin/install.sh
 
 test:
-	uv run pytest -v
+	@set -e; for project in $(PROJECTS); do \
+		echo "== pytest $$project"; \
+		(cd $$project && $(PYTHON) -m pytest -v); \
+	done
 
 check:
-	uv run ruff check .
+	$(PYTHON) -m ruff check $(PROJECTS)
 
 wheel:
-	uv run python -m build --wheel
+	@set -e; for project in $(PROJECTS); do \
+		$(PYTHON) -m build --wheel --outdir $(DIST_DIR) $$project; \
+	done
 
 sdist:
-	uv run python -m build --sdist
+	@set -e; for project in $(PROJECTS); do \
+		$(PYTHON) -m build --sdist --outdir $(DIST_DIR) $$project; \
+	done
+
+dist: sdist wheel
 
 clean:
-	rm -rf build/ dist/ *.egg-info
-	find . -type d -name __pycache__ -exec rm -r {} +
+	rm -rf $(DIST_DIR) build/ */build/ */*.egg-info */src/*.egg-info
+	find . -type d -name __pycache__ -prune -exec rm -r {} +
 	find . -type f -name "*.pyc" -delete
-	rm -rf .pytest_cache .coverage htmlcov
+	rm -rf .pytest_cache */.pytest_cache .coverage htmlcov

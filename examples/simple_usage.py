@@ -2,7 +2,8 @@
 """
 Simple usage examples for pycurvelets (manually converted API from MATLAB CurveAlign).
 
-Requires: curvelops (for curvelet transform), pycurvelets (this package).
+Requires: pycurvelets-core plus a curvelet backend such as pycurvelets-fdct
+(bin/install.sh installs both).
 Run from repo root: python examples/simple_usage.py
 """
 import numpy as np

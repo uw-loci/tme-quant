@@ -9,11 +9,40 @@ on this library:
 - Fiji: [uw-loci/fiji-curvealign](https://github.com/uw-loci/fiji-curvealign)
 - napari: [uw-loci/napari-curvealign](https://github.com/uw-loci/napari-curvealign)
 
-If you only need the segmentation features (Cellpose/StarDist) without curvelets:
+If you only need the segmentation features (Cellpose/StarDist) without curvelets,
+from the repository root:
 
 ```bash
-uv sync --extra segmentation
+uv venv --python 3.11
+uv pip install -e "./pycurvelets-core[segmentation]" pytest
 ```
+
+## Projects and curvelet backends
+
+Each folder at the root with a `pyproject.toml` is a separately built project;
+there is no root project. Run `uv` and `make` from the repository root so they
+use the shared `.venv` (inside a project folder, `uv run` builds a per-project env).
+
+`pycurvelets-core` never imports a transform library. `pycurvelets.backends`
+loads transforms from the `pycurvelets.backends` entry-point group, which
+backend projects register in their `pyproject.toml`:
+
+```toml
+[project.entry-points."pycurvelets.backends"]
+fdct = "pycurvelets_fdct.backend:FDCTBackend"
+```
+
+A backend implements `pycurvelets.backends.CurveletBackend` (`forward`,
+`scale_geometry`, `inverse`) and its tests call
+`pycurvelets.backends.conformance.check_backend`, which also pins the angle
+and pixel-position conventions `new_curv` relies on.
+`pycurvelets-core/tests/test_backend_boundaries.py` fails if core imports a
+provider directly. Backend projects pin `pycurvelets-core` exactly, because
+the protocol is versioned with core.
+
+Choosing a backend: `CurveletControlParameters(backend=...)` /
+`FiberAnalysisParameters(backend=...)`, else `TMEQ_CURVELET_BACKEND`, else the
+only one installed, else `fdct`. The choice is logged at INFO level.
 
 ## Running tests
 
@@ -21,7 +50,7 @@ uv sync --extra segmentation
 make test
 ```
 
-Curvelet tests run automatically when curvelops is installed; otherwise they are skipped.
+Curvelet tests run when `TMEQ_RUN_CURVELETS=1` and `pycurvelets-fdct` is installed; otherwise they are skipped.
 
 ### SHG–HE registration (BDcreation_reg / BDcreation_reg2)
 
@@ -48,8 +77,8 @@ Default `annotation_method="hsv"` is `BDcreationHE2.m`. `annotation_method="rgb_
 
 | Command | Output |
 | --- | --- |
-| `make wheel` | `dist/*.whl` — `src/` only (users) |
-| `make sdist` | `dist/*.tar.gz` — source + docs + lightweight tests (no tests 1-9 / dumps) |
+| `make wheel` | `dist/*.whl`, one per project — each project's `src/` only (users) |
+| `make sdist` | `dist/*.tar.gz`, one per project — source + lightweight tests (no tests 1-9 / dumps) |
 
 `pycurvelets-core/tests/test_packaging.py` checks the contract.
 
@@ -62,4 +91,4 @@ Default `annotation_method="hsv"` is `BDcreationHE2.m`. `annotation_method="rgb_
 | CurveLab not found | Download from curvelet.org, extract as `utils/CurveLab-<version>/` inside this repository |
 | `curvelops` reports MSVC is required | Native Windows needs `cl.exe` and MSVC-compatible FFTW/CurveLab libraries; use WSL2 for the verified install path |
 | curvelops build errors | Ensure `FFTW` and `FDCT` (or `CPPFLAGS`/`LDFLAGS`) point to install roots |
-| Plugin not showing | `uv pip install -e .`
+| `BackendUnavailableError` | No curvelet backend installed, or not the one requested; install `pycurvelets-fdct` (see `bin/install.sh`) |

@@ -5,19 +5,17 @@
 #   plus package-data (data/*.npz). The napari and Fiji plugins live in
 #   uw-loci/napari-curvealign and uw-loci/fiji-curvealign.
 #
-# SDIST (pip install --no-binary tme-quant / python -m build --sdist):
-#   What is needed to rebuild the wheel: src/ + docs + the lightweight
-#   pytest suite (CSV / synthetic-image tests). Registration tests 1-9,
-#   MATLAB dumps, and ground-truth TIFFs stay in git for CI / clones.
+# SDIST (pip install --no-binary pycurvelets-core / python -m build --sdist):
+#   What is needed to rebuild the wheel: src/ + the lightweight pytest suite
+#   (CSV / synthetic-image tests). Registration tests 1-9, MATLAB dumps,
+#   ground-truth TIFFs and the repository-level doc/ and archive/ stay in git
+#   for CI / clones; they sit outside this project directory.
 #   Comparison PNGs are generated locally and are not in git or the sdist.
 
 graft tests
-graft doc
-include Makefile
 
 prune tests/test_for_shg_he_registration_BDcreation
 prune tests/artifacts
-prune archive
 
 global-exclude .DS_Store
 global-exclude .coverage

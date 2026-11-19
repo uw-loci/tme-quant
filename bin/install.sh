@@ -2,7 +2,8 @@
 ################################################################################
 # tme-quant Installation Script
 #
-# Automates installation of tme-quant with curvelops (curvelet backend).
+# Automates installation of pycurvelets-core and the FDCT curvelet backend
+# (pycurvelets-fdct, which builds curvelops) into the repository's .venv.
 # User prerequisite: download CurveLab into this repo's utils/ directory.
 #
 # Usage: bash bin/install.sh
@@ -21,6 +22,7 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 UTILS_DIR="$PROJECT_ROOT/utils"
+VENV_DIR="$PROJECT_ROOT/.venv"
 PYTHON_VERSION="3.11"
 FFTW_VERSION="2.1.5"
 
@@ -334,16 +336,32 @@ EOF
     print_warning "Could not clear the curvelops uv cache; continuing with a forced reinstall."
   fi
 
-  print_info "Syncing uv environment..."
-  if ! uv sync --python "$PYTHON_VERSION" --extra curvelops --extra segmentation --extra fiji --reinstall-package curvelops; then
-    print_error "uv sync failed."
+  # Some build front ends read the variables from the environment instead.
+  export FFTW FDCT
+
+  # There is no project at the repository root: each project under it has its
+  # own pyproject.toml, so they are installed one by one into a shared .venv.
+  print_info "Creating $VENV_DIR (Python $PYTHON_VERSION)..."
+  if ! uv venv --allow-existing --python "$PYTHON_VERSION" "$VENV_DIR"; then
+    print_error "Could not create $VENV_DIR."
     return 1
   fi
-  print_success "Environment configured."
 
-  print_info "Installing tme-quant..."
-  if ! uv pip install -e .; then
-    print_error "Installing tme-quant failed."
+  print_info "Installing pycurvelets-core (with segmentation and fiji extras)..."
+  if ! uv pip install --python "$VENV_DIR" -e "$PROJECT_ROOT/pycurvelets-core[segmentation,fiji]"; then
+    print_error "Installing pycurvelets-core failed."
+    return 1
+  fi
+
+  print_info "Installing pycurvelets-fdct (builds curvelops against FFTW and CurveLab)..."
+  if ! uv pip install --python "$VENV_DIR" -e "$PROJECT_ROOT/pycurvelets-fdct" --reinstall-package curvelops; then
+    print_error "Installing pycurvelets-fdct failed. Check the curvelops build output above."
+    return 1
+  fi
+
+  print_info "Installing development tools (pytest, ruff, build)..."
+  if ! uv pip install --python "$VENV_DIR" pytest ruff build; then
+    print_error "Installing development tools failed."
     return 1
   fi
 
@@ -360,17 +378,22 @@ verify_installation() {
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
 
-  if uv run python -c "
+  local venv_python="$VENV_DIR/bin/python"
+  [ -x "$venv_python" ] || venv_python="$VENV_DIR/Scripts/python.exe"
+
+  if "$venv_python" -c "
 import sys
 errors = []
 try:
     import pycurvelets as pc
+    from pycurvelets.backends import available_backends, load_backend
     print('  ✓ pycurvelets')
+    print(f'    curvelet backends installed: {available_backends()}')
     print(f'    HAS_CURVELETS = {pc.HAS_CURVELETS}')
-    if not pc.HAS_CURVELETS:
-        errors.append('pycurvelets: HAS_CURVELETS is False (curvelet backend not functional; check FFTW/FDCT)')
+    load_backend('fdct')
+    print('  ✓ fdct backend loads')
 except Exception as e:
-    errors.append(f'pycurvelets: {e}')
+    errors.append(f'pycurvelets / fdct backend: {type(e).__name__}: {e}')
 try:
     import curvelops
     print(f'  ✓ curvelops {curvelops.__version__}')
@@ -402,7 +425,7 @@ print('\\n✅ All imports successful!')
 main() {
   echo ""
   print_header "═══════════════════════════════════════════════════════════════"
-  print_header "  tme-quant Installation (with curvelops)"
+  print_header "  tme-quant Installation (pycurvelets-core + FDCT backend)"
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
   echo "Prerequisites:"
@@ -414,7 +437,7 @@ main() {
   echo "This script will:"
   echo "  - Download and build FFTW in $UTILS_DIR"
   echo "  - Build CurveLab from $UTILS_DIR"
-  echo "  - Create and sync uv env with needed packages"
+  echo "  - Create $VENV_DIR and install pycurvelets-core and pycurvelets-fdct into it"
   echo "  - Run verification to ensure all is functional"
   echo ""
   read -p "Press Enter to continue or Ctrl+C to cancel..."
