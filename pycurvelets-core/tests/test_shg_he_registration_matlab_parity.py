@@ -65,7 +65,7 @@ if os.environ.get("TMEQ_RUN_MATLAB_PARITY") != "1":
 _TESTS_DIR = Path(__file__).resolve().parent
 _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"
 _P02_ROOT = _FIXTURE_ROOT / "new_test_datasets_tests4-5-6-7"
-_DUMPS = _TESTS_DIR.parent / "archive" / "matlab_parity" / "dumps"
+_DUMPS = _TESTS_DIR.parents[1] / "archive" / "matlab_parity" / "dumps"
 
 # case_id, HE dir, HE/SHG filename, SHG dir, ppm, golden folder (under HE dir)
 PARITY_CASES = (

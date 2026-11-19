@@ -47,7 +47,7 @@ from skimage.measure import ransac
 from skimage.transform import AffineTransform
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "pycurvelets-core" / "src"))
 
 from pycurvelets._he_bdc_common import (  # noqa: E402
     adjust_rgb_mean_std,
@@ -66,7 +66,7 @@ from pycurvelets._itk_v3_matlab_engine import (  # noqa: E402
 from pycurvelets.SHG_HE_registration import _build_he_moving  # noqa: E402
 
 DUMPS = Path(__file__).resolve().parent / "dumps"
-FIXTURE = ROOT / "tests" / "test_for_shg_he_registration_BDcreation"
+FIXTURE = ROOT / "pycurvelets-core" / "tests" / "test_for_shg_he_registration_BDcreation"
 P02 = FIXTURE / "new_test_datasets_tests4-5-6-7"
 
 CASES = [

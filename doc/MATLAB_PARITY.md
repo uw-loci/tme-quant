@@ -12,8 +12,8 @@ or these dumps.
 
 ```bash
 TMEQ_RUN_MATLAB_PARITY=1 pytest -q \
-    tests/test_shg_he_registration_matlab_parity.py \
-    tests/test_shg_he_registration_gt.py
+    pycurvelets-core/tests/test_shg_he_registration_matlab_parity.py \
+    pycurvelets-core/tests/test_shg_he_registration_gt.py
 ```
 
 ## Tracked files (needed to re-run or regenerate)
@@ -24,7 +24,7 @@ TMEQ_RUN_MATLAB_PARITY=1 pytest -q \
 | `dump_bdc_reg1.m` | Same for reg1 (tests 8-9). Default is `rng(28,'twister')` immediately before `kmeans`, matching the goldens (`dumps/test8_km3`, `dumps/test9_km3`) and Python `kmeans_seed=28`. Optional `callOriginal` also runs CurveAlign `BDcreation_reg.m` (that function still does not seed `kmeans`). |
 | `call_original_bdc.m` | Used when `callOriginal` is true. Copies inputs to a temp HE/SHG pair and writes `registered_original.tif`. |
 | `resolve_curvealign_dir.m` | Resolves the CurveAlign directory argument or `CURVEALIGN_MATLAB`. |
-| `dump_srgb2lab_components.m` | Rebuilds `src/pycurvelets/data/matlab_srgb2lab_components.npz` if the ICC tables change. |
+| `dump_srgb2lab_components.m` | Rebuilds `pycurvelets-core/src/pycurvelets/data/matlab_srgb2lab_components.npz` if the ICC tables change. |
 | `probe_interp2d.m` | Regenerates `dumps/interp2d_probe.mat` (`imwarp` edge rule). |
 | `analyze_dumps.py` | Optional offline comparison; writes local `analysis_summary.json` (gitignored) and can refresh `gt_affine_*.json`. |
 
@@ -65,7 +65,7 @@ is the reproducible reference. The script prints MAE of
 `registered_original.tif` against the committed golden when that golden is
 in the fixture tree.
 
-Fixtures are read from `tests/test_for_shg_he_registration_BDcreation/`.
+Fixtures are read from `pycurvelets-core/tests/test_for_shg_he_registration_BDcreation/`.
 
 ## Tumor annotation (`BDcreationHE2` / `BDcreationHE`)
 
@@ -73,7 +73,7 @@ Validates that `pycurvelets.tumor_annotation_from_he` reproduces MATLAB
 `BDcreationHE2.m` (default HSV path, tests 1-3) and `BDcreationHE.m`
 (RGB k-means at `rng(28,'twister')`). MATLAB `kmeans` is unseeded, so the
 RGB reference matches only that seed. Inputs are the already-registered
-HE TIFFs under `tests/test_for_shg_he_registration_BDcreation/HE/HE_registered_test{1,2,3}/`.
+HE TIFFs under `pycurvelets-core/tests/test_for_shg_he_registration_BDcreation/HE/HE_registered_test{1,2,3}/`.
 
 The committed `SHG/CA_Boundary/BDcreationHE_testNresults_*.tif` goldens are
 a fresh HE2 run (the previous copies were `BDcreationHE.m` output; the
@@ -84,9 +84,9 @@ as well. Figures are generated locally; see [ARTIFACTS.md](ARTIFACTS.md).
 
 ```bash
 TMEQ_RUN_MATLAB_PARITY=1 pytest -q \
-    tests/test_he_bdc_annotation.py \
-    tests/test_tumor_annotation_from_he.py \
-    tests/test_tumor_annotation_matlab_parity.py
+    pycurvelets-core/tests/test_he_bdc_annotation.py \
+    pycurvelets-core/tests/test_tumor_annotation_from_he.py \
+    pycurvelets-core/tests/test_tumor_annotation_matlab_parity.py
 ```
 
 ### Regenerating annotation dumps

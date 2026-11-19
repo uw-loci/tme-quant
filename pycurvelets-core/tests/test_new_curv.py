@@ -6,14 +6,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from pycurvelets.backends import available_backends
 from pycurvelets.models import CurveletControlParameters
+from pycurvelets.new_curv import new_curv
 
-# Skip if curvelops is not available (e.g. on CI without FFTW/CurveLab)
-try:
-    from pycurvelets.new_curv import new_curv  # type: ignore
-except ModuleNotFoundError:
+# The MATLAB references were generated with CurveLab, so these tests pin FDCT.
+TEST_BACKEND = "fdct"
+if TEST_BACKEND not in available_backends():
     pytest.skip(
-        "curvelops not available; skipping new_curv tests", allow_module_level=True
+        f"curvelet backend {TEST_BACKEND!r} not installed (pycurvelets-fdct); "
+        "skipping new_curv tests",
+        allow_module_level=True,
     )
 
 
@@ -121,7 +124,10 @@ def test_new_curv_validate_struct(test_name, test_case):
     """
     img = load_test_image(test_case["image"])
     curve_cp = CurveletControlParameters(
-        keep=test_case["keep"], scale=test_case["scale"], radius=test_case["radius"]
+        keep=test_case["keep"],
+        scale=test_case["scale"],
+        radius=test_case["radius"],
+        backend=TEST_BACKEND,
     )
 
     # Run new_curv
@@ -157,7 +163,10 @@ def test_new_curv_matches_matlab_reference(test_name, test_case):
 
     img = load_test_image(test_case["image"])
     curve_cp = CurveletControlParameters(
-        keep=test_case["keep"], scale=test_case["scale"], radius=test_case["radius"]
+        keep=test_case["keep"],
+        scale=test_case["scale"],
+        radius=test_case["radius"],
+        backend=TEST_BACKEND,
     )
     in_curves, ct, inc = new_curv(img, curve_cp)
 

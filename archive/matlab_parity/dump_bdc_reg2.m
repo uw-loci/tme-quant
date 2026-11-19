@@ -14,7 +14,7 @@
 % Optionally runs case test2 twice for determinism check. The re-run does
 % not call the original function again.
 %
-% Fixtures are tests/test_for_shg_he_registration_BDcreation (repo root).
+% Fixtures are pycurvelets-core/tests/test_for_shg_he_registration_BDcreation.
 
 function dump_bdc_reg2(caseFilter, captureTrace, callOriginal, curveAlignDir)
     % dump_bdc_reg2()                    -> all cases + determinism re-run
@@ -28,9 +28,9 @@ function dump_bdc_reg2(caseFilter, captureTrace, callOriginal, curveAlignDir)
     if nargin < 3 || isempty(callOriginal); callOriginal = false; end
     if nargin < 4; curveAlignDir = ''; end
     thisDir = fileparts(mfilename('fullpath'));
-    % archive/matlab_parity -> repo tests/. The old '../test_for_...' path
+    % archive/matlab_parity -> pycurvelets-core/tests/. The old '../test_for_...' path
     % pointed at archive/ and skipped every case.
-    fixtureRoot = fullfile(thisDir, '..', '..', 'tests', 'test_for_shg_he_registration_BDcreation');
+    fixtureRoot = fullfile(thisDir, '..', '..', 'pycurvelets-core', 'tests', 'test_for_shg_he_registration_BDcreation');
     outRoot = fullfile(thisDir, 'dumps');
     if ~exist(outRoot, 'dir'); mkdir(outRoot); end
     if callOriginal

@@ -21,7 +21,7 @@ import scipy.io as sio
 from skimage import io
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "pycurvelets-core" / "src"))
 
 from pycurvelets._he_bdc_annotation import annotate_he_hsv, annotate_he_kmeans  # noqa: E402
 from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED  # noqa: E402
@@ -33,7 +33,7 @@ from pycurvelets._matlab_util import (  # noqa: E402
 )
 
 DUMPS = Path(__file__).resolve().parent / "dumps"
-FIXTURE = ROOT / "tests" / "test_for_shg_he_registration_BDcreation"
+FIXTURE = ROOT / "pycurvelets-core" / "tests" / "test_for_shg_he_registration_BDcreation"
 GOLDEN_DIR = FIXTURE / "SHG" / "CA_Boundary"
 
 HE2_CASES = (

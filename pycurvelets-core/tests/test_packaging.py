@@ -1,16 +1,17 @@
 """Guard the wheel vs sdist file split.
 
 Wheel
-    ``pip install tme-quant`` / ``python -m build --wheel``
+    ``pip install pycurvelets-core`` / ``python -m build --wheel``
     Only ``src/pycurvelets`` plus package data (``data/*.npz``). The napari
     and Fiji plugins live in uw-loci/napari-curvealign and
     uw-loci/fiji-curvealign.
 
 sdist
-    ``pip install tme-quant --no-binary tme-quant`` / ``python -m build --sdist``
+    ``pip install pycurvelets-core --no-binary pycurvelets-core`` / ``python -m build --sdist``
     Source needed to rebuild the wheel, plus the lightweight pytest suite.
     Tests 1-9 fixtures, MATLAB dumps, and GT TIFFs stay in git; they are
-    not release artifacts. Comparison PNGs are generated locally under
+    not release artifacts; the repository-level ``archive/`` and ``doc/``
+    sit outside this project, so the sdist cannot include them. Comparison PNGs are generated locally under
     tests/artifacts and are not in git or the sdist.
 """
 
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# The pycurvelets-core project directory, not the repository root.
 ROOT = Path(__file__).resolve().parents[1]
 
 _WHEEL_REGISTRATION_MODULES = (
@@ -35,7 +37,6 @@ _WHEEL_ANNOTATION_MODULES = (
 
 _SDIST_PRUNED = (
     "tests/test_for_shg_he_registration_BDcreation",
-    "archive",
     "tests/artifacts",
 )
 
@@ -70,3 +71,10 @@ def test_setuptools_wheel_is_src_only() -> None:
 def test_napari_plugin_is_not_shipped() -> None:
     assert not (ROOT / "src" / "napari_curvealign").exists()
     assert "napari" not in (ROOT / "pyproject.toml").read_text()
+
+
+def test_core_does_not_depend_on_a_curvelet_transform() -> None:
+    text = (ROOT / "pyproject.toml").read_text()
+    assert 'name = "pycurvelets-core"' in text
+    for provider in ("curvelops", "curvelets"):
+        assert f'"{provider}' not in text, f"core must not depend on {provider}; backends do"

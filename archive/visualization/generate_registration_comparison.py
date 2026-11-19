@@ -4,7 +4,7 @@
 Usage:
     python archive/visualization/generate_registration_comparison.py [output_dir]
 
-Default output_dir: tests/artifacts/bdc_regression_viz/current
+Default output_dir: pycurvelets-core/tests/artifacts/bdc_regression_viz/current
 (gitignored; not an input to the registration API).
 
 Calls ``pycurvelets.shg_he_registration`` with ``SHGHERegistrationParameters``.
@@ -23,7 +23,7 @@ from matplotlib.patches import FancyBboxPatch
 from skimage import io
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "pycurvelets-core" / "src"))
 
 from pycurvelets._matlab_util import rgb2gray
 from pycurvelets._registration_quality import (
@@ -35,7 +35,7 @@ from pycurvelets.SHG_HE_registration import (
     shg_he_registration,
 )
 
-FIXTURE = ROOT / "tests" / "test_for_shg_he_registration_BDcreation"
+FIXTURE = ROOT / "pycurvelets-core" / "tests" / "test_for_shg_he_registration_BDcreation"
 HE_DIR = FIXTURE / "HE"
 SHG_DIR = FIXTURE / "SHG"
 
@@ -253,7 +253,7 @@ def generate(
 
 
 def main() -> None:
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_registration_viz" / "current"
+    out_dir = ROOT / "pycurvelets-core" / "tests" / "artifacts" / "bdc_registration_viz" / "current"
     if len(sys.argv) > 1:
         if sys.argv[1].startswith("--"):
             raise SystemExit(f"unknown option {sys.argv[1]}")

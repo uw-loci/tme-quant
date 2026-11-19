@@ -31,16 +31,20 @@ if os.environ.get("TMEQ_RUN_CURVELETS") != "1":
         allow_module_level=True,
     )
 
-# Optional: attempt import; skip module if curvelet backend is missing
-try:
-    from pycurvelets.process_image import (
-        generate_overlay,
-        process_image,
-        process_image_to_files,
-    )
-except ModuleNotFoundError:
+from pycurvelets.backends import available_backends
+from pycurvelets.process_image import (
+    generate_overlay,
+    process_image,
+    process_image_to_files,
+)
+
+# The expected results were generated with CurveLab, so these tests pin FDCT.
+TEST_BACKEND = "fdct"
+if TEST_BACKEND not in available_backends():
     pytest.skip(
-        "curvelops not available; skipping process_image tests", allow_module_level=True
+        f"curvelet backend {TEST_BACKEND!r} not installed (pycurvelets-fdct); "
+        "skipping process_image tests",
+        allow_module_level=True,
     )
 
 
@@ -195,6 +199,7 @@ def test_process_image_returns_fiber_features(test_name, test_case, tmp_path):
     # Build FiberAnalysisParameters from JSON
     fiber_params_dict = test_case["fiber_params"].copy()
     fiber_params_dict["fire_directory"] = str(tmp_path)
+    fiber_params_dict["backend"] = TEST_BACKEND
     fiber_params = FiberAnalysisParameters(**fiber_params_dict)
 
     # Build OutputControlParameters from JSON
@@ -307,7 +312,11 @@ def test_generate_overlay(test_name, test_case, tmp_path, monkeypatch):
         num_sections=1,
     )
     fiber_params = FiberAnalysisParameters(
-        **{**test_case["fiber_params"], "fire_directory": str(tmp_path)}
+        **{
+            **test_case["fiber_params"],
+            "fire_directory": str(tmp_path),
+            "backend": TEST_BACKEND,
+        }
     )
     output_params = OutputControlParameters(
         **{**test_case["output_params"], "output_directory": str(tmp_path)}

@@ -11,7 +11,7 @@
 function dump_bdc_he2(caseFilter)
     if nargin < 1; caseFilter = ''; end
     thisDir = fileparts(mfilename('fullpath'));
-    fixtureRoot = fullfile(thisDir, '..', '..', 'tests', 'test_for_shg_he_registration_BDcreation');
+    fixtureRoot = fullfile(thisDir, '..', '..', 'pycurvelets-core', 'tests', 'test_for_shg_he_registration_BDcreation');
     outRoot = fullfile(thisDir, 'dumps');
     if ~exist(outRoot, 'dir'); mkdir(outRoot); end
 

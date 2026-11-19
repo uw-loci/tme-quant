@@ -49,7 +49,7 @@ if os.environ.get("TMEQ_RUN_MATLAB_PARITY") != "1":
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"
-_DUMPS = _TESTS_DIR.parent / "archive" / "matlab_parity" / "dumps"
+_DUMPS = _TESTS_DIR.parents[1] / "archive" / "matlab_parity" / "dumps"
 _GOLDEN_DIR = _FIXTURE_ROOT / "SHG" / "CA_Boundary"
 
 HE2_CASES = (

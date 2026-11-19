@@ -3,9 +3,9 @@ requires = ["setuptools>=77.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tme-quant"
+name = "pycurvelets-core"
 version = "0.1.0.dev0"
-description = "Python translation of CurveAlign; curvelet-based fiber and tumor-microenvironment quantification"
+description = "Python translation of CurveAlign; curvelet transforms are provided by backend packages (pycurvelets-fdct, pycurvelets-udct)"
 authors = [{ name = "Eliceiri Lab" }]
 requires-python = ">=3.11"
 dependencies = [
@@ -30,9 +30,6 @@ dev = [
 ]
 
 [project.optional-dependencies]
-curvelops = [
-  "curvelops @ git+https://github.com/PyLops/curvelops@0.23.4",
-]
 segmentation = [
   "cellcast",
   "cellpose",
