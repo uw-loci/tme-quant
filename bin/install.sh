@@ -377,11 +377,6 @@ try:
 except Exception as e:
     errors.append(f'curvelops: {e}')
 try:
-    import napari_curvealign
-    print('  ✓ napari_curvealign')
-except Exception as e:
-    errors.append(f'napari_curvealign: {e}')
-try:
     import appose
     print('  ✓ appose-python worker')
 except Exception as e:
@@ -439,11 +434,13 @@ main() {
   print_success "Installation complete!"
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
-  echo "Now run:"
+  echo "Try it:"
   echo ""
-  echo "  uv run napari"
+  echo "  uv run python examples/simple_usage.py"
   echo ""
-  echo "Plugins → napari-curvealign (or CurveAlign for Napari)"
+  echo "Interactive front ends live in separate repositories:"
+  echo "  Fiji:   https://github.com/uw-loci/fiji-curvealign"
+  echo "  napari: https://github.com/uw-loci/napari-curvealign"
   echo ""
 }
 

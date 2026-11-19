@@ -1,9 +1,8 @@
 """
 TACS (Tumor-Associated Collagen Signatures) and related boundary–fiber metrics.
 
-This module is separate from :mod:`napari_curvealign.curvelet_analysis_run`, which
-orchestrates curvelet extraction and maps. Use this module for angles relative
-to a tumor boundary after fibers are available.
+Curvelet extraction itself lives in :mod:`pycurvelets.process_image`. Use this
+module for angles relative to a tumor boundary after fibers are available.
 """
 
 import numpy as np

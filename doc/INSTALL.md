@@ -30,10 +30,12 @@ The native Windows path is not verified end to end: building the `curvelops` Pyt
 ## Run
 
 ```bash
-uv run napari
+uv run python examples/simple_usage.py
 ```
 
-**Plugins → napari-curvealign** (or **CurveAlign for Napari**)
+For an interactive front end, install the Fiji plugin
+([uw-loci/fiji-curvealign](https://github.com/uw-loci/fiji-curvealign)) or the
+napari plugin ([uw-loci/napari-curvealign](https://github.com/uw-loci/napari-curvealign)).
 
 ## Directory layout
 
@@ -46,11 +48,10 @@ tme-quant/
 
 ## Without curvelops
 
-To run napari without the curvelet backend (no FFTW/CurveLab required):
+To install without the curvelet backend (no FFTW/CurveLab required):
 
 ```bash
 uv sync --extra segmentation
-uv run napari
 ```
 
-**Note:** The napari plugin will load, but curvelet-based analysis (e.g. fiber orientation) will not run. For real curvelet analysis, use the full install above.
+**Note:** Registration, annotation, segmentation and preprocessing work, but curvelet-based analysis (e.g. fiber orientation) will not run. For real curvelet analysis, use the full install above.
