@@ -11,7 +11,6 @@ import math
 
 import numpy as np
 from curvelops import fdct2d_wrapper
-
 from pycurvelets.backends import Coefficients, ScaleGeometry, WedgeGeometry
 
 NBANGLES_COARSE = 16

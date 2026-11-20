@@ -1,19 +1,22 @@
+import os
+import time
 from functools import partial
 from io import BytesIO
-import math
-import matplotlib.pyplot as plt
-import numpy as np
-import os
-import pandas as pd
-from PIL import Image
-from skimage.draw import polygon, polygon2mask
-from skimage.measure import regionprops, label, find_contours
-import time
 from multiprocessing import Pool
 from typing import Optional
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from PIL import Image
+from skimage.draw import polygon2mask
+from skimage.measure import find_contours, label, regionprops
+
 from pycurvelets.backends import load_backend
 from pycurvelets.get_alignment_to_roi import get_alignment_to_roi
+from pycurvelets.get_ct import get_ct
+from pycurvelets.get_fire import get_fire
+from pycurvelets.get_tif_boundary import get_tif_boundary
 from pycurvelets.models import (
     AdvancedAnalysisOptions,
     BoundaryParameters,
@@ -24,9 +27,6 @@ from pycurvelets.models import (
     OutputControlParameters,
     ROIList,
 )
-from pycurvelets.get_ct import get_ct
-from pycurvelets.get_fire import get_fire
-from pycurvelets.get_tif_boundary import get_tif_boundary
 from pycurvelets.utils.misc import format_df_to_excel
 from pycurvelets.utils.visualization import draw_curvs, draw_map
 
@@ -213,7 +213,6 @@ def process_image(
     # Get features correlating fibers to boundaries
     if boundary_measurement:
         print("Analyzing boundary.")
-        t_boundary_start = time.perf_counter()
 
         if tif_boundary == 3:
             # Extract boundary coordinates from mask if not provided
@@ -223,10 +222,12 @@ def process_image(
 
             # Process ROIs in parallel only if coordinates are available
             if coordinates is not None and len(coordinates) > 0:
+                # The spreadsheets are written inside the call. The frames are
+                # not used again by this function.
                 (
-                    roi_measurement_details,
-                    roi_summary_details,
-                    save_boundary_width_measurements,
+                    _roi_measurement_details,
+                    _roi_summary_details,
+                    _save_boundary_width_measurements,
                 ) = process_tiff_boundary_rois(
                     coordinates=coordinates,
                     fiber_structure=fiber_structure,
@@ -238,9 +239,6 @@ def process_image(
             else:
                 # No ROI processing when coordinates not available
                 print("Warning: No boundary coordinates available for ROI processing")
-                roi_measurement_details = None
-                roi_summary_details = None
-                save_boundary_width_measurements = None
 
             # Analyze global fiber-boundary relationships
             boundary_results = analyze_global_boundary(
@@ -268,18 +266,14 @@ def process_image(
 
         if fiber_mode == 0:
             # Curvelet mode
-            angles = fiber_structure["angle"].values
             distances = np.full(len(fiber_structure), np.nan)
             in_curvs_flag = np.ones(len(fiber_structure), dtype=bool)
             out_curvs_flag = np.zeros(len(fiber_structure), dtype=bool)
         else:
             # FIRE mode
             in_curvs_flag = np.ones(len(fiber_structure), dtype=bool)
-            angles = fiber_structure["angle"].values
             distances = np.full(len(fiber_structure), np.nan)
 
-        measured_bndry = 0
-        num_im_pts = img.shape[0] * img.shape[1]  # count all pixels if no boundary
         bins = np.arange(2.5, 180, 5)  # 2.5:5:177.5
 
     # Save fiber features if make_feature_file is enabled
@@ -761,8 +755,6 @@ def process_tiff_boundary_rois(
     print(" 1) angle to the nearest point on the boundary")
     print(" 2) angle to the boundary mask orientation")
     print(" 3) angle to the line connecting the fiber center and boundary mask center")
-
-    roi_number = len(coordinates)
 
     save_boundary_width_measurements = os.path.join(
         output_directory, f"{img_name}_BoundaryMeasurements.xlsx"
@@ -1552,6 +1544,7 @@ def concat_roi_df(
 if __name__ == "__main__":
     import csv
     import os
+
     import matplotlib.pyplot as plt
 
     base_path = os.path.join(

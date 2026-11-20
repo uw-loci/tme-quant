@@ -28,13 +28,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from skimage import io
-
-from pycurvelets.SHG_HE_registration import (
-    SHGHERegistrationParameters,
-    shg_he_registration,
-)
-
 from _registration_gt_eval import (
     decompose_affine,
     gt_forward_to_working_grid,
@@ -43,6 +36,11 @@ from _registration_gt_eval import (
     registration_transform_to_grid,
     ssim_vs_reference_rgb,
 )
+from pycurvelets.SHG_HE_registration import (
+    SHGHERegistrationParameters,
+    shg_he_registration,
+)
+from skimage import io
 
 # Developer-only validation; off by default. Enable locally with:
 #   TMEQ_RUN_MATLAB_PARITY=1 pytest -q tests/test_shg_he_registration_gt.py

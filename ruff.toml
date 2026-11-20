@@ -1,0 +1,17 @@
+# Shared by pycurvelets-core, pycurvelets-fdct and pycurvelets-udct.
+# `make check` and the CI lint job both run `ruff check` against this file.
+target-version = "py311"
+
+[lint]
+# Pinned on purpose. Ruff's default selection grows between releases, and CI
+# should fail only on the rules this repository has cleaned.
+# E4, E7, E9: pycodestyle errors. F: pyflakes. I: import order.
+# C4: unnecessary list, dict and set calls.
+select = ["E4", "E7", "E9", "F", "I", "C4"]
+
+[lint.per-file-ignores]
+# `I` is the index of the smallest circular standard deviation, carried over
+# from the MATLAB ports. Renaming it would not change the result and would
+# make those functions harder to compare with the .m files.
+"pycurvelets-core/src/pycurvelets/new_curv.py" = ["E741"]
+"pycurvelets-core/src/pycurvelets/utils/visualization/draw_map.py" = ["E741"]

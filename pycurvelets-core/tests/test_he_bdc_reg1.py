@@ -8,9 +8,7 @@ covers cheap invariants so a broken port is caught in CI without MATLAB dumps.
 from __future__ import annotations
 
 import numpy as np
-
 import pytest
-
 from pycurvelets._he_bdc_common import (
     COLLAGEN_HUE_MAX,
     COLLAGEN_HUE_MIN,

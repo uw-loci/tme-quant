@@ -7,6 +7,7 @@ Converted from MATLAB drawMap.m
 
 import numpy as np
 from scipy.ndimage import gaussian_filter
+
 from pycurvelets.utils.math import circ_r
 
 

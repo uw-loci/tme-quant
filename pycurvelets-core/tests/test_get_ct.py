@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
-
 from pycurvelets.models import CurveletControlParameters, FeatureControlParameters
 
 # By default, skip curvelops-dependent tests (e.g., on CI). Enable locally with:

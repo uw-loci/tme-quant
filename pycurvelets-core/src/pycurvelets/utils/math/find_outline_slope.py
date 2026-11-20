@@ -1,4 +1,5 @@
 import numpy as np
+
 from ..connectivity.find_connected_pts import find_connected_pts
 
 

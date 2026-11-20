@@ -2,8 +2,9 @@
 ################################################################################
 # tme-quant Installation Script
 #
-# Automates installation of pycurvelets-core and the FDCT curvelet backend
-# (pycurvelets-fdct, which builds curvelops) into the repository's .venv.
+# Automates installation of pycurvelets-core and the curvelet backends
+# (pycurvelets-fdct, which builds curvelops, and the pure-Python
+# pycurvelets-udct) into the repository's .venv.
 # User prerequisite: download CurveLab into this repo's utils/ directory.
 #
 # Usage: bash bin/install.sh
@@ -359,6 +360,12 @@ EOF
     return 1
   fi
 
+  print_info "Installing pycurvelets-udct (pure Python UDCT backend)..."
+  if ! uv pip install --python "$VENV_DIR" -e "$PROJECT_ROOT/pycurvelets-udct"; then
+    print_error "Installing pycurvelets-udct failed."
+    return 1
+  fi
+
   print_info "Installing development tools (pytest, ruff, build)..."
   if ! uv pip install --python "$VENV_DIR" pytest ruff build; then
     print_error "Installing development tools failed."
@@ -390,8 +397,9 @@ try:
     print('  ✓ pycurvelets')
     print(f'    curvelet backends installed: {available_backends()}')
     print(f'    HAS_CURVELETS = {pc.HAS_CURVELETS}')
-    load_backend('fdct')
-    print('  ✓ fdct backend loads')
+    for name in ('fdct', 'udct'):
+        load_backend(name)
+        print(f'  ✓ {name} backend loads')
 except Exception as e:
     errors.append(f'pycurvelets / fdct backend: {type(e).__name__}: {e}')
 try:
@@ -425,7 +433,7 @@ print('\\n✅ All imports successful!')
 main() {
   echo ""
   print_header "═══════════════════════════════════════════════════════════════"
-  print_header "  tme-quant Installation (pycurvelets-core + FDCT backend)"
+  print_header "  tme-quant Installation (pycurvelets-core + FDCT and UDCT backends)"
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
   echo "Prerequisites:"
@@ -437,7 +445,7 @@ main() {
   echo "This script will:"
   echo "  - Download and build FFTW in $UTILS_DIR"
   echo "  - Build CurveLab from $UTILS_DIR"
-  echo "  - Create $VENV_DIR and install pycurvelets-core and pycurvelets-fdct into it"
+  echo "  - Create $VENV_DIR and install pycurvelets-core, pycurvelets-fdct and pycurvelets-udct into it"
   echo "  - Run verification to ensure all is functional"
   echo ""
   read -p "Press Enter to continue or Ctrl+C to cancel..."

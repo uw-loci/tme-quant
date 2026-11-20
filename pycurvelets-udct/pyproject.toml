@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=77.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycurvelets-udct"
+version = "0.1.0.dev0"
+description = "UDCT (uniform discrete curvelet transform) backend for pycurvelets, through the curvelets package"
+readme = "README.md"
+authors = [{ name = "Eliceiri Lab" }]
+requires-python = ">=3.11"
+dependencies = [
+  # Released in lockstep with core: the backend Protocol is versioned with it.
+  "pycurvelets-core==0.1.0.dev0",
+  "numpy>=2.2.6",
+  # Pure Python (NumPy), MIT licensed, on PyPI; no native build needed.
+  "curvelets>=1.2,<2",
+  # curvelets 1.2 imports typing_extensions.TypeAliasType on every Python but
+  # only declares the dependency for Python <= 3.10.
+  "typing-extensions>=4.6",
+]
+
+[project.entry-points."pycurvelets.backends"]
+udct = "pycurvelets_udct.backend:UDCTBackend"
+
+[dependency-groups]
+dev = [
+  "pytest",
+]
+
+# Local checkout only; not written into the built package metadata.
+[tool.uv.sources]
+pycurvelets-core = { path = "../pycurvelets-core", editable = true }
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = [
+  "tests",
+]

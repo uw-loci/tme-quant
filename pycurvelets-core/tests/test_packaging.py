@@ -73,6 +73,15 @@ def test_napari_plugin_is_not_shipped() -> None:
     assert "napari" not in (ROOT / "pyproject.toml").read_text()
 
 
+def test_each_project_points_metadata_at_its_readme() -> None:
+    repo = ROOT.parent
+    for project in ("pycurvelets-core", "pycurvelets-fdct", "pycurvelets-udct"):
+        project_dir = repo / project
+        assert (project_dir / "README.md").is_file(), project
+        text = (project_dir / "pyproject.toml").read_text()
+        assert 'readme = "README.md"' in text, project
+
+
 def test_core_does_not_depend_on_a_curvelet_transform() -> None:
     text = (ROOT / "pyproject.toml").read_text()
     assert 'name = "pycurvelets-core"' in text

@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
-
 from pycurvelets.backends import available_backends
 from pycurvelets.models import CurveletControlParameters
 from pycurvelets.new_curv import new_curv
@@ -32,21 +31,6 @@ def load_test_image(image_name):
     """Load a test image by filename."""
     img_path = os.path.join(os.path.dirname(__file__), "test_images", image_name)
     return plt.imread(img_path, format="TIF")
-
-    config_path = os.path.join(
-        os.path.dirname(__file__),
-        "test_results",
-        "new_curv_test_files",
-        "test_cases_new_curv.json",
-    )
-    with open(config_path, "r") as f:
-        config = json.load(f)
-
-    cases = config["test_cases"]
-    if matlab_only:
-        cases = [tc for tc in cases if "matlab_reference_csv" in tc]
-
-    return [(tc["name"], tc) for tc in cases]
 
 
 def load_and_sort_curvelets(in_curves: pd.DataFrame, ref_csv_path: str):

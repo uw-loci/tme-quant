@@ -1,10 +1,12 @@
 import os
-import numpy as np
+
 import cv2
-import plotly.graph_objects as go
 import matplotlib.pyplot as plt
+import numpy as np
+import plotly.graph_objects as go
+from curvelops import FDCT3D
 from mayavi import mlab
-from curvelops import FDCT3D  
+
 
 def find_angles(scale, wedge):
     '''
@@ -91,12 +93,12 @@ def plot_orientations(spatial_locations, direction_vectors):
 
     # Set axis labels and title
     fig.update_layout(
-        scene=dict(
-            xaxis_title='X (k1)',
-            yaxis_title='Y (k2)',
-            zaxis_title='Z (k3)',
-        ),
-        title="Orientations at Spatial Locations"
+        scene={
+            "xaxis_title": "X (k1)",
+            "yaxis_title": "Y (k2)",
+            "zaxis_title": "Z (k3)",
+        },
+        title="Orientations at Spatial Locations",
     )
 
     # Show the plot
@@ -190,7 +192,6 @@ def create_3d_curvelet(folder_path, num_images, nb_scales, nb_angles):
     ax.set_zlabel('Z')
     ax.set_title(f'Orientations at Spatial Locations (Scale {s})')
 
-    img_stack_transposed = np.transpose(img_stack, (1, 2, 0)) 
     Y_transposed = np.transpose(np.abs(Y), (1, 2, 0))
 
     plt.show()

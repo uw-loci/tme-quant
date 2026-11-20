@@ -1,6 +1,7 @@
+import os
+
 import pandas as pd
 from openpyxl import load_workbook
-import os
 
 
 def format_df_to_excel(
