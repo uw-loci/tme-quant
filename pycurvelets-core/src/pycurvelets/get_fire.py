@@ -1,5 +1,5 @@
-import numpy as np
 import os
+
 from scipy.io import loadmat
 
 from pycurvelets.models import FeatureControlParameters
@@ -53,36 +53,32 @@ def get_fire(
     # Load .mat file
     fiber_structure_mat = loadmat(file_path)
 
-    width_option_flag = 0  # default
     try:
         fiber_cp = fiber_structure_mat["cP"]
         width_max = fiber_cp["widMAX"][0, 0]  # MATLAB scalar to Python
         width_cp = fiber_cp["widcon"][0, 0]  # nested struct
 
         width_min_max_fiber_width = width_cp["wid_mm"][0, 0]
-        width_min_pts = width_cp["wid_mp"][0, 0]
-        width_confidence_region = width_cp["wid_sigma"][0, 0]  # default +/- 1 sigma
-        width_option = width_cp["wid_opt"][0, 0]
+        # These CT-FIRE fields are not part of the returned features. Reading
+        # them still rejects a file that is missing the width struct.
+        _width_min_pts = width_cp["wid_mp"][0, 0]
+        _width_confidence_region = width_cp["wid_sigma"][0, 0]  # default +/- 1 sigma
+        _width_option = width_cp["wid_opt"][0, 0]
 
         # Check widMAX
         if width_max < width_min_max_fiber_width:
             print(
                 f"Please make sure the maximum fiber width is correct. Using default min maximum width {width_min_max_fiber_width}."
             )
-            width_threshold = width_min_max_fiber_width
-        else:
-            width_threshold = width_max
-
-        width_option_flag = 1
         print("Use advanced width calculation method.")
 
     except Exception as e:
         print(str(e))
-        width_option_flag = 0
         print("Use the original width calculation method.")
 
     fiber_structure = fiber_structure_mat["data"]
-    length_limit = fiber_structure_mat["cP"]["LL1"][0, 0]
+    # Checked so a CT-FIRE file without these fields fails here, not later.
+    _length_limit = fiber_structure_mat["cP"]["LL1"][0, 0]
     density_df, alignment_df = process_fibers(
         fiber_structure=fiber_structure, feature_cp=feature_cp
     )
@@ -90,8 +86,8 @@ def get_fire(
     if len(fiber_structure) == 0:
         return fiber_structure, density_df, alignment_df
 
-    fiber_number = len(fiber_structure_mat["Fai"][0, 0])
-    X = fiber_structure["Xai"]
+    _fiber_number = len(fiber_structure_mat["Fai"][0, 0])
+    _fiber_coordinates = fiber_structure["Xai"]
 
     # Now process segments:
 

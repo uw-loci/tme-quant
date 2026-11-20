@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
+from sklearn.neighbors import NearestNeighbors
 
 from pycurvelets.models import FeatureControlParameters
 from pycurvelets.utils.math import circ_r
-from sklearn.neighbors import NearestNeighbors
 
 
 def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
@@ -39,7 +39,6 @@ def process_fibers(fiber_structure, feature_cp: FeatureControlParameters):
     x = fiber_structure["center_row"].to_numpy()
     y = fiber_structure["center_col"].to_numpy()
     centers = np.column_stack((x, y))
-    centers_arr = np.asarray(centers, dtype=np.float64)
     angles = fiber_structure["angle"].to_numpy()
 
     minimum_nearest_fibers = feature_cp.minimum_nearest_fibers

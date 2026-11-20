@@ -1,6 +1,7 @@
 import argparse
-from scipy.io import loadmat
+
 import numpy as np
+from scipy.io import loadmat
 
 
 def mat_to_csv(mat_file_path, csv_file_path):

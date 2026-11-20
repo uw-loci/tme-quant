@@ -1,4 +1,5 @@
 from .models import (
+    ROI,
     AdvancedAnalysisOptions,
     BoundaryParameters,
     CurveletControlParameters,
@@ -8,7 +9,6 @@ from .models import (
     FiberFeatures,
     ImageInputParameters,
     OutputControlParameters,
-    ROI,
     ROIList,
 )
 

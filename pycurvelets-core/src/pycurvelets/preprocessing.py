@@ -8,10 +8,10 @@ Provides preprocessing options including:
 - Autothreshold options (Otsu, Triangle, Isodata, etc.)
 """
 
-import numpy as np
-from typing import Optional, Tuple
 from enum import Enum
+from typing import Optional, Tuple
 
+import numpy as np
 from skimage import filters, io
 from skimage.filters import (
     frangi,

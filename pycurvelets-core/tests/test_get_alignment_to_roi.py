@@ -6,12 +6,12 @@ verifying that fiber alignment measurements relative to ROIs are calculated corr
 """
 
 import os
+
 import numpy as np
 import pandas as pd
 import pytest
-
 from pycurvelets.get_alignment_to_roi import get_alignment_to_roi
-from pycurvelets.models.models import ROIList, Fiber
+from pycurvelets.models.models import ROIList
 from pycurvelets.utils.math import flatten_numeric
 
 

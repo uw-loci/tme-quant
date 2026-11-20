@@ -14,8 +14,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from skimage import io
-
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
     shg_he_registration,
@@ -24,6 +22,7 @@ from pycurvelets.tumor_annotation_from_HE import (
     TumorAnnotationFromHEParameters,
     tumor_annotation_from_he,
 )
+from skimage import io
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"

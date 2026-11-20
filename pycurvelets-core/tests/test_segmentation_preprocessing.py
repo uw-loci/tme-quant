@@ -1,16 +1,15 @@
-"""Smoke tests for the backend modules moved out of the napari plugin.
+"""Smoke tests for the modules moved out of the napari plugin.
 
-segmentation, preprocessing and tacs moved from napari_curvealign into
-pycurvelets so the Fiji and napari plugins can share them. These tests only
-check that each entry point runs headless on synthetic data and returns
-sensibly shaped results; numerical validation stays with the plugins.
+segmentation and preprocessing moved from napari_curvealign into pycurvelets
+so the Fiji and napari plugins can share them. These tests only check that
+each entry point runs headless on synthetic data and returns sensibly shaped
+results. The plugin's TACS histogram stays in napari-curvealign; this library's
+boundary angle is get_tif_boundary.get_relative_angle.
 """
 
 import numpy as np
-import pandas as pd
 import pytest
-
-from pycurvelets import preprocessing, segmentation, tacs
+from pycurvelets import preprocessing, segmentation
 
 
 def _two_squares(shape=(128, 128)):
@@ -77,18 +76,3 @@ def test_load_image_with_bioformats_reads_tiff(tmp_path):
     data, metadata = preprocessing.load_image_with_bioformats(str(path))
     assert np.squeeze(data).shape == (128, 128)
     assert "source" in metadata
-
-
-def test_compute_tacs_separates_parallel_and_perpendicular_fibers():
-    t = np.linspace(0, 2 * np.pi, 360, endpoint=False)
-    boundary = np.column_stack((64 + 30 * np.cos(t), 64 + 30 * np.sin(t)))
-    # Both fibers sit just outside the circle at its rightmost point, where the
-    # boundary tangent is vertical: one runs along it, one points away from it.
-    fibers = pd.DataFrame({"x": [100.0, 100.0], "y": [64.0, 64.0], "angle": [90.0, 0.0]})
-
-    result = tacs.compute_tacs(fibers, boundary, max_distance=50)
-
-    assert list(result.columns[-2:]) == ["distance_to_boundary", "relative_angle"]
-    assert sorted(result["relative_angle"].round(6)) == [0.0, 90.0]
-    counts, edges = tacs.bin_relative_angles(result, bins=9)
-    assert counts.sum() == 2 and len(edges) == 10

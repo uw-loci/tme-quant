@@ -30,8 +30,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from skimage import io
-
 from pycurvelets._he_bdc_annotation import (
     EPITH_BINARY_THRESHOLD,
     HE2_PPM_CAP,
@@ -54,6 +52,7 @@ from pycurvelets._matlab_util import (
     strel_disk,
 )
 from pycurvelets.tumor_annotation_from_HE import TumorAnnotationFromHEParameters
+from skimage import io
 
 _FIXTURE_ROOT = Path(__file__).resolve().parent / "test_for_shg_he_registration_BDcreation"
 

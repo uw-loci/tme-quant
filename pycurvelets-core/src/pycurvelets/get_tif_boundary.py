@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 from sklearn.neighbors import NearestNeighbors
 
-from pycurvelets.utils.segmentation import get_segment_pixels
 from pycurvelets.utils.math import circ_r, find_outline_slope
+from pycurvelets.utils.segmentation import get_segment_pixels
 
 
 def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
@@ -36,7 +36,6 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     """
 
     img_height, img_width = img.shape[:2]
-    img_size = (img_height, img_width)
 
     # Extract center points from DataFrame
     if "center_row" in obj.columns:
@@ -109,9 +108,6 @@ def get_tif_boundary(coordinates, img, obj, dist_thresh, min_dist):
     extension_point_dist = np.full(curvs_len, np.nan)
     extension_point_relative_angle = np.full(curvs_len, np.nan)
     measurement_boundary = np.full((curvs_len, 2), np.nan)
-
-    in_curvs_flag = np.zeros(curvs_len, dtype=bool)
-    out_curvs_flag = np.zeros(curvs_len, dtype=bool)
 
     if not min_dist:
         for i in range(curvs_len):
@@ -273,6 +269,7 @@ def get_points_on_line(object, box_size):
 if __name__ == "__main__":
     import csv
     import os
+
     import matplotlib.pyplot as plt
 
     base_path = os.path.join(

@@ -10,13 +10,13 @@ Python conversion: 2025
 """
 
 import logging
-from typing import Union, List, Optional, Dict, Any
+from typing import Optional
+
 import numpy as np
 import pandas as pd
-from sklearn.neighbors import NearestNeighbors, KDTree
+from sklearn.neighbors import KDTree
 
 from .models.models import ROIList
-from .get_relative_angles import get_relative_angles
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -191,7 +191,7 @@ def get_alignment_to_roi(
         logger.info(f"Processing {n_fibers} fibers (vectorized)")
 
         from skimage.draw import polygon2mask
-        from skimage.measure import regionprops, label
+        from skimage.measure import label, regionprops
 
         mask = polygon2mask((roi_list.img_height, roi_list.img_width), roi_coords)
         labeled = label(mask.astype(np.uint8))
@@ -240,7 +240,7 @@ def get_alignment_to_roi(
         )
 
         # Angle to boundary edge (still per-fiber due to different boundary points)
-        from pycurvelets.utils.math import find_outline_slope, circ_r
+        from pycurvelets.utils.math import circ_r, find_outline_slope
 
         angles_to_edge = []
         boundary_points = []  # Store boundary point coordinates

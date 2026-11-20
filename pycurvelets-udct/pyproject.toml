@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "pycurvelets-udct"
 version = "0.1.0.dev0"
 description = "UDCT (uniform discrete curvelet transform) backend for pycurvelets, through the curvelets package"
+readme = "README.md"
 authors = [{ name = "Eliceiri Lab" }]
 requires-python = ">=3.11"
 dependencies = [

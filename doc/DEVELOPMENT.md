@@ -45,6 +45,14 @@ Choosing a backend: `CurveletControlParameters(backend=...)` /
 `FiberAnalysisParameters(backend=...)`, else `TMEQ_CURVELET_BACKEND`, else the
 only one installed, else `fdct`. The choice is logged at INFO level.
 
+## Lint
+
+```bash
+make check
+```
+
+This runs `ruff check` on every project. The rule list is pinned in the repository-root `ruff.toml`, and the CI `lint` job runs that same command.
+
 ## Running tests
 
 ```bash

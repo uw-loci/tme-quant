@@ -6,18 +6,17 @@ from images, matching the functionality of MATLAB CurveAlign's TumorTrace and
 cell analysis modules.
 """
 
-import numpy as np
 import importlib.util
-from typing import Optional, List, Dict
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, List, Optional
+
+import numpy as np
 
 try:
-    from skimage import measure, filters
-    from skimage.segmentation import clear_border
-    
     # Check for morphology.erosion/dilation vs top-level
-    from skimage import morphology
+    from skimage import filters, measure, morphology
+    from skimage.segmentation import clear_border
     if hasattr(morphology, 'dilation') and hasattr(morphology, 'erosion'):
         # Modern skimage
         binary_dilation = morphology.dilation

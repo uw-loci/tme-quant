@@ -1,11 +1,12 @@
 import os
-import pytest
+
+import numpy as np
 import pandas as pd
+import pytest
 from pycurvelets.get_relative_angles import (
     get_relative_angles,
     load_coords,
 )
-import numpy as np
 
 # Load boundary coordinates
 csv_path = os.path.join(

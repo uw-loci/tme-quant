@@ -10,7 +10,6 @@ from importlib.metadata import EntryPoint
 
 import numpy as np
 import pytest
-
 from pycurvelets.backends import (
     BACKEND_ENV_VAR,
     ENTRY_POINT_GROUP,

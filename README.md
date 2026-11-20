@@ -12,7 +12,7 @@ The repository holds independently built Python projects, each with its own
 
 | Project | Distribution | Import name | What it is |
 | --- | --- | --- | --- |
-| `pycurvelets-core/` | `pycurvelets-core` | `pycurvelets` | The analysis library: curvelet fiber extraction (`new_curv`, `get_ct`, `process_image`), the SHG–HE registration and tumor annotation ports, and the segmentation, preprocessing and TACS helpers the plugins drive. Has no curvelet transform of its own. |
+| `pycurvelets-core/` | `pycurvelets-core` | `pycurvelets` | The analysis library: curvelet fiber extraction (`new_curv`, `get_ct`, `process_image`), the SHG–HE registration and tumor annotation ports, and the segmentation and preprocessing helpers. Has no curvelet transform of its own. |
 | `pycurvelets-fdct/` | `pycurvelets-fdct` | `pycurvelets_fdct` | FDCT (CurveLab) backend through `curvelops`. Needs a local CurveLab + FFTW build. The MATLAB-referenced tests use this backend. |
 | `pycurvelets-udct/` | `pycurvelets-udct` | `pycurvelets_udct` | UDCT (uniform discrete curvelet transform) backend through [`curvelets`](https://github.com/cako/curvelets). Pure Python, no native build. |
 
@@ -149,7 +149,8 @@ Testing policy:
   `pycurvelets-core/tests/test_resources/` and read from there during tests.
 
 ### Continuous integration
-- CI has four jobs in `.github/workflows/ci.yml`:
+- CI has five jobs in `.github/workflows/ci.yml`:
+  - `lint`: `ruff check` on every project, using the root `ruff.toml`. Same command as `make check`.
   - `test-core`: `pycurvelets-core` alone on Python 3.11–3.13, with no curvelet backend installed.
   - `test-udct`: `pycurvelets-core` + `pycurvelets-udct` on Python 3.11–3.13; needs no secrets, so it also runs on forked PRs.
   - `test-fdct`: secure lane that fetches/builds CurveLab + FFTW, installs `pycurvelets-core` and `pycurvelets-fdct`, and runs both test suites with curvelets enabled. Skipped on forked PRs (no secrets).

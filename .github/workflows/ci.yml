@@ -8,6 +8,24 @@ on:
     branches: [main]
 
 jobs:
+  # Same command as `make check`. Runs without CurveLab, on every PR.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff
+
+      - name: Ruff
+        run: ruff check pycurvelets-core pycurvelets-fdct pycurvelets-udct
+
   # pycurvelets-core alone, with no curvelet backend installed: the
   # backend-dependent tests skip and the boundary tests prove core imports.
   test-core:
@@ -29,7 +47,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
-          python -m pip install pytest ruff
+          python -m pip install pytest
 
       - name: Show installed curvelet backends (expected none)
         run: python -c "from pycurvelets.backends import available_backends; print(available_backends())"
@@ -150,7 +168,7 @@ jobs:
           python -m pip install --upgrade pip
           # One command, so pip satisfies fdct's pycurvelets-core pin with the checkout.
           python -m pip install -e ./pycurvelets-core -e ./pycurvelets-fdct
-          python -m pip install pytest ruff
+          python -m pip install pytest
           python -c "from pycurvelets.backends import available_backends; print(available_backends())"
 
       - name: Run core tests on the FDCT backend
