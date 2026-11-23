@@ -8,7 +8,8 @@
 #   What is needed to rebuild the wheel: src/ + docs + the lightweight
 #   pytest suite (CSV / synthetic-image tests). Registration tests 1-9,
 #   MATLAB dumps, and ground-truth TIFFs stay in git for CI / clones.
-#   Comparison PNGs are generated locally and are not in git or the sdist.
+#   archive/ is pruned below. Patient 003/004 comparison figures are
+#   generated locally and are not stored in git.
 
 graft tests
 graft doc
