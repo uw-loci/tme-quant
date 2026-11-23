@@ -2,8 +2,9 @@
 
 Wheel
     ``pip install tme-quant`` / ``python -m build --wheel``
-    Only ``src/`` (``pycurvelets``, ``napari_curvealign``) plus package data
-    (``napari.yaml``, ``data/*.npz``).
+    Only ``src/pycurvelets`` plus package data (``data/*.npz``). The napari
+    and Fiji plugins live in uw-loci/napari-curvealign and
+    uw-loci/fiji-curvealign.
 
 sdist
     ``pip install tme-quant --no-binary tme-quant`` / ``python -m build --sdist``
@@ -64,3 +65,8 @@ def test_setuptools_wheel_is_src_only() -> None:
     text = (ROOT / "pyproject.toml").read_text()
     assert 'where = ["src"]' in text
     assert "pycurvelets = [\"data/*.npz\"]" in text
+
+
+def test_napari_plugin_is_not_shipped() -> None:
+    assert not (ROOT / "src" / "napari_curvealign").exists()
+    assert "napari" not in (ROOT / "pyproject.toml").read_text()

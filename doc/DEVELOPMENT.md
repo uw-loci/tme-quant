@@ -2,15 +2,14 @@
 
 Use the same install path as users: `bash bin/install.sh` (or `make setup`).
 
-## Napari plugin
+## Plugins
 
-The plugin is registered via:
-- `src/napari_curvealign/napari.yaml` – manifest (commands, widgets)
-- `pyproject.toml` – entry point: `napari-curvealign = "napari_curvealign:napari.yaml"`
+The interactive front ends are developed in their own repositories and depend
+on this library:
+- Fiji: [uw-loci/fiji-curvealign](https://github.com/uw-loci/fiji-curvealign)
+- napari: [uw-loci/napari-curvealign](https://github.com/uw-loci/napari-curvealign)
 
-After `uv pip install -e .`, run `uv run napari` and open **Plugins → napari-curvealign**.
-
-If you only need plugin segmentation features (Cellpose/StarDist) without curvelets:
+If you only need the segmentation features (Cellpose/StarDist) without curvelets:
 
 ```bash
 uv sync --extra segmentation
@@ -21,8 +20,6 @@ uv sync --extra segmentation
 ```bash
 make test
 ```
-
-Headless (no GUI): `QT_QPA_PLATFORM=offscreen make test`
 
 Curvelet tests run automatically when curvelops is installed; otherwise they are skipped.
 

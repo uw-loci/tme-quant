@@ -34,7 +34,6 @@ jobs:
       - name: Run basic tests
         env:
           TMEQ_RUN_CURVELETS: "0"
-          QT_QPA_PLATFORM: "offscreen"
         run: |
           pytest -q -rs
 
@@ -126,6 +125,5 @@ jobs:
       - name: Run tests with CurveLab
         env:
           TMEQ_RUN_CURVELETS: "1"
-          QT_QPA_PLATFORM: "offscreen"
         run: |
           pytest -q -rs

@@ -11,7 +11,7 @@ Validates that `pycurvelets.SHG_HE_registration` reproduces MATLAB
 or these dumps.
 
 ```bash
-TMEQ_RUN_MATLAB_PARITY=1 pytest -q -p no:napari \
+TMEQ_RUN_MATLAB_PARITY=1 pytest -q \
     tests/test_shg_he_registration_matlab_parity.py \
     tests/test_shg_he_registration_gt.py
 ```
@@ -83,7 +83,7 @@ filename still says HE). RGB patient_001 masks are the separate
 as well. Figures are generated locally; see [ARTIFACTS.md](ARTIFACTS.md).
 
 ```bash
-TMEQ_RUN_MATLAB_PARITY=1 pytest -q -p no:napari \
+TMEQ_RUN_MATLAB_PARITY=1 pytest -q \
     tests/test_he_bdc_annotation.py \
     tests/test_tumor_annotation_from_he.py \
     tests/test_tumor_annotation_matlab_parity.py
