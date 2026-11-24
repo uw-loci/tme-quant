@@ -8,16 +8,14 @@ verifying that fiber features are computed correctly.
 import json
 import os
 from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
-import matplotlib.pyplot as plt
-
 from pycurvelets.models import (
     AdvancedAnalysisOptions,
     BoundaryParameters,
-    CurveletControlParameters,
-    FeatureControlParameters,
     FiberAnalysisParameters,
     ImageInputParameters,
     OutputControlParameters,

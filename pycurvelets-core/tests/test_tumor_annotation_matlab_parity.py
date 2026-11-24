@@ -26,8 +26,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import scipy.io as sio
-from skimage import io
-
 from pycurvelets._he_bdc_annotation import annotate_he_hsv, annotate_he_kmeans
 from pycurvelets._he_bdc_reg1 import DEFAULT_KMEANS_SEED
 from pycurvelets._matlab_util import (
@@ -40,6 +38,7 @@ from pycurvelets.tumor_annotation_from_HE import (
     TumorAnnotationFromHEParameters,
     tumor_annotation_from_he,
 )
+from skimage import io
 
 if os.environ.get("TMEQ_RUN_MATLAB_PARITY") != "1":
     pytest.skip(

@@ -1,12 +1,12 @@
 # Makefile for tme-quant
 # Convenience commands for common tasks. The repository holds several
-# independently built projects (pycurvelets-core, pycurvelets-fdct, ...);
+# independently built projects (pycurvelets-core and the backends);
 # there is no project at the root, so targets loop over PROJECTS and use the
 # shared .venv that bin/install.sh creates.
 
 .PHONY: help setup test check clean wheel sdist dist
 
-PROJECTS := pycurvelets-core pycurvelets-fdct
+PROJECTS := pycurvelets-core pycurvelets-fdct pycurvelets-udct
 PYTHON ?= $(CURDIR)/.venv/bin/python
 DIST_DIR := dist
 
@@ -14,7 +14,7 @@ help:
 	@echo "tme-quant Makefile Commands"
 	@echo ""
 	@echo "Setup & Installation:"
-	@echo "  make setup        - Install core + FDCT backend into .venv (uses bin/install.sh)"
+	@echo "  make setup        - Install core + UDCT; also FDCT if CurveLab is in utils/ (bin/install.sh)"
 	@echo ""
 	@echo "Development:"
 	@echo "  make test         - Run each project's test suite"

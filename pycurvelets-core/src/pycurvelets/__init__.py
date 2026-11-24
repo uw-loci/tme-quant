@@ -1,3 +1,9 @@
+from ._registration_quality import (
+    compute_mask_boundary_metrics,
+    compute_registration_quality_metrics,
+    compute_shg_alignment_metrics,
+    make_checkerboard,
+)
 from .new_curv import new_curv
 from .SHG_HE_registration import (
     BDcreation_reg,
@@ -10,12 +16,6 @@ from .tumor_annotation_from_HE import (
     BDcreationHE2,
     TumorAnnotationFromHEParameters,
     tumor_annotation_from_he,
-)
-from ._registration_quality import (
-    compute_mask_boundary_metrics,
-    compute_registration_quality_metrics,
-    compute_shg_alignment_metrics,
-    make_checkerboard,
 )
 
 __all__ = [

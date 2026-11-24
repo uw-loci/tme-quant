@@ -32,8 +32,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import scipy.io as sio
-from skimage import io
-
 from pycurvelets._he_bdc_common import adjust_rgb_mean_std, prepare_registration_pair
 from pycurvelets._itk_v3_matlab_engine import (
     DEFAULT_SEED,
@@ -53,6 +51,7 @@ from pycurvelets.SHG_HE_registration import (
     _build_he_moving,
     shg_he_registration,
 )
+from skimage import io
 
 # Developer-only validation; off by default (CI). Enable locally with:
 #   TMEQ_RUN_MATLAB_PARITY=1 pytest -q tests/test_shg_he_registration_matlab_parity.py

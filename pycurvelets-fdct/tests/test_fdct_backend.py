@@ -5,14 +5,13 @@ import pytest
 
 pytest.importorskip("curvelops", reason="curvelops (CurveLab) is not installed")
 
+from pycurvelets.backends import available_backends, load_backend
+from pycurvelets.backends.conformance import check_backend
 from pycurvelets_fdct.backend import (
     FDCTBackend,
     number_of_scales,
     wedge_angle_deg,
 )
-
-from pycurvelets.backends import available_backends, load_backend
-from pycurvelets.backends.conformance import check_backend
 
 
 def test_registered_under_fdct_entry_point():

@@ -36,8 +36,8 @@ BACKEND_ENV_VAR = "TMEQ_CURVELET_BACKEND"
 PREFERRED_BACKEND = "fdct"
 
 INSTALL_HINTS = {
-    "fdct": "install pycurvelets-fdct (needs a local CurveLab and FFTW build; see bin/install.sh)",
-    "udct": "pip install pycurvelets-udct",
+    "fdct": "install pycurvelets-fdct (needs a local CurveLab and FFTW build; put CurveLab in utils/ and run bin/install.sh)",
+    "udct": "install pycurvelets-udct (pure Python; from a tme-quant checkout: pip install -e ./pycurvelets-udct)",
 }
 
 

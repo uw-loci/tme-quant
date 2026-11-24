@@ -1,11 +1,12 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from skimage.draw import polygon2mask
-from skimage.measure import regionprops, label
 import csv
 import os
 
-from pycurvelets.utils.math import find_outline_slope, circ_r
+import matplotlib.pyplot as plt
+import numpy as np
+from skimage.draw import polygon2mask
+from skimage.measure import label, regionprops
+
+from pycurvelets.utils.math import circ_r, find_outline_slope
 
 
 def get_relative_angles(ROI, obj, angle_option=0, fig_flag=False):

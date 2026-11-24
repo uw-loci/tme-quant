@@ -16,13 +16,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from skimage import io
-
 from pycurvelets._registration_quality import compute_registration_quality_metrics
 from pycurvelets.SHG_HE_registration import (
     SHGHERegistrationParameters,
     shg_he_registration,
 )
+from skimage import io
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _FIXTURE_ROOT = _TESTS_DIR / "test_for_shg_he_registration_BDcreation"

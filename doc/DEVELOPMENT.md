@@ -29,7 +29,8 @@ backend projects register in their `pyproject.toml`:
 
 ```toml
 [project.entry-points."pycurvelets.backends"]
-fdct = "pycurvelets_fdct.backend:FDCTBackend"
+fdct = "pycurvelets_fdct.backend:FDCTBackend"   # pycurvelets-fdct
+udct = "pycurvelets_udct.backend:UDCTBackend"   # pycurvelets-udct
 ```
 
 A backend implements `pycurvelets.backends.CurveletBackend` (`forward`,
@@ -44,13 +45,21 @@ Choosing a backend: `CurveletControlParameters(backend=...)` /
 `FiberAnalysisParameters(backend=...)`, else `TMEQ_CURVELET_BACKEND`, else the
 only one installed, else `fdct`. The choice is logged at INFO level.
 
+## Lint
+
+```bash
+make check
+```
+
+This runs `ruff check` on every project. The rule list is pinned in the repository-root `ruff.toml`, and the CI `lint` job runs that same command.
+
 ## Running tests
 
 ```bash
 make test
 ```
 
-Curvelet tests run when `TMEQ_RUN_CURVELETS=1` and `pycurvelets-fdct` is installed; otherwise they are skipped.
+Core's curvelet pipeline tests compare against CurveLab/MATLAB references, so they pin `backend="fdct"` and run when `TMEQ_RUN_CURVELETS=1` and `pycurvelets-fdct` is installed; otherwise they are skipped. `pycurvelets-udct`'s tests need no native build and always run; one of them compares UDCT's fiber orientation statistics on `real1.tif` with FDCT's when both are installed.
 
 ### SHG–HE registration (BDcreation_reg / BDcreation_reg2)
 
@@ -88,7 +97,7 @@ Default `annotation_method="hsv"` is `BDcreationHE2.m`. `annotation_method="rgb_
 |-------|-----|
 | uv not found | Install from https://docs.astral.sh/uv/ |
 | FFTW build errors | macOS: `xcode-select --install`; Linux: `apt-get install build-essential gcc g++ make curl`; use `CFLAGS="-fPIC"` |
-| CurveLab not found | Download from curvelet.org, extract as `utils/CurveLab-<version>/` inside this repository |
+| CurveLab not found | `bin/install.sh` still installs core and UDCT. To add FDCT, download from curvelet.org, extract as `utils/CurveLab-<version>/`, and rerun the script |
 | `curvelops` reports MSVC is required | Native Windows needs `cl.exe` and MSVC-compatible FFTW/CurveLab libraries; use WSL2 for the verified install path |
 | curvelops build errors | Ensure `FFTW` and `FDCT` (or `CPPFLAGS`/`LDFLAGS`) point to install roots |
-| `BackendUnavailableError` | No curvelet backend installed, or not the one requested; install `pycurvelets-fdct` (see `bin/install.sh`) |
+| `BackendUnavailableError` | No curvelet backend installed, or not the one requested; install `pycurvelets-fdct` (see `bin/install.sh`) or `pycurvelets-udct` (`uv pip install -e ./pycurvelets-udct`) |

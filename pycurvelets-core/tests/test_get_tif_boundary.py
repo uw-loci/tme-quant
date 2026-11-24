@@ -1,10 +1,9 @@
 import os
-import csv
-import pytest
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
+import pytest
 from pycurvelets.get_tif_boundary import get_tif_boundary
 
 

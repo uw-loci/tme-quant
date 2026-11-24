@@ -1,4 +1,5 @@
 import numpy as np
+
 from .get_first_neighbor import get_first_neighbor
 
 

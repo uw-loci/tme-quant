@@ -173,7 +173,6 @@ def new_curv(img, curve_cp: CurveletControlParameters):
     # print(f"Debug: valid curvelets for grouping: {valid_curvelets}")
 
     # Keep only non-empty groups
-    not_empty = [len(g) > 0 for g in groups]
     comb_nh = [g for g in groups if len(g) > 0]
     n_hoods = [curves[g] for g in comb_nh]
 

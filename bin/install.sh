@@ -2,9 +2,11 @@
 ################################################################################
 # tme-quant Installation Script
 #
-# Automates installation of pycurvelets-core and the FDCT curvelet backend
-# (pycurvelets-fdct, which builds curvelops) into the repository's .venv.
-# User prerequisite: download CurveLab into this repo's utils/ directory.
+# Installs pycurvelets-core and the pure-Python pycurvelets-udct backend into
+# the repository's .venv. CurveLab is optional. When a CurveLab source tree is
+# present under utils/CurveLab-<version>, this script also builds FFTW and
+# CurveLab and installs pycurvelets-fdct (which builds curvelops). Without
+# CurveLab, FFTW, CurveLab, and pycurvelets-fdct are skipped.
 #
 # Usage: bash bin/install.sh
 ################################################################################
@@ -25,6 +27,9 @@ UTILS_DIR="$PROJECT_ROOT/utils"
 VENV_DIR="$PROJECT_ROOT/.venv"
 PYTHON_VERSION="3.11"
 FFTW_VERSION="2.1.5"
+# 1 when exactly one usable CurveLab tree was found; 0 installs core + UDCT only.
+BUILD_FDCT=0
+FDCT=""
 
 # Helpers
 print_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
@@ -117,10 +122,15 @@ has_curvelab_sources() {
 }
 
 check_curvelab() {
+  local -a present=()
   local -a candidates=()
   local candidate nested
+  BUILD_FDCT=0
+  FDCT=""
+
   for candidate in "$UTILS_DIR"/CurveLab-*; do
     [ -d "$candidate" ] || continue
+    present+=("$candidate")
     if has_curvelab_sources "$candidate"; then
       candidates+=("$candidate")
       continue
@@ -137,16 +147,28 @@ check_curvelab() {
     print_error "More than one CurveLab source tree found in $UTILS_DIR; keep only the version you want to build."
     return 1
   fi
-  if [ "${#candidates[@]}" -eq 0 ]; then
-    print_error "CurveLab source not found in $UTILS_DIR"
+  if [ "${#candidates[@]}" -eq 1 ]; then
+    FDCT="${candidates[0]}"
+    export FDCT
+    BUILD_FDCT=1
+    print_success "CurveLab source found at: $FDCT"
+    return 0
+  fi
+
+  # A CurveLab-* directory that does not contain the makefiles is a broken
+  # extract, not an absent install. Say so instead of silently skipping FDCT.
+  if [ "${#present[@]}" -gt 0 ]; then
+    print_error "CurveLab directory found in $UTILS_DIR, but the expected sources are missing."
     echo "  Expected fdct_wrapping_cpp/src/makefile and fdct3d/src/makefile under CurveLab-<version>."
     echo "  Download it from https://curvelet.org/download.php and extract it into $UTILS_DIR"
+    echo "  Or remove that directory to install pycurvelets-core and pycurvelets-udct only."
     return 1
   fi
 
-  FDCT="${candidates[0]}"
-  export FDCT
-  print_success "CurveLab source found at: $FDCT"
+  print_warning "CurveLab source not found in $UTILS_DIR"
+  print_info "FDCT will be skipped. This run installs pycurvelets-core and pycurvelets-udct only."
+  print_info "To add FDCT later, extract CurveLab-<version> into $UTILS_DIR (https://curvelet.org/download.php) and rerun this script."
+  return 0
 }
 
 ################################################################################
@@ -249,7 +271,7 @@ setup_fftw() {
 }
 
 ################################################################################
-# Step 3: Build CurveLab (must be present; fail with instructions if not)
+# Step 3: Build CurveLab (only called when check_curvelab found one source tree)
 ################################################################################
 setup_curvelab() {
   print_header "═══════════════════════════════════════════════════════════════"
@@ -300,44 +322,47 @@ create_env_and_install() {
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
 
-  export CPPFLAGS="-I${FFTW}/include"
-  export LDFLAGS="-L${FFTW}/lib"
-
   cd "$PROJECT_ROOT"
 
   # uv builds curvelops in an isolated environment and does not forward shell
   # exports. curvelops' setup.py reads FFTW and FDCT from that environment.
   # uv.toml is gitignored because the paths are local to this machine.
-  local build_fftw="$FFTW"
-  local build_fdct="$FDCT"
-  case "$(uname -s)" in
-    MINGW*|MSYS*)
-      if ! command -v cygpath >/dev/null 2>&1; then
-        print_error "cygpath is required to convert FFTW and CurveLab paths for the Windows compiler."
-        return 1
-      fi
-      if ! build_fftw="$(cygpath -m "$FFTW")" || ! build_fdct="$(cygpath -m "$FDCT")"; then
-        print_error "Could not convert FFTW and CurveLab paths for the Windows compiler."
-        return 1
-      fi
-      print_info "Using Windows-format paths for the curvelops build."
-      ;;
-  esac
+  # Skipped entirely when CurveLab is absent: core and UDCT need no native build.
+  if [ "$BUILD_FDCT" -eq 1 ]; then
+    export CPPFLAGS="-I${FFTW}/include"
+    export LDFLAGS="-L${FFTW}/lib"
 
-  print_info "Writing uv.toml so the curvelops build can see FFTW and CurveLab..."
-  cat > "$PROJECT_ROOT/uv.toml" <<EOF
+    local build_fftw="$FFTW"
+    local build_fdct="$FDCT"
+    case "$(uname -s)" in
+      MINGW*|MSYS*)
+        if ! command -v cygpath >/dev/null 2>&1; then
+          print_error "cygpath is required to convert FFTW and CurveLab paths for the Windows compiler."
+          return 1
+        fi
+        if ! build_fftw="$(cygpath -m "$FFTW")" || ! build_fdct="$(cygpath -m "$FDCT")"; then
+          print_error "Could not convert FFTW and CurveLab paths for the Windows compiler."
+          return 1
+        fi
+        print_info "Using Windows-format paths for the curvelops build."
+        ;;
+    esac
+
+    print_info "Writing uv.toml so the curvelops build can see FFTW and CurveLab..."
+    cat > "$PROJECT_ROOT/uv.toml" <<EOF
 # Written by bin/install.sh. Local paths; do not commit.
 extra-build-variables = { curvelops = { FFTW = "${build_fftw}", FDCT = "${build_fdct}" } }
 EOF
 
-  # Reinstall curvelops against the current FFTW/CurveLab without deleting the
-  # user's entire environment or unrelated uv source-build caches.
-  if ! uv cache clean curvelops; then
-    print_warning "Could not clear the curvelops uv cache; continuing with a forced reinstall."
-  fi
+    # Reinstall curvelops against the current FFTW/CurveLab without deleting the
+    # user's entire environment or unrelated uv source-build caches.
+    if ! uv cache clean curvelops; then
+      print_warning "Could not clear the curvelops uv cache; continuing with a forced reinstall."
+    fi
 
-  # Some build front ends read the variables from the environment instead.
-  export FFTW FDCT
+    # Some build front ends read the variables from the environment instead.
+    export FFTW FDCT
+  fi
 
   # There is no project at the repository root: each project under it has its
   # own pyproject.toml, so they are installed one by one into a shared .venv.
@@ -353,9 +378,19 @@ EOF
     return 1
   fi
 
-  print_info "Installing pycurvelets-fdct (builds curvelops against FFTW and CurveLab)..."
-  if ! uv pip install --python "$VENV_DIR" -e "$PROJECT_ROOT/pycurvelets-fdct" --reinstall-package curvelops; then
-    print_error "Installing pycurvelets-fdct failed. Check the curvelops build output above."
+  if [ "$BUILD_FDCT" -eq 1 ]; then
+    print_info "Installing pycurvelets-fdct (builds curvelops against FFTW and CurveLab)..."
+    if ! uv pip install --python "$VENV_DIR" -e "$PROJECT_ROOT/pycurvelets-fdct" --reinstall-package curvelops; then
+      print_error "Installing pycurvelets-fdct failed. Check the curvelops build output above."
+      return 1
+    fi
+  else
+    print_info "Skipping pycurvelets-fdct (CurveLab is not present)."
+  fi
+
+  print_info "Installing pycurvelets-udct (pure Python UDCT backend)..."
+  if ! uv pip install --python "$VENV_DIR" -e "$PROJECT_ROOT/pycurvelets-udct"; then
+    print_error "Installing pycurvelets-udct failed."
     return 1
   fi
 
@@ -381,24 +416,39 @@ verify_installation() {
   local venv_python="$VENV_DIR/bin/python"
   [ -x "$venv_python" ] || venv_python="$VENV_DIR/Scripts/python.exe"
 
+  # BUILD_FDCT is 0 or 1. Interpolated below; the rest of this program is Python.
   if "$venv_python" -c "
 import sys
 errors = []
+expect_fdct = ${BUILD_FDCT}
 try:
     import pycurvelets as pc
     from pycurvelets.backends import available_backends, load_backend
     print('  ✓ pycurvelets')
     print(f'    curvelet backends installed: {available_backends()}')
     print(f'    HAS_CURVELETS = {pc.HAS_CURVELETS}')
-    load_backend('fdct')
-    print('  ✓ fdct backend loads')
 except Exception as e:
-    errors.append(f'pycurvelets / fdct backend: {type(e).__name__}: {e}')
-try:
-    import curvelops
-    print(f'  ✓ curvelops {curvelops.__version__}')
-except Exception as e:
-    errors.append(f'curvelops: {e}')
+    errors.append(f'pycurvelets: {type(e).__name__}: {e}')
+    pc = None
+    load_backend = None
+if load_backend is not None:
+    try:
+        load_backend('udct')
+        print('  ✓ udct backend loads')
+    except Exception as e:
+        errors.append(f'udct backend: {type(e).__name__}: {e}')
+    if expect_fdct:
+        try:
+            load_backend('fdct')
+            print('  ✓ fdct backend loads')
+        except Exception as e:
+            errors.append(f'fdct backend: {type(e).__name__}: {e}')
+if expect_fdct:
+    try:
+        import curvelops
+        print(f'  ✓ curvelops {curvelops.__version__}')
+    except Exception as e:
+        errors.append(f'curvelops: {e}')
 try:
     import appose
     print('  ✓ appose-python worker')
@@ -425,36 +475,49 @@ print('\\n✅ All imports successful!')
 main() {
   echo ""
   print_header "═══════════════════════════════════════════════════════════════"
-  print_header "  tme-quant Installation (pycurvelets-core + FDCT backend)"
+  print_header "  tme-quant Installation (core + UDCT; FDCT when CurveLab is present)"
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
   echo "Prerequisites:"
   echo "  1. Run this script from a checked-out copy of the repository"
   echo "  2. Install uv (https://docs.astral.sh/uv/)"
-  echo "  3. Download CurveLab into $UTILS_DIR (see https://curvelet.org/download.php)"
+  echo "  3. Optional: extract CurveLab into $UTILS_DIR (https://curvelet.org/download.php)"
   echo "     Expected folder name: CurveLab-<version>"
   echo ""
+
+  check_curvelab
+
   echo "This script will:"
-  echo "  - Download and build FFTW in $UTILS_DIR"
-  echo "  - Build CurveLab from $UTILS_DIR"
-  echo "  - Create $VENV_DIR and install pycurvelets-core and pycurvelets-fdct into it"
-  echo "  - Run verification to ensure all is functional"
+  echo "  - Create $VENV_DIR and install pycurvelets-core and pycurvelets-udct into it"
+  if [ "$BUILD_FDCT" -eq 1 ]; then
+    echo "  - Download and build FFTW in $UTILS_DIR"
+    echo "  - Build CurveLab at $FDCT"
+    echo "  - Install pycurvelets-fdct (builds curvelops against FFTW and CurveLab)"
+  else
+    echo "  - Skip FFTW, CurveLab, and pycurvelets-fdct"
+  fi
+  echo "  - Run verification"
   echo ""
   read -p "Press Enter to continue or Ctrl+C to cancel..."
   echo ""
 
   ensure_uv
-  mkdir -p "$UTILS_DIR"
-  ensure_build_tools
-  ensure_native_python_compiler
-  check_curvelab
-  setup_fftw
-  setup_curvelab
+  if [ "$BUILD_FDCT" -eq 1 ]; then
+    ensure_build_tools
+    ensure_native_python_compiler
+    setup_fftw
+    setup_curvelab
+  fi
   create_env_and_install
   verify_installation
 
   print_header "═══════════════════════════════════════════════════════════════"
-  print_success "Installation complete!"
+  if [ "$BUILD_FDCT" -eq 1 ]; then
+    print_success "Installation complete (pycurvelets-core, pycurvelets-fdct, pycurvelets-udct)."
+  else
+    print_success "Installation complete (pycurvelets-core and pycurvelets-udct)."
+    print_info "This run did not install pycurvelets-fdct. Add CurveLab under $UTILS_DIR and rerun this script to build it."
+  fi
   print_header "═══════════════════════════════════════════════════════════════"
   echo ""
   echo "Try it:"

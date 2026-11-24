@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, List, Union
+from typing import Dict, List, Optional, Union
+
 import numpy as np
-import pandas as pd
 
 
 # Custom Exception Classes for Fiber Analysis

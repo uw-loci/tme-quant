@@ -3,7 +3,6 @@ import numpy as np
 from pycurvelets.models import (
     CurveletControlParameters,
     FeatureControlParameters,
-    FiberFeatures,
 )
 from pycurvelets.new_curv import new_curv
 from pycurvelets.process_fibers import process_fibers

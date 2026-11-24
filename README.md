@@ -12,8 +12,9 @@ The repository holds independently built Python projects, each with its own
 
 | Project | Distribution | Import name | What it is |
 | --- | --- | --- | --- |
-| `pycurvelets-core/` | `pycurvelets-core` | `pycurvelets` | The analysis library: curvelet fiber extraction (`new_curv`, `get_ct`, `process_image`), the SHG–HE registration and tumor annotation ports, and the segmentation, preprocessing and TACS helpers the plugins drive. Has no curvelet transform of its own. |
-| `pycurvelets-fdct/` | `pycurvelets-fdct` | `pycurvelets_fdct` | FDCT (CurveLab) backend through `curvelops`. Needs a local CurveLab + FFTW build. |
+| `pycurvelets-core/` | `pycurvelets-core` | `pycurvelets` | The analysis library: curvelet fiber extraction (`new_curv`, `get_ct`, `process_image`), the SHG–HE registration and tumor annotation ports, and the segmentation and preprocessing helpers. Has no curvelet transform of its own. |
+| `pycurvelets-fdct/` | `pycurvelets-fdct` | `pycurvelets_fdct` | FDCT (CurveLab) backend through `curvelops`. Needs a local CurveLab + FFTW build. The MATLAB-referenced tests use this backend. |
+| `pycurvelets-udct/` | `pycurvelets-udct` | `pycurvelets_udct` | UDCT (uniform discrete curvelet transform) backend through [`curvelets`](https://github.com/cako/curvelets). Pure Python, no native build. |
 
 Core finds transforms through the `pycurvelets.backends` entry-point group.
 With several backends installed it uses `fdct` unless you pick one with
@@ -63,11 +64,24 @@ uv run pytest -q pycurvelets-core
 Registration, annotation, segmentation and preprocessing work; curvelet
 fiber analysis raises `BackendUnavailableError` naming the package to install.
 
+For curvelet analysis without building CurveLab, add the UDCT backend:
+
+```bash
+uv pip install -e ./pycurvelets-udct
+uv run pytest -q pycurvelets-udct
+```
+
+`bash bin/install.sh` (or `make setup`) does that install for you: core, with
+the `segmentation` and `fiji` extras, and UDCT. CurveLab is optional.
+
+UDCT results are close to FDCT's but not identical (different wedge layout),
+so the MATLAB-referenced pipeline tests stay pinned to FDCT.
+
 ### Curvelet backend: FDCT (CurveLab via curvelops)
 
-To enable curvelet-powered features and tests you must build FFTW 2.1.5 and CurveLab, then install `pycurvelets-fdct`, which builds curvelops. Use the automated script:
+FDCT needs FFTW 2.1.5 and CurveLab, then `pycurvelets-fdct`, which builds curvelops. Extract CurveLab into this repo's `utils/` directory (see [doc/INSTALL.md](doc/INSTALL.md)) and run the same script. It detects that tree, builds FFTW and CurveLab, and installs `pycurvelets-fdct` along with core and UDCT.
 
-**Prerequisites:** Check out this repo, install [uv](https://docs.astral.sh/uv/), and extract CurveLab into this repo's `utils/` directory (see [doc/INSTALL.md](doc/INSTALL.md)).
+**Prerequisites:** Check out this repo, install [uv](https://docs.astral.sh/uv/), and, for FDCT, extract CurveLab into `utils/CurveLab-<version>/`.
 
 macOS/Linux:
 ```bash
@@ -75,9 +89,7 @@ bash bin/install.sh
 # or: make setup
 ```
 
-It creates `.venv` at the repository root, installs `pycurvelets-core` (with
-the `segmentation` and `fiji` extras) and `pycurvelets-fdct` into it, and
-prints the curvelet backends it finds.
+It creates `.venv` at the repository root and prints the curvelet backends it finds.
 
 Windows options:
 - Recommended: use WSL2 (Ubuntu). Follow the macOS/Linux steps inside WSL.
@@ -138,8 +150,10 @@ Testing policy:
   `pycurvelets-core/tests/test_resources/` and read from there during tests.
 
 ### Continuous integration
-- CI has three jobs in `.github/workflows/ci.yml`:
+- CI has five jobs in `.github/workflows/ci.yml`:
+  - `lint`: `ruff check` on every project, using the root `ruff.toml`. Same command as `make check`.
   - `test-core`: `pycurvelets-core` alone on Python 3.11–3.13, with no curvelet backend installed.
+  - `test-udct`: `pycurvelets-core` + `pycurvelets-udct` on Python 3.11–3.13; needs no secrets, so it also runs on forked PRs.
   - `test-fdct`: secure lane that fetches/builds CurveLab + FFTW, installs `pycurvelets-core` and `pycurvelets-fdct`, and runs both test suites with curvelets enabled. Skipped on forked PRs (no secrets).
   - `build`: builds the sdist and wheel of every project, runs `twine check`, and installs the core wheel alone to prove it imports without a backend.
 
