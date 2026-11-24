@@ -71,14 +71,17 @@ uv pip install -e ./pycurvelets-udct
 uv run pytest -q pycurvelets-udct
 ```
 
+`bash bin/install.sh` (or `make setup`) does that install for you: core, with
+the `segmentation` and `fiji` extras, and UDCT. CurveLab is optional.
+
 UDCT results are close to FDCT's but not identical (different wedge layout),
 so the MATLAB-referenced pipeline tests stay pinned to FDCT.
 
 ### Curvelet backend: FDCT (CurveLab via curvelops)
 
-To enable curvelet-powered features and tests you must build FFTW 2.1.5 and CurveLab, then install `pycurvelets-fdct`, which builds curvelops. Use the automated script:
+FDCT needs FFTW 2.1.5 and CurveLab, then `pycurvelets-fdct`, which builds curvelops. Extract CurveLab into this repo's `utils/` directory (see [doc/INSTALL.md](doc/INSTALL.md)) and run the same script. It detects that tree, builds FFTW and CurveLab, and installs `pycurvelets-fdct` along with core and UDCT.
 
-**Prerequisites:** Check out this repo, install [uv](https://docs.astral.sh/uv/), and extract CurveLab into this repo's `utils/` directory (see [doc/INSTALL.md](doc/INSTALL.md)).
+**Prerequisites:** Check out this repo, install [uv](https://docs.astral.sh/uv/), and, for FDCT, extract CurveLab into `utils/CurveLab-<version>/`.
 
 macOS/Linux:
 ```bash
@@ -86,9 +89,7 @@ bash bin/install.sh
 # or: make setup
 ```
 
-It creates `.venv` at the repository root, installs `pycurvelets-core` (with
-the `segmentation` and `fiji` extras), `pycurvelets-fdct` and
-`pycurvelets-udct` into it, and prints the curvelet backends it finds.
+It creates `.venv` at the repository root and prints the curvelet backends it finds.
 
 Windows options:
 - Recommended: use WSL2 (Ubuntu). Follow the macOS/Linux steps inside WSL.

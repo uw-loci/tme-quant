@@ -14,7 +14,7 @@ help:
 	@echo "tme-quant Makefile Commands"
 	@echo ""
 	@echo "Setup & Installation:"
-	@echo "  make setup        - Install core + FDCT and UDCT backends into .venv (uses bin/install.sh)"
+	@echo "  make setup        - Install core + UDCT; also FDCT if CurveLab is in utils/ (bin/install.sh)"
 	@echo ""
 	@echo "Development:"
 	@echo "  make test         - Run each project's test suite"

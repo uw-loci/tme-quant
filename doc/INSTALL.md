@@ -13,9 +13,11 @@
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
-3. **Download CurveLab** (required; cannot be redistributed)
+3. **CurveLab** (optional; cannot be redistributed)
+   - Needed only for the FDCT backend (`pycurvelets-fdct`)
    - https://curvelet.org/download.php
    - Extract it into `utils/` inside this repository (e.g. `tme-quant/utils/CurveLab-2.1.3`)
+   - Without it, the install script still installs `pycurvelets-core` and `pycurvelets-udct`
 
 ## Install
 
@@ -23,7 +25,9 @@
 bash bin/install.sh
 ```
 
-The script resolves paths from its own location, so it can be launched from any working directory. It creates `utils/` inside this repository, downloads FFTW there, detects and builds CurveLab there, creates `.venv` at the repository root, installs `pycurvelets-core`, `pycurvelets-fdct` and `pycurvelets-udct` into it (one `uv pip install -e` per project), and verifies that the `fdct` and `udct` backends load.
+The script resolves paths from its own location, so it can be launched from any working directory. It creates `.venv` at the repository root and installs `pycurvelets-core` (with the `segmentation` and `fiji` extras) and `pycurvelets-udct`.
+
+If `utils/` contains one CurveLab source tree (`CurveLab-<version>/` with `fdct_wrapping_cpp/src/makefile` and `fdct3d/src/makefile`), the script also downloads and builds FFTW there, builds CurveLab, installs `pycurvelets-fdct` (which builds curvelops), and verifies that both the `fdct` and `udct` backends load. If no CurveLab directory is present, it skips FFTW, CurveLab, and `pycurvelets-fdct`, and verifies `udct` only. An incomplete CurveLab directory, or more than one CurveLab tree, stops the script.
 
 The native Windows path is not verified end to end: building the `curvelops` Python extension requires MSVC (`cl.exe`), while the FFTW and CurveLab build steps use GNU tools. Their libraries must also be compatible with MSVC. WSL2 is the supported Windows route; build all dependencies inside WSL rather than reusing Windows-built libraries.
 
@@ -46,13 +50,13 @@ tme-quant/
 ├── pycurvelets-fdct/   # pyproject.toml, src/pycurvelets_fdct, tests/
 ├── pycurvelets-udct/   # pyproject.toml, src/pycurvelets_udct, tests/
 └── utils/
-   ├── fftw-2.1.5/     # Created by install.sh
-   └── CurveLab-2.1.3/ # You must download and extract here
+   ├── fftw-2.1.5/     # Created by install.sh when building FDCT
+   └── CurveLab-2.1.3/ # Optional; required only for the FDCT backend
 ```
 
-## Without a curvelet backend
+## Without CurveLab
 
-To install only the core library (no FFTW/CurveLab required), from the repository root:
+`bash bin/install.sh` with no CurveLab tree installs core and UDCT and does not build FFTW. To install only the core library (no curvelet backend), from the repository root:
 
 ```bash
 uv venv --python 3.11
@@ -65,4 +69,4 @@ From another project, depend on a subdirectory of this repository:
 pip install "pycurvelets-core @ git+https://github.com/uw-loci/tme-quant.git#subdirectory=pycurvelets-core"
 ```
 
-**Note:** Registration, annotation, segmentation and preprocessing work, but curvelet-based analysis (e.g. fiber orientation) will not run. For real curvelet analysis, use the full install above.
+**Note:** With only the core library, registration, annotation, segmentation and preprocessing work, but curvelet-based analysis (e.g. fiber orientation) will not run. `bash bin/install.sh` installs UDCT for that analysis without CurveLab. Extract CurveLab under `utils/` before running the script to add FDCT.

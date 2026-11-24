@@ -2,8 +2,8 @@
 """
 Simple usage examples for pycurvelets (manually converted API from MATLAB CurveAlign).
 
-Requires: pycurvelets-core plus a curvelet backend such as pycurvelets-fdct
-(bin/install.sh installs both).
+Requires: pycurvelets-core plus a curvelet backend. bin/install.sh installs
+core and UDCT, and also FDCT when CurveLab is under utils/.
 Run from repo root: python examples/simple_usage.py
 """
 import numpy as np

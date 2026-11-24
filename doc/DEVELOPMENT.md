@@ -97,7 +97,7 @@ Default `annotation_method="hsv"` is `BDcreationHE2.m`. `annotation_method="rgb_
 |-------|-----|
 | uv not found | Install from https://docs.astral.sh/uv/ |
 | FFTW build errors | macOS: `xcode-select --install`; Linux: `apt-get install build-essential gcc g++ make curl`; use `CFLAGS="-fPIC"` |
-| CurveLab not found | Download from curvelet.org, extract as `utils/CurveLab-<version>/` inside this repository |
+| CurveLab not found | `bin/install.sh` still installs core and UDCT. To add FDCT, download from curvelet.org, extract as `utils/CurveLab-<version>/`, and rerun the script |
 | `curvelops` reports MSVC is required | Native Windows needs `cl.exe` and MSVC-compatible FFTW/CurveLab libraries; use WSL2 for the verified install path |
 | curvelops build errors | Ensure `FFTW` and `FDCT` (or `CPPFLAGS`/`LDFLAGS`) point to install roots |
 | `BackendUnavailableError` | No curvelet backend installed, or not the one requested; install `pycurvelets-fdct` (see `bin/install.sh`) or `pycurvelets-udct` (`uv pip install -e ./pycurvelets-udct`) |
