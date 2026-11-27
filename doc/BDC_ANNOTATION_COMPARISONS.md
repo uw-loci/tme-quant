@@ -52,3 +52,21 @@ on the binary mask. `n_diff=0` is pixel identity.
 | test1 | HE RGB k-means | 1.5 | 1.0000 | 1.0000 | 100 % | 0 | 0 |
 | test2 | HE RGB k-means | 2.0 | 1.0000 | 1.0000 | 100 % | 0 | 0 |
 | test3 | HE RGB k-means | 3.0 | 1.0000 | 1.0000 | 100 % | 0 | 0 |
+
+## Future annotation work
+
+- Compare both methods against independently reviewed tumor masks from
+  diverse, held-out images, using overlap and boundary metrics. MATLAB
+  parity alone does not measure annotation accuracy.
+- Investigate empty or unexpectedly small HSV masks, including the effects
+  of staining, thresholds, morphology, and image resolution.
+- Evaluate each annotation algorithm in both RGB and HSV color spaces with
+  comparable preprocessing. Account for the circular nature of hue and
+  its instability at low saturation.
+- Expose additional settings through the user interface or API to handle
+  different images, such as HSV hue ranges, RGB clustering settings, and
+  morphology thresholds and scales. Preserve the existing MATLAB-compatible
+  settings as a reproducible option and validate configurable alternatives.
+- Explore tumor-boundary annotation based on segmented cells.
+- Add a convenient way to generate and compare boundary overlays for new
+  images, recording the method and pixels per micron used.
