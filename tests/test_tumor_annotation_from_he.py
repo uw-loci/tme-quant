@@ -72,6 +72,7 @@ def test_tumor_annotation_he2_matches_committed_golden(
         HEfilename="patient_001.tif",
         pixelpermicron=pixelpermicron,
         SHGfilepath=str(_SHG_DIR),
+        annotation_method="hsv",
     )
     python_mask, debug = tumor_annotation_from_he(params, save_output=False, return_debug=True)
     assert python_mask.shape == golden.shape
@@ -171,6 +172,16 @@ def test_annotation_method_rejects_unknown_value() -> None:
         )
 
 
+def test_default_annotation_method_is_rgb_kmeans() -> None:
+    params = TumorAnnotationFromHEParameters(
+        HEfilepath=".",
+        HEfilename="patient_001.tif",
+        pixelpermicron=2.0,
+        SHGfilepath=".",
+    )
+    assert params.annotation_method == "rgb_kmeans"
+
+
 def test_register_then_annotate_end_to_end_smoke() -> None:
     if not _HE_RAW.is_file() or not (_SHG_DIR / "patient_001.tif").is_file():
         pytest.skip("patient_001 HE/SHG fixtures missing")
@@ -198,8 +209,9 @@ def test_register_then_annotate_end_to_end_smoke() -> None:
             pixelpermicron=2.0,
             SHGfilepath=str(_SHG_DIR),
         )
-        mask = tumor_annotation_from_he(ann_params, save_output=False, return_debug=False)
+        mask, debug = tumor_annotation_from_he(ann_params, save_output=False, return_debug=True)
 
     assert mask.shape == registered.shape[:2]
     assert mask.dtype == np.bool_
     assert int(mask.sum()) > 0
+    assert str(debug["annotation_method"][0]) == "rgb_kmeans"

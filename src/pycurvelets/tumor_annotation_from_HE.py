@@ -1,7 +1,7 @@
 """Tumor-boundary masks from an already-registered H&E image.
 
-``tumor_annotation_from_he`` reproduces ``BDcreationHE2.m`` (HSV, the default)
-and ``BDcreationHE.m`` (RGB k-means). Registration is a separate step; this
+``tumor_annotation_from_he`` reproduces ``BDcreationHE.m`` (RGB k-means, the
+default) and ``BDcreationHE2.m`` (HSV). Registration is a separate step; this
 module does not move the image.
 
 Public entry points: :func:`tumor_annotation_from_he`, :func:`BDcreationHE2`
@@ -45,7 +45,7 @@ class TumorAnnotationFromHEParameters:
         When it is empty, the mask is written under ``HEfilepath`` instead.
     annotation_method : {'hsv', 'rgb_kmeans'}, optional
         ``'hsv'`` is ``BDcreationHE2.m``. ``'rgb_kmeans'`` is ``BDcreationHE.m``.
-        Default is ``'hsv'``.
+        Default is ``'rgb_kmeans'``.
     kmeans_seed : int, optional
         Seed for the RGB k-means path. MATLAB's ``kmeans`` is unseeded; this
         seed replays ``rng(seed, 'twister')``. Default is 28, the seed of
@@ -53,7 +53,7 @@ class TumorAnnotationFromHEParameters:
 
     Examples
     --------
-    HSV is the default. Omit ``annotation_method`` and ``kmeans_seed``:
+    RGB k-means is the default. Omit ``annotation_method`` to use it:
 
     >>> params = TumorAnnotationFromHEParameters(
     ...     HEfilepath="HE_registered",
@@ -62,7 +62,7 @@ class TumorAnnotationFromHEParameters:
     ...     SHGfilepath="SHG",
     ... )
     >>> params.annotation_method
-    'hsv'
+    'rgb_kmeans'
     >>> params.kmeans_seed
     28
     """
@@ -70,9 +70,9 @@ class TumorAnnotationFromHEParameters:
     HEfilename: str
     pixelpermicron: float
     SHGfilepath: str
-    # "hsv" (default): BDcreationHE2.m HSV path.
-    # "rgb_kmeans": BDcreationHE.m decorrstretch + RGB k-means path.
-    annotation_method: str = "hsv"
+    # "rgb_kmeans" (default): BDcreationHE.m decorrstretch + RGB k-means path.
+    # "hsv": BDcreationHE2.m HSV path.
+    annotation_method: str = "rgb_kmeans"
     # BDcreationHE.m never seeds kmeans. This seed replays
     # ``rng(kmeans_seed,'twister')`` immediately before kmeans, matching the
     # dump harness (same policy as registration's DEFAULT_KMEANS_SEED).
@@ -228,7 +228,7 @@ def tumor_annotation_from_he(
     he_path = Path(p.HEfilepath) / p.HEfilename
     he_raw = _load_he(he_path)
 
-    method = (p.annotation_method or "hsv").lower()
+    method = (p.annotation_method or "rgb_kmeans").lower()
     if method == "hsv":
         bd_mask, debug = annotate_he_hsv(he_raw, p.pixelpermicron)
         save_arr: np.ndarray = bd_mask
