@@ -125,7 +125,7 @@ class RegmexResult:
     ``moving_to_fixed_1based_3x3`` is its inverse, i.e. MATLAB's ``tform.A``.
     ``forward_2x3_0based`` is the same forward transform re-expressed in the
     0-based pixel-centre convention used by
-    :func:`pycurvelets._he_bdc_common.matlab_imwarp_bilinear`.
+    :func:`pycurvelets._matlab_util.imwarp_bilinear`.
 
     Attributes
     ----------
@@ -244,8 +244,10 @@ def forward_0based_to_moving_to_fixed_1based(forward_2x3: np.ndarray) -> np.ndar
     return A
 
 
-def matlab_T_to_A(T: np.ndarray) -> np.ndarray:
-    """Turn MATLAB's post-multiply ``tform.T`` into column-form ``tform.A``.
+def T_to_A(T: np.ndarray) -> np.ndarray:
+    """Migrated from MATLAB ``tform.T`` to ``tform.A``.
+
+    Turn MATLAB's post-multiply ``tform.T`` into column-form ``tform.A``.
 
     Parameters
     ----------
@@ -333,12 +335,14 @@ def _params_from_itk(p: Any, n: int) -> list[float]:
     return [float(p.GetElement(i)) for i in range(n)]
 
 
-def matlab_default_settings(
+def default_settings(
     transform_type: str,
     moving_shape: tuple[int, int],
     fixed_shape: tuple[int, int],
 ) -> tuple[np.ndarray, np.ndarray, list[float]]:
-    """Default transform and optimizer scales from ``computeDefaultRegmexSettings``.
+    """Migrated from MATLAB ``computeDefaultRegmexSettings``.
+
+    Default transform and optimizer scales from ``computeDefaultRegmexSettings``.
 
     Parameters
     ----------
@@ -506,7 +510,7 @@ def _transform_to_matrix(transform: Any) -> tuple[np.ndarray, np.ndarray]:
 # ---------------------------------------------------------------------------
 
 
-def matlab_imregtform_v3(
+def imregtform_v3(
     moving: np.ndarray,
     fixed: np.ndarray,
     transform_type: str,
@@ -523,7 +527,8 @@ def matlab_imregtform_v3(
     number_of_threads: int | None = None,
     verbose: bool = False,
 ) -> RegmexResult:
-    """
+    """Migrated from MATLAB ``imregtform``.
+
     Python/ITK equivalent of MATLAB ``imregtform(moving, fixed, type, optimizer,
     metric)`` with ``imregconfig('multimodal')`` metric.
 
@@ -586,7 +591,7 @@ def matlab_imregtform_v3(
     fixed_itk = _to_itk_image(fixed_np)
     moving_itk = _to_itk_image(moving_np)
 
-    lin0, trans0, scales = matlab_default_settings(t, moving_np.shape, fixed_np.shape)
+    lin0, trans0, scales = default_settings(t, moving_np.shape, fixed_np.shape)
     if initial_fixed_to_moving_3x3 is not None:
         A0 = np.asarray(initial_fixed_to_moving_3x3, dtype=np.float64)
         lin0 = A0[:2, :2]
@@ -790,7 +795,7 @@ def register_bdcreation_reg2_matlab(
     -------
     forward_2x3 : np.ndarray
         Forward affine (moving -> fixed) in 0-based pixel-centre convention,
-        ready for :func:`pycurvelets._he_bdc_common.matlab_imwarp_bilinear`
+        ready for :func:`pycurvelets._matlab_util.imwarp_bilinear`
         via ``_affine_fixed_to_moving_from_forward``.
     debug : dict
         Both stage results (traces, MATLAB-convention ``tform.A`` matrices).
@@ -806,7 +811,7 @@ def register_bdcreation_reg2_matlab(
             initial_radius=cfg.initial_radius,
             maximum_iterations=MATLAB_DEFAULT_MAX_ITERATIONS,
         )
-        warm = matlab_imregtform_v3(
+        warm = imregtform_v3(
             he_moving, fixed_shg, "affine", warm_cfg,
             seed=seed, center=center, number_of_threads=number_of_threads,
             verbose=verbose,
@@ -815,7 +820,7 @@ def register_bdcreation_reg2_matlab(
 
     if verbose:
         print("[matlab-parity] stage 1: similarity")
-    sim = matlab_imregtform_v3(
+    sim = imregtform_v3(
         he_moving, fixed_shg, "similarity", cfg,
         seed=seed, center=center, number_of_threads=number_of_threads,
         verbose=verbose,
@@ -824,7 +829,7 @@ def register_bdcreation_reg2_matlab(
 
     if verbose:
         print("[matlab-parity] stage 2: affine (InitialTransformation = similarity)")
-    aff = matlab_imregtform_v3(
+    aff = imregtform_v3(
         he_moving, fixed_shg, "affine", cfg,
         initial_fixed_to_moving_3x3=sim.fixed_to_moving_3x3,
         seed=seed, center=center, number_of_threads=number_of_threads,

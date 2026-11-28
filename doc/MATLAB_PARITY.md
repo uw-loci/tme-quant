@@ -66,3 +66,44 @@ is the reproducible reference. The script prints MAE of
 in the fixture tree.
 
 Fixtures are read from `tests/test_for_shg_he_registration_BDcreation/`.
+
+## Tumor annotation (`BDcreationHE2` / `BDcreationHE`)
+
+Validates that `pycurvelets.tumor_annotation_from_he` reproduces MATLAB
+`BDcreationHE2.m` (default HSV path, tests 1-3) and `BDcreationHE.m`
+(RGB k-means at `rng(28,'twister')`). MATLAB `kmeans` is unseeded, so the
+RGB reference matches only that seed. Inputs are the already-registered
+HE TIFFs under `tests/test_for_shg_he_registration_BDcreation/HE/HE_registered_test{1,2,3}/`.
+
+The committed `SHG/CA_Boundary/BDcreationHE_testNresults_*.tif` goldens are
+a fresh HE2 run (the previous copies were `BDcreationHE.m` output; the
+filename still says HE). RGB patient_001 masks are the separate
+`BDcreationHE_rgb_kmeans_testN_*.tif` files, written by `imwrite` of
+`uint8(255 * mask)`. Compare the HE path to `dumps/he_testN/images.mat`
+as well. Figures are generated locally; see [ARTIFACTS.md](ARTIFACTS.md).
+
+```bash
+TMEQ_RUN_MATLAB_PARITY=1 pytest -q -p no:napari \
+    tests/test_he_bdc_annotation.py \
+    tests/test_tumor_annotation_from_he.py \
+    tests/test_tumor_annotation_matlab_parity.py
+```
+
+### Regenerating annotation dumps
+
+From this directory, with MATLAB on `PATH` (or the app bundle `matlab`):
+
+```bash
+matlab -batch "dump_annotation_primitives; dump_bdc_he2; dump_bdc_he"
+```
+
+| File | Purpose |
+| --- | --- |
+| `dump_annotation_primitives.m` | `histeq` / `fspecial('disk')` / `strel` / `padarray` / `im2bw` probes. |
+| `dump_bdc_he2.m` | Instrumented `BDcreationHE2` on registered HE tests 1-3. |
+| `dump_bdc_he.m` | Instrumented `BDcreationHE`; pins `rng(28,'twister')` before `kmeans` and `imwrite`s the uint8 mask. |
+| `analyze_he_dumps.py` | Offline first-divergent-step report (`--preproc` for intermediates). |
+
+Per case `dumps/he2_<case>/` and `dumps/he_<case>/`: track `images.mat`;
+`intermediates.mat` and `meta.mat` are gitignored. Annotation primitives
+are `dumps/annotation_primitives.mat`.

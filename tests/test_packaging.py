@@ -24,8 +24,12 @@ _WHEEL_REGISTRATION_MODULES = (
     "_he_bdc_common.py",
     "_he_bdc_reg1.py",
     "_itk_v3_matlab_engine.py",
-    "_matlab_imresize.py",
+    "_matlab_util.py",
     "_registration_quality.py",
+)
+_WHEEL_ANNOTATION_MODULES = (
+    "tumor_annotation_from_HE.py",
+    "_he_bdc_annotation.py",
 )
 
 _SDIST_PRUNED = (
@@ -36,7 +40,7 @@ _SDIST_PRUNED = (
 
 
 def test_wheel_runtime_modules_live_under_src() -> None:
-    for name in _WHEEL_REGISTRATION_MODULES:
+    for name in _WHEEL_REGISTRATION_MODULES + _WHEEL_ANNOTATION_MODULES:
         path = ROOT / "src" / "pycurvelets" / name
         assert path.is_file(), f"wheel must ship {path.relative_to(ROOT)}"
     assert (ROOT / "src" / "pycurvelets" / "data" / "matlab_srgb2lab_components.npz").is_file()

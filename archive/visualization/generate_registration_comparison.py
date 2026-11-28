@@ -25,7 +25,7 @@ from skimage import io
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from pycurvelets._he_bdc_common import matlab_rgb2gray
+from pycurvelets._matlab_util import rgb2gray
 from pycurvelets._registration_quality import (
     compute_registration_quality_metrics,
     make_checkerboard,
@@ -161,7 +161,7 @@ def generate(
     if shg_f.max() > 1.0:
         shg_f = shg_f / 255.0
     if shg_f.ndim == 3:
-        shg_f = matlab_rgb2gray(shg_f)
+        shg_f = rgb2gray(shg_f)
     shg_rgb = np.stack([shg_f, shg_f, shg_f], axis=-1)
     py_rgb01 = py_uint8.astype(np.float64) / 255.0
     if shg_rgb.shape[:2] != py_rgb01.shape[:2]:
@@ -253,7 +253,7 @@ def generate(
 
 
 def main() -> None:
-    out_dir = ROOT / "tests" / "artifacts" / "bdc_regression_viz" / "current"
+    out_dir = ROOT / "tests" / "artifacts" / "bdc_registration_viz" / "current"
     if len(sys.argv) > 1:
         if sys.argv[1].startswith("--"):
             raise SystemExit(f"unknown option {sys.argv[1]}")
